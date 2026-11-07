@@ -2,22 +2,10 @@ import math
 import unittest
 
 from .jarvis_oracle import (
-    InputSignal,
-    NeuronParams,
-    NeuronState,
-    OracleInputError,
-    RewardParams,
-    SynapseParams,
-    SynapseState,
-    apply_reward,
-    attention_gain,
-    compare_numeric_vectors,
-    float32_roundtrip,
-    decay_neuron_state,
-    effective_threshold,
-    process_neuron_batch,
-    update_rstdp,
-    update_stdp,
+    InputSignal, NeuronParams, NeuronState, OracleInputError, RewardParams,
+    SynapseParams, SynapseState, apply_reward, attention_gain,
+    compare_numeric_vectors, float32_roundtrip, decay_neuron_state,
+    effective_threshold, process_neuron_batch, update_rstdp, update_stdp,
 )
 
 MS = 1_000_000
@@ -26,10 +14,9 @@ MS = 1_000_000
 class NeuronOracleTests(unittest.TestCase):
     def test_analytical_decay_matches_reference_exponential(self):
         p = NeuronParams()
-        s = NeuronState(u=1.0, a=0.5)
-        got = decay_neuron_state(s, 20 * MS, p)
-        self.assertAlmostEqual(got.u, math.exp(-1.0), places=15)
-        self.assertAlmostEqual(got.a, 0.5 * math.exp(-0.2), places=15)
+        got = decay_neuron_state(NeuronState(u=1.0, a=0.5), 20 * MS, p)
+        self.assertAlmostEqual(got.u, 0.36787944117144233, places=15)
+        self.assertAlmostEqual(got.a, 0.4093653765389909, places=15)
 
     def test_attention_gain_is_bounded(self):
         p = NeuronParams()
@@ -49,24 +36,42 @@ class NeuronOracleTests(unittest.TestCase):
         self.assertEqual(got.state.u, p.u_reset)
         self.assertEqual(got.state.a, p.delta_a_spike)
 
+    def test_lif_multi_event_golden_trajectory(self):
+        p = NeuronParams()
+        state = NeuronState()
+        trajectory = []
+        for time_ns, signals in (
+            (0, [InputSignal("A", 0.4, 1.0)]),
+            (10 * MS, []),
+            (20 * MS, [InputSignal("B", 0.3, 1.0)]),
+            (40 * MS, []),
+        ):
+            step = process_neuron_batch(state, time_ns, signals, p)
+            state = step.state
+            trajectory.append(state.u)
+        expected = (
+            0.4,
+            0.2426122638850534,
+            0.44715177646857696,
+            0.16449794564607778,
+        )
+        for actual, reference in zip(trajectory, expected):
+            self.assertAlmostEqual(actual, reference, places=15)
+
     def test_same_timestamp_order_is_deterministic(self):
         p = NeuronParams()
-        s = NeuronState()
-        a = [InputSignal("a", 0.4, 1.0, 0.3), InputSignal("b", 0.6, 1.0, 0.8)]
-        b = list(reversed(a))
-        one = process_neuron_batch(s, 10 * MS, a, p)
-        two = process_neuron_batch(s, 10 * MS, b, p)
-        self.assertEqual(one, two)
+        state = NeuronState()
+        inputs = [InputSignal("a", 0.4, 1.0, 0.3), InputSignal("b", 0.6, 1.0, 0.8)]
+        self.assertEqual(
+            process_neuron_batch(state, 10 * MS, inputs, p),
+            process_neuron_batch(state, 10 * MS, list(reversed(inputs)), p),
+        )
 
     def test_refractory_inputs_are_retained_and_checked_at_expiry(self):
         p = NeuronParams()
-        first = process_neuron_batch(
-            NeuronState(), 0, [InputSignal("first", 1.0, 1.0, 0.0)], p
-        )
+        first = process_neuron_batch(NeuronState(), 0, [InputSignal("first", 1.0, 1.0)], p)
         self.assertTrue(first.spike_emitted)
-        during = process_neuron_batch(
-            first.state, 1 * MS, [InputSignal("during", 1.0, 1.0, 1.0)], p
-        )
+        during = process_neuron_batch(first.state, 1 * MS, [InputSignal("during", 1.0, 1.0, 1.0)], p)
         self.assertFalse(during.spike_emitted)
         self.assertTrue(during.refractory_active)
         self.assertGreater(during.state.u, 1.0)
@@ -75,17 +80,18 @@ class NeuronOracleTests(unittest.TestCase):
         self.assertEqual(expiry.state.spike_sequence, 2)
 
     def test_late_event_is_rejected(self):
-        p = NeuronParams()
-        s = NeuronState(last_update_model_time_ns=10 * MS)
         with self.assertRaises(OracleInputError):
-            process_neuron_batch(s, 9 * MS, [], p)
+            process_neuron_batch(
+                NeuronState(last_update_model_time_ns=10 * MS), 9 * MS, [], NeuronParams()
+            )
 
     def test_nan_and_out_of_range_attention_are_rejected(self):
-        p = NeuronParams()
         with self.assertRaises(OracleInputError):
-            process_neuron_batch(NeuronState(), 0, [InputSignal("x", 1.0, 1.0, math.nan)], p)
+            process_neuron_batch(
+                NeuronState(), 0, [InputSignal("x", 1.0, 1.0, math.nan)], NeuronParams()
+            )
         with self.assertRaises(OracleInputError):
-            attention_gain(1.1, p)
+            attention_gain(1.1, NeuronParams())
 
     def test_float32_comparison_helper_reports_error(self):
         reference = [0.1, math.exp(-1.0), 1.0]
@@ -106,21 +112,20 @@ class StdpOracleTests(unittest.TestCase):
         p = SynapseParams()
         first = update_stdp(SynapseState(), p, 0, n_pre=1, n_post=0)
         second = update_stdp(first.state, p, 20 * MS, n_pre=0, n_post=1)
-        expected_q = p.eta_plus * math.exp(-1.0) * (1.0 - 0.5)
-        self.assertAlmostEqual(second.q_raw, expected_q, places=15)
+        self.assertAlmostEqual(second.q_raw, 0.0009196986029286058, places=15)
+        self.assertAlmostEqual(second.state.weight, 0.5009196986029286, places=15)
         self.assertGreater(second.state.weight, 0.5)
 
     def test_post_then_pre_causes_ltd(self):
         p = SynapseParams()
         first = update_stdp(SynapseState(), p, 0, n_pre=0, n_post=1)
         second = update_stdp(first.state, p, 20 * MS, n_pre=1, n_post=0)
-        expected_q = -p.eta_minus * math.exp(-0.5) * 0.5
-        self.assertAlmostEqual(second.q_raw, expected_q, places=15)
+        self.assertAlmostEqual(second.q_raw, -0.0015163266492815835, places=15)
+        self.assertAlmostEqual(second.state.weight, 0.4984836733507184, places=15)
         self.assertLess(second.state.weight, 0.5)
 
     def test_simultaneous_first_pair_has_no_artificial_order(self):
-        p = SynapseParams()
-        got = update_stdp(SynapseState(), p, 0, n_pre=1, n_post=1)
+        got = update_stdp(SynapseState(), SynapseParams(), 0, n_pre=1, n_post=1)
         self.assertEqual(got.q_raw, 0.0)
         self.assertEqual(got.state.weight, 0.5)
         self.assertEqual(got.state.pre_trace, 1.0)
@@ -135,26 +140,45 @@ class StdpOracleTests(unittest.TestCase):
         self.assertLessEqual(got.state.weight, p.w_max)
         self.assertLessEqual(abs(got.weight_delta), p.delta_w_batch_max)
 
+    def test_stdp_multi_event_golden_trajectory(self):
+        p = SynapseParams()
+        state = SynapseState()
+        trajectory = []
+        for time_ns, n_pre, n_post in (
+            (0, 1, 0), (10 * MS, 0, 1), (20 * MS, 1, 0), (40 * MS, 0, 1),
+        ):
+            step = update_stdp(state, p, time_ns, n_pre, n_post)
+            state = step.state
+            trajectory.append(state.weight)
+        expected = (
+            0.5,
+            0.5015163266492816,
+            0.4995634201096938,
+            0.5008225553878598,
+        )
+        for actual, reference in zip(trajectory, expected):
+            self.assertAlmostEqual(actual, reference, places=14)
+
     def test_late_stdp_event_is_rejected(self):
         p = SynapseParams()
-        s = SynapseState(trace_last_update_model_time_ns=5 * MS)
         with self.assertRaises(OracleInputError):
-            update_stdp(s, p, 4 * MS, n_pre=1, n_post=0)
+            update_stdp(
+                SynapseState(trace_last_update_model_time_ns=5 * MS),
+                p, 4 * MS, n_pre=1, n_post=0,
+            )
 
 
 class RewardStdpOracleTests(unittest.TestCase):
     def test_rstdp_accumulates_eligibility_without_changing_weight(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-1")
         second = update_rstdp(first.state, p, rp, 20 * MS, 0, 1, "episode-1")
-        self.assertGreater(second.state.eligibility_trace, 0.0)
+        self.assertAlmostEqual(second.state.eligibility_trace, 0.0009196986029286058, places=15)
         self.assertEqual(second.state.weight, 0.5)
         self.assertEqual(second.weight_delta, 0.0)
 
     def test_reward_changes_weight_and_updates_task_baseline(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-1")
         eligible = update_rstdp(first.state, p, rp, 20 * MS, 0, 1, "episode-1")
         result = apply_reward(
@@ -163,14 +187,13 @@ class RewardStdpOracleTests(unittest.TestCase):
         )
         self.assertAlmostEqual(result.modulator, 0.5)
         self.assertAlmostEqual(result.baseline_after, 0.505)
-        self.assertGreater(result.state.weight, 0.5)
+        self.assertAlmostEqual(result.state.weight, 0.5000022992465073, places=15)
         self.assertEqual(result.status, "APPLIED")
         self.assertEqual(result.state.eligibility_trace, 0.0)
         self.assertIsNone(result.state.eligibility_context_id)
 
     def test_reward_with_zero_prediction_error_does_not_change_weight(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-1")
         eligible = update_rstdp(first.state, p, rp, 20 * MS, 0, 1, "episode-1")
         result = apply_reward(
@@ -182,33 +205,30 @@ class RewardStdpOracleTests(unittest.TestCase):
         self.assertEqual(result.status, "APPLIED_NO_CHANGE")
 
     def test_context_cannot_be_overwritten(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-a")
         with self.assertRaises(OracleInputError):
             update_rstdp(first.state, p, rp, 1 * MS, 0, 1, "episode-b")
 
     def test_eligibility_expires_after_maximum_age(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-a")
-        # At the exact configured age it is still eligible; one nanosecond later it expires.
         at_limit = update_rstdp(first.state, p, rp, rp.max_eligibility_age_ns, 0, 0, "episode-a")
         self.assertEqual(at_limit.state.eligibility_context_id, "episode-a")
-        expired = update_rstdp(at_limit.state, p, rp, rp.max_eligibility_age_ns + 1, 0, 0, "episode-a")
+        expired = update_rstdp(
+            at_limit.state, p, rp, rp.max_eligibility_age_ns + 1, 0, 0, "episode-a"
+        )
         self.assertIsNone(expired.state.eligibility_context_id)
         self.assertEqual(expired.state.eligibility_trace, 0.0)
 
     def test_reward_for_wrong_context_is_rejected(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-a")
         with self.assertRaises(OracleInputError):
             apply_reward(first.state, p, rp, 0, 1.0, 0.5, "episode-b")
 
     def test_expired_reward_is_a_noop_but_updates_baseline(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-a")
         result = apply_reward(
             first.state, p, rp, rp.max_eligibility_age_ns + 1,
@@ -220,28 +240,45 @@ class RewardStdpOracleTests(unittest.TestCase):
         self.assertAlmostEqual(result.baseline_after, 0.505)
 
     def test_expired_context_cannot_be_reopened_and_new_context_starts_clean(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         first = update_rstdp(SynapseState(), p, rp, 0, 1, 0, "episode-a")
         with self.assertRaises(OracleInputError):
             update_rstdp(
-                first.state, p, rp, rp.max_eligibility_age_ns + 1,
-                0, 1, "episode-a",
+                first.state, p, rp, rp.max_eligibility_age_ns + 1, 0, 1, "episode-a"
             )
         second = update_rstdp(
-            first.state, p, rp, rp.max_eligibility_age_ns + 1,
-            1, 0, "episode-b",
+            first.state, p, rp, rp.max_eligibility_age_ns + 1, 1, 0, "episode-b"
         )
         self.assertEqual(second.state.eligibility_context_id, "episode-b")
         self.assertEqual(second.q_raw, 0.0)
         self.assertEqual(second.state.pre_trace, 1.0)
         self.assertEqual(second.state.post_trace, 0.0)
 
+    def test_delayed_reward_golden_vector(self):
+        p, rp = SynapseParams(), RewardParams()
+        state = SynapseState()
+        for time_ns, n_pre, n_post in (
+            (0, 1, 0), (100 * MS, 0, 1), (1100 * MS, 0, 0),
+        ):
+            state = update_rstdp(
+                state, p, rp, time_ns, n_pre, n_post, "golden-episode"
+            ).state
+        result = apply_reward(
+            state, p, rp, 1100 * MS, reward_value=1.0,
+            baseline_before=0.5, learning_context_id="golden-episode",
+        )
+        self.assertAlmostEqual(result.state.weight, 0.5000000154922011, places=15)
+        self.assertAlmostEqual(result.weight_delta, 0.00000001549220107754934, places=18)
+        self.assertAlmostEqual(result.baseline_after, 0.505, places=15)
+        self.assertEqual(result.status, "APPLIED")
+
     def test_invalid_reward_is_rejected(self):
-        p = SynapseParams()
-        rp = RewardParams()
+        p, rp = SynapseParams(), RewardParams()
         with self.assertRaises(OracleInputError):
-            apply_reward(SynapseState(), p, rp, 0, reward_value=1.01, baseline_before=0.5, learning_context_id=None)
+            apply_reward(
+                SynapseState(), p, rp, 0, reward_value=1.01,
+                baseline_before=0.5, learning_context_id=None,
+            )
 
 
 if __name__ == "__main__":
