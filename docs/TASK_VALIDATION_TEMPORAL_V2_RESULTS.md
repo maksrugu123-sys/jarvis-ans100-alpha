@@ -59,7 +59,7 @@ This does **not** prove that reward modulation is mathematically inactive. It sh
 
 1. **FIXED is the current best reference condition** for this exact benchmark. Do not replace it with STDP or claim STDP improved learning.
 2. **STDP is active but harmful to this classifier's operating point.** It strongly increases BURST recall at the cost of many SPARSE false positives.
-3. **R-STDP's task-level utility remains un demonstrated.** Rewarded and neutral R-STDP are indistinguishable on held-out predictions, despite small weight changes in the rewarded condition.
+3. **R-STDP's task-level utility has not yet been demonstrated.** Rewarded and neutral R-STDP are indistinguishable on held-out predictions, despite small weight changes in the rewarded condition.
 4. Four seeds are useful repeatability checks but are not a statistically powered population estimate. The benchmark is synthetic and limited to one neuron, one excitatory synapse and a frozen rule: any output spike predicts BURST.
 5. The per-gap class ranges overlap at 7–8 ms. Results should not be generalized to broad temporal recognition.
 6. The result does not justify changing the STARTER parameters to fit this dataset. Preserve the current STARTER profile until a better-designed, independently evaluated experiment supports a change.
