@@ -30,7 +30,7 @@ The decision deadline is fixed at **7 ms** after the first pulse.
 - The frozen output rule is: one or more output spikes at or before 7 ms means FAST; otherwise SLOW.
 - The deadline and gap ranges are predeclared protocol constants. They are not selected from the observed benchmark results.
 - Every pulse strength is drawn from the same shared grid: 0.80, 0.85, 0.90, 0.95 and 1.00. Strength is a nuisance variable, not a class-specific feature.
-- Pulse strengths are generated independently from the same grid for both labels. Both labels use exactly three pulses in their full episode definition.
+- Each FAST/SLOW pair shares the exact same three pulse-strength values; only the two gap values differ. This matched-pair construction prevents pulse amplitude from acting as a class cue. Both labels use exactly three pulses in their full episode definition.
 - The model is advanced to the exact 7 ms decision time with an empty input batch before the decision is recorded. This makes the deadline semantics explicit rather than evaluating only at the last input event.
 
 The delayed third SLOW pulse is not silently discarded from the dataset: the report records both the total episode definition and the number of pulses observed/withheld at the decision deadline.
