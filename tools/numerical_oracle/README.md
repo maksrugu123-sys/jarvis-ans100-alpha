@@ -64,3 +64,17 @@ The test suite also defines a 2,500-step LIF-DT boundedness/reproducibility
 probe and a 5,000-update STDP boundedness probe. Run the complete unit-test
 command above before relying on the new tests; the new tests and sweep tool
 must not be described as verified until that command has actually completed.
+
+
+## Calibration Round 2 — behavioral characterization
+
+Run from the repository root:
+
+~~~sh
+python3 -m tools.numerical_oracle.calibration_round2 > calibration_round2.json
+python3 -m unittest discover -s tools -t . -v
+~~~
+
+Round 2 adds 23 fixed STARTER scenarios across amplitude, temporal spacing, burst/sparse/sustained input, adaptation recovery, Attention gain, simultaneous input ordering, and initial conditions. It is a deterministic behavioral characterization tool, not an optimizer. It does not change parameters or select a best profile. The new tests are pending execution until the above test command has been run in the target environment.
+
+The user previously confirmed 55 tests passed on Android Termux and inspected the 99 Round 1 sweep scenarios. That verification predates the Round 2 test file; do not treat Round 2 as verified until the tests have been run.
