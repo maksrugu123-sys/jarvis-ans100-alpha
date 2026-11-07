@@ -3299,5 +3299,5 @@ ZRAM может выступать дополнительной системно
 - V1 temporal robustness выполнен в Android Termux: 82 unit tests passed, 0 failures, 0 errors за 3.228 s.
 - V1 held-out accuracy: FIXED 0.80, STDP 0.90, R-STDP 0.80; на выборке из 10 примеров STDP дал 9 правильных ответов против 8 у FIXED, но сделал один false positive. Это предварительный результат одного детерминированного набора.
 - V2 выполнен пользователем на Android Termux: 92 unit tests passed; held-out accuracy FIXED 0.74375, STDP 0.66250, rewarded R-STDP 0.74375, neutral R-STDP 0.74375. Rewarded/neutral R-STDP predictions совпали по всем четырём seed; детали — docs/TASK_VALIDATION_TEMPORAL_V2_RESULTS.md.
-- V3 temporal-rate reference benchmark и 14 специализированных unit-test методов добавлены в tools/task_validation; пользовательский запуск V3 ещё не выполнен, поэтому его метрики не заявляются.
+- V3 temporal-rate reference benchmark и 15 специализированных unit-test методов добавлены в tools/task_validation; пользовательский запуск V3 ещё не выполнен, поэтому его метрики не заявляются.
 - STARTER не менялся; сборки, CI/GitHub Actions, APK/AAB и измерения RAM/CPU/энергии/I/O не запускались.
