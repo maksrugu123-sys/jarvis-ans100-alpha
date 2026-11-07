@@ -205,3 +205,14 @@ A post-publication fetch check found that the new architecture subsection had be
 ## 2026-11-07 — README newline literal corrected
 
 A second byte-level check showed the README V5/V4.2 separator still contained the two literal characters backslash+n after the prior correction attempt. The exact marker was replaced by a real newline. This is a documentation-only correction; no code, equations, protocols or test status changed. The file is fetched again after publication for verification. No executable tests/benchmarks, builds, APK/AAB, CI or GitHub Actions were run.
+
+
+## 2026-11-07 — V4.2 unittest runner name collision fix
+
+The user's Android Termux run exposed a test-harness failure: setUpClass assigned the report dictionary to cls.run, shadowing unittest.TestCase.run(). The unittest suite then attempted to call the dictionary and raised TypeError: 'dict' object is not callable before test methods could execute.
+
+Renamed the stored report alias to audit_run and updated its test references. This is a test-only fix; it does not modify the V4.2 audit implementation, the Numerical Oracle, neuron equations, STARTER, V4 datasets, or benchmark protocols.
+
+**Verification:** static inspection confirms the cls.run/self.run shadowing references are absent. The dedicated tests have not yet been rerun; no passing result is claimed. The user's smoke and pilot commands did execute according to their progress output, but their JSON reports have not yet been inspected.
+
+**Builds / CI / GitHub Actions:** NOT RUN.

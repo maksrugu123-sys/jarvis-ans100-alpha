@@ -26,7 +26,7 @@ class RstdpCausalCreditV42Tests(unittest.TestCase):
             seeds=(104729,),
             max_examples_per_category=2,
         )
-        cls.run = cls.report["runs"][0]
+        cls.audit_run = cls.report["runs"][0]
 
     def test_same_timestamp_batch_and_ordered_probe_have_expected_signs(self):
         probe = _same_timestamp_order_probe()
@@ -38,12 +38,12 @@ class RstdpCausalCreditV42Tests(unittest.TestCase):
 
     def test_cross_tab_and_pulse_aggregates_cover_training_episodes(self):
         expected_episodes = len(self.train)
-        self.assertEqual(sum(self.run["cross_tab"].values()), expected_episodes)
+        self.assertEqual(sum(self.audit_run["cross_tab"].values()), expected_episodes)
         self.assertEqual(
-            sum(row["episode_count"] for row in self.run["pulse_alignment"].values()),
+            sum(row["episode_count"] for row in self.audit_run["pulse_alignment"].values()),
             expected_episodes,
         )
-        for group in self.run["pulse_alignment"].values():
+        for group in self.audit_run["pulse_alignment"].values():
             self.assertEqual(
                 [row["event_count"] for row in group["pulses"]],
                 [group["episode_count"]] * 3,
@@ -52,7 +52,7 @@ class RstdpCausalCreditV42Tests(unittest.TestCase):
     def test_saved_episode_traces_reconcile_pulse_contributions(self):
         saved = [
             row
-            for rows in self.run["representative_traces"].values()
+            for rows in self.audit_run["representative_traces"].values()
             for row in rows
         ]
         self.assertTrue(saved)
@@ -70,12 +70,12 @@ class RstdpCausalCreditV42Tests(unittest.TestCase):
             104729, "rstdp", self.train, self.held_out,
             DIAGNOSTIC_INITIAL_WEIGHT,
         )
-        self.assertEqual(self.run["training_metrics"], reference["train"])
+        self.assertEqual(self.audit_run["training_metrics"], reference["train"])
         self.assertEqual(
-            self.run["weight_after_training"], reference["weight_after_training"]
+            self.audit_run["weight_after_training"], reference["weight_after_training"]
         )
         self.assertEqual(
-            self.run["reward_baseline_after_training"],
+            self.audit_run["reward_baseline_after_training"],
             reference["reward_baseline_after_training"],
         )
 
@@ -85,7 +85,7 @@ class RstdpCausalCreditV42Tests(unittest.TestCase):
             DIAGNOSTIC_INITIAL_WEIGHT,
         )
         self.assertEqual(
-            self.run["weight_after_training"], reference["weight_after_training"]
+            self.audit_run["weight_after_training"], reference["weight_after_training"]
         )
         self.assertEqual(
             self.report["protocol"]["diagnostic_initial_weight"],
