@@ -127,3 +127,64 @@ Use the latest architecture file as the authoritative detail; this summary is on
 - Give progress percentages only as clearly labeled rough estimates of architectural planning or implementation scope. Never imply that a percentage is a measured fact.
 - State blockers early. Never say "done" for an implementation when only a design document has been written.
 - Continue in Russian when communicating with the user unless the user requests another language.
+
+## 12. Mandatory change log — record every meaningful task
+
+**Every agent must leave a durable repository record of the work.** Do not rely on chat history, commit messages, terminal scrollback, or memory as the only record.
+
+For every coherent task or batch that changes code, tests, architecture, configuration, research protocols, documentation, or project status:
+
+1. Append an entry to `docs/DEVELOPMENT_LOG.md`. The log is append-only: do not rewrite or silently delete earlier entries. Related edits in one coherent batch may share one entry.
+2. Record the date, goal, and a clear list of files added, changed, or removed.
+3. Describe what was implemented or documented, what behavior changed, and the reason for the change. Distinguish implementation from a proposal or specification.
+4. Record tests added, updated, or removed, with their file paths and the behavior they cover.
+5. Record every verification command actually executed, its exact scope, environment when known, and the real result (pass/fail, counts, duration if available). Include benchmark profile, seeds, dataset size, and report path for experiments.
+6. List relevant checks that were not run, with the reason. Explicitly mark tests as **authored but not run** when that is the truth.
+7. Record known limitations, failed/interrupted checks, unresolved questions, and the next meaningful step.
+8. Link to the relevant architecture, test protocol, and result document rather than copying large specifications into the log.
+
+Do not omit a meaningful addition, bug fix, refactor, test, experiment, architectural decision, configuration change, or removal. For a documentation-only change, state that no executable tests were applicable and identify any documentation/static checks actually performed. For an unfinished task, record the partial state and remaining work rather than presenting it as complete.
+
+The project status in `README.md` and the authoritative design in `docs/JARVIS_ARCHITECTURE.md` must be updated when the task changes their subject matter. The development log complements these documents; it does not replace them.
+
+## 13. Mandatory test policy
+
+Read `docs/TESTING_POLICY.md` before adding or changing tests. The following rules are mandatory:
+
+- **New behavior requires tests.** Add tests for each meaningful new behavior, invariant, public contract, or failure mode.
+- **Bug fixes require regression tests.** Reproduce the old failure in a test when practical, then assert the corrected behavior.
+- **Changed behavior requires changed tests.** Update stale assertions and preserve tests for behavior that must not regress.
+- **Numerical/learning changes require deterministic evidence.** Cover signs, boundaries, limits, ordering, reset/context isolation, invalid inputs, and reference/golden vectors as relevant. Keep task-level held-out benchmarks separate from unit tests.
+- **Test both positive and negative paths.** Include malformed input, no-op/neutral behavior, limits, and failure/recovery paths when those are part of the contract.
+- Run the narrow relevant test first, then the full available unit-test suite when practical and permitted. Record the exact commands and actual results.
+- If a test cannot be written or run, explain why in the development log and final report. Do not silently skip it.
+- Never report a test as passed because it was merely written, inspected, or expected to pass. Never convert a partial test run into a claim that the whole suite passed.
+- Do not claim coverage percentages unless a coverage tool actually ran and its measured scope is stated.
+- Keep tests deterministic where possible; record random seeds and fixture/dataset details for reproducibility.
+- Do not change canonical STARTER values or learning equations merely to make a test or benchmark pass. Any diagnostic perturbation must be named and separated from canonical configuration.
+
+### Verification status vocabulary
+
+Use these labels consistently:
+
+- **PASS** — the stated command completed successfully and all included assertions passed.
+- **FAIL** — the command completed and one or more assertions/checks failed.
+- **INTERRUPTED** — execution was stopped before completion (for example, Ctrl+C).
+- **BLOCKED** — execution could not start or finish because of an external prerequisite or environment limitation.
+- **NOT RUN** — the check was not attempted.
+- **AUTHORED, NOT RUN** — test code was added or changed, but it has not been executed.
+
+A benchmark result is not a unit-test result. A unit-test pass does not prove task-level usefulness. A successful static inspection does not prove runtime behavior.
+
+## 14. Required completion report
+
+At the end of each task, report in the user-facing response:
+
+- **Added / changed / fixed / removed:** meaningful files and behavior.
+- **Tests:** tests added/updated, exact tests executed, and their actual status; separately list unrun or blocked checks.
+- **Evidence:** benchmark profile, seeds, sample sizes, metrics, or device/environment when relevant.
+- **Limitations:** what remains unverified or incomplete.
+- **GitHub:** branch, commit SHA, and commit link when a commit was created.
+
+Keep this summary consistent with `docs/DEVELOPMENT_LOG.md`. Never hide a failed test, interrupted benchmark, or known limitation. Do not claim CI, a build, a device measurement, or a push occurred unless it actually did.
+
