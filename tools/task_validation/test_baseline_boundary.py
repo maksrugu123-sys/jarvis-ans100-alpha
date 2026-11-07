@@ -14,6 +14,12 @@ class BaselineBoundaryTests(unittest.TestCase):
         self.assertEqual(report["cell_count"], len(INTERVALS_MS) * len(STRENGTHS))
         self.assertEqual(len(report["cells"]), report["cell_count"])
 
+    def test_strength_grid_respects_oracle_input_bounds(self):
+        self.assertEqual(len(STRENGTHS), 9)
+        self.assertTrue(all(0.0 <= strength <= 1.0 for strength in STRENGTHS))
+        self.assertEqual(STRENGTHS[0], 0.2)
+        self.assertEqual(STRENGTHS[-1], 1.0)
+
     def test_grid_is_deterministic(self):
         self.assertEqual(run_grid(), run_grid())
 
