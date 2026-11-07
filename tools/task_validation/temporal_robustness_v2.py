@@ -161,7 +161,20 @@ def _build_dataset(
     train = _generate_split(seed, "train", TRAIN_PER_CLASS, seen)
     held_out = _generate_split(seed, "held-out", HELD_OUT_PER_CLASS, seen)
     _validate_dataset(train, held_out)
-    return train, held_out
+
+    # Avoid presenting all examples from one class as a contiguous block.
+    # The order is deterministic and independent of model outcomes.
+    def order_key(episode: Episode) -> bytes:
+        material = (
+            f"JARVIS_TEMPORAL_ROBUSTNESS_V2_ORDER|{seed}|{episode.split}|"
+            f"{episode.episode_id}"
+        )
+        return hashlib.sha256(material.encode("utf-8")).digest()
+
+    return (
+        tuple(sorted(train, key=order_key)),
+        tuple(sorted(held_out, key=order_key)),
+    )
 
 
 def _f1(precision: float, recall: float) -> float:
