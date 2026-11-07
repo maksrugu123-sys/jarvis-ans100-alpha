@@ -1,6 +1,7 @@
 import math
 import unittest
 
+from .calibration_sweeps import run_sweeps
 from .jarvis_oracle import (
     InputSignal, NeuronParams, NeuronState, OracleInputError, RewardParams,
     SynapseParams, SynapseState, apply_reward, attention_gain,
@@ -279,6 +280,75 @@ class RewardStdpOracleTests(unittest.TestCase):
                 SynapseState(), p, rp, 0, reward_value=1.01,
                 baseline_before=0.5, learning_context_id=None,
             )
+
+
+
+class LongSequenceOracleTests(unittest.TestCase):
+    def test_lif_long_sequence_is_bounded_and_reproducible(self):
+        params = NeuronParams()
+
+        def run_probe():
+            state = NeuronState()
+            spike_times = []
+            for index in range(2500):
+                signals = []
+                if index % 5 == 0:
+                    signals.append(InputSignal("periodic-excitation", 1.0, 0.45, 0.2))
+                if index % 13 == 0:
+                    signals.append(InputSignal("periodic-inhibition", -0.35, 0.5, 0.0))
+                step = process_neuron_batch(state, index * MS, signals, params)
+                state = step.state
+                state.validate(params)
+                if step.spike_emitted:
+                    spike_times.append(index)
+            return state, tuple(spike_times)
+
+        first_state, first_spikes = run_probe()
+        second_state, second_spikes = run_probe()
+        self.assertEqual(first_state, second_state)
+        self.assertEqual(first_spikes, second_spikes)
+        self.assertGreater(len(first_spikes), 0)
+        self.assertEqual(first_state.spike_sequence, len(first_spikes))
+        self.assertTrue(math.isfinite(first_state.u))
+        self.assertTrue(math.isfinite(first_state.a))
+
+    def test_stdp_long_sequence_keeps_weight_and_traces_bounded(self):
+        params = SynapseParams()
+        state = SynapseState()
+        for index in range(5000):
+            n_pre = 1 if index % 2 == 0 else 0
+            n_post = 1 if index % 2 == 1 else 0
+            step = update_stdp(state, params, index * MS, n_pre, n_post)
+            state = step.state
+            state.validate(params)
+            self.assertGreaterEqual(state.weight, params.w_min)
+            self.assertLessEqual(state.weight, params.w_max)
+            self.assertGreaterEqual(state.pre_trace, 0.0)
+            self.assertLessEqual(state.pre_trace, params.x_pre_max)
+            self.assertGreaterEqual(state.post_trace, 0.0)
+            self.assertLessEqual(state.post_trace, params.x_post_max)
+
+
+class CalibrationSweepTests(unittest.TestCase):
+    def test_sweeps_are_deterministic_and_cover_required_grid(self):
+        report = run_sweeps()
+        self.assertEqual(run_sweeps(), report)
+        self.assertEqual(report["schema"], "JARVIS_NUMERICAL_SWEEP_V0_1")
+        self.assertEqual(report["profile_id"], "JARVIS_SINGLE_NEURON_STARTER_V1")
+        self.assertEqual(report["counts"], {"lif": 81, "stdp": 12, "rstdp": 6})
+        self.assertEqual(len(report["lif"]), 81)
+        self.assertEqual(len(report["stdp"]), 12)
+        self.assertEqual(len(report["rstdp"]), 6)
+        boundary = next(
+            row for row in report["rstdp"]
+            if row["age_from_context_start_ms"] == 5000
+        )
+        expired = next(
+            row for row in report["rstdp"]
+            if row["age_from_context_start_ms"] == 5001
+        )
+        self.assertEqual(boundary["status"], "APPLIED")
+        self.assertEqual(expired["status"], "EXPIRED")
 
 
 if __name__ == "__main__":
