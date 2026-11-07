@@ -12,8 +12,10 @@ Python standard library and is intentionally single-threaded.
 - CQE `COMMAND`, `QUERY`, and `EVENT` envelopes with UUID identity checks and
   schema-version validation.
 - Module registration and operation/schema routing.
-- Deny-by-default command capabilities, scope/priority checks, expiry, revocation,
-  and a second authorization check immediately before commit.
+- Deny-by-default command capabilities with sender, operation/schema, priority,
+  policy-version and expiry checks, revocation, and a second authorization check
+  immediately before commit. Object/domain scope and resource-budget enforcement
+  from the full architecture are not implemented in this reference.
 - NCC-owned priority selection; a sender's requested priority is only a hint.
 - Bounded P0–P4 queues, per-class quotas, a per-source ordinary-message limit,
   FIFO within each class, and explicit `ACCEPTED` / `DEFERRED` / `REJECTED` results.
@@ -48,6 +50,12 @@ This package does **not** implement:
 - real concurrency, worker pools, async cancellation, RPC or external brokers;
 - the complete NCC lifecycle/recovery/resource managers or the central JARVIS
   capability-issuance service;
+- explicit capability scope checks for domain/object ranges and capability resource
+  budgets; the current reference checks sender, operation/schema, priority, expiry
+  and policy version only;
+- Aging/starvation protection for queued work: the dispatcher always selects the
+  highest non-empty priority class (P0→P1→P2→P3→P4) and FIFO within that class;
+  a sustained higher-priority load can therefore delay lower-priority work;
 - durable retention/compaction policies for idempotency and event inbox records.
 
 The in-memory coordinator accepts only volatile proposals. A proposal marked
