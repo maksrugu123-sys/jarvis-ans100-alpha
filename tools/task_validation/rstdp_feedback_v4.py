@@ -7,10 +7,12 @@ learning condition.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import math
 import statistics
+import sys
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -740,6 +742,7 @@ def run_benchmark(
     train_pairs: int = TRAIN_PAIRS,
     held_out_pairs: int = HELD_OUT_PAIRS,
     seeds: tuple[int, ...] = RUN_SEEDS,
+    progress: bool = False,
 ) -> dict[str, object]:
     if not seeds or len(set(seeds)) != len(seeds):
         raise ValueError("seeds must be a non-empty sequence of unique integers")
@@ -747,7 +750,11 @@ def run_benchmark(
     starter_rows: list[dict[str, object]] = []
     diagnostic_initial_rows: list[dict[str, object]] = []
 
-    for seed in seeds:
+    total_conditions = len(seeds) * len(CONDITION_MODES)
+    completed_conditions = 0
+    for seed_index, seed in enumerate(seeds, start=1):
+        if progress:
+            print(f"[V4] seed {seed_index}/{len(seeds)} ({seed}): generating dataset", file=sys.stderr, flush=True)
         train, held_out = _build_dataset(seed, train_pairs, held_out_pairs)
         starter_metrics = _evaluate(
             held_out, CANONICAL_STARTER_WEIGHT, start_index=len(train)
@@ -758,10 +765,14 @@ def run_benchmark(
         starter_rows.append({"seed": seed, **starter_metrics})
         diagnostic_initial_rows.append({"seed": seed, **initial_diagnostic_metrics})
 
-        conditions = [
-            _run_condition(seed, mode, train, held_out)
-            for mode in CONDITION_MODES
-        ]
+        conditions = []
+        for mode in CONDITION_MODES:
+            if progress:
+                print(f"[V4] condition {completed_conditions + 1}/{total_conditions}: seed={seed}, mode={mode}, train_episodes={len(train)}, held_out_episodes={len(held_out)}", file=sys.stderr, flush=True)
+            conditions.append(_run_condition(seed, mode, train, held_out))
+            completed_conditions += 1
+            if progress:
+                print(f"[V4] completed {completed_conditions}/{total_conditions}: seed={seed}, mode={mode}", file=sys.stderr, flush=True)
         runs.append({
             "seed": seed,
             "dataset": {
@@ -898,7 +909,25 @@ def run_benchmark(
 
 
 def main() -> None:
-    print(json.dumps(run_benchmark(), indent=2, sort_keys=True, allow_nan=False))
+    parser = argparse.ArgumentParser(description="Run the V4 R-STDP feedback/error-recovery benchmark.")
+    parser.add_argument("--profile", choices=("full", "pilot", "smoke"), default="full")
+    parser.add_argument("--train-pairs", type=int, default=None)
+    parser.add_argument("--held-out-pairs", type=int, default=None)
+    parser.add_argument("--seeds", type=int, nargs="+", default=None)
+    args = parser.parse_args()
+    profiles = {
+        "full": (TRAIN_PAIRS, HELD_OUT_PAIRS, RUN_SEEDS),
+        "pilot": (512, 128, RUN_SEEDS[:2]),
+        "smoke": (128, 64, RUN_SEEDS[:2]),
+    }
+    default_train, default_held, default_seeds = profiles[args.profile]
+    train_pairs = args.train_pairs if args.train_pairs is not None else default_train
+    held_out_pairs = args.held_out_pairs if args.held_out_pairs is not None else default_held
+    seeds = tuple(args.seeds) if args.seeds is not None else tuple(default_seeds)
+    if train_pairs < 1 or held_out_pairs < 1:
+        parser.error("pair counts must be positive")
+    report = run_benchmark(train_pairs, held_out_pairs, seeds, progress=True)
+    print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
 
 
 if __name__ == "__main__":
