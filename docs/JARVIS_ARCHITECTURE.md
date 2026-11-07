@@ -2713,6 +2713,28 @@ python3 -m unittest discover -s tools -t . -v
 
 Генератор только печатает JSON и не меняет параметры, не выполняет оптимизацию и не выбирает «лучший» вариант. Redirect в файл выполняется shell-командой пользователя.
 
+
+### 3.26.4. Round 2 execution result — 7 November 2026
+
+Пользователь выполнил генератор:
+
+~~~sh
+python3 -m tools.numerical_oracle.calibration_round2 > calibration_round2.json
+~~~
+
+Команда завершилась без сообщения об ошибке; JSON-отчёт создан в локальном каталоге Termux. Сами числовые метрики сценариев пока не представлены для анализа, поэтому поведенческие выводы по 23 сценариям ещё не делаются.
+
+После этого пользователь выполнил полный набор:
+
+~~~sh
+python3 -m unittest discover -s tools -t . -v
+~~~
+
+Результат: **64 tests passed, 0 failures, 0 errors** за 1.649 секунды. Breakdown: 26 CQE reference tests, 29 Numerical Oracle tests и 9 новых Calibration Round 2 tests. Запуск выполнен пользователем на Android Termux; версия Python не зафиксирована.
+
+Это подтверждает прохождение существующих unit-test assertions в данном окружении. Это не заменяет анализ фактических scenario traces, task-level validation, интеграционные/crash tests или runtime benchmarks.
+
+
 #### 3.26.3. Критерии и границы выводов
 
 Round 2 проверяет детерминированность, конечность/ограниченность состояний, монотонность заранее выбранных subthreshold/Attention/recovery-сценариев, различимость временных паттернов и инвариантность порядка одновременных входов. Эти проверки относятся к конкретной сетке сценариев, а не являются универсальными доказательствами поведения модели.
@@ -3074,3 +3096,18 @@ ZRAM может выступать дополнительной системно
 
 
 **Главный ближайший шаг:** запустить полный набор из 29 unit-тестов Numerical Oracle (три новых теста ожидают повторного запуска), выполнить sweep-генератор и разобрать его JSON-отчёт. После анализа нужно откалибровать STARTER-профиль по явным критериям и сохранить отдельную immutable parameter_set_version. Параллельно CQE reference остаётся acceptance oracle для будущего production NCC; следующий инженерный блок после подтверждения Oracle — выбор production-языка и интеграция JPVR durable commit/outbox/recovery. Reasoning Engine v0.1 остаётся отдельным последующим этапом после стабилизации базового ядра.
+
+
+### 12.2. Последняя проверка Numerical Oracle — 7 ноября 2026
+
+Последнее подтверждённое исполнение пользователя в Android Termux:
+
+- Calibration Round 2 generator завершился успешно и создал локальный файл calibration_round2.json; содержимое отчёта ещё ожидает предметного анализа.
+- Полный набор \`python3 -m unittest discover -s tools -t . -v\`: **64 passed, 0 failures, 0 errors**, 1.649 секунды.
+- Breakdown: 26 CQE reference tests + 29 Numerical Oracle tests + 9 Calibration Round 2 tests.
+- Python version не записана.
+- Это тестирование reference-инструментов, а не production runtime.
+- Параметры JARVIS_SINGLE_NEURON_STARTER_V1 не менялись и не считаются CALIBRATED.
+- Сборки, CI/GitHub Actions, APK/AAB, benchmarks и измерения ресурсов не запускались.
+
+Эта запись является более свежей проверкой и уточняет ожидавшие повторного запуска статусы, перечисленные выше в документе. Для следующих решений необходимо изучить фактические значения и traces из calibration_round2.json, а затем составить отдельный task-level validation набор.

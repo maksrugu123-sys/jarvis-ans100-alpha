@@ -2,7 +2,7 @@
 
 **Date:** 7 November 2026  
 **Branch:** main  
-**Status:** experiment definition and reference script committed; Round 2 execution is pending  
+**Status:** Round 2 generator executed; all 64 repository unit tests passed on Android Termux  
 **Numerical profile:** JARVIS_SINGLE_NEURON_STARTER_V1 (unchanged)
 
 ## 1. Round 1: observed results
@@ -104,7 +104,7 @@ These are behavioral sanity checks for this finite scenario set, not universal m
 
 ## 6. Next decision after the run
 
-After the user runs Round 2 in Termux, inspect the generated JSON and the complete test output. Record the actual execution environment and results. Investigate any failed invariant before adding new parameter dimensions.
+The Round 2 generator completed successfully in the user's Android Termux environment. The complete test output reports 64 passed, 0 failures, 0 errors in 1.649 seconds. The JSON report was generated as calibration_round2.json, but its scenario metrics have not yet been inspected in this review. The test pass confirms the implemented assertions, not task-level usefulness or calibration.
 
 Only after this characterization should we define a separate task-level validation suite with explicit desired outputs, false-positive/false-negative costs, and held-out test scenarios. Parameter changes require that separate objective and a versioned candidate profile; the STARTER baseline must remain preserved.
 
@@ -112,6 +112,7 @@ Only after this characterization should we define a separate task-level validati
 
 - Round 1 unit tests: 55 passed on the user's Android Termux environment; Python version not captured.
 - Round 1 sweep: 99 scenarios generated and inspected by the user.
-- Round 2 source and tests: committed; execution not yet confirmed.
+- Round 2 generator: executed successfully; calibration_round2.json created on the user's device. Detailed scenario metrics are pending inspection.
+- Round 2 + full repository unit tests: **64 passed, 0 failures, 0 errors** in 1.649 seconds on Android Termux. Breakdown: 26 CQE reference tests, 29 Numerical Oracle tests, 9 Round 2 tests. Python version not recorded.
 - Builds, APK/AAB generation, CI, and GitHub Actions were not run.
 - No runtime, benchmark, RAM, or device-performance measurements were performed.

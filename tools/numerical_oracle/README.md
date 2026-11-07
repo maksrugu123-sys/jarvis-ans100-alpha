@@ -75,6 +75,6 @@ python3 -m tools.numerical_oracle.calibration_round2 > calibration_round2.json
 python3 -m unittest discover -s tools -t . -v
 ~~~
 
-Round 2 adds 23 fixed STARTER scenarios across amplitude, temporal spacing, burst/sparse/sustained input, adaptation recovery, Attention gain, simultaneous input ordering, and initial conditions. It is a deterministic behavioral characterization tool, not an optimizer. It does not change parameters or select a best profile. The new tests are pending execution until the above test command has been run in the target environment.
+Round 2 adds 23 fixed STARTER scenarios across amplitude, temporal spacing, burst/sparse/sustained input, adaptation recovery, Attention gain, simultaneous input ordering, and initial conditions. It is a deterministic behavioral characterization tool, not an optimizer. It does not change parameters or select a best profile. The user has now run the full command on Android Termux: 64 tests passed (26 CQE, 29 Numerical Oracle, 9 Round 2), 0 failures, 0 errors, in 1.649 seconds. The generated Round 2 JSON exists on the user's device; detailed scenario metrics still require review.
 
 The user previously confirmed 55 tests passed on Android Termux and inspected the 99 Round 1 sweep scenarios. That verification predates the Round 2 test file; do not treat Round 2 as verified until the tests have been run.
