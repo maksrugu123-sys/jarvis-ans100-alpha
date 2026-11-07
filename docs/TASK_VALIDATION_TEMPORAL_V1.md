@@ -166,3 +166,24 @@ The expected test count increases by the new robustness tests once the user runs
 - Since overlapping input conditions can carry conflicting labels, 100% accuracy is not an appropriate assumed target.
 - This is a small deterministic reference challenge, not a statistically powered estimate, calibrated profile, production benchmark or biological-equivalence claim.
 - Do not change STARTER parameters based on this experiment. If the one-neuron model cannot express the required distinction, document the capacity limit before considering a larger model.
+
+
+## Observed V1 results — 7 November 2026
+
+The user executed the benchmark on Android Termux and then ran the full unit-test suite.
+
+| Condition | Train accuracy | Held-out accuracy | TP | FP | TN | FN | Weight after training |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| FIXED | 1.000 | 0.800 | 3 | 0 | 5 | 2 | 0.5000000000 |
+| STDP | 1.000 | 0.900 | 5 | 1 | 4 | 0 | 0.5192031455 |
+| R-STDP | 1.000 | 0.800 | 3 | 0 | 5 | 2 | 0.5000464128 |
+
+Held-out output spike counts were:
+
+- FIXED: `[1, 0, 1, 0, 0, 0, 1, 0, 0, 0]`
+- STDP: `[1, 0, 1, 0, 1, 0, 1, 1, 1, 0]`
+- R-STDP: `[1, 0, 1, 0, 0, 0, 1, 0, 0, 0]`
+
+All three conditions reported that held-out weights were frozen. STDP produced 9/10 correct held-out classifications, one more than FIXED and R-STDP (8/10). It removed both BURST false negatives seen under FIXED but introduced one SPARSE false positive. Therefore, the result is a small preliminary trade-off on this particular fixed challenge set, not evidence of robust generalization. R-STDP did not show an advantage over FIXED in this experiment.
+
+The complete test suite passed: **82 tests, 0 failures, 0 errors, 3.228 seconds**. Breakdown: 26 CQE reference, 29 Numerical Oracle, 9 Calibration Round 2, 5 temporal-pattern, 5 baseline-boundary and 8 temporal-robustness tests. Python version was not recorded. No build, APK/AAB, CI or GitHub Actions workflow was run.

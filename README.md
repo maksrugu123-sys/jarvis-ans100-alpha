@@ -9,10 +9,10 @@ The repository is currently at the **architecture and reference-experiment stage
 - **Architecture:** the first-neuron design, Adaptive LIF-DT model, excitatory STDP/R-STDP rules, CQE v1 contract and JPVR_FORMAT_V1 storage format are specified in the architecture document.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **CQE reference:** a partial, single-threaded Python contract reference exists. Its commit store and event inbox/outbox are volatile; durable JPVR integration is not implemented.
-- **Verification:** the latest user-run full test command on Android Termux completed with **74 passed, 0 failures, 0 errors** (26 CQE reference, 29 Numerical Oracle, 9 Calibration Round 2 and 10 task-validation tests; 2.325 seconds). The Python version for this run was not recorded.
+- **Verification:** the latest user-run full test command on Android Termux completed with **82 passed, 0 failures, 0 errors** (26 CQE reference, 29 Numerical Oracle, 9 Calibration Round 2, 5 temporal-pattern, 5 baseline-boundary and 8 temporal-robustness tests; 3.228 seconds). The Python version for this run was not recorded.
 - **Calibration:** Round 1's 99-scenario sweep was generated and reviewed. Round 2's 23-scenario report was generated locally and all summarized scenario outcomes were reviewed and recorded in docs/CALIBRATION_ROUND2.md. The STARTER parameter profile has not been calibrated or changed.
-- **Task-level validation:** the initial one-neuron burst-vs-sparse benchmark gave FIXED, STDP and R-STDP 100% train and held-out accuracy (6/6 held-out episodes); learning did not demonstrate an accuracy advantage because FIXED already solved the easy task. A follow-up fixed-baseline boundary grid completed all 135 cells. It showed output spikes only for strengths 0.8–1.0 at short intervals (2–8 ms, depending on strength), with no more than one output spike per three-pulse cell. This is discrete characterization, not an exact continuous threshold or a learning result. Details: docs/TASK_VALIDATION_TEMPORAL_V1.md.
-- **Temporal robustness V1:** a deterministic overlapping-condition benchmark is now specified in tools/task_validation/temporal_robustness.py. Its timing ranges overlap (BURST 4–8 ms, SPARSE 7–10 ms), while both classes share per-pulse strength variation (0.85–0.95). The protocol and tests are added but await the user's Termux run; no results are claimed yet.
+- **Task-level validation:** the initial one-neuron burst-vs-sparse benchmark gave FIXED, STDP and R-STDP 100% train and held-out accuracy (6/6 held-out episodes); learning did not demonstrate an accuracy advantage because FIXED already solved the easy task. A follow-up fixed-baseline boundary grid completed all 135 cells. It showed output spikes only for strengths 0.8–1.0 at short intervals (2–8 ms, depending on strength), with no more than one output spike per three-pulse cell. This is discrete characterization, not an exact continuous threshold or a learning result. Details: docs/TASK_VALIDATION_TEMPORAL_V1.md. The first overlapping temporal challenge and V1 results are documented in the same report.
+- **Temporal robustness V1:** the user-run held-out results were FIXED 80%, STDP 90%, R-STDP 80% (10 episodes). STDP made one more correct prediction than FIXED but introduced one false positive; this is preliminary evidence from a single deterministic challenge set, not proof of generalization.
 - **Not implemented yet:** production neuron/NCC runtime, JNVM/JPVR storage engine, durable commit/outbox and crash recovery, full capability scopes/resource budgets, scheduler Aging/starvation protection, and Reasoning Engine execution.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for this verification.
@@ -23,9 +23,10 @@ The repository is currently at the **architecture and reference-experiment stage
 |---|---|
 | `docs/JARVIS_ARCHITECTURE.md` | Main architecture specification, decisions, open questions and development plan |
 | `docs/CALIBRATION_ROUND2.md` | Round 1 observations, Round 2 scenario design, verification record and next steps |
-| `docs/TASK_VALIDATION_TEMPORAL_V1.md` | Task-level benchmark protocols, observed results, boundary map and limitations |
+| `docs/TASK_VALIDATION_TEMPORAL_V1.md` | V1 task-level protocols, observed results, boundary map and limitations |
+| `docs/TASK_VALIDATION_TEMPORAL_V2.md` | Multi-seed temporal robustness protocol and execution instructions |
 | `tools/numerical_oracle/` | Float64 reference equations, deterministic sweeps, Round 2 generator and tests |
-| `tools/task_validation/` | Temporal-pattern and robustness benchmarks, fixed-baseline boundary grid and tests |
+| `tools/task_validation/` | Temporal-pattern, V1/V2 robustness and fixed-baseline boundary benchmarks/tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory instructions and constraints for contributors and AI coding agents |
 
@@ -68,7 +69,19 @@ From the repository root:
 python3 -m tools.task_validation.temporal_robustness > temporal_robustness_report.json
 ```
 
-This compares FIXED, STDP and R-STDP on a deterministic task with overlapping timing ranges and per-pulse strength variation. The report includes train/held-out confusion metrics, each episode's output spikes, and the training weight trajectory. The held-out set is inference-only. The benchmark does not modify the STARTER profile. The protocol is specified but its first user-run result is still pending.
+This compares FIXED, STDP and R-STDP on a deterministic task with overlapping timing ranges and per-pulse strength variation. The report includes train/held-out confusion metrics, each episode's output spikes, and the training weight trajectory. The held-out set is inference-only. The benchmark does not modify the STARTER profile. The user ran V1: FIXED achieved 80%, STDP 90%, and R-STDP 80% held-out accuracy. The STDP result is preliminary and awaits multi-seed validation.
+
+
+## Run the multi-seed temporal robustness V2 benchmark
+
+From the repository root:
+
+~~~sh
+python3 -m tools.task_validation.temporal_robustness_v2 > temporal_robustness_v2_report.json
+python3 -m unittest discover -s tools -t . -v
+~~~
+
+V2 uses four deterministic datasets, balanced train/held-out splits, overlapping timing ranges, and five shared pulse-strength levels. It compares FIXED, STDP, rewarded R-STDP and a neutral-reward R-STDP control. The control makes it possible to distinguish reward modulation from eligibility processing alone. The report provides pooled and per-seed accuracy, balanced accuracy, class F1, macro-F1, confusion counts, weight trajectories and reward effects. The protocol is specified; user execution is pending. It does not modify STARTER or run builds/CI.
 
 ## Generate experiment reports
 

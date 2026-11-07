@@ -2842,7 +2842,7 @@ python3 -m unittest discover -s tools -t . -v
 
 #### 3.27.6. Temporal Robustness V1 — зафиксированный протокол
 
-**Статус:** protocol, reference script and unit tests added; first execution by the user is pending. No task-level results or learning benefit are claimed yet.
+**Статус:** benchmark выполнен пользователем 7 ноября 2026 года на Android Termux; фактические результаты записаны ниже и в docs/TASK_VALIDATION_TEMPORAL_V1.md. Это reference experiment, не production runtime; STARTER не менялся.
 
 Проверка должна усложнять простую burst-vs-sparse задачу без изменения STARTER:
 
@@ -2865,6 +2865,42 @@ python3 -m unittest discover -s tools -t . -v
     python3 -m unittest discover -s tools -t . -v
 
 Поскольку временные диапазоны перекрываются, часть входов может быть неоднозначной по назначенным меткам. Нельзя заранее требовать 100% accuracy. Ошибки baseline, STDP или R-STDP нужно разбирать отдельно; низкая точность может указывать на ограничение one-neuron/one-synapse capacity или выходного правила, а не только на недостаток обучения. STARTER остаётся неизменным.
+
+
+#### 3.27.7. Фактические результаты Temporal Robustness V1 — 7 ноября 2026
+
+Пользователь выполнил tools/task_validation/temporal_robustness.py и полный набор unit tests в Android Termux.
+
+| Условие | Train accuracy | Held-out accuracy | TP | FP | TN | FN | Вес после обучения |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| FIXED | 1.000 | 0.800 | 3 | 0 | 5 | 2 | 0.5000000 |
+| STDP | 1.000 | 0.900 | 5 | 1 | 4 | 0 | 0.5192031 |
+| R-STDP | 1.000 | 0.800 | 3 | 0 | 5 | 2 | 0.5000464 |
+
+Все три условия подтвердили неизменность весов на held-out. STDP дал на один правильный ответ больше, чем FIXED (9/10 против 8/10), устранив два пропуска BURST, но допустив одно ложное срабатывание SPARSE. Поэтому это предварительное преимущество на одном фиксированном наборе, а не доказательство устойчивого обобщения. R-STDP в этом опыте не превзошёл FIXED.
+
+Полный набор: **82 tests passed, 0 failures, 0 errors, 3.228 s** на Android Termux. В этот запуск вошли 26 CQE reference, 29 Numerical Oracle, 9 Calibration Round 2, 5 temporal-pattern, 5 baseline-boundary и 8 temporal-robustness тестов. Python version не записана. Сборки и GitHub Actions не запускались.
+
+#### 3.27.8. Temporal Robustness V2 — протокол расширенной проверки
+
+**Статус:** reference implementation, unit tests и протокол добавлены; пользовательский запуск ожидается. Метрики V2 ещё не измерены.
+
+V2 расширяет проверку, не меняя STARTER и фиксированное правило классификации:
+
+- четыре детерминированных независимых набора с seed 104729, 130363, 155921 и 181081;
+- в каждом наборе 16 BURST и 16 SPARSE train episodes, 20 BURST и 20 SPARSE held-out episodes;
+- два межимпульсных интервала в каждом эпизоде; диапазоны BURST 4–8 ms и SPARSE 7–11 ms перекрываются на 7–8 ms;
+- для обеих меток используется общая сетка силы импульса 0.80/0.85/0.90/0.95/1.00;
+- SHA-256-derived deterministic generator даёт воспроизводимые примеры без runtime randomness; полные входные сигнатуры уникальны и не пересекаются между train/held-out;
+- один Adaptive LIF-DT neuron, один excitatory synapse, три pulses per episode, начальный вес 0.5; состояние нейрона сбрасывается к покою на границе эпизода, состояние синапса сохраняется внутри run/condition;
+- сравниваются FIXED, STDP, rewarded R-STDP и R-STDP neutral-reward control; последний подаёт reward, равный текущему baseline, то есть потребляет eligibility при нулевой prediction error и изолирует вклад модуляции reward;
+- все held-out эпизоды выполняются без STDP, eligibility и reward updates.
+
+Сводка включает pooled confusion metrics, accuracy, balanced accuracy, class F1, macro-F1, среднее и sample standard deviation по четырём runs, траектории весов и per-seed эффект reward. Преимущество rewarded R-STDP оценивается относительно neutral-reward control, а не только по сравнению с FIXED или по величине изменения веса.
+
+Реализация: tools/task_validation/temporal_robustness_v2.py; тесты: tools/task_validation/test_temporal_robustness_v2.py; протокол и команда запуска: docs/TASK_VALIDATION_TEMPORAL_V2.md.
+
+Сборки, CI/GitHub Actions, APK/AAB и измерения ресурсов этим этапом не запускаются. STARTER не изменяется.
 
 ## 4. Гибридная память нейросети
 
@@ -3215,7 +3251,7 @@ ZRAM может выступать дополнительной системно
 До отдельного разрешения пользователя сборки не запускаются. Архитектурная готовность, написание исходного кода, статические проверки, запуск тестов и сборка приложения — разные статусы и должны учитываться раздельно.
 
 
-**Главный ближайший шаг:** выполнить python3 -m tools.task_validation.temporal_patterns и полный набор unit tests, затем изучить held-out метрики FIXED/STDP/R-STDP и фактические изменения веса. Не менять STARTER и не подбирать параметры только по числу spikes. По результатам решить, есть ли измеримая польза обучения относительно baseline; если baseline уже решает задачу, расширить тест на шум/вариации, а не объявлять обучение успешным. Далее — уточнить исполняемые контракты и границы первого прототипа; CQE reference сохранить как acceptance oracle для будущего production NCC. JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
+**Главный ближайший шаг:** выполнить tools/task_validation/temporal_robustness_v2.py и полный набор unit tests на Android Termux; затем разобрать среднюю точность, разброс между seed, confusion metrics и прямое сравнение rewarded R-STDP с neutral-reward control. Не менять STARTER по результатам одного набора и не объявлять reward полезным без повторяемого преимущества на нескольких seed. После V2 выбрать следующий эксперимент по фактическим ограничениям одного нейрона/синапса; CQE reference сохранить как acceptance oracle для будущего production NCC. JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
 
 
 ### 12.2. Последняя проверка Numerical Oracle — 7 ноября 2026
@@ -3231,3 +3267,11 @@ ZRAM может выступать дополнительной системно
 - Сборки, CI/GitHub Actions, APK/AAB, benchmarks и измерения ресурсов не запускались.
 
 Эта запись является более свежей проверкой и уточняет ожидавшие повторного запуска статусы, перечисленные выше в документе. Следующий шаг — выполнить tools/task_validation/baseline_boundary.py (135 ячеек: 15 интервалов × 9 значений силы входа), затем заранее зафиксировать более сложный task-level benchmark с пограничными/шумными условиями. Сравнить FIXED/STDP/R-STDP на одинаковых train/held-out данных; STARTER не менять.
+
+
+### 12.3. Последнее пользовательское task-level validation — 7 ноября 2026
+
+- V1 temporal robustness выполнен в Android Termux: 82 unit tests passed, 0 failures, 0 errors за 3.228 s.
+- V1 held-out accuracy: FIXED 0.80, STDP 0.90, R-STDP 0.80; на выборке из 10 примеров STDP дал 9 правильных ответов против 8 у FIXED, но сделал один false positive. Это предварительный результат одного детерминированного набора.
+- V2 расширенный протокол внесён в репозиторий, но ещё не запускался пользователем; все его метрики остаются неизвестными.
+- STARTER не менялся; сборки, CI/GitHub Actions, APK/AAB и измерения RAM/CPU/энергии/I/O не запускались.
