@@ -154,6 +154,15 @@ def _validate_dataset(
             raise ValueError(f"{split_name} SLOW class is not balanced")
         if any(labels[index] == labels[index + 1] for index in range(len(labels) - 1)):
             raise ValueError(f"{split_name} order must be class-interleaved")
+        pairs: dict[str, dict[str, Episode]] = {}
+        for item in episodes:
+            sample_index = item.episode_id.rsplit("-", 1)[-1]
+            pairs.setdefault(sample_index, {})[item.label] = item
+        for pair in pairs.values():
+            if set(pair) != {"FAST", "SLOW"}:
+                raise ValueError(f"{split_name} matched-pair class is incomplete")
+            if pair["FAST"].strengths != pair["SLOW"].strengths:
+                raise ValueError(f"{split_name} matched-pair strengths differ")
 
     for episode in all_episodes:
         if episode.label not in {"FAST", "SLOW"}:
