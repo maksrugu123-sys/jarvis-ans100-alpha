@@ -12,6 +12,7 @@ The repository is currently at the **architecture and reference-experiment stage
 - **Verification:** the latest user-run full test command on Android Termux completed with **74 passed, 0 failures, 0 errors** (26 CQE reference, 29 Numerical Oracle, 9 Calibration Round 2 and 10 task-validation tests; 2.325 seconds). The Python version for this run was not recorded.
 - **Calibration:** Round 1's 99-scenario sweep was generated and reviewed. Round 2's 23-scenario report was generated locally and all summarized scenario outcomes were reviewed and recorded in docs/CALIBRATION_ROUND2.md. The STARTER parameter profile has not been calibrated or changed.
 - **Task-level validation:** the initial one-neuron burst-vs-sparse benchmark gave FIXED, STDP and R-STDP 100% train and held-out accuracy (6/6 held-out episodes); learning did not demonstrate an accuracy advantage because FIXED already solved the easy task. A follow-up fixed-baseline boundary grid completed all 135 cells. It showed output spikes only for strengths 0.8–1.0 at short intervals (2–8 ms, depending on strength), with no more than one output spike per three-pulse cell. This is discrete characterization, not an exact continuous threshold or a learning result. Details: docs/TASK_VALIDATION_TEMPORAL_V1.md.
+- **Temporal robustness V1:** a deterministic overlapping-condition benchmark is now specified in tools/task_validation/temporal_robustness.py. Its timing ranges overlap (BURST 4–8 ms, SPARSE 7–10 ms), while both classes share per-pulse strength variation (0.85–0.95). The protocol and tests are added but await the user's Termux run; no results are claimed yet.
 - **Not implemented yet:** production neuron/NCC runtime, JNVM/JPVR storage engine, durable commit/outbox and crash recovery, full capability scopes/resource budgets, scheduler Aging/starvation protection, and Reasoning Engine execution.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for this verification.
@@ -24,7 +25,7 @@ The repository is currently at the **architecture and reference-experiment stage
 | `docs/CALIBRATION_ROUND2.md` | Round 1 observations, Round 2 scenario design, verification record and next steps |
 | `docs/TASK_VALIDATION_TEMPORAL_V1.md` | Task-level benchmark protocols, observed results, boundary map and limitations |
 | `tools/numerical_oracle/` | Float64 reference equations, deterministic sweeps, Round 2 generator and tests |
-| `tools/task_validation/` | Temporal-pattern benchmark, fixed-baseline boundary grid and tests |
+| `tools/task_validation/` | Temporal-pattern and robustness benchmarks, fixed-baseline boundary grid and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory instructions and constraints for contributors and AI coding agents |
 
@@ -57,6 +58,17 @@ python3 -m tools.task_validation.baseline_boundary > baseline_boundary_report.js
 ```
 
 This evaluates 135 deterministic combinations (15 pulse intervals × 9 input strengths in the Oracle's valid [0, 1] range). Each cell uses three pulses. The user-run grid and its full response matrix are recorded in docs/TASK_VALIDATION_TEMPORAL_V1.md. It does not change the STARTER profile or update synaptic weights. The grid is a characterization step, not a learning benchmark.
+
+
+## Run the temporal robustness benchmark
+
+From the repository root:
+
+```sh
+python3 -m tools.task_validation.temporal_robustness > temporal_robustness_report.json
+```
+
+This compares FIXED, STDP and R-STDP on a deterministic task with overlapping timing ranges and per-pulse strength variation. The report includes train/held-out confusion metrics, each episode's output spikes, and the training weight trajectory. The held-out set is inference-only. The benchmark does not modify the STARTER profile. The protocol is specified but its first user-run result is still pending.
 
 ## Generate experiment reports
 

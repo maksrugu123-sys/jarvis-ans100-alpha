@@ -2840,12 +2840,31 @@ python3 -m unittest discover -s tools -t . -v
 
 Подробный протокол и ограничения: docs/TASK_VALIDATION_TEMPORAL_V1.md.
 
-#### 3.27.6. Следующий эксперимент
+#### 3.27.6. Temporal Robustness V1 — зафиксированный протокол
 
-Не менять STARTER. Выполнить детерминированную characterization-сетку tools/task_validation/baseline_boundary.py (15 интервалов × 9 значений силы входа = 135 ячеек) для FIXED baseline, чтобы измерить область перехода между BURST и SPARSE. Затем заранее зафиксировать более сложную задачу с пограничными/шумными условиями, где baseline не имеет идеальной точности. Только после этого повторить сравнение FIXED/STDP/R-STDP с одинаковыми train/held-out последовательностями и замороженными весами на тесте.
+**Статус:** protocol, reference script and unit tests added; first execution by the user is pending. No task-level results or learning benefit are claimed yet.
 
-Если один синапс не может выразить требуемое различие, увеличение ёмкости модели должно быть отдельным экспериментом, а не ошибочно трактоваться как неудача обучения.
+Проверка должна усложнять простую burst-vs-sparse задачу без изменения STARTER:
 
+- один Adaptive LIF-DT reference neuron и один excitatory synapse, начальный вес 0.5;
+- три входных импульса в эпизод, два межимпульсных интервала и отдельная сила каждого импульса;
+- 12 train episodes (6 BURST / 6 SPARSE) и 10 независимых held-out episodes (5 / 5);
+- диапазоны временных интервалов частично перекрываются: BURST 4–8 ms, SPARSE 7–10 ms;
+- обе метки используют одну и ту же полосу силы отдельных входных импульсов: 0.85, 0.90 и 0.95;
+- полные входные сигнатуры train и held-out (оба интервала и три силы) не повторяются между выборками;
+- все эпизоды заданы явными константами, без случайной генерации; интервалы между стартами эпизодов — 2000 ms;
+- состояние нейрона начинает каждый эпизод из покоя, а состояние синапса и выученный вес сохраняются на протяжении train.
+
+Сравниваются FIXED, STDP и R-STDP на одинаковых эпизодах. STDP не получает метку класса; R-STDP получает reward 1.0 за верную классификацию и 0.0 за ошибочную после завершения эпизода. Выходное правило неизменно: один или более output spikes — BURST, отсутствие spikes — SPARSE. На held-out все методы используют только фиксированный inference; пластичность и reward отключены.
+
+Отчёт должен включать confusion metrics, spike pattern каждого эпизода, weight trajectory после каждого train episode и проверку неизменности веса на held-out. Отдельно сравниваются held-out accuracy и число правильных ответов относительно FIXED.
+
+Реализация reference benchmark: tools/task_validation/temporal_robustness.py; тесты: tools/task_validation/test_temporal_robustness.py. Запуск из корня репозитория:
+
+    python3 -m tools.task_validation.temporal_robustness > temporal_robustness_report.json
+    python3 -m unittest discover -s tools -t . -v
+
+Поскольку временные диапазоны перекрываются, часть входов может быть неоднозначной по назначенным меткам. Нельзя заранее требовать 100% accuracy. Ошибки baseline, STDP или R-STDP нужно разбирать отдельно; низкая точность может указывать на ограничение one-neuron/one-synapse capacity или выходного правила, а не только на недостаток обучения. STARTER остаётся неизменным.
 
 ## 4. Гибридная память нейросети
 

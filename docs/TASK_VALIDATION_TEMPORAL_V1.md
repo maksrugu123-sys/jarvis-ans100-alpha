@@ -116,10 +116,53 @@ The additional strength-range test verifies that every grid value respects the O
 
 No application build, APK/AAB generation, CI, or GitHub Actions workflow was run.
 
-## Next experiment
+## Follow-up protocol: JARVIS_TEMPORAL_ROBUSTNESS_V1
 
-Do not change the STARTER profile based on these results. The easy burst-vs-sparse task is already solved by FIXED, and the boundary map now shows where the fixed neuron responds for the tested amplitudes and intervals.
+**Status:** protocol, reference script and unit tests are specified; the new benchmark has not yet been run by the user. No measured accuracy, weight change or learning benefit is claimed in this section.
 
-Next, design a pre-registered task with overlapping input conditions or controlled timing/amplitude jitter. First verify that the FIXED baseline is not already perfect; then compare FIXED, STDP, and R-STDP on identical training and held-out episodes, with held-out updates disabled. Report confusion matrices, per-condition output spikes, and weight trajectories. If the one-neuron/one-synapse model cannot represent the task, document that capacity limit separately rather than calling it a learning failure.
+### Objective
 
-Keep the STARTER profile immutable until a separate calibration experiment justifies a versioned candidate profile.
+Check whether the one-neuron reference model preserves burst/sparse discrimination when the input conditions vary and the two timing classes partially overlap. The task deliberately includes amplitude variation so that input strength is a nuisance factor shared by both classes rather than a clean class cue.
+
+### Pre-registered dataset
+
+- One Adaptive LIF-DT reference neuron and one excitatory synapse; initial weight 0.5.
+- Each episode contains exactly three pulses, represented by two inter-pulse gaps and three separate input-strength values.
+- Training: 12 episodes, balanced 6 BURST / 6 SPARSE.
+- Held-out: 10 different episodes, balanced 5 BURST / 5 SPARSE.
+- The observed BURST gap range is 4–8 ms; SPARSE is 7–10 ms. These ranges overlap at 7–8 ms.
+- Both classes use the same per-pulse strength set: 0.85, 0.90 and 0.95. Strength values vary between pulses and episodes.
+- The exact input signatures (both gaps and all three strengths) are disjoint between training and held-out data.
+- All episodes are explicit constants. There is no random sampling or seed-dependent generation.
+- The neuron starts from a rested state for each episode; synaptic state and learned weight persist across training episodes. Episodes are separated by 2,000 ms of model time.
+
+The label is assigned by the fixed dataset, not generated from a hidden threshold. Because the timing bands overlap, some examples are intrinsically ambiguous for a classifier that sees only these input events. Results must be interpreted with that limitation in mind.
+
+### Compared conditions
+
+1. **FIXED:** no weight updates.
+2. **STDP:** pair-based excitatory STDP after each pulse; the learning rule is not given the class label.
+3. **R-STDP:** eligibility updates after each pulse; after the complete episode, an external evaluator sends reward 1.0 for a correct classification or 0.0 for an incorrect classification.
+
+The decision rule is frozen before evaluation: one or more output spikes means BURST; zero means SPARSE. The same training and held-out episodes are used for all three conditions. During held-out evaluation, every condition uses fixed inference: no STDP updates and no reward updates.
+
+### Recorded output
+
+The report records train and held-out accuracy, precision/recall/specificity and balanced accuracy; TP/FP/TN/FN; each episode's gaps, strengths, per-pulse output spikes and prediction; the synaptic weight after every training episode; final weight; and held-out weight-freeze verification. Each learned condition is compared against FIXED on held-out accuracy and number of correctly classified episodes.
+
+### Execution
+
+From the repository root on the user's Python environment:
+
+    python3 -m tools.task_validation.temporal_robustness > temporal_robustness_report.json
+    python3 -m unittest discover -s tools -t . -v
+
+The expected test count increases by the new robustness tests once the user runs the full suite. Until that run is reported, the existing 74-test result remains the latest confirmed test result.
+
+### Interpretation limits
+
+- The fixed baseline is explicitly required by a unit test to make at least one held-out error; this checks that the challenge set is not another already-perfect control task.
+- A lower STDP/R-STDP score is not automatically proof that the learning rule is intrinsically ineffective; it can indicate a mismatch between the task, the one-synapse capacity, the output rule and the learning signal.
+- Since overlapping input conditions can carry conflicting labels, 100% accuracy is not an appropriate assumed target.
+- This is a small deterministic reference challenge, not a statistically powered estimate, calibrated profile, production benchmark or biological-equivalence claim.
+- Do not change STARTER parameters based on this experiment. If the one-neuron model cannot express the required distinction, document the capacity limit before considering a larger model.
