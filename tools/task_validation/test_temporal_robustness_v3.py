@@ -32,6 +32,7 @@ class TemporalRobustnessV3Tests(unittest.TestCase):
         self.assertEqual(report["protocol"]["slow_gap_values_ms"], list(SLOW_GAP_VALUES))
         self.assertEqual(report["protocol"]["shared_strength_grid"], list(STRENGTH_LEVELS))
         self.assertFalse(report["protocol"]["starter_profile_modified"])
+        self.assertTrue(report["protocol"]["paired_strength_sequences_identical"])
         self.assertEqual([item["condition"] for item in report["aggregate_conditions"]],
                          list(CONDITION_MODES))
 
