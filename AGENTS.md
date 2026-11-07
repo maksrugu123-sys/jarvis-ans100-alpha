@@ -92,6 +92,8 @@ Unless the architecture is deliberately revised and the reason documented:
 - Keep recovery deterministic and fail safely when integrity cannot be established.
 - Keep timestamps and clock epochs explicit; monotonic clocks from one process run must not be treated as directly comparable across restarts.
 - Bound neural weights, traces, queues, caches, and adaptation values. Unexpected inputs must not cause unbounded growth or uncontrolled plasticity.
+- Keep Reasoning Engine sessions bounded: limit task decomposition, hypothesis count, plan depth, retries, context size, time, and compute. Preserve evidence provenance and unresolved contradictions; do not treat heuristic confidence scores as calibrated probabilities.
+- Reasoning Engine must not bypass Permission & Safety Gate, grant itself capabilities, mutate authoritative shared state directly, or repeat side-effecting commands without CQE idempotency/commit handling.
 
 ## 9. Current documented design snapshot
 
@@ -102,6 +104,7 @@ Use the latest architecture file as the authoritative detail; this summary is on
 - Learning: pair-based excitatory STDP and reward-modulated STDP have documented mathematical specifications. Inhibitory plasticity remains a separate unresolved design item; do not apply excitatory STDP to inhibitory synapses by default.
 - Numeric parameters: `JARVIS_SINGLE_NEURON_STARTER_V1` is a starter profile, not a calibrated production profile. Values must be tested against deterministic sequences and compared with a float64 reference before being treated as validated.
 - Neural Core State, Neural Core State Engine, NCC, CQE v1, JNVM, and JPVR have architectural specifications. Specifications must not be reported as implemented subsystems.
+- Reasoning Engine v0.1 has a conceptual architecture in section 3.23: task decomposition, bounded hypotheses, evidence/contradiction evaluation, planning, safety authorization, outcome verification, and feedback. It is not implemented and is not part of the first one-neuron JPVR-001 prototype.
 - The architecture document contains open questions and planned validation work. Check it before deciding what to do next.
 
 ## 10. Recommended workflow for each task
