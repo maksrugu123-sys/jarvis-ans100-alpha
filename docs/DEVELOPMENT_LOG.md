@@ -157,3 +157,41 @@ python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v
 **Builds / CI / GitHub Actions:** NOT RUN. No application build, APK/AAB, CI job or workflow was triggered.
 
 **Remaining limitations / next step:** run the V4.2 focused test module and smoke profile first, then the phone-friendly pilot. Review pulse contribution residuals and actual/shadow sign changes. This diagnostic is not a held-out learning experiment and cannot justify changing event ordering or learning rules by itself.
+
+
+## 2026-11-07 — V5 compact adaptive neuron core research specification
+
+**Objective:** begin the MASTER PROMPT V2 direction with a coherent architecture-level improvement focused on maximum useful capability per byte and per operation, without changing the current neuron equations or silently degrading quality.
+
+**Repository audit:**
+- Confirmed the latest main head before this change was `f3728ce1a0fa88f79a79d27ffd3ddf79d4acf10a`.
+- README, AGENTS.md, TESTING_POLICY.md, the current architecture, Numerical Oracle, V4/V4.1/V4.2 protocols, and development history were inspected.
+- V4.1 user-run evidence remains 15/15 dedicated tests and 8/8 pilot conditions.
+- V4.2 code/tests remain AUTHORED / NOT RUN; no V4.2 result is claimed.
+- Production neuron runtime and target-device memory/latency measurements do not exist.
+
+**Added:**
+- `docs/JARVIS_COMPACT_NEURON_CORE_V5.md` — proposal for shared immutable parameter sets, hot/cold state separation, rule-specific synapse payloads, compact indexed events, derived-state checks, optional future shared slow context, measurement protocol and explicit acceptance gates.
+- `docs/JARVIS_ARCHITECTURE.md` — section 3.28 links and records the proposed V5 architecture and its limits.
+- `README.md` — records V5 as PROPOSED, not implemented or measured.
+
+**Technical decisions:**
+- Keep the current F64 Numerical Oracle and Adaptive LIF-DT/STDP/R-STDP behaviour as the control.
+- Proposed hot payload estimates only: neuron 40 bytes; synapse NONE 8 bytes; STDP 32 bytes; R-STDP 52 bytes (alignment may produce a 56-byte stride). These exclude durable envelopes, IDs, indexes, integrity metadata and allocator overhead; they are not RAM measurements.
+- Derive last-spike time only when the refractory/parameter-version invariant is proven.
+- Use rule-specific synapse state and a shared R-STDP timestamp only after explicit invariant tests.
+- Do not add quantization, new learning rules, changed event ordering, shared slow memory or production runtime in this specification.
+- Preserve STARTER, V4 and V4.2. V4.2 must still be run before changing causal-credit or simultaneous-event semantics.
+
+**Research references reviewed:**
+- Sun et al., Nature Machine Intelligence (16 June 2026), dual-memory-pathway SNN; shared low-dimensional slow context and task-specific parameter reductions. This motivates only a future multi-neuron experiment.
+- Huang et al., ICLR 2026, checkpointing and lossless spike compression for BPTT memory efficiency. JARVIS currently has no BPTT training tape, so this is explicitly future-only.
+- Cheng et al., IEEE Transactions on Circuits and Systems I (2025), structured sparsity/event-driven SNN accelerator; hardware/task-specific evidence only.
+
+**Verification performed:** static repository/document/source inspection and cross-check of field invariants in the current Oracle source. The existing update_rstdp/apply_reward paths assign trace and eligibility timestamps to the same event time, but the current generic state validator does not enforce equality for arbitrary constructed states; V5 must test and enforce this in its own versioned state contract before collapsing the fields.
+
+**Tests / benchmarks / device measurements:** NOT RUN. The new specification is documentation-only. V4.2 remains AUTHORED / NOT RUN. No memory, RSS/PSS, latency or energy measurement is claimed.
+
+**Builds / APK/AAB / CI / GitHub Actions:** NOT RUN.
+
+**Next step:** user-run V4.2 focused tests and smoke/pilot; then add a small F64 packed-state/resource-baseline prototype and compare it differentially with the Numerical Oracle before any precision or learning-rule changes.
