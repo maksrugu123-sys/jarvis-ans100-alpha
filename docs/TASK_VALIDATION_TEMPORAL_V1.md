@@ -41,7 +41,7 @@ STDP changed the synaptic weight from 0.5 to approximately 0.520462, while R-STD
 
 The result establishes only that the current one-neuron reference model distinguishes this specific set of short-gap and long-gap sequences without learning. It does not establish general pattern recognition, robust learning, biological equivalence, or production runtime quality.
 
-## Test suite
+## Test suite — first run
 
 The user ran:
 
@@ -49,29 +49,77 @@ The user ran:
 python3 -m unittest discover -s tools -t . -v
 ```
 
-Observed result: **69 tests passed, 0 failures, 0 errors, 1.833 seconds**.
+Observed result at that time: **69 tests passed, 0 failures, 0 errors, 1.833 seconds**.
 
-This includes 26 CQE reference tests, 29 Numerical Oracle tests, 9 Calibration Round 2 tests, and 5 task-validation tests. These are reference-tool unit tests, not production runtime or build tests.
+This included 26 CQE reference tests, 29 Numerical Oracle tests, 9 Calibration Round 2 tests, and 5 task-validation tests. These are reference-tool unit tests, not production runtime or build tests.
 
 No application build, APK/AAB generation, CI, or GitHub Actions workflow was run.
 
-## Next experiment
-
-Do not change the STARTER profile based on this result. First characterize the fixed neuron's decision boundary across a controlled grid of inter-pulse intervals and input strengths. Use that map to select a harder, pre-registered task with overlapping/noisy conditions where the baseline is not already perfect. Then compare FIXED, STDP, and R-STDP on identical training and held-out sequences, reporting confusion matrices and weight trajectories. Keep all held-out updates disabled.
-
-If the one-synapse model cannot express the required distinction, increase model capacity only as a separately documented experiment; do not attribute a representational limitation to failed learning.
-
-
 ## Follow-up: fixed-baseline boundary characterization
 
-A separate deterministic characterization tool has been added at `tools/task_validation/baseline_boundary.py`. It evaluates the unchanged fixed-weight neuron across 15 inter-pulse intervals (2–60 ms) and 9 input strengths (0.4–1.2), for 135 cells total. Each cell contains three pulses and records output spike count plus the fixed burst/sparse decision.
+The deterministic tool `tools/task_validation/baseline_boundary.py` evaluates the unchanged fixed-weight neuron across 15 inter-pulse intervals (2–60 ms) and 9 input strengths (0.2–1.0), for 135 cells total. Each cell contains three pulses and records output spike count plus the fixed burst/sparse decision.
 
-This is not a training experiment: there are no STDP/R-STDP updates, no parameter optimization, and no STARTER changes. Its purpose is to map where the current baseline changes its decision, so the next task can be chosen from measured boundary behavior rather than guessed.
+This is not a training experiment: there are no STDP/R-STDP updates, no parameter optimization, and no STARTER changes. The input-strength grid is constrained to the Numerical Oracle's validated inclusive range [0, 1].
 
-Run from the repository root:
+### Observed boundary-grid results
+
+The user ran the command successfully on Android Termux on 7 November 2026:
 
 ```sh
 python3 -m tools.task_validation.baseline_boundary > baseline_boundary_report.json
 ```
 
-The grid and its four unit tests have been added but have not yet been run by the user. Do not treat its response map as verified until the command and full test suite have been executed.
+The report identified benchmark `JARVIS_FIXED_BASELINE_BOUNDARY_GRID_V1` and contained **135/135 cells**. The observed spike-count matrix is:
+
+| Strength | 2 ms | 3 ms | 4 ms | 5 ms | 6 ms | 7 ms | 8 ms | 10 ms | 12 ms | 15 ms | 20 ms | 30 ms | 40 ms | 50 ms | 60 ms |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 0.3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 0.4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 0.5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 0.6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 0.7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 0.8 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 0.9 | 1 | 1 | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 1.0 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Here each value is the number of output spikes from three input pulses, not a classification accuracy.
+
+### Interpretation and limits
+
+- In this sampled grid, strengths 0.2–0.7 produced no output spikes at any tested interval.
+- At strength 0.8, spikes occurred only at 2–3 ms intervals.
+- At strength 0.9, spikes occurred at 2–7 ms intervals.
+- At strength 1.0, spikes occurred at 2–8 ms intervals.
+- No tested cell produced more than one output spike.
+
+This is consistent with temporal summation: closely spaced inputs can accumulate sufficiently to cross threshold, while more widely spaced inputs decay before summating. The sampled grid does not establish an exact continuous threshold or a universal boundary; it only characterizes the listed discrete conditions and the current STARTER profile.
+
+### Full test suite after the boundary-grid fix
+
+The user reran:
+
+```sh
+python3 -m unittest discover -s tools -t . -v
+```
+
+Observed result: **74 tests passed, 0 failures, 0 errors, 2.325 seconds**.
+
+Breakdown:
+- 26 CQE reference tests;
+- 29 Numerical Oracle tests;
+- 9 Calibration Round 2 tests;
+- 5 temporal-pattern task-validation tests;
+- 5 baseline-boundary task-validation tests.
+
+The additional strength-range test verifies that every grid value respects the Oracle's [0, 1] input constraint. These are reference-tool unit tests, not production runtime, build, or CI tests.
+
+No application build, APK/AAB generation, CI, or GitHub Actions workflow was run.
+
+## Next experiment
+
+Do not change the STARTER profile based on these results. The easy burst-vs-sparse task is already solved by FIXED, and the boundary map now shows where the fixed neuron responds for the tested amplitudes and intervals.
+
+Next, design a pre-registered task with overlapping input conditions or controlled timing/amplitude jitter. First verify that the FIXED baseline is not already perfect; then compare FIXED, STDP, and R-STDP on identical training and held-out episodes, with held-out updates disabled. Report confusion matrices, per-condition output spikes, and weight trajectories. If the one-neuron/one-synapse model cannot represent the task, document that capacity limit separately rather than calling it a learning failure.
+
+Keep the STARTER profile immutable until a separate calibration experiment justifies a versioned candidate profile.
