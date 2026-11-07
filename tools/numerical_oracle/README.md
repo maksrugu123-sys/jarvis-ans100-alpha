@@ -35,3 +35,32 @@ The oracle does not prove model quality, biological fidelity, network stability,
 ## Known contract clarification
 
 An eligibility trace's maximum age is measured from the start of its learning context, not from its last decay update. The logical `SynapseRecord v1` already defines `eligibility_started_model_time_ns` alongside the context ID and current trace timestamp (architecture section 3.18.2). The Oracle uses this field; the future JPVR serializer must preserve it and its semantics rather than introducing a duplicate logical field. It is distinct from durable reward deduplication metadata. In the reference rule, starting, consuming or expiring an R-STDP context also clears pair traces so that pre/post activity from one episode cannot leak into another episode's eligibility.
+
+## Exploratory calibration sweeps
+
+Run from the repository root:
+
+~~~sh
+python3 -m tools.numerical_oracle.calibration_sweeps
+~~~
+
+The command prints a deterministic JSON report to standard output and does not
+write files or modify the starter parameters. The current bounded grid contains:
+
+- **81 LIF-DT cases:** tau_m (10/20/40 ms), tau_a (50/100/200 ms),
+  theta_0 (1.0/1.1/1.2), and refractory period (1/2/4 ms).
+- **12 STDP cases:** pre→post and post→pre pairs at 1/5/10/20/40/80 ms.
+- **6 R-STDP cases:** reward delays after the second pair event chosen to
+  probe the eligibility-age boundary, including exactly 5,000 ms from context
+  start and 5,001 ms (expired).
+
+These are controlled sensitivity probes, not an optimizer and not a calibration
+result. The report intentionally does not rank or select a “best” parameter
+combination. A profile can be called calibrated only after the sweep output is
+reviewed against explicit acceptance criteria and recorded with its
+parameter_set_version and execution environment.
+
+The test suite also defines a 2,500-step LIF-DT boundedness/reproducibility
+probe and a 5,000-update STDP boundedness probe. Run the complete unit-test
+command above before relying on the new tests; the new tests and sweep tool
+must not be described as verified until that command has actually completed.
