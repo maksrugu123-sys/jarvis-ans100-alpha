@@ -762,9 +762,11 @@ def run_benchmark() -> dict[str, object]:
             },
             "held_out_policy": "inference only; no STDP, eligibility or reward updates",
             "data_generation": (
-                "SHA-256 deterministic generation; identical protocol and strength "
-                "grid for both classes; train/held-out full signatures disjoint"
+                "SHA-256 deterministic generation; paired FAST/SLOW episodes share "
+                "the exact same three strengths and differ only in gaps; "
+                "train/held-out full signatures disjoint"
             ),
+            "paired_strength_sequences_identical": True,
             "starter_profile_modified": False,
             "randomness": "none; deterministic generation and deterministic order",
         },
