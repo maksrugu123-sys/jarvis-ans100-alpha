@@ -143,8 +143,9 @@ Interpretation must remain at the right level:
 
 The dedicated tests cover cross-tab coverage, sign-count reconciliation,
 product/delta consistency, baseline/modulator consistency and frozen
-held-out inference. Their post-V4.1 execution result must be recorded
-separately.
+held-out inference. Their post-V4.1 execution result was supplied by the user
+and is recorded in docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md and
+docs/DEVELOPMENT_LOG.md.
 
 ## 8. Run on Android Termux
 

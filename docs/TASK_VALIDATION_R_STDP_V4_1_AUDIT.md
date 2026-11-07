@@ -74,7 +74,7 @@ python3 -m tools.task_validation.rstdp_feedback_v4 --profile pilot > rstdp_feedb
 python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v
 ```
 
-V4.1 must be distinguished from the earlier V4 pilot. The report produced before the V4.1 code change does not contain this cross-tab. The new benchmark and tests must actually be rerun before any V4.1 result is claimed.
+V4.1 must be distinguished from the earlier V4 pilot. The report produced before the V4.1 code change does not contain this cross-tab. Only a report generated after the V4.1 code was pulled contains the new cross-tab and baseline audit. The user-run result is recorded in section 8; the earlier V4 pilot JSON is not a V4.1 report.
 
 ## 7. Interpretation boundary and next decision
 
