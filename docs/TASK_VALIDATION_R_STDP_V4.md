@@ -1,7 +1,7 @@
 # Task-Level Validation V4 — R-STDP Feedback and Error Recovery
 
 **Benchmark:** `JARVIS_R_STDP_FEEDBACK_ERROR_RECOVERY_V4`  
-**Status:** specified and implemented as a Python reference experiment; user execution pending.  
+**Status:** specified and implemented as a Python reference experiment; exploratory two-seed pilot completed; full pre-registered profile pending. Pilot results: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md.  
 **Date:** 7 November 2026  
 **Production runtime:** not implemented by this benchmark.
 
