@@ -54,25 +54,35 @@ def _signature(episode: Episode) -> tuple[tuple[int, int], tuple[float, float, f
     return episode.gaps_ms, episode.strengths
 
 
-def _candidate_episode(
-    seed: int, split: str, label: str, index: int, attempt: int
-) -> Episode:
-    material = (
-        f"JARVIS_TEMPORAL_ROBUSTNESS_V3|{seed}|{split}|{label}|{index}|{attempt}"
+def _candidate_pair(
+    seed: int, split: str, index: int, attempt: int
+) -> tuple[Episode, Episode]:
+    """Create matched FAST/SLOW inputs with identical strengths and different timing."""
+    strength_material = (
+        f"JARVIS_TEMPORAL_ROBUSTNESS_V3_STRENGTH|{seed}|{split}|{index}|{attempt}"
     )
-    digest = hashlib.sha256(material.encode("utf-8")).digest()
-    gap_values = FAST_GAP_VALUES if label == "FAST" else SLOW_GAP_VALUES
-    gaps = (gap_values[digest[0] % 2], gap_values[digest[1] % 2])
+    strength_digest = hashlib.sha256(strength_material.encode("utf-8")).digest()
     strengths = tuple(
-        STRENGTH_LEVELS[digest[offset] % len(STRENGTH_LEVELS)]
-        for offset in (2, 3, 4)
+        STRENGTH_LEVELS[strength_digest[offset] % len(STRENGTH_LEVELS)]
+        for offset in (0, 1, 2)
     )
-    return Episode(
-        episode_id=f"seed-{seed}-{split}-{label.lower()}-{index:03d}",
-        label=label,
-        gaps_ms=gaps,
-        strengths=strengths,
-    )
+    episodes = []
+    for label, gap_values in (
+        ("FAST", FAST_GAP_VALUES),
+        ("SLOW", SLOW_GAP_VALUES),
+    ):
+        gap_material = (
+            f"JARVIS_TEMPORAL_ROBUSTNESS_V3_GAPS|{seed}|{split}|{label}|{index}|{attempt}"
+        )
+        gap_digest = hashlib.sha256(gap_material.encode("utf-8")).digest()
+        gaps = (gap_values[gap_digest[0] % 2], gap_values[gap_digest[1] % 2])
+        episodes.append(Episode(
+            episode_id=f"seed-{seed}-{split}-{label.lower()}-{index:03d}",
+            label=label,
+            gaps_ms=gaps,
+            strengths=strengths,
+        ))
+    return episodes[0], episodes[1]
 
 
 def _interleave(seed: int, episodes: list[Episode]) -> tuple[Episode, ...]:
@@ -103,17 +113,16 @@ def _generate_split(
     seen: set[tuple[tuple[int, int], tuple[float, float, float]]],
 ) -> tuple[Episode, ...]:
     generated: list[Episode] = []
-    for label in ("FAST", "SLOW"):
-        for index in range(per_class):
-            for attempt in range(10_000):
-                episode = _candidate_episode(seed, split, label, index, attempt)
-                signature = _signature(episode)
-                if signature not in seen:
-                    seen.add(signature)
-                    generated.append(episode)
-                    break
-            else:
-                raise RuntimeError("could not generate a unique V3 input signature")
+    for index in range(per_class):
+        for attempt in range(10_000):
+            pair = _candidate_pair(seed, split, index, attempt)
+            signatures = [_signature(item) for item in pair]
+            if len(set(signatures)) == 2 and not any(item in seen for item in signatures):
+                seen.update(signatures)
+                generated.extend(pair)
+                break
+        else:
+            raise RuntimeError("could not generate a unique matched V3 input pair")
     return _interleave(seed, generated)
 
 
@@ -277,6 +286,8 @@ def _run_episode(
                 "eligibility_before": None,
                 "eligibility_after": None,
                 "event_weight_delta": plasticity.weight_delta,
+                "pre_trace_after": synapse_state.pre_trace,
+                "post_trace_after": synapse_state.post_trace,
                 "weight_after_event": synapse_state.weight,
             }
         elif training and mode in {"rstdp", "rstdp_neutral"}:
@@ -298,6 +309,8 @@ def _run_episode(
                 "eligibility_before": eligibility_before,
                 "eligibility_after": synapse_state.eligibility_trace,
                 "eligibility_context_id": synapse_state.eligibility_context_id,
+                "pre_trace_after": synapse_state.pre_trace,
+                "post_trace_after": synapse_state.post_trace,
                 "event_weight_delta": plasticity.weight_delta,
                 "weight_after_event": synapse_state.weight,
             }
@@ -306,6 +319,8 @@ def _run_episode(
             "pulse_index": pulse_index,
             "time_ms": relative_ms,
             "strength": strength,
+            "n_pre": 1,
+            "n_post": n_post,
             "output_spike": step.spike_emitted,
             "effective_threshold": step.effective_threshold,
             "potential_input_delta": step.total_input_delta,
