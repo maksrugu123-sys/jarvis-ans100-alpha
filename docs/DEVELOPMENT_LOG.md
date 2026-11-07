@@ -65,3 +65,44 @@ Do not edit old entries to make a result look better. Add a correction entry if 
 
 **Executable tests:** NOT RUN — documentation-only contributor-policy change.  
 **Builds / CI / GitHub Actions:** NOT RUN.
+
+## 2026-11-07 — V4 R-STDP feedback/error-recovery pilot
+
+**Objective:** execute the phone-friendly V4 pilot and assess signed reward/eligibility behavior and held-out error correction.
+
+**Execution supplied by user (Android Termux):**
+```sh
+python3 -m tools.task_validation.rstdp_feedback_v4 --profile pilot > rstdp_feedback_v4_pilot_report.json
+python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v
+```
+
+**Verification:**
+- Benchmark: **PASS** — all 8 seed/condition runs completed (2 seeds × FIXED/STDP/R-STDP/R-STDP neutral).
+- Pilot data: per seed 512 matched training pairs (1,024 episodes) and 128 held-out pairs (256 episodes); aggregate 2,048 training episodes and 512 held-out episodes.
+- Dedicated V4 tests: **PASS — 12 tests, 0 failures, 0 errors, 2.962 s**.
+- Full repository suite after V4: **NOT RUN**. The earlier 107-test pass predates V4.
+- Builds, APK/AAB, CI and GitHub Actions: **NOT RUN**.
+
+**Held-out aggregate results:**
+- FIXED: 419/512 = 81.8359%; TP=256, FN=0, TN=163, FP=93.
+- STDP: 512/512 = 100%; TP=256, FN=0, TN=256, FP=0.
+- R-STDP: 425/512 = 83.0078%; TP=256, FN=0, TN=169, FP=87.
+- R-STDP neutral: 419/512 = 81.8359%; same aggregate predictions as FIXED.
+- R-STDP improvement over FIXED: +1.171875 percentage points (six fewer false positives among 512 held-out episodes). This is exploratory evidence from two seeds, not a robust general claim.
+
+**Signed R-STDP diagnostics:**
+- Reward modulators: +1,717 / −331 / 0.
+- Eligibility at feedback: negative 1,024 / positive 331 / zero 693.
+- Non-zero modulator × eligibility sign matches: 1,355.
+- All 1,355 non-zero reward-driven weight updates were negative; total reward delta sum across both runs = −0.004205183945517832.
+- Every one of the 331 false-positive training episodes received a negative weight update. Correct FAST episodes also produced negative updates because positive reward was paired with negative eligibility. Correct SLOW episodes had zero eligibility.
+- R-STDP final weights: 0.6978193055 and 0.6979755106. STDP final weights: 0.6055889854 and 0.6090516151.
+- The neutral condition had 2,048 zero modulators and no weight change.
+
+**Interpretation:** the signed three-factor numerical rule and diagnostics behaved consistently with the specified product-sign equation. However, in this task the observed eligibility signs made both correct FAST outcomes and false-positive SLOW outcomes depress the same scalar synaptic weight. R-STDP only modestly improved on FIXED and remained well below STDP; the pilot does not establish robust task-level error correction. No equation, STARTER parameter, or learning rate was changed.
+
+**Code inspection:** reviewed `update_rstdp`, `apply_reward`, V4 episode feedback handling and diagnostic aggregation. No obvious sign-accounting discrepancy was found in the inspected paths. This was source inspection, not an additional execution/test.
+
+**Artifacts:** `docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md` records the metrics and interpretation. Local JSON report was not committed.
+
+**Next step:** inspect representative episode-level traces, then run the full pre-registered V4 profile when practical without changing the protocol, equations, or canonical STARTER. Preserve the distinction between pilot and full results.
