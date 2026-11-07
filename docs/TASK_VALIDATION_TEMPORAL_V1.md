@@ -60,3 +60,18 @@ No application build, APK/AAB generation, CI, or GitHub Actions workflow was run
 Do not change the STARTER profile based on this result. First characterize the fixed neuron's decision boundary across a controlled grid of inter-pulse intervals and input strengths. Use that map to select a harder, pre-registered task with overlapping/noisy conditions where the baseline is not already perfect. Then compare FIXED, STDP, and R-STDP on identical training and held-out sequences, reporting confusion matrices and weight trajectories. Keep all held-out updates disabled.
 
 If the one-synapse model cannot express the required distinction, increase model capacity only as a separately documented experiment; do not attribute a representational limitation to failed learning.
+
+
+## Follow-up: fixed-baseline boundary characterization
+
+A separate deterministic characterization tool has been added at `tools/task_validation/baseline_boundary.py`. It evaluates the unchanged fixed-weight neuron across 15 inter-pulse intervals (2–60 ms) and 9 input strengths (0.4–1.2), for 135 cells total. Each cell contains three pulses and records output spike count plus the fixed burst/sparse decision.
+
+This is not a training experiment: there are no STDP/R-STDP updates, no parameter optimization, and no STARTER changes. Its purpose is to map where the current baseline changes its decision, so the next task can be chosen from measured boundary behavior rather than guessed.
+
+Run from the repository root:
+
+```sh
+python3 -m tools.task_validation.baseline_boundary > baseline_boundary_report.json
+```
+
+The grid and its four unit tests have been added but have not yet been run by the user. Do not treat its response map as verified until the command and full test suite have been executed.
