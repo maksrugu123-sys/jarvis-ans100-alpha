@@ -3110,7 +3110,7 @@ ZRAM может выступать дополнительной системно
 - методология систематической калибровки и экспериментального сравнения по Google Research Deep Learning Tuning Playbook адаптирована для JARVIS в разделе 3.25; она не заменяет STDP/R-STDP и не означает наличия полноценного training pipeline или завершённой калибровки;
 - описанные в документе подсистемы являются проектными решениями и предложениями;
 - production-реализация нейрона, NCC, JNVM и JPVR ещё не начата; tools/cqe_reference — отдельная тестируемая Python reference implementation протокола, не production runtime;
-- специализированные тесты CQE reference (26 методов) ранее прошли на Python 3.13.5; в более свежем полном запуске на Android Termux прошли 64 теста (26 CQE + 29 Numerical Oracle + 9 Round 2), 0 failures и 0 errors за 1.649 секунды; Round 1 sweep на 99 сценариев и Round 2 generator выполнены, но фактические метрики всех 23 сценариев Round 2 проанализированы и записаны в docs/CALIBRATION_ROUND2.md; task-level validation, crash-тесты production JPVR, benchmarks и измерения ресурсов ещё не проводились; сборки и GitHub Actions не запускались.
+- специализированные тесты CQE reference (26 методов) ранее прошли на Python 3.13.5; в более свежем полном запуске на Android Termux прошли 64 теста (26 CQE + 29 Numerical Oracle + 9 Round 2), 0 failures и 0 errors за 1.649 секунды; Round 1 sweep на 99 сценариев и Round 2 generator выполнены, но фактические метрики всех 23 сценариев Round 2 проанализированы и записаны в docs/CALIBRATION_ROUND2.md; первый task-level reference benchmark JARVIS_TEMPORAL_BURST_VS_SPARSE_V1 добавлен в tools/task_validation, но его выполнение и результаты ещё не подтверждены; crash-тесты production JPVR, runtime benchmarks и измерения ресурсов не проводились; сборки и GitHub Actions не запускались.
 
 
 ### 12.1. Оценка готовности к первому прототипу
@@ -3187,4 +3187,4 @@ ZRAM может выступать дополнительной системно
 - Параметры JARVIS_SINGLE_NEURON_STARTER_V1 не менялись и не считаются CALIBRATED.
 - Сборки, CI/GitHub Actions, APK/AAB, benchmarks и измерения ресурсов не запускались.
 
-Эта запись является более свежей проверкой и уточняет ожидавшие повторного запуска статусы, перечисленные выше в документе. Для следующих решений необходимо изучить фактические значения и traces из calibration_round2.json, а затем составить отдельный task-level validation набор.
+Эта запись является более свежей проверкой и уточняет ожидавшие повторного запуска статусы, перечисленные выше в документе. Следующий шаг — выполнить tools/task_validation/temporal_patterns.py и полный набор unit tests, затем изучить held-out метрики FIXED/STDP/R-STDP и фактические изменения веса. STARTER не менять. Benchmark добавлен, но до выполнения пользователем не считается Verified.
