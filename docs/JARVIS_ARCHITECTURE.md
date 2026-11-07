@@ -2904,7 +2904,7 @@ V2 расширяет проверку, не меняя STARTER и фиксир�
 
 #### 3.27.9. Temporal Robustness V3 — deadline-bounded temporal-rate task
 
-**Статус:** reference implementation и специализированные unit tests добавлены; пользовательский запуск ожидается. Метрики V3 пока неизвестны.
+**Статус:** выполнен пользователем 7 ноября 2026 года на Android Termux; полный набор — 107 tests passed, 0 failures, 0 errors за 19.730 s. Результаты записаны в docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md. Held-out accuracy: FIXED 1.000, STDP 0.9875, R-STDP 1.000, neutral R-STDP 1.000. STARTER не изменялся.
 
 V3 дополняет V2, но не заменяет его. V2 исследует перекрывающиеся временные интервалы; V3 задаёт контролируемую временную задачу с заранее определённым decision deadline 7 ms:
 
@@ -2925,7 +2925,7 @@ V3 дополняет V2, но не заменяет его. V2 исследуе
     python3 -m tools.task_validation.temporal_robustness_v3 > temporal_robustness_v3_report.json
     python3 -m unittest discover -s tools -t . -v
 
-Все результаты V3 остаются непроверенными до пользовательского запуска на Termux. Даже если FIXED идеально распознаёт заданные классы, это подтверждает лишь доступность временной информации для одного нейрона в рамках этого протокола. Преимущество обучения должно подтверждаться held-out поведением и прямым сравнением rewarded R-STDP с neutral control. V3 не является production-runtime validation. STARTER, Numerical Oracle, сборки и CI не меняются.
+Фактические результаты: FIXED и обе версии R-STDP получили 100% held-out accuracy на всех четырёх seed; STDP получил 98.75% из-за двух false positives. Boundary probe (1,000 patterns/weight) дал 100% при весах 0.50 и 0.525, с ростом false positives при увеличении веса до 0.55–0.60. STDP поднял средний вес примерно до 0.55786 и ухудшил held-out результат. Rewarded R-STDP изменил средний вес примерно на +0.00014353/run, но все 128 reward modulators были положительными, так как все training examples классифицированы правильно; отрицательная reward correction в V3 не проверялась. Важно: FAST предъявляет три импульса до deadline 7 ms, SLOW — два; поэтому V3 проверяет deadline-bounded event-density/latency, а не same-count interval discrimination. Подробности и ограничения — docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md. V3 не является production-runtime validation. STARTER, Numerical Oracle, сборки и CI не менялись.
 
 ## 4. Гибридная память нейросети
 
@@ -3276,7 +3276,7 @@ ZRAM может выступать дополнительной системно
 До отдельного разрешения пользователя сборки не запускаются. Архитектурная готовность, написание исходного кода, статические проверки, запуск тестов и сборка приложения — разные статусы и должны учитываться раздельно.
 
 
-**Главный ближайший шаг:** выполнить tools/task_validation/temporal_robustness_v3.py и полный набор unit tests на Android Termux; затем разобрать boundary probe, per-event STDP/R-STDP diagnostics, held-out metrics и прямой reward-vs-neutral эффект. V2 остаётся завершённым историческим экспериментом. Не менять STARTER по результатам одного набора и не объявлять reward полезным без повторяемого преимущества на нескольких seed. После V2 выбрать следующий эксперимент по фактическим ограничениям одного нейрона/синапса; CQE reference сохранить как acceptance oracle для будущего production NCC. JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
+**Главный ближайший исследовательский шаг — V4:** разработать same-count temporal-summation challenge, в котором оба класса предъявляют все три импульса до одного deadline, а классы различаются только межимпульсными интервалами; matched FAST/SLOW пары должны иметь одинаковые силы. Сохранить canonical STARTER 0.5 как baseline и отдельно определить pre-registered diagnostic recovery track с одинаковым для FIXED/STDP/R-STDP/neutral initial-weight perturbation (не изменяя STARTER). Задача должна давать как верные, так и ошибочные train decisions, чтобы R-STDP получил положительные и отрицательные reward modulators; затем проверить held-out recovery и весовой контроль. V2/V3 остаются завершёнными историческими экспериментами. Не менять STARTER без отдельного обоснования. CQE reference сохранить как acceptance oracle для будущего production NCC; JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
 
 
 ### 12.2. Calibration Round 2 — историческая запись запуска 7 ноября 2026
@@ -3299,5 +3299,5 @@ ZRAM может выступать дополнительной системно
 - V1 temporal robustness выполнен в Android Termux: 82 unit tests passed, 0 failures, 0 errors за 3.228 s.
 - V1 held-out accuracy: FIXED 0.80, STDP 0.90, R-STDP 0.80; на выборке из 10 примеров STDP дал 9 правильных ответов против 8 у FIXED, но сделал один false positive. Это предварительный результат одного детерминированного набора.
 - V2 выполнен пользователем на Android Termux: 92 unit tests passed; held-out accuracy FIXED 0.74375, STDP 0.66250, rewarded R-STDP 0.74375, neutral R-STDP 0.74375. Rewarded/neutral R-STDP predictions совпали по всем четырём seed; детали — docs/TASK_VALIDATION_TEMPORAL_V2_RESULTS.md.
-- V3 temporal-rate reference benchmark и 15 специализированных unit-test методов добавлены в tools/task_validation; пользовательский запуск V3 ещё не выполнен, поэтому его метрики не заявляются.
+- V3 temporal-rate benchmark выполнен пользователем на Android Termux: 107 tests passed, 0 failures; held-out accuracy FIXED 1.000, STDP 0.9875, R-STDP 1.000, neutral R-STDP 1.000. Reward modulation была только положительной (128/128 train rewards), поэтому отрицательная reward correction остаётся непроверенной. V3 cue — число импульсов до deadline (FAST=3, SLOW=2), не same-count interval discrimination. Подробности: docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md.
 - STARTER не менялся; сборки, CI/GitHub Actions, APK/AAB и измерения RAM/CPU/энергии/I/O не запускались.
