@@ -12,7 +12,8 @@ The repository is currently at the **architecture and reference-experiment stage
 - **Verification:** the latest user-run full test command on Android Termux completed with **64 passed, 0 failures, 0 errors** (26 CQE reference, 29 Numerical Oracle and 9 Calibration Round 2 tests; 1.649 seconds). The Python version for this run was not recorded.
 - **Calibration:** Round 1's 99-scenario sweep was generated and reviewed. Round 2's 23-scenario report was generated locally and all summarized scenario outcomes were reviewed and recorded in docs/CALIBRATION_ROUND2.md. The STARTER parameter profile has not been calibrated or changed.
 - **Not implemented yet:** production neuron/NCC runtime, JNVM/JPVR storage engine, durable commit/outbox and crash recovery, full capability scopes/resource budgets, scheduler Aging/starvation protection, and Reasoning Engine execution.
-- **Not measured or validated yet:** task-level learning utility, target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
+- **Task-level validation:** a deterministic one-neuron burst-vs-sparse benchmark now compares fixed weights, STDP and reward-modulated STDP. It has not yet been run; no task-level results are claimed.
+- **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for this verification.
 
 ## Repository map
@@ -22,6 +23,7 @@ The repository is currently at the **architecture and reference-experiment stage
 | `docs/JARVIS_ARCHITECTURE.md` | Main architecture specification, decisions, open questions and development plan |
 | `docs/CALIBRATION_ROUND2.md` | Round 1 observations, Round 2 scenario design, verification record and next steps |
 | `tools/numerical_oracle/` | Float64 reference equations, deterministic sweeps, Round 2 generator and tests |
+| `tools/task_validation/` | Deterministic task-level temporal-pattern benchmark and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory instructions and constraints for contributors and AI coding agents |
 
