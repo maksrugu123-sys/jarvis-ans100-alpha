@@ -98,3 +98,14 @@ V4.1 execution was supplied by the user on Android Termux:
 V4.2 code and tests are authored but NOT RUN at publication time. No V4.2 benchmark result is claimed. The full repository unit-test suite has not been rerun after V4.1. No builds, APK/AAB, CI or GitHub Actions were run.
 
 A per-pulse correlation can locate where the sign is generated. It still does not prove that a different ordering is biologically correct or improves task learning. A new rule must be judged only by a later, controlled, held-out experiment.
+
+
+## 9. User-run evidence update (2026-11-07)
+
+The user subsequently ran the dedicated V4.2 module on Android Termux after the unittest runner-name fix: **6 tests passed, 0 failures, 0 errors, 0.288 seconds**. The smoke profile completed 128 episodes and the pilot completed 2,048 episodes (two seeds, 1,024 episodes per seed).
+
+The pilot cross-tab recorded 1,024 correct FAST episodes with negative eligibility and positive modulator (negative weight update), 331 false-positive SLOW→FAST episodes with positive eligibility and negative modulator (negative weight update), and 693 correct SLOW episodes with zero eligibility (zero update). Thus there were 1,355 negative, zero positive and 693 zero updates. The actual eligibility sum was -1.6586585879267512; the actual reward-driven weight-delta sum was -0.004205183945517832.
+
+The 1 ns ordered shadow changed the aggregate eligibility sum to +0.32333505612981234, while the reported per-episode eligibility sign counts and weight-update sign counts remained unchanged. This indicates magnitude/order sensitivity, not a demonstrated improvement or a reason to change canonical event ordering.
+
+Interpretation and exact shared metrics: `docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md`. Full repository tests remain unrun. Builds, APK/AAB, CI and GitHub Actions were not run.

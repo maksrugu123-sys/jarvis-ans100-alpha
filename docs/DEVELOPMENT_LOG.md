@@ -216,3 +216,12 @@ Renamed the stored report alias to audit_run and updated its test references. Th
 **Verification:** static inspection confirms the cls.run/self.run shadowing references are absent. The dedicated tests have not yet been rerun; no passing result is claimed. The user's smoke and pilot commands did execute according to their progress output, but their JSON reports have not yet been inspected.
 
 **Builds / CI / GitHub Actions:** NOT RUN.
+
+
+## 2026-11-07 — V4.2 user-run evidence
+
+The user reran the dedicated V4.2 tests after the unittest runner-name collision fix: 6/6 passed in 0.288 seconds. Smoke (128 episodes) and pilot (2,048 episodes, two seeds) completed on Android Termux.
+
+The pilot produced 1,355 negative, zero positive and 693 zero weight updates. Correct FAST episodes had negative eligibility with positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility sum from -1.6586585879267512 to +0.32333505612981234, but no per-episode eligibility or weight-update sign changed. This supports a task-specific temporal-credit alignment diagnosis; it does not establish a fix or general learning capability.
+
+Detailed evidence: docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md. Full repository tests after V4.2 remain unrun. No builds, APK/AAB, CI or GitHub Actions were run.

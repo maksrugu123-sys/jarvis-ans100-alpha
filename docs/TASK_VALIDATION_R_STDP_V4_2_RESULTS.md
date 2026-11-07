@@ -1,0 +1,120 @@
+# V4.2 Causal-Credit Audit — User Run Results
+
+**Run date:** 2026-11-07  
+**Environment:** Android / Termux, Python 3.14  
+**Status:** USER-RUN / DEDICATED TESTS PASS / SMOKE AND PILOT COMPLETED  
+**Scope:** Reference benchmark only. This is not a production neuron result.
+
+## 1. Test verification
+
+After fixing the unittest name collision (`cls.run` shadowed `unittest.TestCase.run()`), the user reran the dedicated module:
+
+- **6 tests passed**
+- **0 failures**
+- **0 errors**
+- **0.288 seconds**
+
+Covered:
+- replay parity with the existing V4 training path;
+- cross-tab and pulse aggregates cover training episodes;
+- deterministic, JSON-safe report;
+- simultaneous-batch versus ordered-probe sign behavior;
+- pulse-contribution reconciliation;
+- shadow-path isolation from the real training weight.
+
+This is the dedicated V4.2 test module only. The complete repository test suite was not run.
+
+## 2. Smoke and pilot execution
+
+Both commands completed and returned to the Termux prompt:
+
+| Profile | Seeds | Training episodes audited |
+|---|---:|---:|
+| Smoke | 2 | 128 |
+| Pilot | 2 | 2,048 |
+
+The pilot replayed 1,024 R-STDP training episodes per seed. The reports were parsed with `python3 -m json.tool`. The user shared the aggregate sections below; the full JSON files were not included in the conversation.
+
+## 3. Pilot feedback / eligibility cross-tab
+
+| Actual label | Prediction | Outcome | Eligibility | Modulator | Weight delta | Count |
+|---|---|---|---|---|---|---:|
+| FAST | FAST | Correct | Negative | Positive | Negative | 1,024 |
+| SLOW | FAST | Incorrect | Positive | Negative | Negative | 331 |
+| SLOW | SLOW | Correct | Zero | Positive | Zero | 693 |
+
+Aggregate pilot updates:
+
+- feedback events: **2,048**;
+- negative weight updates: **1,355**;
+- positive weight updates: **0**;
+- zero weight updates: **693**;
+- actual reward-driven weight-delta sum: **−0.004205183945517832**;
+- actual eligibility sum: **−1.6586585879267512**.
+
+The smoke cross-tab was proportionally consistent:
+
+- FAST→FAST correct: 64;
+- SLOW→FAST incorrect: 21;
+- SLOW→SLOW correct: 43;
+- total: 128 episodes;
+- 85 negative updates, 0 positive updates, 43 zero updates.
+
+## 4. Per-pulse evidence
+
+For the shown FAST-correct pulse aggregates, the first pulse had zero q, the second pulse contributed positive q/eligibility, and the third pulse contributed a larger negative q/eligibility. The final eligibility was negative:
+
+- pilot FAST-correct eligibility sum: **−1.9361299938084326** across 1,024 episodes;
+- smoke FAST-correct eligibility sum: **−0.12115994801997368** across 64 episodes.
+
+This is consistent with the final pulse's negative contribution dominating the earlier positive contribution in this task. It is an observed property of this particular event sequence and current trace rule, not proof that the last pulse is generally harmful.
+
+## 5. One-nanosecond shadow-order probe
+
+Across 2,048 pilot episodes:
+
+| Metric | Actual simultaneous batch | Ordered shadow |
+|---|---:|---:|
+| Eligibility sum | −1.6586585879267512 | +0.32333505612981234 |
+| Negative eligibility episodes | 1,024 | 1,024 |
+| Positive eligibility episodes | 331 | 331 |
+| Zero eligibility episodes | 693 | 693 |
+| Negative weight updates | 1,355 | 1,355 |
+| Positive weight updates | 0 | 0 |
+| Zero weight updates | 693 | 693 |
+| Weight-delta sum | −0.004205183945517832 | −0.004940786397539032 |
+
+The shadow ordering materially changes aggregate eligibility magnitude and its total sum, but the reported per-episode eligibility signs and weight-update signs do not change. The probe is an artificial 1 ns sensitivity test only; it does not establish a biologically correct event order. The actual training path remains the canonical simultaneous-batch path.
+
+## 6. Interpretation
+
+### What is supported
+
+1. The V4.2 audit replay matches the existing V4 training path on its deterministic parity test.
+2. The pulse-level accounting reconciles with the episode-level eligibility.
+3. The current task produces both positive and negative eligibility and both positive and negative reward modulators.
+4. Despite that, the task-level product yields no positive weight updates.
+5. The one-nanosecond shadow changes eligibility magnitudes but not the reported per-episode signs or update directions.
+
+### What is not supported
+
+- This does not show that R-STDP is generally incapable of potentiation; the signed-quadrant probe already covers the mathematical sign combinations.
+- This does not show that changing simultaneous event ordering is a valid fix.
+- This does not prove that the last pulse alone causes the task-level limitation.
+- It does not demonstrate held-out task improvement, generalization, or production-neuron quality.
+- It does not justify changing canonical STARTER parameters or silently changing the learning equation.
+
+### Engineering conclusion
+
+The current limitation is best described as **task-specific temporal-credit alignment**: the eligibility trace generated by the current pulse sequence has the wrong sign for correct FAST outcomes, while it has the useful sign for suppressing false-positive FAST outcomes.
+
+The next experiment should isolate eligibility construction from reward modulation. Candidate comparisons should preserve the current V4 path as a frozen control and test alternative trace/credit windows on identical sequences. Any candidate must demonstrate both positive and negative task-level updates, reduce false positives without damaging correct FAST behavior, and improve held-out performance over fixed, STDP and neutral controls across multiple seeds. No new rule should be promoted based on sign counts alone.
+
+## 7. Project status and constraints
+
+- Canonical STARTER remains unchanged.
+- V4/V4.1/V4.2 remain research/reference experiments.
+- No production neuron implementation is implied.
+- Full repository unit tests after V4.2: **not run**.
+- Builds, APK/AAB, CI and GitHub Actions: **not run**.
+- No RAM, CPU, energy or device-latency measurements were performed by this audit.
