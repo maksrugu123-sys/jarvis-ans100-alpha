@@ -2927,6 +2927,61 @@ V3 дополняет V2, но не заменяет его. V2 исследуе
 
 Фактические результаты: FIXED и обе версии R-STDP получили 100% held-out accuracy на всех четырёх seed; STDP получил 98.75% из-за двух false positives. Boundary probe (1,000 patterns/weight) дал 100% при весах 0.50 и 0.525, с ростом false positives при увеличении веса до 0.55–0.60. STDP поднял средний вес примерно до 0.55786 и ухудшил held-out результат. Rewarded R-STDP изменил средний вес примерно на +0.00014353/run, но все 128 reward modulators были положительными, так как все training examples классифицированы правильно; отрицательная reward correction в V3 не проверялась. Важно: FAST предъявляет три импульса до deadline 7 ms, SLOW — два; поэтому V3 проверяет deadline-bounded event-density/latency, а не same-count interval discrimination. Подробности и ограничения — docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md. V3 не является production-runtime validation. STARTER, Numerical Oracle, сборки и CI не менялись.
 
+### 3.27.10. R-STDP Feedback and Error Recovery V4 — signed feedback and same-count temporal task
+
+**Статус:** Python reference benchmark, protocol and dedicated unit tests добавлены; пользовательский запуск на Android Termux ожидается. Метрики V4 пока неизвестны. Это не production runtime.
+
+V4 отвечает на незакрытый вопрос V3: может ли R-STDP не только принимать reward, но и получать положительную и отрицательную обратную связь, применять signed eligibility и уменьшать количество ошибок на отложенных примерах.
+
+**Канонический STARTER сохранён:**
+- канонический синаптический вес `JARVIS_SINGLE_NEURON_STARTER_V1` остаётся **0.5**;
+- отдельный read-only baseline probe оценивает задачу с весом 0.5 без обучения;
+- recovery track использует явно обозначенное диагностическое начальное значение **0.70**; это не калибровка и не замена STARTER;
+- FIXED, STDP, R-STDP и neutral R-STDP начинают recovery track с одного и того же веса 0.70 и получают одинаковые данные.
+
+**Signed eligibility probe:**
+- pre при 0 ms → post при 2 ms формирует положительную eligibility;
+- post при 0 ms → pre при 2 ms формирует отрицательную eligibility;
+- reward 1.0 при baseline 0.5 даёт положительный modulator;
+- reward 0.0 при baseline 0.5 даёт отрицательный modulator;
+- neutral reward равен baseline и должен давать нулевое изменение веса.
+
+Проверяются все четыре комбинации знаков. Ожидаемое направление изменения определяется знаком произведения `modulator × eligibility`; отсутствие eligibility не должно менять вес.
+
+**Same-count temporal challenge:**
+- оба класса содержат ровно три импульса, и все три предъявляются до общего decision deadline 40 ms;
+- FAST gap pairs: (2,2), (2,3), (3,2), (3,3) ms;
+- SLOW gap pairs: (18,18), (18,19), (19,18), (19,19) ms;
+- matched FAST/SLOW пары имеют идентичные три значения силы импульсов в диапазоне [0.8, 1.0];
+- train/held-out signatures уникальны и не пересекаются;
+- decision: хотя бы один output spike до deadline → FAST, иначе SLOW.
+
+Диагностический вес 0.70 заранее выбран как high-excitability perturbation: быстрый паттерн обычно вызывает spike на втором импульсе, а часть сильных медленных паттернов — только на третьем. Эти разные временные отношения pre/post должны формировать разные знаки eligibility. Проверяется, уменьшает ли обратная связь завышенный вес и улучшает ли held-out поведение. Сам дизайн не считается результатом: вывод делается только по фактическому JSON.
+
+**Протокол:** четыре deterministic seeds (104729, 130363, 155921, 181081); по 8,000 matched train pairs и 256 held-out pairs на seed. Сравниваются:
+1. FIXED — диагностический вес не изменяется;
+2. STDP — обычная локальная excitatory pair-STDP без class label/reward;
+3. R-STDP — reward 1.0 за правильное и 0.0 за неправильное training decision;
+4. R-STDP neutral — тот же eligibility путь, но reward равен текущему baseline, то есть modulator равен нулю.
+
+Baseline reward начинается с 0.5; используется неизменённый R-STDP профиль STARTER. Held-out — inference-only, без plasticity, eligibility и reward updates.
+
+Отчёт фиксирует reward/modulator signs, eligibility signs на момент feedback, направление и величину delta weight, первые ошибки, weight trajectory, train/held-out confusion metrics и сравнения R-STDP с FIXED, neutral R-STDP и STDP по каждому seed.
+
+**Критерий task-level исправления ошибки:** повторяемое улучшение held-out confusion metrics над FIXED и neutral R-STDP с уменьшением ошибочных решений и согласованной диагностикой feedback/eligibility/weight. Одна только смена веса успехом не считается. STDP может оказаться лучше R-STDP; это нужно честно отразить. Ограничения одного нейрона/одного синапса, включая credit assignment, фиксируются как результат, а не обходятся незаявленной настройкой.
+
+Файлы:
+- реализация: `tools/task_validation/rstdp_feedback_v4.py`;
+- тесты: `tools/task_validation/test_rstdp_feedback_v4.py`;
+- протокол: `docs/TASK_VALIDATION_R_STDP_V4.md`.
+
+Запуск из корня репозитория:
+
+    python3 -m tools.task_validation.rstdp_feedback_v4 > rstdp_feedback_v4_report.json
+    python3 -m unittest discover -s tools -t . -v
+
+V4 остаётся reference experiment: он не реализует production neuron runtime, не доказывает сознание и не измеряет ресурсы устройства. Сборки и GitHub Actions к эксперименту не относятся.
+
 ## 4. Гибридная память нейросети
 
 Выбран концептуальный вариант **C — Hybrid Memory**:
@@ -3178,17 +3233,18 @@ ZRAM может выступать дополнительной системно
 
 ## 11. Последовательность дальнейшей разработки
 
-1. Сохранить и расширить исполняемую CQE v1 reference contract (раздел 3.15.9) как acceptance oracle; затем выбрать production-язык и интегрировать NCC с JPVR durable commit, атомарным commit/outbox, recovery и durable deduplication. Reference implementation не считается production NCC.
+1. Сохранить и расширить исполняемую CQE v1 reference contract (раздел 3.15.9) как acceptance oracle; затем выбрать production-язык и интегрировать NCC с JPVR durable commit, атомарным commit/outbox, recovery и durable deduplication.
 2. Завершить численную калибровку Adaptive LIF-DT и уже определённых STDP/R-STDP по экспериментальной методологии раздела 3.25: формулировать отдельные вопросы, разделять scientific/nuisance/fixed parameters, проводить воспроизводимые sweeps, анализировать взаимодействия и подтверждать кандидатов на длинных/отложенных сценариях; выбрать диапазоны параметров и числовую точность. iSTDP оставить отдельным исследовательским этапом.
-3. Сверить будущую runtime-реализацию Adaptive LIF-DT/STDP/R-STDP с уже реализованным float64 Oracle на golden vectors и длинных последовательностях; spike/no-spike, spike_sequence и допустимые числовые ошибки должны проверяться отдельно по разделу 3.22.
-4. Реализовать сериализаторы NeuronStateRecord/SynapseRecord и JPVR_FORMAT_V1 reader/writer по разделам 3.17–3.18 и 3.21; пока без масштабирования.
-5. Реализовать ограниченный JPVR-001: один нейрон, несколько синапсов, запись, закрытие, повторное открытие и продолжение работы.
-6. Проверить crash-consistency, dual-superblock recovery, целостность индексов, durable outbox и компактизацию через fault injection.
-7. Измерить RAM, задержки, размер контейнера, пакетный I/O, кэш, write amplification и нагрузку на накопитель; откалибровать стартовые лимиты CQE.
-8. Сравнить пакетные операции 4/16/64/256 KiB и политики кэша на целевом устройстве.
-9. Только после результатов перейти к 10 и 100 нейронам.
-10. После стабилизации базового ядра специфицировать, реализовать и отдельно проверить Reasoning Engine v0.1 как ограниченный слой декомпозиции задач, гипотез, планирования и проверки результата (раздел 3.23).
-11. Масштабировать дальше только при подтверждённой устойчивости и приемлемой производительности.
+3. Выполнить V4 signed-feedback/error-recovery benchmark (раздел 3.27.10), проверить оба знака reward и eligibility, а также held-out recovery R-STDP против FIXED, STDP и neutral control. STARTER 0.5 сохранить; диагностическое начальное значение 0.70 не считать калибровкой. Зафиксировать результат или ограничение credit assignment до изменения learning rule.
+4. Сверить будущую runtime-реализацию Adaptive LIF-DT/STDP/R-STDP с уже реализованным float64 Oracle на golden vectors и длинных последовательностях; spike/no-spike, spike_sequence и допустимые числовые ошибки должны проверяться отдельно по разделу 3.22.
+5. Реализовать сериализаторы NeuronStateRecord/SynapseRecord и JPVR_FORMAT_V1 reader/writer по разделам 3.17–3.18 и 3.21; пока без масштабирования.
+6. Реализовать ограниченный JPVR-001: один нейрон, несколько синапсов, запись, закрытие, повторное открытие и продолжение работы.
+7. Проверить crash-consistency, dual-superblock recovery, целостность индексов, durable outbox и компактизацию через fault injection.
+8. Измерить RAM, задержки, размер контейнера, пакетный I/O, кэш, write amplification и нагрузку на накопитель; откалибровать стартовые лимиты CQE.
+9. Сравнить пакетные операции 4/16/64/256 KiB и политики кэша на целевом устройстве.
+10. Только после результатов перейти к 10 и 100 нейронам.
+11. После стабилизации базового ядра специфицировать, реализовать и отдельно проверить Reasoning Engine v0.1 как ограниченный слой декомпозиции задач, гипотез, планирования и проверки результата (раздел 3.23).
+12. Масштабировать дальше только при подтверждённой устойчивости и приемлемой производительности.
 
 ## 12. Текущее состояние проекта
 
@@ -3300,4 +3356,5 @@ ZRAM может выступать дополнительной системно
 - V1 held-out accuracy: FIXED 0.80, STDP 0.90, R-STDP 0.80; на выборке из 10 примеров STDP дал 9 правильных ответов против 8 у FIXED, но сделал один false positive. Это предварительный результат одного детерминированного набора.
 - V2 выполнен пользователем на Android Termux: 92 unit tests passed; held-out accuracy FIXED 0.74375, STDP 0.66250, rewarded R-STDP 0.74375, neutral R-STDP 0.74375. Rewarded/neutral R-STDP predictions совпали по всем четырём seed; детали — docs/TASK_VALIDATION_TEMPORAL_V2_RESULTS.md.
 - V3 temporal-rate benchmark выполнен пользователем на Android Termux: 107 tests passed, 0 failures; held-out accuracy FIXED 1.000, STDP 0.9875, R-STDP 1.000, neutral R-STDP 1.000. Reward modulation была только положительной (128/128 train rewards), поэтому отрицательная reward correction остаётся непроверенной. V3 cue — число импульсов до deadline (FAST=3, SLOW=2), не same-count interval discrimination. Подробности: docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md.
+- V4 R-STDP feedback/error-recovery reference benchmark, протокол и специализированные тесты добавлены: tools/task_validation/rstdp_feedback_v4.py, tools/task_validation/test_rstdp_feedback_v4.py и docs/TASK_VALIDATION_R_STDP_V4.md. Пользовательский запуск V4 ещё не выполнен; метрики и способность task-level error recovery пока не заявляются. Канонический STARTER 0.5 сохранён; вес 0.70 используется только как pre-registered diagnostic recovery condition, общий для FIXED/STDP/R-STDP/neutral.
 - STARTER не менялся; сборки, CI/GitHub Actions, APK/AAB и измерения RAM/CPU/энергии/I/O не запускались.
