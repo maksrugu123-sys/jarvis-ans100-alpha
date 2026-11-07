@@ -866,7 +866,7 @@ NCC проверяет capability при приёме команды и повт
 Реализованные и проверенные в reference slice возможности:
 - типизированные COMMAND/QUERY/EVENT envelope и проверка UUID/schema version;
 - реестр модулей и маршрутизация по зарегистрированным схемам/операциям;
-- deny-by-default capability для Command, проверка subject/scope/priority/policy version/expiry и повторная проверка перед commit;
+- deny-by-default capability для Command с проверкой subject, operation/schema, priority, policy version и expiry, а также повторной проверкой перед commit; отдельные ограничения по domain/object scope и resource budgets в reference пока не реализованы;
 - определение приоритета политикой NCC, а не доверие к запрошенному приоритету отправителя;
 - ограниченные очереди P0–P4, квоты классов, per-source limit и FIFO внутри класса;
 - проверки размера конверта, inline payload, descriptor, query result и deadline;
@@ -890,6 +890,7 @@ python3 -m unittest tools.cqe_reference.test_cqe -v
 - commit record и outbox пока не записываются одной атомарной durable-транзакцией;
 - crash recovery, flush/sync, JPVR_FORMAT_V1 reader/writer, durable idempotency retention, реальная многопоточность и полный lifecycle/resource/recovery NCC не реализованы;
 - Aging/старение очереди и защита от голодания, предусмотренные разделом 3.13.5, в reference-диспетчере не реализованы: он выбирает классы в строгом порядке P0→P1→P2→P3→P4 и FIFO внутри класса; отдельные тесты долгого ожидания и starvation protection отсутствуют. Это известное ограничение reference slice, а не подтверждённое свойство будущего production NCC.
+- Отдельные capability-ограничения по диапазонам доменов/объектов и ресурсным квотам из разделов 3.13.6 и 3.15.5 не представлены в текущей структуре `Capability` и не проверяются; существующая проверка operation/schema не заменяет эти ограничения. До production NCC необходимо определить и протестировать явный scope/resource contract.
 
 Поэтому текущий код позволяет проверять контрактные правила и порядок взаимодействия, но **не подтверждает durable commit, восстановление после сбоя, production-безопасность или готовность полноценного JARVIS**. Отсутствие JPVR не скрывается эмуляцией: persistent Command возвращает `MODULE_UNAVAILABLE` до изменения состояния.
 
