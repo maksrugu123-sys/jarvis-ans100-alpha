@@ -86,6 +86,19 @@ class TemporalRobustnessV2Tests(unittest.TestCase):
         }
         self.assertNotEqual(first_signatures, second_signatures)
 
+    def test_episode_order_is_deterministic_and_not_class_blocked(self):
+        for seed in RUN_SEEDS:
+            train_a, held_a = _build_dataset(seed)
+            train_b, held_b = _build_dataset(seed)
+            self.assertEqual(train_a, train_b)
+            self.assertEqual(held_a, held_b)
+            for episodes in (train_a, held_a):
+                labels = [episode.label for episode in episodes]
+                transitions = sum(
+                    left != right for left, right in zip(labels, labels[1:])
+                )
+                self.assertGreater(transitions, 1)
+
     def test_report_contains_all_conditions_and_aggregate_metrics(self):
         self.assertEqual(
             {item["condition"] for item in self.report["aggregate_conditions"]},
