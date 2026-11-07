@@ -47,3 +47,21 @@ Do not edit old entries to make a result look better. Add a correction entry if 
 **Limitations:** this policy is enforced through repository instructions and contributor workflow; no automated GitHub branch protection or CI enforcement was configured.
 
 **Next step:** all future meaningful tasks must append their own evidence-backed entry here.
+
+## 2026-11-07 — Verify contributor policy publication
+
+**Verification:** fetched the final files again from GitHub `main` after the documentation commits. Confirmed that:
+- `AGENTS.md` contains the mandatory change-log, testing, status-vocabulary, and completion-report rules.
+- `docs/TESTING_POLICY.md` contains the required test matrix, execution guidance, and evidence-recording rules.
+- `docs/DEVELOPMENT_LOG.md` contains the append-only entry format and the initial policy-change record.
+- `README.md` links to the agent instructions, test policy, and development log without a duplicate agent-policy row.
+
+**Git commits created for this policy change:**
+- `991e6ab0aa92c34c1caa6d8665035fffe2e8e6f0` — agent requirements.
+- `af8a3e8e2b228d51c4ee7220277113d25a16deea` — testing policy.
+- `bad5ccd73b6d9184d51e37f9ba82170ca640a8a7` — development log.
+- `568bcc40b2df1f3f7fb0b171ea47c8241993eeb8` — initial README links.
+- `ccd73c43bc2aae03c9013494a8ff90512fd19346` — remove duplicate README map entry.
+
+**Executable tests:** NOT RUN — documentation-only contributor-policy change.  
+**Builds / CI / GitHub Actions:** NOT RUN.
