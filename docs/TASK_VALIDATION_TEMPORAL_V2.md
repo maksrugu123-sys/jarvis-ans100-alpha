@@ -1,6 +1,6 @@
 # Task-Level Validation V2 — Multi-seed Temporal Robustness
 
-**Run status:** protocol and reference implementation added; user execution on Android Termux is pending. No V2 accuracy or learning benefit is claimed yet.
+**Run status:** completed on Android Termux on 7 November 2026. Results and interpretation: [TASK_VALIDATION_TEMPORAL_V2_RESULTS.md](TASK_VALIDATION_TEMPORAL_V2_RESULTS.md). No V2 learning benefit is claimed.
 **Benchmark:** JARVIS_TEMPORAL_ROBUSTNESS_V2
 **Date prepared:** 7 November 2026
 
