@@ -166,7 +166,7 @@ def _build_dataset(
     # The order is deterministic and independent of model outcomes.
     def order_key(episode: Episode) -> bytes:
         material = (
-            f"JARVIS_TEMPORAL_ROBUSTNESS_V2_ORDER|{seed}|{episode.split}|"
+            f"JARVIS_TEMPORAL_ROBUSTNESS_V2_ORDER|{seed}|{episode.episode_id}|"
             f"{episode.episode_id}"
         )
         return hashlib.sha256(material.encode("utf-8")).digest()
