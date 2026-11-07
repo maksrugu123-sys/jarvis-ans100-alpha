@@ -3033,6 +3033,31 @@ V4.2 закрывает именно этот диагностический п�
 
 Canonical STARTER weight 0.5 remains unchanged; V4 diagnostic start weight remains 0.70. The V4.2 tool is a float64 reference diagnostic, not a production runtime, not a held-out learning benchmark, and does not collect device resource measurements.
 
+
+### 3.28. JARVIS Compact Adaptive Neuron Core V5 — proposed architecture (7 November 2026)
+
+**Статус: PROPOSED / NOT IMPLEMENTED / NOT MEASURED.** Полная спецификация: `docs/JARVIS_COMPACT_NEURON_CORE_V5.md`.
+
+Главное решение V5: сначала оптимизировать представление состояния и горячий событийный путь, не меняя уравнения обучения. Oracle остаётся F64 эталоном. STARTER, V4/V4.1/V4.2 и одновременная batch-семантика заморожены.
+
+Предлагается пять связанных механизмов:
+
+1. **Shared Parameter Bank:** неизменяемые параметры и версии хранятся один раз; нейроны и синапсы используют компактный handle на parameter set.
+2. **Hot/Cold State Split:** числовое активное состояние отделяется от ID, schema/commit metadata, topology, диагностики и истории. JPVR durability, NCC single-writer и подтверждение commit сохраняются.
+3. **Rule-Specific Synapse State:** NONE хранит только вес; STDP — вес, pre/post traces и один timestamp; R-STDP дополнительно eligibility, время начала контекста и U32 context token. Общее время trace/eligibility допустимо только после тестирования инварианта, так как текущие update_rstdp/apply_reward продвигают обе шкалы одним timestamp.
+4. **Compact Event Payload:** события ссылаются на числовой synapse handle, timestamp задаётся для пакета, а строки/неизменяемые параметры не копируются в каждый spike. Версия/pinned snapshot веса должна соответствовать порядку обработки.
+5. **Derived State:** last_spike может быть выведен из refractory_until − refractory_ns при spike_sequence > 0 и неизменной parameter-set version; эффективный порог и transient sums не являются authoritative state.
+
+Предварительные F64 hot-payload размеры (не полный объект/JPVR record): NeuronState 40 байт; synapse NONE 8 байт; STDP 32 байта; R-STDP 52 байта (до возможного выравнивания до 56). Эти числа — расчёт по типам полей, не измерения RAM. Полный durable record содержит дополнительные метаданные и integrity overhead.
+
+**Не вводить пока:** F32/INT8/INT4, новый learning rule, shared slow-memory path, изменённый event ordering или новый temporal buffer. Сначала F64 packed-state должен пройти round-trip, corruption/version tests, дифференциальную проверку траекторий Oracle и измерение полной памяти на Android Termux.
+
+Отдельная будущая гипотеза — threshold-margin precision escalation: F32 для уверенных решений и F64-пересчёт, если валидированная граница численной ошибки пересекается с порогом. Никакого принятия до доказанной error bound и spike/learning-sign equivalence.
+
+В многонейронном режиме можно отдельно проверить общий низкоразмерный slow-context state вместо повторения длинной временной памяти в каждом нейроне. Работа Nature Machine Intelligence 2026 о dual-memory-pathway SNN — научная мотивация для эксперимента, а не готовое доказательство для JARVIS. Работа ICLR 2026 по checkpointing и lossless spike compression относится к BPTT; текущий JARVIS использует online STDP/R-STDP и не должен переносить этот метод в hot path без появления соответствующего training regime.
+
+**Ближайшие ворота:** выполнить V4.2 focused tests + smoke/pilot; затем измерить исходное представление на устройстве; затем реализовать отдельный F64 compact-state prototype без изменения математических правил. Сравнивать total memory, latency, spike sequence, weights, eligibility, reward updates и held-out quality. Масштабировать 1 → 10 → 100 → 1,000 → 10,000 только после прохождения предыдущего gate.
+
 ## 4. Гибридная память нейросети
 
 Выбран концептуальный вариант **C — Hybrid Memory**:
@@ -3410,28 +3435,3 @@ ZRAM может выступать дополнительной системно
 - V4 R-STDP feedback/error-recovery pilot выполнен пользователем на Android Termux: 12/12 специализированных тестов прошли за 2.962 s; два seed, 512 training pairs и 128 held-out pairs на seed. Held-out accuracy: FIXED 81.8359%, STDP 100%, R-STDP 83.0078%, neutral R-STDP 81.8359%. R-STDP получил 1,717 положительных и 331 отрицательный reward modulator; eligibility: 1,024 отрицательных, 331 положительный, 693 нулевых. Все 1,355 ненулевых reward-driven weight updates были отрицательными: правильные FAST эпизоды и ошибочные SLOW false positives оба депрессировали один и тот же вес. R-STDP превзошёл FIXED на 1.171875 п.п. (6 из 512 примеров), но STDP дал 0 ошибок; результат pilot предварительный и не доказывает надёжное error recovery. Полный pre-registered профиль (4 seed, 8,000/256 matched pairs) ещё не запускался. Детали: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md.
 - V4.1 alignment audit выполнен пользователем на Android Termux: 15/15 специализированных тестов прошли за 4.061 s; V4.1 pilot завершился 8/8 условий (два seed × четыре condition). Cross-tab: 1,024 correct FAST с negative eligibility / positive modulator / negative delta; 331 incorrect SLOW→FAST с positive eligibility / negative modulator / negative delta; 693 correct SLOW с zero eligibility. Итого 2,048 feedback events и 0 positive / 1,355 negative / 693 zero reward-driven updates. Baseline-before mean/min/max: 0.8045988381060147 / 0.495 / 0.891672785088837; neutral control сохранил baseline 0.5 и не изменил weight. Вывод: reward-baseline sign accounting согласован, но task-level R-STDP не показал двунаправленной коррекции. Полный набор тестов репозитория после V4.1 не запускался.
 - STARTER не менялся; сборки, CI/GitHub Actions, APK/AAB и измерения RAM/CPU/энергии/I/O не запускались.
-
-
-### 3.28. JARVIS Compact Adaptive Neuron Core V5 — proposed architecture (7 November 2026)
-
-**Статус: PROPOSED / NOT IMPLEMENTED / NOT MEASURED.** Полная спецификация: `docs/JARVIS_COMPACT_NEURON_CORE_V5.md`.
-
-Главное решение V5: сначала оптимизировать представление состояния и горячий событийный путь, не меняя уравнения обучения. Oracle остаётся F64 эталоном. STARTER, V4/V4.1/V4.2 и одновременная batch-семантика заморожены.
-
-Предлагается пять связанных механизмов:
-
-1. **Shared Parameter Bank:** неизменяемые параметры и версии хранятся один раз; нейроны и синапсы используют компактный handle на parameter set.
-2. **Hot/Cold State Split:** числовое активное состояние отделяется от ID, schema/commit metadata, topology, диагностики и истории. JPVR durability, NCC single-writer и подтверждение commit сохраняются.
-3. **Rule-Specific Synapse State:** NONE хранит только вес; STDP — вес, pre/post traces и один timestamp; R-STDP дополнительно eligibility, время начала контекста и U32 context token. Общее время trace/eligibility допустимо только после тестирования инварианта, так как текущие update_rstdp/apply_reward продвигают обе шкалы одним timestamp.
-4. **Compact Event Payload:** события ссылаются на числовой synapse handle, timestamp задаётся для пакета, а строки/неизменяемые параметры не копируются в каждый spike. Версия/pinned snapshot веса должна соответствовать порядку обработки.
-5. **Derived State:** last_spike может быть выведен из refractory_until − refractory_ns при spike_sequence > 0 и неизменной parameter-set version; эффективный порог и transient sums не являются authoritative state.
-
-Предварительные F64 hot-payload размеры (не полный объект/JPVR record): NeuronState 40 байт; synapse NONE 8 байт; STDP 32 байта; R-STDP 52 байта (до возможного выравнивания до 56). Эти числа — расчёт по типам полей, не измерения RAM. Полный durable record содержит дополнительные метаданные и integrity overhead.
-
-**Не вводить пока:** F32/INT8/INT4, новый learning rule, shared slow-memory path, изменённый event ordering или новый temporal buffer. Сначала F64 packed-state должен пройти round-trip, corruption/version tests, дифференциальную проверку траекторий Oracle и измерение полной памяти на Android Termux.
-
-Отдельная будущая гипотеза — threshold-margin precision escalation: F32 для уверенных решений и F64-пересчёт, если валидированная граница численной ошибки пересекается с порогом. Никакого принятия до доказанной error bound и spike/learning-sign equivalence.
-
-В многонейронном режиме можно отдельно проверить общий низкоразмерный slow-context state вместо повторения длинной временной памяти в каждом нейроне. Работа Nature Machine Intelligence 2026 о dual-memory-pathway SNN — научная мотивация для эксперимента, а не готовое доказательство для JARVIS. Работа ICLR 2026 по checkpointing и lossless spike compression относится к BPTT; текущий JARVIS использует online STDP/R-STDP и не должен переносить этот метод в hot path без появления соответствующего training regime.
-
-**Ближайшие ворота:** выполнить V4.2 focused tests + smoke/pilot; затем измерить исходное представление на устройстве; затем реализовать отдельный F64 compact-state prototype без изменения математических правил. Сравнивать total memory, latency, spike sequence, weights, eligibility, reward updates и held-out quality. Масштабировать 1 → 10 → 100 → 1,000 → 10,000 только после прохождения предыдущего gate.
