@@ -24,6 +24,9 @@ The repository is at the **architecture and reference-experiment stage**. It is 
 | Path | Purpose |
 |---|---|
 | `docs/JARVIS_ARCHITECTURE.md` | Main architecture specification, decisions, open questions and development plan |
+| `AGENTS.md` | Mandatory instructions for all AI agents and contributors |
+| `docs/TESTING_POLICY.md` | Required test practices, verification evidence and result labels |
+| `docs/DEVELOPMENT_LOG.md` | Append-only record of changes, tests, experiments and limitations |
 | `docs/CALIBRATION_ROUND2.md` | Round 1 observations, Round 2 scenarios and verification record |
 | `docs/TASK_VALIDATION_TEMPORAL_V1.md` | Initial task-level and V1 protocols/results |
 | `docs/TASK_VALIDATION_TEMPORAL_V2.md` | V2 protocol |
