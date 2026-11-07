@@ -56,6 +56,24 @@ class TemporalRobustnessV3Tests(unittest.TestCase):
                     for index in range(len(labels) - 1)
                 ))
 
+    def test_fast_slow_pairs_share_identical_pulse_strengths(self):
+        for seed in RUN_SEEDS:
+            for split, episodes in zip(("train", "held-out"), _build_dataset(seed)):
+                by_id = {item.episode_id: item for item in episodes}
+                per_class = TRAIN_PER_CLASS if split == "train" else HELD_OUT_PER_CLASS
+                for index in range(per_class):
+                    suffix = f"{index:03d}"
+                    fast = next(
+                        item for key, item in by_id.items()
+                        if key.endswith(f"-fast-{suffix}")
+                    )
+                    slow = next(
+                        item for key, item in by_id.items()
+                        if key.endswith(f"-slow-{suffix}")
+                    )
+                    self.assertEqual(fast.strengths, slow.strengths)
+                    self.assertNotEqual(fast.gaps_ms, slow.gaps_ms)
+
     def test_seeded_datasets_are_reproducible_and_independent(self):
         first_train, first_held = _build_dataset(RUN_SEEDS[0])
         again_train, again_held = _build_dataset(RUN_SEEDS[0])
