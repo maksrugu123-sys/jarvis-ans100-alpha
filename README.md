@@ -37,6 +37,16 @@ python3 -m unittest discover -s tools -t . -v
 
 This runs Python unit tests only. It is not a production build, application package, Android build or CI workflow.
 
+## Run the first task-level benchmark
+
+From the repository root:
+
+```sh
+python3 -m tools.task_validation.temporal_patterns
+```
+
+This compares a fixed-weight baseline with STDP and reward-modulated STDP on a deterministic burst-vs-sparse task. It prints a JSON report and does not change the STARTER profile. The benchmark and its tests are new and must be run on the user's environment before their results are treated as verified.
+
 ## Generate experiment reports
 
 Round 1 exploratory parameter sweep:
