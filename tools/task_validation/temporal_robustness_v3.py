@@ -313,6 +313,7 @@ def _run_episode(
             "learning_update": update_record,
         })
 
+    weight_after_pulses = synapse_state.weight
     predicted_fast = bool(spike_times_ms)
     prediction = "FAST" if predicted_fast else "SLOW"
     correct = prediction == episode.label
@@ -372,14 +373,7 @@ def _run_episode(
         "prediction": prediction,
         "correct": correct,
         "weight_before_episode": weight_before_episode,
-        "weight_after_pulses": (
-            pulse_records[-1]["learning_update"]["weight_after_event"]
-            if pulse_records and pulse_records[-1]["learning_update"] is not None
-            and mode == "stdp"
-            else weight_before_episode
-            if not pulse_records or mode == "fixed"
-            else synapse_state.weight
-        ),
+        "weight_after_pulses": weight_after_pulses,
         "weight_after_episode": synapse_state.weight,
         "pulse_diagnostics": pulse_records,
         "reward_diagnostic": reward_record,
