@@ -107,7 +107,46 @@ A weight change alone is not a learning success. Task-level error correction req
 
 A single-neuron/one-synapse system may lack sufficient credit-assignment capacity. Failure to recover is a valid experimental result and must not trigger silent changes to STARTER or the learning equations.
 
-## 7. Run on Android Termux
+## 7. V4.1 eligibility–reward alignment audit
+
+V4.1 extends the V4 report without changing the benchmark dataset, reward policy,
+STARTER parameters, STDP/R-STDP equations or learning rates.
+
+For every training feedback event, the report records a six-dimensional
+cross-tab cell:
+
+`label | prediction | correctness | eligibility_sign | modulator_sign | weight_delta_sign`
+
+Each sign is one of `negative`, `zero` or `positive`. The cells are stored in
+`training_diagnostics.episode_alignment_cross_tab` for each seed/condition and
+reconciled across seeds in `aggregate_conditions`. The sum of all cells must
+equal the number of feedback events.
+
+The audit also records the reward baseline immediately before each feedback,
+its mean/minimum/maximum, and checks the existing oracle contract:
+
+`modulator = clip(reward_value - baseline_before, -1, 1)`
+
+It reconciles positive/negative/zero weight deltas against feedback-event totals
+and checks whether non-zero `eligibility × modulator` products agree with the
+actual delta sign. A zero delta with a non-zero product is reported separately
+because soft bounds or clipping can suppress an update; a sign mismatch is a
+distinct integrity failure. The diagnostic counters do not modify the oracle.
+
+Interpretation must remain at the right level:
+- The cross-tab reveals which task outcomes co-occur with each eligibility sign.
+- It does not prove that an eligibility trace carries useful causal credit.
+- A one-synapse scalar weight can move in only one direction at a time; both
+  reward signs do not guarantee useful bidirectional task correction.
+- The canonical STARTER weight remains 0.5. The 0.70 recovery condition is
+  still explicitly diagnostic and is not calibration.
+
+The dedicated tests cover cross-tab coverage, sign-count reconciliation,
+product/delta consistency, baseline/modulator consistency and frozen
+held-out inference. Their post-V4.1 execution result must be recorded
+separately.
+
+## 8. Run on Android Termux
 
 From the repository root:
 
@@ -122,8 +161,8 @@ python3 -m tools.task_validation.rstdp_feedback_v4 --profile full > rstdp_feedba
 python3 -m unittest discover -s tools -t . -v
 ```
 
-The pilot profile is an explicitly exploratory, reduced-size run for constrained devices; it does not replace the pre-registered full benchmark. The full profile remains the default if no profile is supplied. Progress is printed to stderr while the final JSON is written to stdout, so shell redirection preserves a clean JSON file. The dedicated V4 unit tests use a smaller deterministic smoke dataset to keep the full test suite practical. The JSON report is a local execution artifact unless separately committed by the user.
+The pilot profile is an explicitly exploratory, reduced-size run for constrained devices; it does not replace the pre-registered full benchmark. The full profile remains the default if no profile is supplied. Progress is printed to stderr while the final JSON is written to stdout, so shell redirection preserves a clean JSON file. The dedicated V4 unit tests use a smaller deterministic smoke dataset to keep the full test suite practical. The JSON report is a local execution artifact unless separately committed by the user. V4.1 cross-tab and baseline diagnostics are included automatically in each run.
 
-## 8. Scope limits
+## 9. Scope limits
 
 This is a Python/float64 reference experiment using the Numerical Oracle, not the production JARVIS runtime. It does not measure target-device RAM, CPU, energy or I/O; it does not test JPVR, NCC production integration, scaling, biological equivalence, consciousness or general intelligence. No application build or GitHub Actions workflow is part of V4.

@@ -158,6 +158,76 @@ class RstdpFeedbackV4Tests(unittest.TestCase):
                     condition["weight_after_held_out"],
                 )
 
+    def test_alignment_cross_tab_covers_every_rewarded_feedback_episode(self):
+        for run in self.report["runs"]:
+            rewarded = next(
+                row for row in run["conditions"]
+                if row["condition"] == "rstdp"
+            )
+            diagnostics = rewarded["training_diagnostics"]
+            cross_tab = diagnostics["episode_alignment_cross_tab"]
+            self.assertEqual(
+                sum(cross_tab.values()), diagnostics["reward_event_count"]
+            )
+            for key, count in cross_tab.items():
+                fields = key.split("|")
+                self.assertEqual(len(fields), 6)
+                label, prediction, correctness, eligibility, modulator, delta = fields
+                self.assertIn(label, ("FAST", "SLOW"))
+                self.assertIn(prediction, ("FAST", "SLOW"))
+                self.assertEqual(
+                    correctness,
+                    "correct" if label == prediction else "incorrect",
+                )
+                self.assertIn(eligibility, ("negative", "zero", "positive"))
+                self.assertIn(modulator, ("negative", "zero", "positive"))
+                self.assertIn(delta, ("negative", "zero", "positive"))
+                self.assertGreater(count, 0)
+
+    def test_weight_delta_sign_reconciles_with_eligibility_modulator_product(self):
+        aggregate = {
+            row["condition"]: row
+            for row in self.report["aggregate_conditions"]
+        }
+        diagnostics = aggregate["rstdp"]["training_diagnostics"]
+        self.assertEqual(diagnostics["product_delta_sign_mismatch_count"], 0)
+        self.assertEqual(
+            diagnostics["nonzero_delta_without_nonzero_product_count"], 0
+        )
+        self.assertEqual(
+            diagnostics["positive_reward_weight_delta_count"]
+            + diagnostics["negative_reward_weight_delta_count"]
+            + diagnostics["zero_reward_weight_delta_count"],
+            diagnostics["reward_event_count"],
+        )
+        self.assertEqual(
+            diagnostics["nonzero_eligibility_modulator_product_count"],
+            diagnostics["eligibility_modulator_product_sign_match_count"]
+            + diagnostics["zero_delta_with_nonzero_product_count"]
+            + diagnostics["product_delta_sign_mismatch_count"],
+        )
+
+    def test_reward_baseline_modulator_relation_is_consistent(self):
+        aggregate = {
+            row["condition"]: row
+            for row in self.report["aggregate_conditions"]
+        }
+        rewarded = aggregate["rstdp"]
+        diagnostics = rewarded["training_diagnostics"]
+        baseline = rewarded["reward_baseline_audit"]
+        self.assertEqual(diagnostics["reward_modulator_consistency_error_count"], 0)
+        self.assertEqual(
+            baseline["feedback_events"], diagnostics["reward_event_count"]
+        )
+        self.assertGreaterEqual(baseline["min_baseline_before"], 0.0)
+        self.assertLessEqual(baseline["max_baseline_before"], 1.0)
+        self.assertGreaterEqual(
+            baseline["mean_baseline_before"], baseline["min_baseline_before"]
+        )
+        self.assertLessEqual(
+            baseline["mean_baseline_before"], baseline["max_baseline_before"]
+        )
+
     def test_report_is_json_serializable_without_non_finite_values(self):
         encoded = json.dumps(self.report, sort_keys=True, allow_nan=False)
         self.assertTrue(encoded.startswith("{"))

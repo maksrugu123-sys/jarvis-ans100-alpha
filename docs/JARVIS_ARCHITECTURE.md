@@ -2982,6 +2982,28 @@ Baseline reward начинается с 0.5; используется неизм
 
 V4 остаётся reference experiment: он не реализует production neuron runtime, не доказывает сознание и не измеряет ресурсы устройства. Сборки и GitHub Actions к эксперименту не относятся.
 
+### 3.27.11. V4.1 — Eligibility–Reward Alignment Audit
+
+**Статус:** диагностический код и регрессионные тесты добавлены; запуск V4.1 после добавления аудита ещё не выполнен. V4 pilot остаётся единственным фактически подтверждённым task-level запуском.
+
+V4.1 не меняет протокол V4, сигналы, reward policy, алгоритм `update_rstdp`/`apply_reward`, коэффициенты или канонический STARTER. Он расширяет отчёт, чтобы объяснить, почему V4 получил 1,355 отрицательных reward-driven обновлений и ни одного положительного.
+
+Для каждого training feedback event строится cross-tab по шести измерениям: класс FAST/SLOW, prediction FAST/SLOW, correctness, знак eligibility, знак reward modulator и знак фактического weight delta. Ключ ячейки сохраняет все шесть признаков; сумма ячеек обязана совпадать с числом feedback events. Таблица публикуется отдельно для каждого seed/condition и агрегируется по seed.
+
+Отдельный baseline audit записывает baseline до каждого reward, min/mean/max и проверяет существующее равенство `modulator = clip(reward_value - baseline_before, -1, 1)`. Счётчики сверяют все положительные, отрицательные и нулевые delta, а также согласованность знака delta со знаком произведения `eligibility × modulator`. Нулевой delta при ненулевом произведении отделён от фактического несовпадения знака: ограничение веса может подавить изменение, не меняя математический знак.
+
+**Научная граница:** cross-tab показывает ассоциации между типом эпизода и знаком eligibility, но сам по себе не доказывает причинную пригодность eligibility для credit assignment. Нельзя менять формулу или STARTER только на основании агрегированной корреляции; сначала нужно прочитать конкретные ячейки и проверить механизм на целевом задании.
+
+Файлы:
+- `tools/task_validation/rstdp_feedback_v4.py` — V4.1 report diagnostics;
+- `tools/task_validation/test_rstdp_feedback_v4.py` — audit reconciliation tests;
+- `docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md` — protocol and interpretation.
+
+Запуск остаётся тем же:
+`python3 -m tools.task_validation.rstdp_feedback_v4 --profile pilot > rstdp_feedback_v4_pilot_report.json`
+и
+`python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v`.
+
 ## 4. Гибридная память нейросети
 
 Выбран концептуальный вариант **C — Hybrid Memory**:
@@ -3235,7 +3257,7 @@ ZRAM может выступать дополнительной системно
 
 1. Сохранить и расширить исполняемую CQE v1 reference contract (раздел 3.15.9) как acceptance oracle; затем выбрать production-язык и интегрировать NCC с JPVR durable commit, атомарным commit/outbox, recovery и durable deduplication.
 2. Завершить численную калибровку Adaptive LIF-DT и уже определённых STDP/R-STDP по экспериментальной методологии раздела 3.25: формулировать отдельные вопросы, разделять scientific/nuisance/fixed parameters, проводить воспроизводимые sweeps, анализировать взаимодействия и подтверждать кандидатов на длинных/отложенных сценариях; выбрать диапазоны параметров и числовую точность. iSTDP оставить отдельным исследовательским этапом.
-3. Выполнить V4 signed-feedback/error-recovery benchmark (раздел 3.27.10), проверить оба знака reward и eligibility, а также held-out recovery R-STDP против FIXED, STDP и neutral control. STARTER 0.5 сохранить; диагностическое начальное значение 0.70 не считать калибровкой. Зафиксировать результат или ограничение credit assignment до изменения learning rule.
+3. Завершить V4.1 Eligibility–Reward Alignment Audit (раздел 3.27.11), сопоставить label/prediction/correctness с eligibility, modulator и weight-delta signs, проверить reward-baseline relation и сверку счётчиков. После чтения отчёта решить, нужен ли полный pre-registered V4 benchmark или отдельный тест credit assignment. STARTER 0.5 и формулу R-STDP не менять без evidence.
 4. Сверить будущую runtime-реализацию Adaptive LIF-DT/STDP/R-STDP с уже реализованным float64 Oracle на golden vectors и длинных последовательностях; spike/no-spike, spike_sequence и допустимые числовые ошибки должны проверяться отдельно по разделу 3.22.
 5. Реализовать сериализаторы NeuronStateRecord/SynapseRecord и JPVR_FORMAT_V1 reader/writer по разделам 3.17–3.18 и 3.21; пока без масштабирования.
 6. Реализовать ограниченный JPVR-001: один нейрон, несколько синапсов, запись, закрытие, повторное открытие и продолжение работы.
@@ -3332,7 +3354,7 @@ ZRAM может выступать дополнительной системно
 До отдельного разрешения пользователя сборки не запускаются. Архитектурная готовность, написание исходного кода, статические проверки, запуск тестов и сборка приложения — разные статусы и должны учитываться раздельно.
 
 
-**Главный ближайший исследовательский шаг — выполнить V4:** запустить `tools.task_validation.rstdp_feedback_v4` и полный набор unit tests на Android Termux; затем разобрать оба знака eligibility/reward, первые ошибки, направления weight delta, held-out confusion metrics и сравнения R-STDP с FIXED, STDP и neutral control. V4 protocol уже реализован в reference-коде и специфицирован в разделе 3.27.10; пользовательский запуск и его метрики пока ожидаются. Канонический STARTER 0.5 не менять; вес 0.70 остаётся отдельным диагностическим условием. V2/V3 — завершённые исторические эксперименты. CQE reference сохранить как acceptance oracle для будущего production NCC; JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
+**Ближайший исследовательский шаг — выполнить V4.1 audit** на Android Termux и прочитать cross-tab по каждому seed: какие классы и решения порождают положительную/отрицательную/нулевую eligibility, как baseline формирует знак modulator и согласуется ли фактический delta с произведением eligibility × modulator. Только после этой диагностики выбирать между полным pre-registered V4 запуском и отдельным credit-assignment экспериментом. Канонический STARTER 0.5 и формулу R-STDP не менять без evidence; вес 0.70 остаётся диагностическим. V2/V3 — завершённые исторические эксперименты, V4 pilot — выполненный exploratory запуск. CQE reference сохранить как acceptance oracle для будущего production NCC; JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
 
 
 ### 12.2. Calibration Round 2 — историческая запись запуска 7 ноября 2026

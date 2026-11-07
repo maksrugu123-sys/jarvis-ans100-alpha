@@ -441,7 +441,15 @@ def _evaluate(
     return _metrics(counts)
 
 
-def _new_training_diagnostics() -> dict[str, int | float]:
+def _sign_bucket(value: float) -> str:
+    if value > 0.0:
+        return "positive"
+    if value < 0.0:
+        return "negative"
+    return "zero"
+
+
+def _new_training_diagnostics() -> dict[str, object]:
     return {
         "plasticity_event_count": 0,
         "positive_q_count": 0,
@@ -465,11 +473,20 @@ def _new_training_diagnostics() -> dict[str, int | float]:
         "false_positive_negative_weight_update_count": 0,
         "false_negative_positive_weight_update_count": 0,
         "eligibility_modulator_product_sign_match_count": 0,
+        "nonzero_eligibility_modulator_product_count": 0,
+        "zero_delta_with_nonzero_product_count": 0,
+        "product_delta_sign_mismatch_count": 0,
+        "nonzero_delta_without_nonzero_product_count": 0,
+        "reward_modulator_consistency_error_count": 0,
+        "baseline_before_sum": 0.0,
+        "baseline_before_min": 1.0,
+        "baseline_before_max": 0.0,
+        "episode_alignment_cross_tab": {},
     }
 
 
 def _accumulate_diagnostics(
-    diagnostics: dict[str, int | float],
+    diagnostics: dict[str, object],
     pulse_stats: dict[str, int | float],
     record: dict[str, object],
 ) -> None:
@@ -493,6 +510,34 @@ def _accumulate_diagnostics(
     modulator = float(feedback["modulator"])
     eligibility = float(feedback["eligibility_at_feedback"])
     delta = float(feedback["weight_delta"])
+    reward_value = float(feedback["reward_value"])
+    baseline_before = float(feedback["baseline_before"])
+    diagnostics["baseline_before_sum"] += baseline_before
+    diagnostics["baseline_before_min"] = min(
+        float(diagnostics["baseline_before_min"]), baseline_before
+    )
+    diagnostics["baseline_before_max"] = max(
+        float(diagnostics["baseline_before_max"]), baseline_before
+    )
+    if not math.isclose(
+        modulator, reward_value - baseline_before, rel_tol=0.0, abs_tol=1e-15
+    ):
+        diagnostics["reward_modulator_consistency_error_count"] += 1
+
+    label = str(record["label"])
+    prediction = str(record["prediction"])
+    correctness = "correct" if bool(record["correct"]) else "incorrect"
+    eligibility_sign = _sign_bucket(eligibility)
+    modulator_sign = _sign_bucket(modulator)
+    delta_sign = _sign_bucket(delta)
+    cross_tab = diagnostics["episode_alignment_cross_tab"]
+    assert isinstance(cross_tab, dict)
+    cross_key = "|".join((
+        label, prediction, correctness,
+        eligibility_sign, modulator_sign, delta_sign,
+    ))
+    cross_tab[cross_key] = int(cross_tab.get(cross_key, 0)) + 1
+
     diagnostics["positive_modulator_count"] += int(modulator > 0.0)
     diagnostics["negative_modulator_count"] += int(modulator < 0.0)
     diagnostics["zero_modulator_count"] += int(modulator == 0.0)
@@ -509,8 +554,33 @@ def _accumulate_diagnostics(
     if record["label"] == "FAST" and record["prediction"] == "SLOW" and delta > 0.0:
         diagnostics["false_negative_positive_weight_update_count"] += 1
     product = modulator * eligibility
-    if (product > 0.0 and delta > 0.0) or (product < 0.0 and delta < 0.0):
-        diagnostics["eligibility_modulator_product_sign_match_count"] += 1
+    if product != 0.0:
+        diagnostics["nonzero_eligibility_modulator_product_count"] += 1
+        if delta == 0.0:
+            diagnostics["zero_delta_with_nonzero_product_count"] += 1
+        elif (product > 0.0 and delta < 0.0) or (product < 0.0 and delta > 0.0):
+            diagnostics["product_delta_sign_mismatch_count"] += 1
+        else:
+            diagnostics["eligibility_modulator_product_sign_match_count"] += 1
+    elif delta != 0.0:
+        diagnostics["nonzero_delta_without_nonzero_product_count"] += 1
+
+
+def _reward_baseline_audit(
+    diagnostics: dict[str, object],
+) -> dict[str, object] | None:
+    events = int(diagnostics["reward_event_count"])
+    if events == 0:
+        return None
+    return {
+        "feedback_events": events,
+        "initial_baseline": REWARD_BASELINE_INITIAL,
+        "beta_b": starter_reward_params().beta_b,
+        "mean_baseline_before": float(diagnostics["baseline_before_sum"]) / events,
+        "min_baseline_before": float(diagnostics["baseline_before_min"]),
+        "max_baseline_before": float(diagnostics["baseline_before_max"]),
+        "modulator_definition": "clip(reward_value - baseline_before, -1, 1)",
+    }
 
 
 def _run_condition(
@@ -604,6 +674,7 @@ def _run_condition(
         "train": _metrics(train_counts),
         "held_out": _metrics(held_counts),
         "training_diagnostics": diagnostics,
+        "reward_baseline_audit": _reward_baseline_audit(diagnostics),
         "first_errors": first_errors,
         "weight_trajectory": trajectory,
     }
@@ -730,10 +801,34 @@ def _aggregate_conditions(runs: list[dict[str, object]]) -> list[dict[str, objec
             ],
         }
         diagnostic_keys = tuple(per_seed[0]["training_diagnostics"])
-        summary["training_diagnostics"] = {
-            key: sum(item["training_diagnostics"][key] for item in per_seed)
-            for key in diagnostic_keys
-        }
+        combined_diagnostics: dict[str, object] = {}
+        for key in diagnostic_keys:
+            if key == "episode_alignment_cross_tab":
+                merged_cross_tab: dict[str, int] = {}
+                for item in per_seed:
+                    for cell, count in item["training_diagnostics"][key].items():
+                        merged_cross_tab[cell] = merged_cross_tab.get(cell, 0) + int(count)
+                combined_diagnostics[key] = merged_cross_tab
+            elif key == "baseline_before_min":
+                observed = [
+                    float(item["training_diagnostics"][key])
+                    for item in per_seed
+                    if int(item["training_diagnostics"]["reward_event_count"]) > 0
+                ]
+                combined_diagnostics[key] = min(observed) if observed else 1.0
+            elif key == "baseline_before_max":
+                observed = [
+                    float(item["training_diagnostics"][key])
+                    for item in per_seed
+                    if int(item["training_diagnostics"]["reward_event_count"]) > 0
+                ]
+                combined_diagnostics[key] = max(observed) if observed else 0.0
+            else:
+                combined_diagnostics[key] = sum(
+                    item["training_diagnostics"][key] for item in per_seed
+                )
+        summary["training_diagnostics"] = combined_diagnostics
+        summary["reward_baseline_audit"] = _reward_baseline_audit(combined_diagnostics)
         summaries.append(summary)
     return summaries
 
@@ -850,6 +945,15 @@ def run_benchmark(
                 "so the reward modulator is exactly zero"
             ),
             "held_out_policy": "inference only; no plasticity, eligibility or reward updates",
+            "v4_1_alignment_audit": {
+                "cross_tab_key_order": [
+                    "label", "prediction", "correctness",
+                    "eligibility_sign", "modulator_sign", "weight_delta_sign",
+                ],
+                "sign_values": ["negative", "zero", "positive"],
+                "baseline_audit": "records baseline before each reward; verifies modulator = reward - baseline",
+                "update_audit": "reconciles product sign, weight-delta sign, zero updates and sign mismatches",
+            },
             "dataset_generation": "SHA-256 deterministic, matched-strength pairs, train/held-out disjoint",
             "diagnostic_weight_rationale": (
                 "0.70 is a predeclared high-bias diagnostic condition: FAST sequences "
@@ -899,6 +1003,7 @@ def run_benchmark(
         "interpretation_limits": [
             "The evaluator supplies an external scalar correctness reward; the neuron does not know the class label during inference.",
             "The signed probe verifies the numerical reward/eligibility sign rule, not learning or task-level error correction.",
+            "The V4.1 cross-tab is descriptive: association between task outcomes and eligibility signs does not prove causal credit assignment.",
             "A task-level correction claim requires improved held-out confusion metrics against FIXED and neutral R-STDP across seeds.",
             "STDP is retained as a direct local-learning comparator; it may outperform reward-modulated learning.",
             "One neuron and one excitatory synapse have limited credit-assignment capacity; failure is a valid result.",
