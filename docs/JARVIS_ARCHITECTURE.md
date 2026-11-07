@@ -3254,19 +3254,19 @@ ZRAM может выступать дополнительной системно
 **Главный ближайший шаг:** выполнить tools/task_validation/temporal_robustness_v2.py и полный набор unit tests на Android Termux; затем разобрать среднюю точность, разброс между seed, confusion metrics и прямое сравнение rewarded R-STDP с neutral-reward control. Не менять STARTER по результатам одного набора и не объявлять reward полезным без повторяемого преимущества на нескольких seed. После V2 выбрать следующий эксперимент по фактическим ограничениям одного нейрона/синапса; CQE reference сохранить как acceptance oracle для будущего production NCC. JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
 
 
-### 12.2. Последняя проверка Numerical Oracle — 7 ноября 2026
+### 12.2. Calibration Round 2 — историческая запись запуска 7 ноября 2026
 
-Последнее подтверждённое исполнение пользователя в Android Termux:
+На этапе завершения Calibration Round 2 пользователь запустил генератор и полный набор unit tests на Android Termux:
 
-- Calibration Round 2 generator завершился успешно и создал локальный файл calibration_round2.json; содержимое отчёта ещё ожидает предметного анализа.
-- Полный набор \`python3 -m unittest discover -s tools -t . -v\`: **64 passed, 0 failures, 0 errors**, 1.649 секунды.
-- Breakdown: 26 CQE reference tests + 29 Numerical Oracle tests + 9 Calibration Round 2 tests.
+- Генератор создал локальный файл `calibration_round2.json`; его 23 сценария были впоследствии просмотрены и описаны в `docs/CALIBRATION_ROUND2.md`.
+- На тот момент полный набор содержал **64 passed, 0 failures, 0 errors**, 1.649 секунды: 26 CQE reference + 29 Numerical Oracle + 9 Calibration Round 2.
 - Python version не записана.
-- Это тестирование reference-инструментов, а не production runtime.
-- Параметры JARVIS_SINGLE_NEURON_STARTER_V1 не менялись и не считаются CALIBRATED.
-- Сборки, CI/GitHub Actions, APK/AAB, benchmarks и измерения ресурсов не запускались.
+- Это проверка reference-инструментов, а не production runtime.
+- Параметры `JARVIS_SINGLE_NEURON_STARTER_V1` не менялись и не считаются CALIBRATED.
+- Сборки, CI/GitHub Actions, APK/AAB и измерения ресурсов не запускались.
 
-Эта запись является более свежей проверкой и уточняет ожидавшие повторного запуска статусы, перечисленные выше в документе. Следующий шаг — выполнить tools/task_validation/baseline_boundary.py (135 ячеек: 15 интервалов × 9 значений силы входа), затем заранее зафиксировать более сложный task-level benchmark с пограничными/шумными условиями. Сравнить FIXED/STDP/R-STDP на одинаковых train/held-out данных; STARTER не менять.
+Это исторический результат Round 2, а не последняя проверка всего репозитория. Более поздний запуск после добавления task-level validation V1 прошёл **82 теста**; актуальная запись приведена в разделе 12.3. Следующий экспериментальный шаг — выполнить и проанализировать Temporal Robustness V2. STARTER не менять без отдельного воспроизводимого обоснования.
+
 
 
 ### 12.3. Последнее пользовательское task-level validation — 7 ноября 2026
