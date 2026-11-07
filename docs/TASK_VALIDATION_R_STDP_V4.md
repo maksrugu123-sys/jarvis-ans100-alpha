@@ -112,11 +112,17 @@ A single-neuron/one-synapse system may lack sufficient credit-assignment capacit
 From the repository root:
 
 ```sh
-python3 -m tools.task_validation.rstdp_feedback_v4 > rstdp_feedback_v4_report.json
+# Телефонный пилот: 512 train pairs, 128 held-out pairs, два seed
+python3 -m tools.task_validation.rstdp_feedback_v4 --profile pilot > rstdp_feedback_v4_pilot_report.json
+
+# Полный pre-registered benchmark: 8000/256 пар, четыре seed
+python3 -m tools.task_validation.rstdp_feedback_v4 --profile full > rstdp_feedback_v4_report.json
+
+# Полный набор unit tests
 python3 -m unittest discover -s tools -t . -v
 ```
 
-The first command runs the full 4-seed benchmark. The dedicated V4 unit tests use a smaller deterministic smoke dataset to keep the full test suite practical. The JSON report is a local execution artifact unless separately committed by the user.
+The pilot profile is an explicitly exploratory, reduced-size run for constrained devices; it does not replace the pre-registered full benchmark. The full profile remains the default if no profile is supplied. Progress is printed to stderr while the final JSON is written to stdout, so shell redirection preserves a clean JSON file. The dedicated V4 unit tests use a smaller deterministic smoke dataset to keep the full test suite practical. The JSON report is a local execution artifact unless separately committed by the user.
 
 ## 8. Scope limits
 
