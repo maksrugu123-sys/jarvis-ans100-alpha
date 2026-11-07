@@ -554,6 +554,7 @@ NCC использует ограниченные внутренние очер�
 - MODULE_UNAVAILABLE — получатель не готов принимать работу;
 - VERSION_CONFLICT — изменилось состояние, на версии которого основывалась команда;
 - DEADLINE_EXCEEDED — истёк срок выполнения;
+- LATE_SIGNAL — временная метка сигнала старше уже подтверждённого модельного времени;
 - RESOURCE_EXHAUSTED — достигнут безопасный лимит очереди или ресурсов;
 - CANCELLED — задача отменена до commit;
 - INTEGRITY_FAILURE — проверка целостности не пройдена;
@@ -1002,6 +1003,8 @@ Learning Manager получает временные метки входных �
 - **сила** может ограниченно зависеть от превышения порога и Attention;
 - **длительность** может ограниченно зависеть от состояния внимания и выходной политики.
 
+Здесь overshoot определяется до сброса потенциала: overshoot = max(0, u_before_reset − theta_eff). Это только превышение порога в текущем вычислении, а не дополнительный сигнал неожиданности.
+
 Концептуально:
 
 \[
@@ -1045,7 +1048,7 @@ Adaptive LIF-DT не моделирует точную форму потенци
 
 1. Dan Goodman, *Abstract neuron models* — учебное изложение перехода от порогового Integrate-and-Fire к LIF, временной утечки, синаптической динамики и адаптивного порога: https://neuro4ml.github.io/abstract-models/
 2. *Spike frequency adaptation: bridging neuronal models and neuromorphic applications* — обзор вариантов адаптации частоты импульсов и динамического порога: https://pmc.ncbi.nlm.nih.gov/articles/PMC11053160/
-3. *Advancing spatio-temporal processing through adaptation in spiking neural networks* — исследование адаптивных LIF-моделей и роли дополнительной переменной адаптации: https://www.nature.com/articles/s41434-025-60878-z
+3. *Advancing spatio-temporal processing through adaptation in spiking neural networks* — исследование адаптивных LIF-моделей и роли дополнительной переменной адаптации: https://www.nature.com/articles/s41467-025-60878-z
 
 
 ---
