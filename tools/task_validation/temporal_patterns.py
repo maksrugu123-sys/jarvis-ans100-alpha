@@ -7,7 +7,7 @@ STDP on one ALIF-DT output neuron and one excitatory input synapse.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Iterable
 
 from tools.numerical_oracle.jarvis_oracle import (
@@ -44,9 +44,9 @@ TRAIN_EPISODES = (
 
 # Held-out intervals and slightly reduced amplitude are not used for updates.
 TEST_EPISODES = (
-    Episode(True, 4, 0.95), Episode(False, 45, 0.95),
-    Episode(True, 6, 0.95), Episode(False, 55, 0.95),
-    Episode(True, 5, 0.95), Episode(False, 65, 0.95),
+    Episode(True, 7, 0.95), Episode(False, 45, 0.95),
+    Episode(True, 8, 0.95), Episode(False, 55, 0.95),
+    Episode(True, 7, 0.95), Episode(False, 65, 0.95),
 )
 
 
@@ -76,7 +76,6 @@ def _metrics(rows: Iterable[tuple[bool, bool]]) -> dict[str, float | int]:
 def _run_episode(
     episode: Episode,
     episode_index: int,
-    weight: float,
     mode: str,
     synapse_state: SynapseState,
     reward_baseline: float,
@@ -155,7 +154,7 @@ def _run_condition(mode: str) -> dict[str, object]:
     for index, episode in enumerate(TRAIN_EPISODES):
         context_id = f"temporal-train-{index:03d}"
         predicted, _, synapse_state, reward_baseline = _run_episode(
-            episode, index, synapse_state.weight, mode, synapse_state,
+            episode, index, mode, synapse_state,
             reward_baseline, context_id,
         )
         train_rows.append((episode.label, predicted))
@@ -166,7 +165,7 @@ def _run_condition(mode: str) -> dict[str, object]:
     for index, episode in enumerate(TEST_EPISODES):
         # Test episodes are inference-only: no STDP or reward updates.
         predicted, spike_count, synapse_state, reward_baseline = _run_episode(
-            episode, len(TRAIN_EPISODES) + index, synapse_state.weight,
+            episode, len(TRAIN_EPISODES) + index,
             "fixed", synapse_state, reward_baseline,
             f"temporal-test-{index:03d}",
         )
