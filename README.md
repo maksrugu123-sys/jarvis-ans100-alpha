@@ -24,7 +24,7 @@ The repository is currently at the **architecture and reference-experiment stage
 | `docs/CALIBRATION_ROUND2.md` | Round 1 observations, Round 2 scenario design, verification record and next steps |
 | `docs/TASK_VALIDATION_TEMPORAL_V1.md` | First task-level benchmark protocol, observed results and limitations |
 | `tools/numerical_oracle/` | Float64 reference equations, deterministic sweeps, Round 2 generator and tests |
-| `tools/task_validation/` | Deterministic task-level temporal-pattern benchmark and tests |
+| `tools/task_validation/` | Temporal-pattern benchmark, fixed-baseline boundary grid and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory instructions and constraints for contributors and AI coding agents |
 
@@ -47,6 +47,16 @@ python3 -m tools.task_validation.temporal_patterns
 ```
 
 This compares a fixed-weight baseline with STDP and reward-modulated STDP on a deterministic burst-vs-sparse task. The first run is recorded in docs/TASK_VALIDATION_TEMPORAL_V1.md. It prints a JSON report and does not change the STARTER profile.
+
+## Characterize the fixed baseline
+
+After the first task-level run, map the current neuron's response boundary without training:
+
+```sh
+python3 -m tools.task_validation.baseline_boundary > baseline_boundary_report.json
+```
+
+This evaluates 135 deterministic combinations (15 pulse intervals × 9 input strengths). It does not change the STARTER profile or update synaptic weights. The grid is a characterization step, not a learning benchmark.
 
 ## Generate experiment reports
 
