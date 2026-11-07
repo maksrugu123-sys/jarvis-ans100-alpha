@@ -128,3 +128,32 @@ python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v
 **Builds / CI / GitHub Actions:** NOT RUN. No application build, APK/AAB, or workflow was triggered.
 
 **Limitations / next step:** the cross-tab is descriptive, not causal proof of useful credit assignment. Run the V4.1 pilot and the dedicated test module on Android Termux, then inspect the six-dimensional cells before deciding whether to run the full V4 profile or design a separate credit-assignment test.
+
+## 2026-11-07 — V4.1 user-run verification and V4.2 causal-credit audit authored
+
+**Objective:** record the user's V4.1 execution evidence, then add a pulse-level diagnostic to isolate where eligibility signs are produced without changing the V4/R-STDP model.
+
+**V4.1 execution supplied by user (Android Termux):**
+- Command: python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v
+- Result: **PASS — 15 tests, 0 failures, 0 errors, 4.061 s**.
+- Command: python3 -m tools.task_validation.rstdp_feedback_v4 --profile pilot
+- Result: **PASS as an executed pilot — 8/8 conditions completed**, two seeds × four conditions; 512 training pairs and 128 held-out pairs per seed.
+- R-STDP feedback/update counts: 2,048 feedback events; 0 positive, 1,355 negative and 693 zero reward-driven weight updates.
+- Cross-tab: 1,024 correct FAST with negative eligibility / positive modulator / negative delta; 331 false-positive SLOW→FAST with positive eligibility / negative modulator / negative delta; 693 correct SLOW with zero eligibility / positive modulator / zero delta.
+- Baseline-before-reward: initial 0.5, mean 0.8045988381060147, min 0.495, max 0.891672785088837; beta_b 0.01.
+- Neutral R-STDP had 2,048 zero weight updates and retained baseline 0.5.
+- The full repository suite after V4.1 was **NOT RUN**. These results were supplied by the user and were not rerun by this author.
+
+**Added for V4.2:**
+- tools/task_validation/rstdp_causal_credit_v42.py — replays only the V4 R-STDP training stream, captures trace/q/eligibility after each of three pulses, decomposes pulse contributions at 40 ms feedback, checks the Oracle batch equation, and compares it with an isolated 1 ns pre→post shadow ordering.
+- tools/task_validation/test_rstdp_causal_credit_v42.py — tests same-time batch tie behavior, ordered sign sensitivity, pulse aggregation, contribution reconciliation, exact parity with V4 training metrics/final weight/reward baseline, shadow isolation and deterministic JSON output.
+- docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md — protocol, assumptions, commands, controls and interpretation limits.
+- Updated docs/TASK_VALIDATION_R_STDP_V4.md, docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md, docs/JARVIS_ARCHITECTURE.md and README.md to record the V4.1 user-run evidence and V4.2 next step.
+
+**Technical decision:** preserve the Oracle's canonical simultaneous-batch rule. The 1 ns ordered pathway is a separate shadow only; it cannot affect the actual neuron, synapse, reward baseline, decisions or later episodes. The canonical STARTER weight 0.5 and diagnostic V4 starting weight 0.70 remain unchanged.
+
+**Verification:** V4.2 code and dedicated tests are **AUTHORED / NOT RUN** at publication. No V4.2 numerical result is claimed. The code includes internal q/eligibility consistency assertions and the tests include a replay parity check; those assertions are not treated as executed verification until the user runs them.
+
+**Builds / CI / GitHub Actions:** NOT RUN. No application build, APK/AAB, CI job or workflow was triggered.
+
+**Remaining limitations / next step:** run the V4.2 focused test module and smoke profile first, then the phone-friendly pilot. Review pulse contribution residuals and actual/shadow sign changes. This diagnostic is not a held-out learning experiment and cannot justify changing event ordering or learning rules by itself.

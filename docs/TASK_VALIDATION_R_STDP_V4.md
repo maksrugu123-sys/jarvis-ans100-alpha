@@ -1,7 +1,7 @@
 # Task-Level Validation V4 — R-STDP Feedback and Error Recovery
 
 **Benchmark:** `JARVIS_R_STDP_FEEDBACK_ERROR_RECOVERY_V4`  
-**Status:** specified and implemented as a Python reference experiment; exploratory two-seed pilot completed; full pre-registered profile pending. Pilot results: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md.  
+**Status:** V4 reference experiment implemented; exploratory two-seed pilot completed. V4.1 user-run follow-up: 15 dedicated tests passed and pilot 8/8 conditions completed. Full pre-registered V4 profile remains pending. V4.2 pulse-level diagnostic authored; execution pending. Pilot results: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md.  
 **Date:** 7 November 2026  
 **Production runtime:** not implemented by this benchmark.
 
@@ -166,3 +166,15 @@ The pilot profile is an explicitly exploratory, reduced-size run for constrained
 ## 9. Scope limits
 
 This is a Python/float64 reference experiment using the Numerical Oracle, not the production JARVIS runtime. It does not measure target-device RAM, CPU, energy or I/O; it does not test JPVR, NCC production integration, scaling, biological equivalence, consciousness or general intelligence. No application build or GitHub Actions workflow is part of V4.
+
+## 10. V4.2 causal-credit diagnostic
+
+V4.2 is a separate read-only diagnostic replay. It records the existing batch pathway's per-pulse decayed pre/post traces, q_raw, q_bounded, eligibility before/after each pulse and each pulse's contribution at the 40 ms feedback time. It reconstructs the Oracle equations independently and checks the replay against the existing V4 R-STDP training path.
+
+A separate shadow synapse receives the same observed output spikes but uses a diagnostic pre-at-t / post-at-t-plus-1-ns ordering. It never feeds into the neuron, real synapse, subsequent episodes or reward baseline. This is an ordering-sensitivity probe, not a model change.
+
+Protocol and interpretation: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md.  
+Code: tools/task_validation/rstdp_causal_credit_v42.py.  
+Tests: tools/task_validation/test_rstdp_causal_credit_v42.py.
+
+V4.2 code and tests are authored but NOT RUN. The dedicated tests and phone-friendly smoke/pilot must be run before treating its output as evidence. STARTER 0.5, diagnostic initial weight 0.70, Oracle equations, reward policy and V4 data remain unchanged.

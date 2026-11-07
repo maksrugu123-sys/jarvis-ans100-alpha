@@ -9,13 +9,14 @@ The repository is at the **architecture and reference-experiment stage**. It is 
 - **Architecture:** the first-neuron design, Adaptive LIF-DT model, excitatory STDP/R-STDP rules, CQE v1 contract and JPVR_FORMAT_V1 storage format are specified in the architecture document.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **CQE reference:** a partial, single-threaded Python contract reference exists. Its commit store and event inbox/outbox are volatile; durable JPVR integration is not implemented.
-- **Latest test evidence:** before V4, the user ran **107 tests, 0 failures, 0 errors in 19.730 seconds** on Android Termux. After V4 was added, the user separately ran its dedicated module: **12 tests passed, 0 failures, 0 errors in 2.962 seconds**. A full post-V4 suite has not yet been run.
+- **Latest test evidence:** before V4, the user ran **107 tests, 0 failures, 0 errors in 19.730 seconds** on Android Termux. The user then ran the V4 module: **12 tests passed in 2.962 seconds**, and the V4.1 module: **15 tests passed in 4.061 seconds**. The V4.1 pilot completed 8/8 conditions. The full repository suite has **NOT RUN after V4.1**. V4.2 tests are authored but NOT RUN.
 - **Calibration:** Round 1's 99-scenario sweep was generated and reviewed. Round 2's 23-scenario report was generated locally and summarized in docs/CALIBRATION_ROUND2.md. The canonical STARTER parameter profile has not been calibrated or changed.
 - **Temporal task V1:** user-run held-out accuracy was FIXED 80%, STDP 90%, R-STDP 80% on one small deterministic challenge. This was preliminary evidence, not proof of generalization.
 - **Temporal robustness V2:** user-run held-out accuracy was FIXED 74.375%, STDP 66.25%, rewarded R-STDP 74.375%, neutral R-STDP 74.375%. Rewarded and neutral R-STDP predictions matched on all four seeds; task-level reward benefit was not demonstrated. Details: docs/TASK_VALIDATION_TEMPORAL_V2_RESULTS.md.
 - **Temporal robustness V3:** user-run held-out accuracy was FIXED 100%, STDP 98.75%, R-STDP 100%, neutral R-STDP 100%. All 128 training reward modulators were positive, so negative reward correction was not tested. FAST delivered three pulses before the 7 ms deadline while SLOW delivered two; V3 therefore tested deadline-bounded event-density/latency, not same-count interval discrimination. Details: docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md.
 - **V4 — R-STDP feedback/error recovery:** the exploratory two-seed pilot completed with 12/12 dedicated tests passing. Held-out accuracy: FIXED 81.84%, STDP 100%, R-STDP 83.01%, neutral R-STDP 81.84%. R-STDP used both reward signs, but all 1,355 non-zero reward-driven updates depressed the weight; task-level benefit over FIXED was small (+1.17 percentage points, 6 fewer false positives), while STDP was best. The full pre-registered profile remains pending. Canonical STARTER weight 0.5 is unchanged; 0.70 is only the shared diagnostic initial weight. Details: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md.
-- **V4.1 alignment audit:** report code and reconciliation tests have been added to map every training feedback episode across label, prediction, correctness, eligibility sign, modulator sign and actual weight-delta sign. Baseline-before-reward statistics and product/delta consistency counters are included. **V4.1 tests and benchmark have NOT RUN yet**; do not treat the authored diagnostics as new experimental evidence. No learning equation or STARTER value changed. Details: docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md.
+- **V4.1 alignment audit:** user-run Android Termux verification: **15/15 dedicated tests passed** and the two-seed pilot completed 8/8 conditions. R-STDP recorded 2,048 feedback events and 0 positive / 1,355 negative / 693 zero weight updates. The cross-tab showed correct FAST outcomes with negative eligibility (therefore depressing the weight), false-positive SLOW→FAST outcomes with positive eligibility (also depressing it), and correct SLOW outcomes with zero eligibility. Baseline/modulator and product/delta sign checks were consistent. Full repository suite after V4.1 remains NOT RUN. Details: docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md.
+- **V4.2 causal-credit audit:** a separate pulse-level replay and 1 ns shadow-order sensitivity probe have been authored. It records pre/post traces, q_raw/q_bounded, per-pulse eligibility contributions and actual-vs-shadow feedback deltas. It does not change the Oracle, STARTER, reward policy or V4 learning path. **V4.2 tests and benchmark NOT RUN yet.** Details: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md.
 - **Not implemented yet:** production neuron/NCC runtime, JNVM/JPVR storage engine, durable commit/outbox and crash recovery, full capability scopes/resource budgets, scheduler Aging/starvation protection, and Reasoning Engine execution.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
@@ -35,9 +36,10 @@ The repository is at the **architecture and reference-experiment stage**. It is 
 | `docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md` | V3 results and task interpretation |
 | `docs/TASK_VALIDATION_R_STDP_V4.md` | V4 signed-feedback and error-recovery protocol |
 | `docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md` | Exploratory V4 pilot metrics, interpretation and limitations |
-| `docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md` | V4.1 eligibility/reward alignment audit protocol and interpretation |
+| `docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md` | V4.1 eligibility/reward alignment audit protocol and user-run results |
+| `docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md` | V4.2 per-pulse eligibility and shadow event-order diagnostic protocol |
 | `tools/numerical_oracle/` | Float64 reference equations, sweeps and tests |
-| `tools/task_validation/` | V1–V4.1 deterministic task benchmarks, audits and tests |
+| `tools/task_validation/` | V1–V4.2 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
@@ -64,6 +66,22 @@ python3 -m tools.task_validation.rstdp_feedback_v4 --profile full > rstdp_feedba
 The CLI prints progress to stderr while keeping the final JSON on stdout, so redirecting stdout to a report file does not hide progress. The pilot is exploratory and reduced-size; it must not be reported as the full pre-registered result. The JSON now includes the V4.1 per-episode eligibility/reward alignment cross-tab and reward-baseline reconciliation automatically. The full profile is the default. V4 first probes positive and negative eligibility against positive, negative and neutral reward modulation. Its task-level recovery track compares FIXED, STDP, rewarded R-STDP and neutral R-STDP on identical same-count three-pulse data and multiple deterministic seeds. It uses the canonical STARTER weight 0.5 only for a read-only baseline probe. The separately declared diagnostic recovery track starts all four conditions at weight 0.70; that perturbation is not a STARTER change or calibration.
 
 The evaluator supplies reward 1.0 for a correct training decision and 0.0 for an incorrect one. Held-out examples are inference-only. A weight change alone is not success: compare held-out confusion metrics against FIXED and neutral R-STDP across seeds, and also report STDP even if it performs better. The protocol and limitations are in docs/TASK_VALIDATION_R_STDP_V4.md.
+
+
+## Run the V4.2 pulse-level R-STDP credit audit
+
+~~~sh
+# Small smoke profile (32 training pairs, two seeds)
+python3 -m tools.task_validation.rstdp_causal_credit_v42 --profile smoke > rstdp_causal_credit_v42_smoke.json
+
+# Phone-friendly pilot (512 training pairs, two seeds)
+python3 -m tools.task_validation.rstdp_causal_credit_v42 --profile pilot > rstdp_causal_credit_v42_pilot.json
+
+# Dedicated V4.2 contract tests
+python3 -m unittest tools.task_validation.test_rstdp_causal_credit_v42 -v
+~~~
+
+V4.2 replays only the V4 R-STDP training split. It records per-pulse pair traces and eligibility contributions, and compares the existing batch update with a separate 1 ns pre→post shadow ordering. The shadow is diagnostic only and cannot change actual training. The full profile is deliberately not the default; start with smoke or pilot on a constrained phone. V4.2 is not a held-out learning benchmark and cannot justify a learning-rule change by itself.
 
 ## Run historical temporal benchmarks
 

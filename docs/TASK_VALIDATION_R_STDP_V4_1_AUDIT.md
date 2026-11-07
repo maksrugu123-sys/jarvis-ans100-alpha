@@ -3,7 +3,7 @@
 **Benchmark extension:** `JARVIS_R_STDP_FEEDBACK_ERROR_RECOVERY_V4`  
 **Audit version:** V4.1  
 **Date:** 7 November 2026  
-**Status:** code and tests authored; execution not yet performed.
+**Status:** V4.1 code/tests executed by the user on Android Termux; 15 dedicated tests passed and the two-seed pilot completed 8/8 conditions. Full repository suite after V4.1 remains NOT RUN. User-supplied evidence is recorded in section 8.
 
 ## 1. Why this audit exists
 
@@ -81,3 +81,32 @@ V4.1 must be distinguished from the earlier V4 pilot. The report produced before
 A cross-tab is descriptive evidence. Eligibility sign co-occurring with a correct or incorrect episode does not prove that the trace causally represents the correct synaptic contribution. If the audit confirms that both correct FAST events and false-positive SLOW events depress the same scalar weight, do not tune the reward rule by guesswork. The next experiment should isolate causal credit assignment (for example, vary presynaptic/post-synaptic event ordering while keeping reward correctness controlled) and compare it against an explicit baseline.
 
 The canonical `JARVIS_SINGLE_NEURON_STARTER_V1` weight remains 0.5. The 0.70 value remains a separately declared diagnostic starting weight, not a calibrated or replacement profile. No build, CI workflow, APK or AAB is part of this audit.
+
+## 8. User-run V4.1 execution record — 7 November 2026
+
+The following execution output was supplied by the user from Android Termux. It is not represented as an execution performed by the author of this V4.2 change.
+
+- Dedicated V4.1 tests: **PASS — 15 tests, 0 failures, 0 errors, 4.061 s**.
+- V4.1 pilot: **PASS as an executed benchmark run — 8/8 seed/condition runs completed**, using two seeds and four conditions.
+- R-STDP feedback events: 2,048.
+- R-STDP weight updates: **0 positive, 1,355 negative, 693 zero**.
+- R-STDP baseline-before-reward: initial 0.5, mean 0.8045988381060147, minimum 0.495, maximum 0.891672785088837; beta_b 0.01.
+- Aggregate cross-tab:
+  - 1,024: FAST predicted FAST, correct, negative eligibility, positive modulator, negative delta.
+  - 331: SLOW predicted FAST, incorrect, positive eligibility, negative modulator, negative delta.
+  - 693: SLOW predicted SLOW, correct, zero eligibility, positive modulator, zero delta.
+- Neutral R-STDP: 2,048 feedback events, 0 positive / 0 negative / 2,048 zero updates; baseline remained 0.5.
+- No positive task-level R-STDP update occurred. The baseline/modulator relation and product/delta sign reconciliation were consistent in the supplied report.
+- The full repository suite after V4.1 was **NOT RUN** according to the supplied output.
+
+Interpretation: the audit found no baseline-sign accounting discrepancy. It showed that correct FAST and false-positive SLOW episodes both depressed the same scalar weight, while correct SLOW episodes had zero eligibility. The cross-tab did not expose which pulse created those eligibility signs; that is the specific gap addressed by V4.2.
+
+## 9. V4.2 follow-up
+
+V4.2 is a separate pulse-level diagnostic, not a change to the V4 task or the learning rule. It replays the V4 R-STDP training split, records the per-pulse pre/post traces and q contributions, reconstructs eligibility at feedback, and compares the existing simultaneous-batch pathway with an isolated shadow pathway that places the postsynaptic event 1 ns after the presynaptic event. The shadow never updates the real synapse.
+
+Code: tools/task_validation/rstdp_causal_credit_v42.py  
+Tests: tools/task_validation/test_rstdp_causal_credit_v42.py  
+Protocol: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md
+
+The V4.2 code and tests are authored; they have **NOT RUN** at the time of this documentation update. Run the focused tests and a phone-friendly smoke/pilot on Android Termux before interpreting the pulse-level report.

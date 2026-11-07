@@ -2984,7 +2984,7 @@ V4 остаётся reference experiment: он не реализует productio
 
 ### 3.27.11. V4.1 — Eligibility–Reward Alignment Audit
 
-**Статус:** диагностический код и регрессионные тесты добавлены; запуск V4.1 после добавления аудита ещё не выполнен. V4 pilot остаётся единственным фактически подтверждённым task-level запуском.
+**Статус:** V4.1 запущен пользователем на Android Termux: 15 специализированных тестов прошли, двух-seed pilot завершился 8/8 условий. Полный набор тестов после V4.1 пока не запускался. V4 и V4.1 pilot остаются exploratory reference experiments, не production runtime.
 
 V4.1 не меняет протокол V4, сигналы, reward policy, алгоритм `update_rstdp`/`apply_reward`, коэффициенты или канонический STARTER. Он расширяет отчёт, чтобы объяснить, почему V4 получил 1,355 отрицательных reward-driven обновлений и ни одного положительного.
 
@@ -3003,6 +3003,35 @@ V4.1 не меняет протокол V4, сигналы, reward policy, ал�
 `python3 -m tools.task_validation.rstdp_feedback_v4 --profile pilot > rstdp_feedback_v4_pilot_report.json`
 и
 `python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v`.
+
+### 3.27.12. V4.2 — Pulse-Level R-STDP Causal-Credit Audit
+
+**Статус:** отдельный Python reference diagnostic и dedicated tests добавлены; исполнение ожидает проверки пользователем на Android Termux. Никакие learning rules или параметры не изменены.
+
+V4.1 показал 2,048 feedback events: 1,024 correct FAST с negative eligibility / positive modulator / negative delta; 331 incorrect SLOW→FAST с positive eligibility / negative modulator / negative delta; 693 correct SLOW с zero eligibility / zero delta. Арифметика baseline/modulator и знак delta согласовались с существующей формулой. При этом V4.1 не сохранял значения traces и q на каждом из трёх импульсов.
+
+V4.2 закрывает именно этот диагностический пробел:
+- для каждого импульса записывает n_pre, n_post, decayed pre_trace/post_trace до update, q_raw, q_bounded, eligibility до decay, после decay и после добавления q, а также traces после события;
+- вычисляет вклад каждого q в eligibility на момент feedback (40 ms) и сверяет сумму с фактической eligibility; остаток сохраняется в отчёте;
+- группирует pulse-level статистику по label / prediction / correctness и сохраняет ограниченное число полных representative traces;
+- независимо реконструирует batch q из старых traces и проверяет совпадение с Numerical Oracle;
+- сохраняет фактические cross-tab, eligibility и reward-driven weight delta на feedback.
+
+**Shadow ordering probe:** отдельный shadow synapse получает те же фактические spike events, но presynaptic event ставится в t, а postsynaptic event при spike — в t+1 ns. Он сравнивается с существующим simultaneous batch path при том же весе до эпизода, reward и baseline-before. Shadow не подключён к neuron input, не изменяет реальное состояние, веса, решение или baseline и удаляется после эпизода. 1 ns — искусственное смещение для анализа чувствительности к tie ordering, не биологическое утверждение и не новая нормативная семантика.
+
+Архитектурное правило остаётся прежним: одинаковые timestamps обрабатываются пакетом; старые traces используются для расчёта q, новые traces записываются после batch. Любое изменение порядка событий потребует отдельного заранее определённого task-level теста с held-out контролями. V4.2 сам по себе не является доказательством улучшенного обучения.
+
+Файлы:
+- tools/task_validation/rstdp_causal_credit_v42.py;
+- tools/task_validation/test_rstdp_causal_credit_v42.py;
+- docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md.
+
+Команды:
+    python3 -m tools.task_validation.rstdp_causal_credit_v42 --profile smoke > rstdp_causal_credit_v42_smoke.json
+    python3 -m tools.task_validation.rstdp_causal_credit_v42 --profile pilot > rstdp_causal_credit_v42_pilot.json
+    python3 -m unittest tools.task_validation.test_rstdp_causal_credit_v42 -v
+
+Canonical STARTER weight 0.5 remains unchanged; V4 diagnostic start weight remains 0.70. The V4.2 tool is a float64 reference diagnostic, not a production runtime, not a held-out learning benchmark, and does not collect device resource measurements.
 
 ## 4. Гибридная память нейросети
 
@@ -3354,7 +3383,7 @@ ZRAM может выступать дополнительной системно
 До отдельного разрешения пользователя сборки не запускаются. Архитектурная готовность, написание исходного кода, статические проверки, запуск тестов и сборка приложения — разные статусы и должны учитываться раздельно.
 
 
-**Ближайший исследовательский шаг — выполнить V4.1 audit** на Android Termux и прочитать cross-tab по каждому seed: какие классы и решения порождают положительную/отрицательную/нулевую eligibility, как baseline формирует знак modulator и согласуется ли фактический delta с произведением eligibility × modulator. Только после этой диагностики выбирать между полным pre-registered V4 запуском и отдельным credit-assignment экспериментом. Канонический STARTER 0.5 и формулу R-STDP не менять без evidence; вес 0.70 остаётся диагностическим. V2/V3 — завершённые исторические эксперименты, V4 pilot — выполненный exploratory запуск. CQE reference сохранить как acceptance oracle для будущего production NCC; JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
+**Ближайший исследовательский шаг — выполнить V4.2 smoke и pilot** на Android Termux, проверить совпадение replay с исходным V4 R-STDP и прочитать per-pulse q / eligibility contribution и разницу actual-vs-shadow ordering. V4.1 пользовательский запуск уже подтвердил 15/15 специализированных тестов и 8/8 pilot conditions; полный набор тестов после V4.1 ещё не запускался. Сам V4.2 пока AUTHORED / NOT RUN. Не менять одновременную batch семантику, формулу R-STDP или канонический STARTER до отдельного held-out эксперимента. Вес 0.70 остаётся только диагностическим. V2/V3 — завершённые исторические эксперименты, V4 pilot/V4.1 pilot — exploratory reference runs. CQE reference сохранить как acceptance oracle для будущего production NCC; JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
 
 
 ### 12.2. Calibration Round 2 — историческая запись запуска 7 ноября 2026
@@ -3379,4 +3408,5 @@ ZRAM может выступать дополнительной системно
 - V2 выполнен пользователем на Android Termux: 92 unit tests passed; held-out accuracy FIXED 0.74375, STDP 0.66250, rewarded R-STDP 0.74375, neutral R-STDP 0.74375. Rewarded/neutral R-STDP predictions совпали по всем четырём seed; детали — docs/TASK_VALIDATION_TEMPORAL_V2_RESULTS.md.
 - V3 temporal-rate benchmark выполнен пользователем на Android Termux: 107 tests passed, 0 failures; held-out accuracy FIXED 1.000, STDP 0.9875, R-STDP 1.000, neutral R-STDP 1.000. Reward modulation была только положительной (128/128 train rewards), поэтому отрицательная reward correction остаётся непроверенной. V3 cue — число импульсов до deadline (FAST=3, SLOW=2), не same-count interval discrimination. Подробности: docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md.
 - V4 R-STDP feedback/error-recovery pilot выполнен пользователем на Android Termux: 12/12 специализированных тестов прошли за 2.962 s; два seed, 512 training pairs и 128 held-out pairs на seed. Held-out accuracy: FIXED 81.8359%, STDP 100%, R-STDP 83.0078%, neutral R-STDP 81.8359%. R-STDP получил 1,717 положительных и 331 отрицательный reward modulator; eligibility: 1,024 отрицательных, 331 положительный, 693 нулевых. Все 1,355 ненулевых reward-driven weight updates были отрицательными: правильные FAST эпизоды и ошибочные SLOW false positives оба депрессировали один и тот же вес. R-STDP превзошёл FIXED на 1.171875 п.п. (6 из 512 примеров), но STDP дал 0 ошибок; результат pilot предварительный и не доказывает надёжное error recovery. Полный pre-registered профиль (4 seed, 8,000/256 matched pairs) ещё не запускался. Детали: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md.
+- V4.1 alignment audit выполнен пользователем на Android Termux: 15/15 специализированных тестов прошли за 4.061 s; V4.1 pilot завершился 8/8 условий (два seed × четыре condition). Cross-tab: 1,024 correct FAST с negative eligibility / positive modulator / negative delta; 331 incorrect SLOW→FAST с positive eligibility / negative modulator / negative delta; 693 correct SLOW с zero eligibility. Итого 2,048 feedback events и 0 positive / 1,355 negative / 693 zero reward-driven updates. Baseline-before mean/min/max: 0.8045988381060147 / 0.495 / 0.891672785088837; neutral control сохранил baseline 0.5 и не изменил weight. Вывод: reward-baseline sign accounting согласован, но task-level R-STDP не показал двунаправленной коррекции. Полный набор тестов репозитория после V4.1 не запускался.
 - STARTER не менялся; сборки, CI/GitHub Actions, APK/AAB и измерения RAM/CPU/энергии/I/O не запускались.
