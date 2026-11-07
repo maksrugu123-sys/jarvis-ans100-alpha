@@ -1,36 +1,42 @@
 # JARVIS ANS-100 Alpha
 
-**JARVIS ANS-100 Alpha** is a research project for a compact adaptive neural system. Development is intentionally staged: begin with one artificial neuron and a small number of synapses, validate the behavior and resource cost, and scale only when each previous step is supported by evidence.
+**JARVIS ANS-100 Alpha** is a research project for a compact adaptive neural system. Development is staged: begin with one artificial neuron and a small number of synapses, validate behavior and resource cost, and scale only when each previous step is supported by evidence.
 
-The repository is currently at the **architecture and reference-experiment stage**. It is not yet a production neural runtime or a finished assistant.
+The repository is at the **architecture and reference-experiment stage**. It is not yet a production neural runtime or a finished assistant.
 
 ## Current status — 7 November 2026
 
 - **Architecture:** the first-neuron design, Adaptive LIF-DT model, excitatory STDP/R-STDP rules, CQE v1 contract and JPVR_FORMAT_V1 storage format are specified in the architecture document.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **CQE reference:** a partial, single-threaded Python contract reference exists. Its commit store and event inbox/outbox are volatile; durable JPVR integration is not implemented.
-- **Verification:** the latest user-run full test command on Android Termux completed with **82 passed, 0 failures, 0 errors** (26 CQE reference, 29 Numerical Oracle, 9 Calibration Round 2, 5 temporal-pattern, 5 baseline-boundary and 8 temporal-robustness tests; 3.228 seconds). The Python version for this run was not recorded.
-- **Calibration:** Round 1's 99-scenario sweep was generated and reviewed. Round 2's 23-scenario report was generated locally and all summarized scenario outcomes were reviewed and recorded in docs/CALIBRATION_ROUND2.md. The STARTER parameter profile has not been calibrated or changed.
-- **Task-level validation:** the initial one-neuron burst-vs-sparse benchmark gave FIXED, STDP and R-STDP 100% train and held-out accuracy (6/6 held-out episodes); learning did not demonstrate an accuracy advantage because FIXED already solved the easy task. A follow-up fixed-baseline boundary grid completed all 135 cells. It showed output spikes only for strengths 0.8–1.0 at short intervals (2–8 ms, depending on strength), with no more than one output spike per three-pulse cell. This is discrete characterization, not an exact continuous threshold or a learning result. Details: docs/TASK_VALIDATION_TEMPORAL_V1.md. The first overlapping temporal challenge and V1 results are documented in the same report.
-- **Temporal robustness V1:** the user-run held-out results were FIXED 80%, STDP 90%, R-STDP 80% (10 episodes). STDP made one more correct prediction than FIXED but introduced one false positive; this is preliminary evidence from a single deterministic challenge set, not proof of generalization.
+- **Latest verified full test run before V4 was added:** the user ran **107 tests, 0 failures, 0 errors in 19.730 seconds** on Android Termux. This result predates the V4 files below. V4-specific tests and benchmark have been added to the repository but have **not yet been run by the user**; no pass result is claimed for them.
+- **Calibration:** Round 1's 99-scenario sweep was generated and reviewed. Round 2's 23-scenario report was generated locally and summarized in docs/CALIBRATION_ROUND2.md. The canonical STARTER parameter profile has not been calibrated or changed.
+- **Temporal task V1:** user-run held-out accuracy was FIXED 80%, STDP 90%, R-STDP 80% on one small deterministic challenge. This was preliminary evidence, not proof of generalization.
+- **Temporal robustness V2:** user-run held-out accuracy was FIXED 74.375%, STDP 66.25%, rewarded R-STDP 74.375%, neutral R-STDP 74.375%. Rewarded and neutral R-STDP predictions matched on all four seeds; task-level reward benefit was not demonstrated. Details: docs/TASK_VALIDATION_TEMPORAL_V2_RESULTS.md.
+- **Temporal robustness V3:** user-run held-out accuracy was FIXED 100%, STDP 98.75%, R-STDP 100%, neutral R-STDP 100%. All 128 training reward modulators were positive, so negative reward correction was not tested. FAST delivered three pulses before the 7 ms deadline while SLOW delivered two; V3 therefore tested deadline-bounded event-density/latency, not same-count interval discrimination. Details: docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md.
+- **V4 — R-STDP feedback/error recovery:** a signed eligibility/reward probe, a same-count temporal task, four learning controls, dedicated tests and a pre-registered protocol are now in the repository. User execution is pending. Canonical STARTER weight 0.5 is unchanged; 0.70 is used only as an explicitly labelled diagnostic initial-weight condition shared by all four learning controls.
 - **Not implemented yet:** production neuron/NCC runtime, JNVM/JPVR storage engine, durable commit/outbox and crash recovery, full capability scopes/resource budgets, scheduler Aging/starvation protection, and Reasoning Engine execution.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
-- No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for this verification.
+- No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
 ## Repository map
 
 | Path | Purpose |
 |---|---|
 | `docs/JARVIS_ARCHITECTURE.md` | Main architecture specification, decisions, open questions and development plan |
-| `docs/CALIBRATION_ROUND2.md` | Round 1 observations, Round 2 scenario design, verification record and next steps |
-| `docs/TASK_VALIDATION_TEMPORAL_V1.md` | V1 task-level protocols, observed results, boundary map and limitations |
-| `docs/TASK_VALIDATION_TEMPORAL_V2.md` | Multi-seed temporal robustness protocol and execution instructions |
-| `tools/numerical_oracle/` | Float64 reference equations, deterministic sweeps, Round 2 generator and tests |
-| `tools/task_validation/` | Temporal-pattern, V1/V2 robustness and fixed-baseline boundary benchmarks/tests |
+| `docs/CALIBRATION_ROUND2.md` | Round 1 observations, Round 2 scenarios and verification record |
+| `docs/TASK_VALIDATION_TEMPORAL_V1.md` | Initial task-level and V1 protocols/results |
+| `docs/TASK_VALIDATION_TEMPORAL_V2.md` | V2 protocol |
+| `docs/TASK_VALIDATION_TEMPORAL_V2_RESULTS.md` | V2 results and limitations |
+| `docs/TASK_VALIDATION_TEMPORAL_V3.md` | V3 protocol |
+| `docs/TASK_VALIDATION_TEMPORAL_V3_RESULTS.md` | V3 results and task interpretation |
+| `docs/TASK_VALIDATION_R_STDP_V4.md` | V4 signed-feedback and error-recovery protocol |
+| `tools/numerical_oracle/` | Float64 reference equations, sweeps and tests |
+| `tools/task_validation/` | V1–V4 deterministic task benchmarks and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
-| `AGENTS.md` | Mandatory instructions and constraints for contributors and AI coding agents |
+| `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
-## Run the reference tests
+## Run reference unit tests
 
 From the repository root, with Python 3 installed:
 
@@ -38,52 +44,47 @@ From the repository root, with Python 3 installed:
 python3 -m unittest discover -s tools -t . -v
 ```
 
-This runs Python unit tests only. It is not a production build, application package, Android build or CI workflow.
+This runs Python unit tests only. It is not a production build, application package, Android build or CI workflow. The V4-specific unit tests use a smaller deterministic smoke dataset; they do not substitute for the full V4 benchmark.
 
-## Run the first task-level benchmark
+## Run the V4 R-STDP feedback/error-recovery benchmark
 
-From the repository root:
+```sh
+python3 -m tools.task_validation.rstdp_feedback_v4 > rstdp_feedback_v4_report.json
+```
+
+V4 first probes positive and negative eligibility against positive, negative and neutral reward modulation. Its task-level recovery track compares FIXED, STDP, rewarded R-STDP and neutral R-STDP on identical same-count three-pulse data and multiple deterministic seeds. It uses the canonical STARTER weight 0.5 only for a read-only baseline probe. The separately declared diagnostic recovery track starts all four conditions at weight 0.70; that perturbation is not a STARTER change or calibration.
+
+The evaluator supplies reward 1.0 for a correct training decision and 0.0 for an incorrect one. Held-out examples are inference-only. A weight change alone is not success: compare held-out confusion metrics against FIXED and neutral R-STDP across seeds, and also report STDP even if it performs better. The protocol and limitations are in docs/TASK_VALIDATION_R_STDP_V4.md.
+
+## Run historical temporal benchmarks
+
+V3:
+
+```sh
+python3 -m tools.task_validation.temporal_robustness_v3 > temporal_robustness_v3_report.json
+```
+
+V2:
+
+```sh
+python3 -m tools.task_validation.temporal_robustness_v2 > temporal_robustness_v2_report.json
+```
+
+These are historical reference experiments. Their recorded results and limitations are in the corresponding V2/V3 documents.
+
+## Other reference experiments
+
+Initial burst-vs-sparse benchmark:
 
 ```sh
 python3 -m tools.task_validation.temporal_patterns
 ```
 
-This compares a fixed-weight baseline with STDP and reward-modulated STDP on a deterministic burst-vs-sparse task. The first run is recorded in docs/TASK_VALIDATION_TEMPORAL_V1.md. It prints a JSON report and does not change the STARTER profile.
-
-## Characterize the fixed baseline
-
-From the repository root:
+Fixed-baseline boundary characterization:
 
 ```sh
 python3 -m tools.task_validation.baseline_boundary > baseline_boundary_report.json
 ```
-
-This evaluates 135 deterministic combinations (15 pulse intervals × 9 input strengths in the Oracle's valid [0, 1] range). Each cell uses three pulses. The user-run grid and its full response matrix are recorded in docs/TASK_VALIDATION_TEMPORAL_V1.md. It does not change the STARTER profile or update synaptic weights. The grid is a characterization step, not a learning benchmark.
-
-
-## Run the temporal robustness benchmark
-
-From the repository root:
-
-```sh
-python3 -m tools.task_validation.temporal_robustness > temporal_robustness_report.json
-```
-
-This compares FIXED, STDP and R-STDP on a deterministic task with overlapping timing ranges and per-pulse strength variation. The report includes train/held-out confusion metrics, each episode's output spikes, and the training weight trajectory. The held-out set is inference-only. The benchmark does not modify the STARTER profile. The user ran V1: FIXED achieved 80%, STDP 90%, and R-STDP 80% held-out accuracy. The STDP result is preliminary and awaits multi-seed validation.
-
-
-## Run the multi-seed temporal robustness V2 benchmark
-
-From the repository root:
-
-~~~sh
-python3 -m tools.task_validation.temporal_robustness_v2 > temporal_robustness_v2_report.json
-python3 -m unittest discover -s tools -t . -v
-~~~
-
-V2 uses four deterministic datasets, balanced train/held-out splits, overlapping timing ranges, and five shared pulse-strength levels. It compares FIXED, STDP, rewarded R-STDP and a neutral-reward R-STDP control. The control makes it possible to distinguish reward modulation from eligibility processing alone. The report provides pooled and per-seed accuracy, balanced accuracy, class F1, macro-F1, confusion counts, weight trajectories and reward effects. The protocol is specified; user execution is pending. It does not modify STARTER or run builds/CI.
-
-## Generate experiment reports
 
 Round 1 exploratory parameter sweep:
 
@@ -97,7 +98,7 @@ Round 2 behavioral characterization:
 python3 -m tools.numerical_oracle.calibration_round2 > calibration_round2.json
 ```
 
-Both commands produce deterministic JSON reports and do not optimize parameters or alter the STARTER profile. Review the outputs against explicit task-level criteria before considering any calibration change.
+These commands are reference experiments/diagnostics. They do not calibrate or modify the canonical STARTER profile.
 
 ## Important engineering boundaries
 
@@ -107,4 +108,4 @@ Both commands produce deterministic JSON reports and do not optimize parameters 
 - Keep the original `JARVIS_SINGLE_NEURON_STARTER_V1` parameter set immutable. Any future calibrated profile must have its own version and reproducible evidence.
 - Do not run application builds or GitHub Actions without explicit user permission. See `AGENTS.md`.
 
-For the detailed status, unresolved decisions and the next implementation gates, start with [the architecture document](docs/JARVIS_ARCHITECTURE.md).
+For detailed status, unresolved decisions and the next implementation gates, start with [the architecture document](docs/JARVIS_ARCHITECTURE.md).
