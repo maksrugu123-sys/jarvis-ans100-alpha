@@ -17,6 +17,7 @@ from .jarvis_oracle import (
     NeuronState,
     SynapseState,
     apply_reward,
+    effective_threshold,
     process_neuron_batch,
     starter_neuron_params,
     starter_reward_params,
@@ -90,7 +91,7 @@ def _lif_sweep() -> list[dict[str, object]]:
                 "final_u": _rounded(state.u),
                 "final_a": _rounded(state.a),
                 "final_effective_threshold": _rounded(
-                    params.theta_0 + params.k_a * state.a
+                    effective_threshold(state, params)
                 ),
             }
         )
