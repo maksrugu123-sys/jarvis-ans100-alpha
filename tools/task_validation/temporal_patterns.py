@@ -98,7 +98,7 @@ def _run_episode(
             time_ns,
             [InputSignal(
                 source_id="temporal_input",
-                signed_weight=weight,
+                signed_weight=synapse_state.weight,
                 strength=episode.strength,
                 attention=0.0,
             )],
