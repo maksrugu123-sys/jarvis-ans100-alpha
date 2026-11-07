@@ -314,6 +314,15 @@ def _run_episode(
         })
 
     weight_after_pulses = synapse_state.weight
+    decision_step = process_neuron_batch(
+        neuron_state,
+        start_ns + DECISION_DEADLINE_MS * NS_PER_MS,
+        [],
+        neuron_params,
+    )
+    neuron_state = decision_step.state
+    if decision_step.spike_emitted:
+        spike_times_ms.append(DECISION_DEADLINE_MS)
     predicted_fast = bool(spike_times_ms)
     prediction = "FAST" if predicted_fast else "SLOW"
     correct = prediction == episode.label
@@ -368,6 +377,12 @@ def _run_episode(
         "observed_input_pulses": observed_count,
         "withheld_after_deadline_pulses": withheld_count,
         "observed_pulse_times_ms": observed_times,
+        "decision_check": {
+            "time_ms": DECISION_DEADLINE_MS,
+            "output_spike": decision_step.spike_emitted,
+            "effective_threshold": decision_step.effective_threshold,
+            "potential_input_delta": decision_step.total_input_delta,
+        },
         "spike_times_ms": spike_times_ms,
         "first_spike_latency_ms": spike_times_ms[0] if spike_times_ms else None,
         "prediction": prediction,
@@ -595,7 +610,10 @@ def _predict_at_weight(episode: Episode, weight: float) -> str:
         state = step.state
         if step.spike_emitted:
             return "FAST"
-    return "SLOW"
+    decision_step = process_neuron_batch(
+        state, start_ns + DECISION_DEADLINE_MS * NS_PER_MS, [], params
+    )
+    return "FAST" if decision_step.spike_emitted else "SLOW"
 
 
 def _boundary_probe() -> dict[str, object]:
