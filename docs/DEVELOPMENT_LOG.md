@@ -200,3 +200,8 @@ python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v
 ## 2026-11-07 — V5 documentation structure verification
 
 A post-publication fetch check found that the new architecture subsection had been appended after the document's status section instead of being placed beside the other neural-core subsections, and the README insertion contained a literal escaped newline. Both documentation-only issues were corrected: section 3.28 now appears immediately before section 4, and the README V4.2 bullet is on its own line. No source code, equations, parameters, benchmark protocols or test claims changed. Static fetch/content checks were performed; executable tests and benchmarks were not applicable or run. Builds, APK/AAB, CI and GitHub Actions were not run.
+
+
+## 2026-11-07 — README newline literal corrected
+
+A second byte-level check showed the README V5/V4.2 separator still contained the two literal characters backslash+n after the prior correction attempt. The exact marker was replaced by a real newline. This is a documentation-only correction; no code, equations, protocols or test status changed. The file is fetched again after publication for verification. No executable tests/benchmarks, builds, APK/AAB, CI or GitHub Actions were run.
