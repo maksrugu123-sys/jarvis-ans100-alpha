@@ -1514,8 +1514,8 @@ Reward принимается только от зарегистрированн
 После получения допустимого reward:
 
 1. Проверяются feedback_id, feedback_sequence, источник, временная эпоха, задача и learning_context_id.
-2. Создаётся долговечная RewardProcessingRecord с исходным RewardEnvelope, неизменяемым снимком b/baseline_version, вычисленным M и состоянием обработки.
-3. Reward Baseline Manager возвращает снимок b для соответствующей reward_task_id; для этой задачи не запускается следующая feedback_sequence, пока текущая не завершена.
+2. Reward Baseline Manager резервирует последовательную обработку для reward_task_id, проверяет следующую feedback_sequence и возвращает неизменяемый снимок b/baseline_version.
+3. Вычисляется M по этому снимку и создаётся долговечная RewardProcessingRecord с исходным RewardEnvelope, снимком baseline, M и статусом RECEIVED/VALIDATED.
 4. Для каждой подходящей записи Synapse проверяется совпадение eligibility_context_id с learning_context_id и срок пригодности trace.
 5. Рассчитывается предварительное изменение:
 
@@ -1549,8 +1549,8 @@ w'=\operatorname{clip}(w+\Delta w_R,w_{\min},w_{\max})
 \]
 
 7. Вес, версия состояния, last_applied_feedback_id и потребление eligibility фиксируются в записи синапса через Synapse Manager и Core Commit Coordinator. Для каждой связи используется стабильный operation_id, связанный с feedback_id и synapse_id.
-8. RewardProcessingRecord отмечает результат каждой связи. Результат может быть APPLIED, NO_ELIGIBILITY, EXPIRED или REJECTED с явной причиной; незавершённые записи остаются для восстановления.
-9. Когда все запланированные связи имеют подтверждённый итог, Reward Baseline Manager обновляет RewardBaselineRecord с проверкой ожидаемой baseline_version и feedback_sequence. После commit обработки записывается COMPLETED и публикуется результат.
+8. RewardProcessingRecord отмечает результат каждой связи. Явные безопасные результаты без изменения веса: NO_ELIGIBILITY, EXPIRED и DISABLED_NO_OP. Конфликт версии или временная недоступность переводят запись в RETRY_REQUIRED/DEFERRED; повреждение или нарушение целостности переводит операцию в FAILED и блокирует обновление baseline. Незавершённые записи остаются для восстановления.
+9. Когда все запланированные связи получили APPLIED или один из разрешённых безопасных NO-OP результатов, Reward Baseline Manager обновляет RewardBaselineRecord с проверкой ожидаемой baseline_version и feedback_sequence. После commit baseline обработка помечается COMPLETED и публикуется итог.
 10. Повторная доставка того же feedback_id не должна повторно менять вес, потреблять eligibility или обновлять baseline.
 
 Положительный M усиливает положительный eligibility и ослабляет отрицательный; отрицательный M меняет направление коррекции. Нулевой M не меняет вес. При отсутствии активного или ещё не истёкшего eligibility baseline может обновляться для будущих эпизодов, но вес синапса не меняется.
@@ -1559,7 +1559,7 @@ w'=\operatorname{clip}(w+\Delta w_R,w_{\min},w_{\max})
 
 После подтверждённого применения reward eligibility обнуляется и context id очищается в той же транзакции синапса. При аварии до commit остаются прежние вес и eligibility; восстановление продолжает обработку по feedback_id и RewardProcessingRecord. Если часть синапсов уже подтверждена, их operation_id и last_applied_feedback_id позволяют пропустить повторное применение и продолжить только незавершённые записи.
 
-Обновление разных синапсов после одного reward не объявляется общей атомарной транзакцией: каждая запись подтверждается отдельно и идемпотентно, как определено в CQE v1. Baseline не обновляется, пока все запланированные изменения не получили подтверждённый результат или явный безопасный NO-OP.
+Обновление разных синапсов после одного reward не объявляется общей атомарной транзакцией: каждая запись подтверждается отдельно и идемпотентно, как определено в CQE v1. RewardProcessingRecord сохраняет этап RECEIVED, VALIDATED, APPLYING, WEIGHTS_COMMITTED, BASELINE_COMMITTED, COMPLETED либо DEFERRED/FAILED и результаты отдельных связей. Baseline не обновляется, пока все запланированные изменения не получили APPLIED или явный безопасный NO-OP. При RETRY_REQUIRED или FAILED baseline остаётся прежним, а контекст обработки не объявляется завершённым.
 
 #### 3.19.8. Тормозящие связи и отдельная iSTDP
 
