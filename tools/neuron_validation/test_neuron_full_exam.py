@@ -370,7 +370,7 @@ class SynapticLearningExam(unittest.TestCase):
             start = index * 2 * MS
             first = update_rstdp(
                 state, self.synapse, self.reward,
-                start, rng.randint(0, 3), 0, context,
+                start, rng.randint(1, 3), 0, context,
             )
             second = update_rstdp(
                 first.state, self.synapse, self.reward,
