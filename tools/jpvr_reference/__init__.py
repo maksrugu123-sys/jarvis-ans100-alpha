@@ -20,9 +20,11 @@ from .records import (
     encode_tlv,
 )
 from .blob import DecodedBlobRecord, decode_blob_pages, encode_blob_pages
+from .data import DecodedDataPage, decode_data_page, encode_data_page
 
 __all__ = [
     "DecodedBlobRecord",
+    "DecodedDataPage",
     "DecodedPage",
     "DecodedRecord",
     "PageType",
@@ -31,11 +33,13 @@ __all__ = [
     "WireType",
     "crc32c",
     "decode_blob_pages",
+    "decode_data_page",
     "decode_page",
     "decode_record",
     "decode_superblock",
     "decode_tlv",
     "encode_blob_pages",
+    "encode_data_page",
     "encode_page",
     "encode_record",
     "encode_superblock",
