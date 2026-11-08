@@ -644,3 +644,7 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **GitHub:** опубликовано в `main`. Commits: `5113c03`, `b6bbad5`, `3a62504`, `8618ccc`, `9ed8990`, `b50ffad`, `03a7653`.
 
 **Следующий шаг:** перейти к container-level in-memory manifest/index planning, а затем к journal/commit model; реальный file writer не добавлять до полного тестирования всех 89 текущих focused checks.
+
+### 2026-11-08 — JPVR test-count correction
+
+Correction to the immediately preceding append-planner entry: a fresh count of `^s+def test_` in `tools/jpvr_reference/test_layout.py` returns **15**, not 14. The five module counts are 23 (`test_codec.py`) + 23 (`test_records.py`) + 15 (`test_blob.py`) + 14 (`test_data.py`) + 15 (`test_layout.py`) = **90 test methods**. README and architecture status were corrected to 90. All 90 remain **AUTHORED, NOT RUN**; this is a source-count correction, not a test result.
