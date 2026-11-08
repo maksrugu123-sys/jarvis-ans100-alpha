@@ -41,32 +41,30 @@ If a required test is not feasible, the contributor must state why, identify the
 
 ## 4. Running tests
 
-From the repository root, use the unified lightweight verification entry point:
+For a broad one-command validation of the implemented neuron and the repository, run from the repository root:
 
-```sh
-python3 -m tools.run_all_checks
-```
+    python3 -m tools.neuron_validation.full_exam
 
-The runner:
-1. Syntax-compiles every Python source below `tools/` without importing or executing those source files.
-2. Enumerates `test*.py` files and flags nested test modules that cannot be reached by standard `unittest` package discovery.
-3. Discovers and runs the complete `unittest` suite below `tools/`.
+The comprehensive exam runs:
+1. Python syntax and unittest-discovery integrity checks.
+2. The complete discovered Python unit-test suite under tools/.
+3. A deterministic noisy temporal-generalization benchmark with FIXED, STDP, R-STDP and neutral-R-STDP controls, disjoint training/held-out signal/noise signatures, matched distractors and frozen held-out weights.
+4. The V5.1 Python-reference resource baseline at the selected profile size.
+5. A capability matrix that marks proposed-but-unimplemented mechanisms as NOT_IMPLEMENTED rather than passing them.
 
-For a machine-readable result:
+Profiles are smoke (quick integration), pilot (default, multi-seed exploratory), and full (larger multi-seed experiment). The default report is neuron_full_exam_report.json. Use --json-report PATH to choose another location and -q for compact unit-test output. Read docs/JARVIS_NEURON_FULL_EXAM.md before interpreting research results.
 
-```sh
-python3 -m tools.run_all_checks --json-report reports/master_test_report.json
-```
+The one-command comprehensive exam is not proof that every planned JARVIS capability exists. It tests implemented reference mechanisms and reports major gaps. The noisy benchmark is observational and has no automatic performance promotion threshold. BTCC is tested as an isolated oracle, not as an integrated learning rule. V5.1 values are measurements of Python reference objects only.
 
-A failing syntax check, undiscoverable test module, empty test suite, test failure, or test import error makes the overall result fail. The runner includes new test modules automatically when they follow the `test*.py` naming convention and are inside importable Python packages.
+For lightweight unit-only checks without the temporal-noise benchmark or resource profile, run:
+
+    python3 -m tools.run_all_checks
 
 Focused debugging remains supported, for example:
 
-```sh
-python3 -m unittest tools.super_neuron_btcc.test_credit_oracle -v
-```
+    python3 -m unittest tools.super_neuron_btcc.test_credit_oracle -v
 
-The master runner intentionally does not launch task-level research benchmarks, sweeps, Android/Termux measurements, builds, APK/AAB packaging, CI, or GitHub Actions. These checks have different costs and scientific meanings and must be run and reported separately. A master-test PASS is not evidence that those excluded activities passed.
+Neither command launches application builds, APK/AAB packaging, CI or GitHub Actions. Device measurements, full research experiments and production-runtime equivalence remain separate evidence gates.
 
 ## 5. Evidence recording
 
