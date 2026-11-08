@@ -28,6 +28,7 @@ from tools.numerical_oracle.jarvis_oracle import (
     update_stdp,
 )
 from tools.neuron_validation.noise_benchmark import build_dataset, run_seed
+from tools.neuron_validation.full_exam import _resolve_capability_matrix
 
 MS = 1_000_000
 U64_MAX = (1 << 64) - 1
@@ -440,6 +441,52 @@ class NumericAndResourceBoundaryExam(unittest.TestCase):
             SynapseState(weight=2.0).validate(SynapseParams())
         with self.assertRaises(OracleInputError):
             update_stdp(SynapseState(), SynapseParams(), 0, True, 0)
+
+
+class CoverageReportExam(unittest.TestCase):
+    def test_unrun_checks_are_never_labelled_passed(self):
+        matrix = _resolve_capability_matrix("NOT_RUN", "NOT_RUN", "NOT_RUN")
+        self.assertEqual(
+            matrix["Adaptive LIF-DT membrane integration and analytical decay"],
+            "NOT_RUN",
+        )
+        self.assertEqual(
+            matrix["Noisy temporal train/held-out task"],
+            "FAILED_OR_NOT_RUN",
+        )
+        self.assertEqual(
+            matrix["V5.1 resource measurements"],
+            "FAILED_OR_NOT_RUN",
+        )
+        self.assertEqual(
+            matrix["Long-term associative memory and adaptive forgetting"],
+            "NOT_IMPLEMENTED",
+        )
+
+    def test_completed_checks_are_labelled_with_correct_scope(self):
+        matrix = _resolve_capability_matrix(
+            "PASS", "COMPLETED_OBSERVATIONAL", "MEASURED_REFERENCE_ONLY"
+        )
+        self.assertEqual(
+            matrix["Adaptive LIF-DT membrane integration and analytical decay"],
+            "PASS_UNIT_TESTS",
+        )
+        self.assertEqual(
+            matrix["Attention-to-input gain bounds"],
+            "PASS_UNIT_TESTS_SCALAR_FUNCTION_ONLY",
+        )
+        self.assertEqual(
+            matrix["BTCC counterfactual replay"],
+            "PASS_UNIT_TESTS_NO_TASK_LEVEL_TRAINING_EVIDENCE",
+        )
+        self.assertEqual(
+            matrix["Noisy temporal train/held-out task"],
+            "COMPLETED_OBSERVATIONAL_NO_THRESHOLD",
+        )
+        self.assertEqual(
+            matrix["V5.1 resource measurements"],
+            "MEASURED_PYTHON_REFERENCE_ONLY",
+        )
 
 
 class NoisyTemporalGeneralizationExam(unittest.TestCase):
