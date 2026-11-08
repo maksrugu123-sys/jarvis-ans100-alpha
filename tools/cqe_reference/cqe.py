@@ -574,8 +574,13 @@ class NCCDispatcher:
         return result
 
     def _check_outbox_capacity(self, events: tuple[EventSpec, ...], publisher: ModuleSpec) -> None:
-        delivery_sizes = []
+        if not isinstance(events, tuple):
+            raise CQEError("INVALID_MESSAGE", "command events must be a tuple")
+        if len(events) > MAX_OUTBOX_EVENTS:
+            raise CQEError("RESOURCE_EXHAUSTED", "command event count exceeds the outbox limit")
+
         delivery_count = 0
+        delivery_bytes = 0
         seen_event_ids: set[str] = set()
         for event in events:
             if not isinstance(event, EventSpec):
@@ -593,17 +598,23 @@ class NCCDispatcher:
             if len(payload_bytes) > MAX_INLINE_PAYLOAD_BYTES:
                 raise CQEError("RESOURCE_EXHAUSTED", "event inline payload exceeds 4 KiB")
             _validate_descriptors(payload)
-            recipients = [m for m in self._modules.values() if event.schema_id in m.event_handlers]
-            for module in recipients:
+
+            recipient_count = 0
+            for module in self._modules.values():
+                if event.schema_id not in module.event_handlers:
+                    continue
                 if event.schema_version not in module.supported_schemas.get(event.schema_id, frozenset()):
                     raise CQEError("UNSUPPORTED_SCHEMA", "an event subscriber does not support this schema version")
-            delivery_count += len(recipients)
+                recipient_count += 1
+
+            delivery_count += recipient_count
+            if self._outbox_count + delivery_count > ORDINARY_OUTBOX_LIMIT:
+                raise CQEError("RESOURCE_EXHAUSTED", "outbox capacity unavailable before commit; critical reserve is protected")
             event_size = len(_json_bytes({"event_id": event.event_id, "schema_id": event.schema_id,
                                           "schema_version": event.schema_version, "payload": payload}))
-            delivery_sizes.extend([event_size] * len(recipients))
-        if (self._outbox_count + delivery_count > ORDINARY_OUTBOX_LIMIT
-                or self._outbox_bytes + sum(delivery_sizes) > MAX_OUTBOX_BYTES):
-            raise CQEError("RESOURCE_EXHAUSTED", "outbox capacity unavailable before commit; critical reserve is protected")
+            delivery_bytes += event_size * recipient_count
+            if self._outbox_bytes + delivery_bytes > MAX_OUTBOX_BYTES:
+                raise CQEError("RESOURCE_EXHAUSTED", "outbox capacity unavailable before commit; critical reserve is protected")
 
     @property
     def _outbox_count(self) -> int:
