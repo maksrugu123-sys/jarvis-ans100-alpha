@@ -2266,7 +2266,25 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 `tools/jpvr_reference/test_data.py` содержит 14 тестов для single/multiple/empty pages, ordering, capacity, canonical record framing, malformed records, wrong page type/size/physical page number, outer CRC, inner record CRC и nonzero trailing bytes. Вместе с 23 `test_codec.py`, 23 `test_records.py` и 15 `test_blob.py` пакет содержит 75 тестовых методов; все **AUTHORED, NOT RUN**.
 
-**Границы:** packer работает только с одной страницей за вызов. Он не выбирает свободные page numbers, не управляет контейнерным append offset, object indexes, manifest, transaction journal, commit/outbox, durability, recovery или compaction.
+**Границы:** packer работает только с одной страницей за вызов. Он не выполняет file I/O и не резервирует page numbers; чистый append planner для диапазонов описан в 3.21.19. Object indexes, manifest, transaction journal, commit/outbox, durability, recovery и compaction отсутствуют.
+
+#### 3.21.19. In-memory append planner reference slice
+
+**Статус:** исходный код реализован; 14 тестов **AUTHORED, NOT RUN**. `tools/jpvr_reference/layout.py` содержит pure planner, который не открывает и не изменяет файлы.
+
+`plan_append(current_superblock, page_count, active_commit_id)`:
+- начинает диапазон со следующего номера после `durable_tail_page_no`;
+- проверяет u64 overflow и положительный bounded page_count;
+- считает последнюю страницу COMMIT page и новую durable tail;
+- увеличивает generation на 1 и выбирает противоположный superblock slot A/B;
+- сохраняет checkpoint по умолчанию или проверяет новый checkpoint внутри planned durable prefix;
+- возвращает immutable AppendPlan с expected base generation/tail/slot, page range и новой Superblock copy.
+  
+`validate_append_plan` повторно проверяет типы/диапазон и отклоняет stale plan или изменённые поля до будущей записи. Планирование не резервирует физические offsets, не гарантирует отсутствие гонок между процессами и не выполняет write ordering/flush/sync; это должно обеспечить будущий locked writer по протоколу 3.21.10.
+
+`tools/jpvr_reference/test_layout.py` содержит 14 тестов для genesis/next-generation planning, alternating slots, checkpoint, overflow, invalid identifiers, stale/tampered plans и строгих numeric types. Вместе с 23 page/superblock, 23 JREC/TLV, 15 BLOB и 14 DATA tests пакет содержит 89 тестовых методов; все **AUTHORED, NOT RUN**.
+
+**Границы:** append planner не является allocator или transaction manager. Он не записывает страницы, не формирует COMMIT record, не проверяет содержимое новых страниц, не обновляет superblock на диске и не выполняет crash recovery.
 
 ### 3.22. JARVIS Numerical Oracle v0.1 — эталонная числовая реализация
 
@@ -3526,7 +3544,7 @@ ZRAM может выступать дополнительной системно
 - отдельный направленный контракт Synapse v1, фиксированная полярность, локальные trace/eligibility и идемпотентность обучения определены в разделе 3.18;
 - математические правила EXCITATORY_PAIR_EXP_STDP_V1 и EXCITATORY_PAIR_EXP_R_STDP_V1, reward baseline, ограничения и сценарии проверки описаны в разделе 3.19; численная калибровка и отдельное правило iSTDP ещё открыты;
 - стартовый числовой профиль и план sweep-калибровки описаны в разделе 3.20; значения являются экспериментальными кандидатами, а не откалиброванным runtime-профилем;
-- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; начальные reference codecs для CRC32C, superblock, page envelope, JREC, TLV, BLOB и one-page DATA packing реализованы в tools/jpvr_reference; 75 тестов AUTHORED, NOT RUN; полноценный Storage Engine и crash-тесты отсутствуют;
+- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; начальные reference layers для CRC32C, superblock/page, JREC/TLV, BLOB, DATA packing и append planning реализованы в tools/jpvr_reference; 89 тестов AUTHORED, NOT RUN; полноценный Storage Engine и crash-тесты отсутствуют;
 - для постоянного представления числовых полей v1 выбрано F64; рабочая точность runtime ещё не определена;
 - первый Python reference coordinator реализован в tools/neuron_runtime: один Adaptive LIF-DT нейрон с несколькими входящими возбуждающими синапсами; его 15 тестов вошли в пользовательский полный Termux запуск 216/216 PASS от 8 ноября 2026 года (19.280 s). Многонейронный NetworkRuntime V1 с направленными задержанными связями, bounded event queue и in-memory timestamp commit реализован в разделе 3.31; его 14 тестов AUTHORED, NOT RUN против настоящего Oracle. Оба слоя остаются Python reference, не production NCC и не persistence.
 - отдельный JARVIS Numerical Oracle v0.1 реализован в tools/numerical_oracle как float64 reference tool; все 29 его unit-тестов прошли в полном запуске 64 тестов на Android Termux 7 ноября 2026 года (версия Python не записана); генератор Round 1 на 99 сценариев и генератор Round 2 на 23 сценария выполнены; числовые значения всех 23 сценариев Round 2 рассмотрены и записаны; STARTER не откалиброван; это не runtime JARVIS;
@@ -3557,7 +3575,7 @@ ZRAM может выступать дополнительной системно
 - логические контракты NeuronStateRecord и SynapseRecord v1, включая версии, временную модель, знаки весов, локальное состояние пластичности, индексы и восстановление (разделы 3.17–3.18);
 - математические правила парного возбуждающего STDP и R-STDP, reward baseline, ограничения и набор будущих проверок (раздел 3.19);
 - единый стартовый числовой профиль Adaptive LIF-DT/STDP/R-STDP, sweep-диапазоны и политика точности вычислений (раздел 3.20); профиль пока не откалиброван;
-- физический бинарный формат JPVR_FORMAT_V1: кодирование, страницы, записи, BLOB, индексы, транзакции, durable outbox, dual-superblock recovery, компактизация и миграции (раздел 3.21); CRC32C/superblock/page/JREC/TLV/BLOB и DATA-page packing reference codecs частично реализованы, но 75 тестов AUTHORED, NOT RUN; контейнер и crash recovery не реализованы;
+- физический бинарный формат JPVR_FORMAT_V1: кодирование, страницы, записи, BLOB, индексы, транзакции, durable outbox, dual-superblock recovery, компактизация и миграции (раздел 3.21); CRC32C/superblock/page/JREC/TLV/BLOB/DATA packing и append-planning reference layers частично реализованы, но 89 тестов AUTHORED, NOT RUN; контейнер и crash recovery не реализованы;
 - JARVIS Numerical Oracle v0.1 — отдельный float64 reference module, контрольные тесты, длинные последовательности и генераторы exploratory sweeps/behavioral characterization (раздел 3.22); все 29 Oracle-тестов прошли в составе полного запуска из 64 тестов; это проверка reference tool, а не production/runtime или task-level калибровка;
 - CQE v1 executable contract reference (раздел 3.15.9) — отдельный Python package tools/cqe_reference с маршрутизацией, авторизацией, bounded queues, age-based promotion, idempotency/version checks и volatile commit/event flow; 26 тестов имеют исторический PASS на Python 3.13.5, текущий файл содержит 31 метод, из которых пять добавлены после того запуска и AUTHORED, NOT RUN; persistence/recovery и production runtime отсутствуют;
 - концептуальная архитектура Reasoning Engine v0.1: декомпозиция задач, гипотезы, оценка доказательств, планирование, Safety Gate и проверка результата (раздел 3.23); это последующий слой, не часть первого нейронного прототипа.
