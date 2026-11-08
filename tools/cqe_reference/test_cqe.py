@@ -385,6 +385,35 @@ class CQEReferenceTests(unittest.TestCase):
         self.assertEqual(second.value["delivered"], 0)
         self.assertEqual(len(self.events), 1)
 
+    def test_event_inbox_is_bounded_to_recent_history(self):
+        module = self.ncc._modules["observer"]
+        event_ids = []
+        for index in range(4097):
+            event_id = uid()
+            event_ids.append(event_id)
+            message = MessageEnvelope(
+                1, uid(), MessageType.EVENT, "state.changed", 1,
+                "state-manager", {"index": index}, event_id=event_id,
+            )
+            self.assertTrue(self.ncc._deliver_event(module, message))
+
+        self.assertEqual(len(self.ncc._event_inbox), 4096)
+        self.assertEqual(len(self.ncc._event_inbox_history), 4096)
+        # The oldest key has expired from the bounded deduplication window.
+        self.assertNotIn(("observer", event_ids[0]), self.ncc._event_inbox)
+        # A duplicate inside the retained window is still suppressed.
+        retained = MessageEnvelope(
+            1, uid(), MessageType.EVENT, "state.changed", 1,
+            "state-manager", {"index": 4096}, event_id=event_ids[-1],
+        )
+        self.assertFalse(self.ncc._deliver_event(module, retained))
+        # An event older than the explicitly bounded window can be delivered again.
+        expired = MessageEnvelope(
+            1, uid(), MessageType.EVENT, "state.changed", 1,
+            "state-manager", {"index": 0}, event_id=event_ids[0],
+        )
+        self.assertTrue(self.ncc._deliver_event(module, expired))
+
     def test_nan_payload_is_rejected(self):
         result = self.ncc.submit(self.command(payload={"value": float("nan")}))
         self.assertEqual((result.status, result.code), ("REJECTED", "INVALID_MESSAGE"))
