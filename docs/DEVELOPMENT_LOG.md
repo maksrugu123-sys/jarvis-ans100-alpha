@@ -225,3 +225,12 @@ The user reran the dedicated V4.2 tests after the unittest runner-name collision
 The pilot produced 1,355 negative, zero positive and 693 zero weight updates. Correct FAST episodes had negative eligibility with positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility sum from -1.6586585879267512 to +0.32333505612981234, but no per-episode eligibility or weight-update sign changed. This supports a task-specific temporal-credit alignment diagnosis; it does not establish a fix or general learning capability.
 
 Detailed evidence: docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md. Full repository tests after V4.2 remain unrun. No builds, APK/AAB, CI or GitHub Actions were run.
+
+
+## 2026-11-08 — V4.3 decision-boundary temporal-credit experiment authored
+
+V4.2 pulse-level evidence motivated a narrow hypothesis: in FAST episodes, the first output spike can latch the classification on pulse 2, while pulse 3 still contributes an eligibility update and may add LTD after the task decision is already irreversible.
+
+Added a separate V4.3 reference benchmark comparing FIXED, STDP, frozen V4 R-STDP, decision-latched R-STDP and neutral R-STDP. The decision-latched path continues processing all sensory inputs but skips plasticity events after the first output spike; the spike-producing pulse itself remains eligible. Canonical STARTER 0.5, diagnostic initial weight 0.70, all learning parameters, event ordering, reward equation and V4 dataset generator are preserved. Added a frozen-V4 replay parity test and dedicated protocol/results documents.
+
+Status at publication: authored, NOT RUN. No tests or benchmark have been run by the assistant. No builds, APK/AAB, CI or GitHub Actions were run.
