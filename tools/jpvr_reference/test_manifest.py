@@ -1,15 +1,18 @@
 import unittest
+from dataclasses import replace
 
 from .codec import JPVRFormatError, PageType, Superblock, encode_page
 from .manifest import (
     INDEX_ROOT_NAMES,
     Manifest,
     PageRef,
+    decode_manifest_page,
     decode_manifest_payload,
+    encode_manifest_page,
     encode_manifest_payload,
     validate_manifest,
 )
-from .records import TLVField, WireType, encode_tlv
+from .records import TLVField, WireType, decode_tlv, encode_tlv
 
 
 class ManifestCodecTests(unittest.TestCase):
@@ -75,10 +78,10 @@ class ManifestCodecTests(unittest.TestCase):
             decode_manifest_payload(payload)
 
     def test_manifest_rejects_optional_flag_on_required_field(self):
-        payload = encode_tlv([
-            TLVField(1, WireType.ID128, self.CONTAINER_ID, optional=True),
-        ])
-        with self.assertRaises(JPVRFormatError):
+        fields = list(decode_tlv(encode_manifest_payload(self.make_manifest())))
+        fields[0] = replace(fields[0], optional=True)
+        payload = encode_tlv(fields)
+        with self.assertRaisesRegex(JPVRFormatError, "cannot be marked OPTIONAL"):
             decode_manifest_payload(payload)
 
     def test_manifest_roots_must_be_exactly_the_required_set(self):
@@ -88,6 +91,31 @@ class ManifestCodecTests(unittest.TestCase):
         invalid = Manifest(manifest.container_uuid, manifest.generation, roots)
         with self.assertRaisesRegex(JPVRFormatError, "seven required"):
             encode_manifest_payload(invalid)
+
+    def test_manifest_page_round_trip(self):
+        manifest = self.make_manifest()
+        page = encode_manifest_page(manifest, 30, self.COMMIT_ID)
+        decoded = decode_manifest_page(page, expected_page_no=30)
+        self.assertEqual(decoded.manifest, manifest)
+        self.assertEqual(decoded.commit_generation, manifest.generation)
+        self.assertEqual(decoded.transaction_id, self.COMMIT_ID)
+
+    def test_manifest_page_rejects_wrong_page_type(self):
+        data_page = encode_page(PageType.DATA, 30, 2, self.COMMIT_ID, bytes(4032))
+        with self.assertRaisesRegex(JPVRFormatError, "not MANIFEST"):
+            decode_manifest_page(data_page)
+
+    def test_manifest_page_rejects_generation_mismatch(self):
+        manifest = self.make_manifest()
+        page = encode_page(PageType.MANIFEST, 30, 3, self.COMMIT_ID, encode_manifest_payload(manifest))
+        with self.assertRaisesRegex(JPVRFormatError, "generation does not match"):
+            decode_manifest_page(page)
+
+    def test_manifest_page_checks_outer_crc(self):
+        page = bytearray(encode_manifest_page(self.make_manifest(), 30, self.COMMIT_ID))
+        page[-1] ^= 1
+        with self.assertRaisesRegex(JPVRFormatError, "payload CRC32C"):
+            decode_manifest_page(page)
 
     def test_manifest_validation_accepts_previous_generation_roots(self):
         manifest = self.make_manifest(generation=2)
