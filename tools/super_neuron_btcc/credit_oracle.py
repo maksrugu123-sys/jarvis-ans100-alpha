@@ -123,7 +123,11 @@ def _unit_interval(name: str, value: float) -> float:
 
 
 def _target_bool(target_fast: int) -> bool:
-    if isinstance(target_fast, bool) or target_fast not in (0, 1):
+    if (
+        isinstance(target_fast, bool)
+        or not isinstance(target_fast, int)
+        or target_fast not in (0, 1)
+    ):
         raise OracleInputError("target_fast must be integer 0 (SLOW) or 1 (FAST)")
     return bool(target_fast)
 
@@ -142,6 +146,8 @@ def _validate_inputs(
 ) -> tuple[tuple[BTCCEvent, ...], dict[str, float], bool, float, float]:
     if not isinstance(events, (list, tuple)):
         raise OracleInputError("events must be a list or tuple")
+    if isinstance(max_events, bool) or not isinstance(max_events, int) or max_events < 1:
+        raise OracleInputError("max_events must be a positive integer")
     if len(events) > max_events:
         raise OracleInputError(
             f"episode has {len(events)} events; bounded BTCC limit is {max_events}"
@@ -182,13 +188,6 @@ def _validate_inputs(
     epsilon = _finite("loss_epsilon", loss_epsilon)
     if not 0.0 < epsilon < 0.5:
         raise OracleInputError("loss_epsilon must be in (0, 0.5)")
-
-    if (
-        isinstance(max_events, bool)
-        or not isinstance(max_events, int)
-        or max_events < 1
-    ):
-        raise OracleInputError("max_events must be a positive integer")
 
     if deadline_ns is not None:
         if (
@@ -406,8 +405,14 @@ def audit_episode(
 
     for event in ordered:
         omitted = tuple(candidate for candidate in ordered if candidate.event_id != event.event_id)
+        omitted_synapses = {candidate.synapse_id for candidate in omitted}
+        alternative_weights = {
+            synapse_id: weight
+            for synapse_id, weight in weight_map.items()
+            if synapse_id in omitted_synapses
+        }
         alternative = replay_episode(
-            omitted, weight_map, initial_state, neuron_params, synapse_params,
+            omitted, alternative_weights, initial_state, neuron_params, synapse_params,
             int(target), temperature=temperature_value, loss_epsilon=epsilon,
             deadline_ns=deadline_ns, max_events=max_events,
         )
@@ -472,6 +477,7 @@ def central_difference_weight_gradient(
     prepared = tuple(events)
     if not isinstance(weights, Mapping) or synapse_id not in weights:
         raise OracleInputError("synapse_id must exist in weights")
+    synapse_params.validate()
     step = _finite("step_size", step_size)
     if step <= 0.0:
         raise OracleInputError("step_size must be positive")

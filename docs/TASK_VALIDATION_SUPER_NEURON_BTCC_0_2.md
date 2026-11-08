@@ -14,7 +14,7 @@ The replay oracle uses the existing Numerical Oracle's \`decay_neuron_state\`, \
 
 Binary output remains the actual Oracle result: FAST iff a spike is emitted at an input-event timestamp. A separate smooth score is derived from the maximum pre-reset, non-refractory margin through the first spike. This score is for counterfactual loss diagnostics only; it does not alter the neuron's decision.
 
-The bounded audit tests each event omission from the same immutable initial state and same weight snapshot. Shadow replays cannot change the real state or the caller's weight map.
+The bounded audit tests each event omission from the same immutable initial state and same weight snapshot. For each shadow replay, the weight map is restricted to synapses still present after omission, so removing the only event from a synapse remains a valid counterfactual. Shadow replays cannot change the real state or the caller's weight map.
 
 ## 2. Objective and event score
 

@@ -55,6 +55,23 @@ class BTCCReplayTests(unittest.TestCase):
         two = replay_episode(tuple(reversed(events)), weights, state, neuron, synapse, 1)
         self.assertEqual(one, two)
 
+    def test_single_event_synapse_can_be_removed_without_stale_weight_key(self):
+        weights = {"synapse-a": 0.5, "synapse-b": 0.5}
+        state, neuron, synapse = NeuronState(), NeuronParams(), SynapseParams()
+        events = (
+            BTCCEvent("only-a", "synapse-a", 0, 0.2),
+            BTCCEvent("only-b", "synapse-b", 5 * MS, 0.2),
+        )
+        audit = audit_episode(
+            events, weights, state, neuron, synapse, 1,
+            mode="always", temperature=TEMPERATURE,
+        )
+        self.assertEqual(len(audit.event_credits), 2)
+        self.assertEqual(
+            {item.event_id for item in audit.event_credits},
+            {"only-a", "only-b"},
+        )
+
     def test_leave_one_out_credit_is_positive_for_helpful_fast_events(self):
         weights, state, neuron, synapse = common()
         audit = audit_episode(
