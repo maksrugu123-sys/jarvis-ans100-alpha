@@ -2199,9 +2199,9 @@ v1 использует append-only размещение: подтверждён
 
 `tools/jpvr_reference/test_codec.py` содержит 23 детерминированных тестовых метода для CRC контрольного вектора, round-trip genesis/committed superblock, обеих slot-копий, page round-trip (empty/small/full payload), границ, corruption CRC, reserved/flags, padding и physical page number. Они **AUTHORED, NOT RUN**; никаких PASS для нового codec не заявляется.
 
-**Границы реализации:** файловый контейнер, file/process lock, DATA/JREC/TLV record codec, BLOB fragmentation, copy-on-write индексы, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, durable flush/sync, reopen/recovery, compaction и fault injection ещё не реализованы. Этот пакет нельзя использовать как доказательство durability или безопасного хранения данных.
+**Границы реализации:** файловый контейнер, file/process lock, DATA page packing, copy-on-write индексы, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, durable flush/sync, reopen/recovery, compaction и fault injection ещё не реализованы. Этот пакет нельзя использовать как доказательство durability или безопасного хранения данных.
 
-Следующий слой после запуска тестов — BLOB fragment codec; интеграция с CQE запрещена до появления и проверки transaction/recovery path.
+Этот page-envelope slice является нижним уровнем; JREC/TLV и BLOB codecs описаны в разделах 3.21.16–3.21.17. Интеграция с CQE запрещена до появления и проверки transaction/recovery path.
 
 #### 3.21.16. JREC small-record и TLV codec reference slice
 
@@ -2236,7 +2236,25 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 `tools/jpvr_reference/test_records.py` содержит 23 тестовых метода для всех 11 wire types, сортировки/дублей, unknown optional/mandatory, type mismatch, malformed values, UTF-8, alignment, JREC round-trip, несколько записей на странице, CRC, reserved/flags и границ размера. Вместе с 23 тестами `test_codec.py` в JPVR reference сейчас 46 тестовых методов; **все 46 AUTHORED, NOT RUN**.
 
-**Границы:** BLOB fragmentation, record registry/schema migration, DATA page packing/indexing, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, file/container I/O, durable sync, recovery и compaction не реализованы. Числовые коды wire_type и OPTIONAL bit — зафиксированный начальный выбор этого reference slice; изменение после появления persisted files потребует явной schema/format compatibility policy.
+**Границы:** BLOB fragmentation реализован отдельным reference slice в 3.21.17, но не проверен запуском; record registry/schema migration, DATA page packing/indexing, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, file/container I/O, durable sync, recovery и compaction не реализованы. Числовые коды wire_type и OPTIONAL bit — зафиксированный начальный выбор этого reference slice; изменение после появления persisted files потребует явной schema/format compatibility policy.
+
+#### 3.21.17. BLOB fragment codec reference slice
+
+**Статус:** исходный код реализован; 15 тестов **AUTHORED, NOT RUN**. `tools/jpvr_reference/blob.py` кодирует большую логическую запись в последовательность полных PageType.BLOB страниц и выполняет обратную проверку/сборку.
+
+64-byte JBLB fragment header внутри 4 032-byte page payload:
+- offset 0: `JBLB` magic (4 bytes);
+- 4: record_type (u16), 6: flags=0 (u16);
+- 8: schema_id (u32), 12: schema_version (u16), 14: header_bytes=64 (u16);
+- 16: object_id (16 bytes), 32: record_version (u64);
+- 40: fragment_index (u32), 44: fragment_count (u32);
+- 48: total_payload_length (u64), 56: fragment_payload_length (u32), 60: full_payload_crc32c (u32).
+
+Одна BLOB page содержит до 3 968 bytes fragment data после заголовка. Внешний page envelope проверяет CRC32C всех 4 032 bytes payload area, включая JBLB header и zero padding; full_payload_crc32c проверяется после сборки всей логической записи. Decoder требует последовательные page_no, одинаковые transaction_id/commit_generation и record metadata, точный fragment_index/count/length, нулевой padding, полный размер и full-record CRC. Максимум logical record — 16 MiB; максимум страниц BLOB — 8 192.
+
+`tools/jpvr_reference/test_blob.py` содержит 15 тестов для round-trip, fragment boundary, малого/слишком большого payload, порядка страниц/индексов, expected page number, outer CRC, full-record CRC после повторного outer checksum, padding, transaction/generation/metadata consistency и page type. Вместе с 23 `test_codec.py` и 23 `test_records.py` пакет содержит 61 тестовый метод; все **AUTHORED, NOT RUN**.
+
+**Границы:** BLOB codec не резервирует file offsets/pages, не создаёт DATA/INDEX/MANIFEST страницы, не управляет транзакциями, не выполняет file I/O, flush/sync, durable commit, recovery, outbox или compaction. Он проверяет только in-memory последовательность уже предоставленных полных страниц.
 
 ### 3.22. JARVIS Numerical Oracle v0.1 — эталонная числовая реализация
 
@@ -3496,7 +3514,7 @@ ZRAM может выступать дополнительной системно
 - отдельный направленный контракт Synapse v1, фиксированная полярность, локальные trace/eligibility и идемпотентность обучения определены в разделе 3.18;
 - математические правила EXCITATORY_PAIR_EXP_STDP_V1 и EXCITATORY_PAIR_EXP_R_STDP_V1, reward baseline, ограничения и сценарии проверки описаны в разделе 3.19; численная калибровка и отдельное правило iSTDP ещё открыты;
 - стартовый числовой профиль и план sweep-калибровки описаны в разделе 3.20; значения являются экспериментальными кандидатами, а не откалиброванным runtime-профилем;
-- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; начальные reference codecs для CRC32C, superblock, page envelope, JREC и TLV реализованы в tools/jpvr_reference; 46 тестов AUTHORED, NOT RUN; полноценный Storage Engine и crash-тесты отсутствуют;
+- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; начальные reference codecs для CRC32C, superblock, page envelope, JREC, TLV и BLOB реализованы в tools/jpvr_reference; 61 тест AUTHORED, NOT RUN; полноценный Storage Engine и crash-тесты отсутствуют;
 - для постоянного представления числовых полей v1 выбрано F64; рабочая точность runtime ещё не определена;
 - первый Python reference coordinator реализован в tools/neuron_runtime: один Adaptive LIF-DT нейрон с несколькими входящими возбуждающими синапсами; его 15 тестов вошли в пользовательский полный Termux запуск 216/216 PASS от 8 ноября 2026 года (19.280 s). Многонейронный NetworkRuntime V1 с направленными задержанными связями, bounded event queue и in-memory timestamp commit реализован в разделе 3.31; его 14 тестов AUTHORED, NOT RUN против настоящего Oracle. Оба слоя остаются Python reference, не production NCC и не persistence.
 - отдельный JARVIS Numerical Oracle v0.1 реализован в tools/numerical_oracle как float64 reference tool; все 29 его unit-тестов прошли в полном запуске 64 тестов на Android Termux 7 ноября 2026 года (версия Python не записана); генератор Round 1 на 99 сценариев и генератор Round 2 на 23 сценария выполнены; числовые значения всех 23 сценариев Round 2 рассмотрены и записаны; STARTER не откалиброван; это не runtime JARVIS;
