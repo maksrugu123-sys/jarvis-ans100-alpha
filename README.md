@@ -62,7 +62,7 @@ To check the implemented neuron as a whole in one run, use:
 
     python3 -m tools.neuron_validation.full_exam
 
-This is the main scientific/engineering exam. It runs the complete Python unit-test suite, syntax and discovery checks, a deterministic noisy temporal generalization benchmark (FIXED/STDP/R-STDP/neutral controls with separate held-out data), and the V5.1 Python-reference resource baseline. It writes neuron_full_exam_report.json and exits non-zero if an automated stage fails.
+This is the main scientific/engineering exam. It runs the complete Python unit-test suite, syntax and discovery checks, a deterministic noisy temporal generalization benchmark (FIXED/STDP/R-STDP/neutral controls with separate held-out data and unseen temporal gap bands), and the V5.1 Python-reference resource baseline. It writes neuron_full_exam_report.json and exits non-zero if an automated stage fails.
 
 The default pilot profile uses two seeds, 128 training pairs and 64 held-out pairs per seed at each of three distractor levels (0/2/4). Use --profile smoke for a quick integration check or --profile full for a larger four-seed experiment (0/2/4/6 distractors, up to 10,000 reference objects):
 
