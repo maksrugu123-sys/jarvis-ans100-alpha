@@ -93,8 +93,10 @@ def _build_split(
     for index in range(pair_count):
         digest = _digest("JARVIS_NOISY_TEMPORAL_V1", seed, split, index, "signal")
         strengths = tuple(
-            0.80 + 0.20 * _unit(digest[offset])
-            for offset in (0, 1, 2)
+            0.80 + 0.20 * (
+                int.from_bytes(digest[offset:offset + 4], "big") / 0xFFFFFFFF
+            )
+            for offset in (0, 4, 8)
         )
         fast_gaps = FAST_GAPS[digest[3] % len(FAST_GAPS)]
         slow_gaps = SLOW_GAPS[digest[4] % len(SLOW_GAPS)]
