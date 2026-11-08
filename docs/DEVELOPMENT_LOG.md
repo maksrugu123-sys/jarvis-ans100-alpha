@@ -392,3 +392,14 @@ A static code audit found that the first BTCC replay version only evaluated deci
 **Limitations:** the current reference code does not yet implement predictive/surprise/familiarity learning, fatigue/recovery, long-term associative memory and forgetting, structural synapse creation/deletion, a dedicated homeostatic controller, JNVM/JPVR persistence/recovery, a production neuron runtime, or network-level behavior. The exam reports these as NOT_IMPLEMENTED. The noisy task uses weak excitatory distractors only and has no preselected promotion threshold; its results must be interpreted as exploratory evidence, not proof that a learning rule is superior.
 
 **Next step:** run the default pilot command from Termux, preserve the complete JSON report, fix any failures, then review per-seed held-out results before designing a larger pre-registered acceptance experiment. Keep STARTER and production learning rules unchanged until evidence justifies a change.
+
+
+### 2026-11-08 — Noisy temporal exam: stronger held-out interval separation
+
+A post-review strengthened the noisy task's generalization test. Previously, train and held-out examples had disjoint signal-strength/noise signatures but drew timing gaps from the same small set. The generator now uses separate, non-overlapping timing-gap pairs for the two splits: training FAST 2–3 ms and SLOW 18–19 ms; held-out FAST 4–5 ms and SLOW 15–16 ms. Both labels retain three task pulses and the same 40 ms decision deadline. Signal-strength material uses three 32-bit digest components; temporal labels now use separate digest bytes so strength values do not directly choose the timing category. Tests now assert gap-signature disjointness both with and without distractors.
+
+Files changed: tools/neuron_validation/noise_benchmark.py, tools/neuron_validation/test_neuron_full_exam.py, docs/JARVIS_NEURON_FULL_EXAM.md, and README.md.
+
+Verification: GitHub fetch/static inspection only. New and modified executable tests remain AUTHORED, NOT RUN. No benchmark metrics or full-suite status are claimed.
+
+Interpretation: this creates a stricter synthetic temporal distribution-shift test, but does not establish real-world generalization. The held-out timing bands still preserve the intended FAST/SLOW ordering and must be reviewed after the first run; no accuracy threshold is imposed before observing the results.
