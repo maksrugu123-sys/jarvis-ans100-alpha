@@ -576,24 +576,34 @@ class NCCDispatcher:
     def _check_outbox_capacity(self, events: tuple[EventSpec, ...], publisher: ModuleSpec) -> None:
         delivery_sizes = []
         delivery_count = 0
+        seen_event_ids: set[str] = set()
         for event in events:
+            if not isinstance(event, EventSpec):
+                raise CQEError("INVALID_MESSAGE", "command events must be EventSpec records")
+            if (not _is_uuid(event.event_id) or event.event_id in seen_event_ids
+                    or not isinstance(event.schema_id, str) or not event.schema_id.strip()
+                    or isinstance(event.schema_version, bool)
+                    or not isinstance(event.schema_version, int) or event.schema_version < 1
+                    or event.schema_id not in publisher.published_event_schemas
+                    or not isinstance(event.payload, Mapping)):
+                raise CQEError("INVALID_MESSAGE", "invalid or unauthorized committed event descriptor")
+            seen_event_ids.add(event.event_id)
+            payload = dict(event.payload)
+            payload_bytes = _json_bytes(payload)
+            if len(payload_bytes) > MAX_INLINE_PAYLOAD_BYTES:
+                raise CQEError("RESOURCE_EXHAUSTED", "event inline payload exceeds 4 KiB")
+            _validate_descriptors(payload)
             recipients = [m for m in self._modules.values() if event.schema_id in m.event_handlers]
+            for module in recipients:
+                if event.schema_version not in module.supported_schemas.get(event.schema_id, frozenset()):
+                    raise CQEError("UNSUPPORTED_SCHEMA", "an event subscriber does not support this schema version")
             delivery_count += len(recipients)
             event_size = len(_json_bytes({"event_id": event.event_id, "schema_id": event.schema_id,
-                                          "schema_version": event.schema_version, "payload": dict(event.payload)}))
+                                          "schema_version": event.schema_version, "payload": payload}))
             delivery_sizes.extend([event_size] * len(recipients))
         if (self._outbox_count + delivery_count > ORDINARY_OUTBOX_LIMIT
                 or self._outbox_bytes + sum(delivery_sizes) > MAX_OUTBOX_BYTES):
             raise CQEError("RESOURCE_EXHAUSTED", "outbox capacity unavailable before commit; critical reserve is protected")
-        for event in events:
-            if (not _is_uuid(event.event_id) or not event.schema_id or event.schema_version < 1
-                    or event.schema_id not in publisher.published_event_schemas):
-                raise CQEError("INVALID_MESSAGE", "invalid or unauthorized committed event descriptor")
-            if len(_json_bytes(dict(event.payload))) > MAX_INLINE_PAYLOAD_BYTES:
-                raise CQEError("RESOURCE_EXHAUSTED", "event inline payload exceeds 4 KiB")
-            for module in self._modules.values():
-                if event.schema_id in module.event_handlers and event.schema_version not in module.supported_schemas.get(event.schema_id, frozenset()):
-                    raise CQEError("UNSUPPORTED_SCHEMA", "an event subscriber does not support this schema version")
 
     @property
     def _outbox_count(self) -> int:
