@@ -6,9 +6,12 @@ from dataclasses import dataclass
 import struct
 
 from .codec import (
+    DecodedPage,
     JPVRFormatError,
     PageType,
     Superblock,
+    decode_page,
+    encode_page,
     _fixed_bytes,
     _require_uint,
     decode_page,
@@ -161,6 +164,54 @@ def decode_manifest_payload(payload: bytes | bytearray | memoryview) -> Manifest
     )
     _validate_manifest_shape(manifest)
     return manifest
+
+
+@dataclass(frozen=True)
+class DecodedManifestPage:
+    page_no: int
+    transaction_id: bytes
+    commit_generation: int
+    manifest: Manifest
+
+
+def encode_manifest_page(
+    manifest: Manifest,
+    page_no: int,
+    transaction_id: bytes,
+) -> bytes:
+    """Encode a MANIFEST payload inside a standard 4-KiB page envelope."""
+    _validate_manifest_shape(manifest)
+    _require_uint("page_no", page_no, 0xFFFFFFFFFFFFFFFF)
+    if page_no < 2:
+        raise JPVRFormatError("manifest page number must be at least 2")
+    tx_id = _fixed_bytes("transaction_id", transaction_id, 16)
+    return encode_page(
+        PageType.MANIFEST,
+        page_no,
+        manifest.generation,
+        tx_id,
+        encode_manifest_payload(manifest),
+    )
+
+
+def decode_manifest_page(
+    page_bytes: bytes | bytearray | memoryview,
+    *,
+    expected_page_no: int | None = None,
+) -> DecodedManifestPage:
+    """Decode and cross-check the MANIFEST page envelope and its TLV generation."""
+    page: DecodedPage = decode_page(page_bytes, expected_page_no=expected_page_no)
+    if page.page_type is not PageType.MANIFEST:
+        raise JPVRFormatError("page type is not MANIFEST")
+    manifest = decode_manifest_payload(page.payload)
+    if manifest.generation != page.commit_generation:
+        raise JPVRFormatError("manifest generation does not match page header")
+    return DecodedManifestPage(
+        page_no=page.page_no,
+        transaction_id=page.transaction_id,
+        commit_generation=page.commit_generation,
+        manifest=manifest,
+    )
 
 
 def validate_manifest(
