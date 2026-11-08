@@ -526,3 +526,33 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **GitHub:** опубликовано в `main`. Commits: `1d4d4e1`, `69ccfcb`, `807edd9`, `a5ea9f5`, `ddd1ecb`, `cc6c695`.
 
 **Следующий шаг:** запустить 23 focused codec tests в Termux, исправить реальные ошибки, затем реализовать JREC 56-byte header + deterministic TLV codec с отдельными bounds/CRC tests. После этого перейти к BLOB fragments. Не подключать codec к CQE commit path до появления transaction journal, durable commit и recovery tests.
+
+### 2026-11-08 — JPVR JREC and deterministic TLV reference codecs
+
+**Цель:** продолжить JPVR_FORMAT_V1 после Superblock/page envelope и реализовать ограниченное framing небольших DATA-записей и каноническое кодирование их TLV payload.
+
+**Добавлено:**
+- `tools/jpvr_reference/records.py`:
+  - JREC 56-byte header encode/decode по зафиксированным offset: record_type, flags, schema_id/version, object_id, record_version, payload length, payload/header CRC32C и reserved;
+  - small record payload ограничен 3 976 bytes, запись выравнивается до 8 bytes и не пересекает DATA page;
+  - TLV encode/decode с сортировкой field_id, запретом дубликатов/нулевого ID, строгими wire-type lengths, optional bit, проверкой schema map, zero padding и пределом логического payload 16 MiB;
+  - wire_type codes выбраны как U8=1, U16=2, U32=3, U64=4, I64=5, BOOL=6, F32=7, F64=8, ID128=9, BYTES=10, UTF8=11; OPTIONAL flag = 0x01, остальные bits запрещены;
+  - конечность float, канонизация −0.0 при encode и отказ при чтении ненормализованного −0.0.
+- `tools/jpvr_reference/test_records.py` — 23 тестовых метода для всех wire types, optional/mandatory fields, ordering, duplicates, type mismatch, invalid values, UTF-8, alignment, record round-trip, multi-record packing, CRC, reserved/flags и bounds.
+- `tools/jpvr_reference/__init__.py` — exports JREC/TLV codec API.
+- `docs/JARVIS_ARCHITECTURE.md` — раздел 3.21.16 фиксирует заголовок, wire type registry, OPTIONAL flag и границы reference slice.
+- `README.md` — обновлён статус JPVR codec.
+
+**Проверки и доказательства:**
+- GitHub fetch/readback и статическая проверка форматов, offset, размеров struct и test assertions — выполнены; это source review, не Python runtime verification.
+- `tools/jpvr_reference/test_records.py`: 23 test methods **AUTHORED, NOT RUN**.
+- В паре с `test_codec.py` пакет содержит 46 test methods (23 page/superblock + 23 JREC/TLV), все **AUTHORED, NOT RUN**.
+- Python syntax checks и focused unit tests — **NOT RUN**. Текущий контейнер не имеет checkout; git clone ранее блокировался DNS/network failure. Runtime PASS не заявляется.
+- BLOB, container I/O, full unit suite, fault injection, Android/Termux/device measurements — **NOT RUN**.
+- Builds, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN** по ограничению пользователя.
+
+**Ограничения и решения:** числовые коды wire_type и OPTIONAL=0x01 были не заданы численно в общей схеме; этот reference slice фиксирует их как начальный выбор. Если до появления persisted files потребуется изменение, оно должно пройти явную compatibility/version policy. Codec не реализует schema registry/migrations, BLOB, page packing/indexing, journal, commit, outbox, durability или recovery.
+
+**GitHub:** опубликовано в `main`. Commits: `2ae7021`, `4dd93b5`, `437c371`, `e07fe5c`, `4d8f2ad`, `48441f2`, `d602c14`, `68fdbc6`.
+
+**Следующий шаг:** реализовать BLOB fragment codec по разделу 3.21.5 с проверкой fragment order/count, total length, page CRC и full-record CRC; затем объединить DATA/BLOB records с page envelope только после прохождения всех focused tests.
