@@ -614,3 +614,33 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **GitHub:** опубликовано в `main`. Commits: `0d3a985`, `53d0dda`, `a98ceb2`, `cbb3b03`, `6210c2a`.
 
 **Следующий шаг:** реализовать ограниченный in-memory container layout/append planner с выделением последовательных page_no и проверкой durable_tail boundaries; не выполнять реальный file I/O или commit, пока allocator и layout invariants не пройдут focused tests.
+
+### 2026-11-08 — JPVR in-memory append planner reference slice
+
+**Цель:** описать безопасное выделение последовательного диапазона page_no и подготовку следующей inactive Superblock copy без реальной записи на диск.
+
+**Добавлено:**
+- `tools/jpvr_reference/layout.py`:
+  - immutable `AppendPlan` с ожидаемым base generation/tail/slot, first/last page, commit page, target slot и новой Superblock;
+  - `plan_append` начинает диапазон с `durable_tail_page_no + 1`, требует положительный page_count, проверяет u64 overflow, делает последнюю страницу COMMIT page, увеличивает generation и чередует Superblock A/B slot;
+  - checkpoint сохраняется по умолчанию или проверяется в пределах нового durable prefix;
+  - `validate_append_plan` отклоняет stale base и tampered plan, отдельно проверяя bool/int distinction (в Python bool является подклассом int).
+- `tools/jpvr_reference/test_layout.py` — 14 тестов для genesis/next generation, alternating slots, checkpoint, overflow, invalid IDs, stale/tampered plans и строгих numeric types.
+- `tools/jpvr_reference/__init__.py` — exports append planner.
+- `docs/JARVIS_ARCHITECTURE.md` — раздел 3.21.19 и границы pure planning.
+- `README.md` — обновлён текущий JPVR scope и число тестов.
+
+**Проверки и доказательства:**
+- GitHub readback/static source review — выполнены; это не runtime verification.
+- Один важный defensive check добавлен после review: плановые поля валидируются до equality comparison, чтобы bool не проходил как int.
+- Новые tests: 14 **AUTHORED, NOT RUN**.
+- Общий JPVR набор: 23 page/superblock + 23 JREC/TLV + 15 BLOB + 14 DATA + 14 append planner = **89 test methods, all AUTHORED, NOT RUN**.
+- Python syntax/focused tests/full suite — **NOT RUN**: assistant container has no checkout; git clone blocked by DNS/network.
+- Реальный file writer, process lock, append offsets, free-page allocator, transaction journal, commit, superblock disk update, flush/sync, recovery, crash tests — **NOT RUN / NOT IMPLEMENTED**.
+- Builds, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN** по ограничению пользователя.
+
+**Ограничения:** AppendPlan — вычисленный in-memory план, а не reservation. Без file/process lock несколько writers могут получить одинаковый диапазон; он не гарантирует write ordering, durability или recovery. Последняя страница считается COMMIT page по принятому layout contract, но её содержимое этим модулем не создаётся и не проверяется.
+
+**GitHub:** опубликовано в `main`. Commits: `5113c03`, `b6bbad5`, `3a62504`, `8618ccc`, `9ed8990`, `b50ffad`, `03a7653`.
+
+**Следующий шаг:** перейти к container-level in-memory manifest/index planning, а затем к journal/commit model; реальный file writer не добавлять до полного тестирования всех 89 текущих focused checks.
