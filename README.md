@@ -56,6 +56,21 @@ The repository is at the **architecture and reference-experiment stage**. It is 
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
+## Run the comprehensive one-neuron exam
+
+To check the implemented neuron as a whole in one run, use:
+
+    python3 -m tools.neuron_validation.full_exam
+
+This is the main scientific/engineering exam. It runs the complete Python unit-test suite, syntax and discovery checks, a deterministic noisy temporal generalization benchmark (FIXED/STDP/R-STDP/neutral controls with separate held-out data), and the V5.1 Python-reference resource baseline. It writes neuron_full_exam_report.json and exits non-zero if an automated stage fails.
+
+The default pilot profile uses two seeds, 128 training pairs and 64 held-out pairs per seed at each of three distractor levels (0/2/4). Use --profile smoke for a quick integration check or --profile full for a larger four-seed experiment (0/2/4/6 distractors, up to 10,000 reference objects):
+
+    python3 -m tools.neuron_validation.full_exam --profile smoke
+    python3 -m tools.neuron_validation.full_exam --profile full
+
+The report explicitly distinguishes tested mechanisms from NOT_IMPLEMENTED features. It does not claim to test long-term memory, predictive surprise, fatigue/recovery, structural plasticity, JPVR persistence, a packed V5 candidate, a production runtime or Android performance. No learning rule is promoted automatically by the benchmark.
+
 ## Run all automated Python checks
 
 From the repository root, run one command:
