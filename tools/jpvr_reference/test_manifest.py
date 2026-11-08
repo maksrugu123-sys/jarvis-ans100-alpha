@@ -162,10 +162,11 @@ class ManifestCodecTests(unittest.TestCase):
             validate_manifest(invalid, self.make_superblock(tail=12), self.make_page_catalog())
 
     def test_manifest_validates_checkpoint_journal_and_outbox_types(self):
-        catalog = self.make_page_catalog()
-        catalog[9] = encode_page(PageType.INDEX, 9, 2, self.COMMIT_ID, b"wrong")
-        with self.assertRaisesRegex(JPVRFormatError, "wrong page type"):
-            validate_manifest(self.make_manifest(), self.make_superblock(), catalog)
+        for page_no in (9, 10, 11):
+            catalog = self.make_page_catalog()
+            catalog[page_no] = encode_page(PageType.INDEX, page_no, 2, self.COMMIT_ID, b"wrong")
+            with self.assertRaisesRegex(JPVRFormatError, "wrong page type"):
+                validate_manifest(self.make_manifest(), self.make_superblock(), catalog)
 
     def test_manifest_rejects_missing_high_water_page(self):
         catalog = self.make_page_catalog()
