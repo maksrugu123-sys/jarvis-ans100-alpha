@@ -465,3 +465,35 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **Ограничения:** одно-поточная in-memory reference модель; нет CQE authorization/idempotency, durable queue, production NCC, concurrency, JPVR/JNVM persistence, crash recovery, inhibitory connections/iSTDP, topology learning или device performance evidence. Backpressure использует консервативное резервирование worst-case fan-out.
 
 **Следующий шаг:** пользователь запускает `python3 -m unittest tools.neuron_runtime.test_network -v`, затем `python3 -m unittest discover -s tools -t . -v`. После проверки исправить реальные интеграционные ошибки; только затем решать следующий gate по persistent state/JPVR-001.
+
+### 2026-11-08 — CQE reference lifecycle and event-boundary hardening
+
+**Цель:** устранить постоянное накопление subscriber dedup keys, формализовать безопасное поведение bounded idempotency/result ledger и закрыть некорректные/чрезмерные committed-event descriptors до commit.
+
+**Изменено:**
+- `tools/cqe_reference/cqe.py`:
+  - subscriber inbox теперь хранит только последние 4 096 `(module_id, event_id)` ключей через set + FIFO history; при вытеснении старый event может быть обработан повторно. Это явно bounded dedup window, а не durable exactly-once;
+  - idempotency/result ledger остаётся ограниченным 4 096 принятыми командами; записи намеренно не вытесняются без JPVR, потому что забытый ключ может разрешить повторное выполнение уже применённой команды. После заполнения возвращается `DEFERRED/RESOURCE_EXHAUSTED`;
+  - committed events проверяются до commit: tuple и максимум 256 событий, EventSpec, UUID, уникальность event_id внутри proposal, непустой schema_id, положительная int schema_version (bool запрещён), Mapping payload, JSON/inline-size/descriptor limits и совместимость схем всех подписчиков;
+  - outbox count/byte preflight теперь считает объём инкрементально и прекращает проверку при превышении лимита, не создавая промежуточный список delivery-size на каждую доставку.
+- `tools/cqe_reference/test_cqe.py`:
+  - добавлены четыре теста: bounded inbox history, bounded idempotency/result backpressure, duplicate IDs/boolean schema versions и максимальное число committed events.
+- `docs/JARVIS_ARCHITECTURE.md`:
+  - уточнены bounded inbox semantics, 4 096-key retention window, fail-closed idempotency behavior, возрастное повышение очереди и текущий статус тестов;
+  - исторические PASS-результаты не переписаны как новые.
+- `README.md`:
+  - исправлен устаревший статус scheduler Aging и уточнено разделение reference/production.
+
+**Проверки и доказательства:**
+- GitHub source/test/diff fetch и статическая проверка изменённых фрагментов — выполнены; это не syntax check и не runtime verification.
+- В текущем `tools/cqe_reference/test_cqe.py` обнаружен 31 test method. Историческая запись о 26 PASS относится к более раннему запуску; пять проверок появились после него (age-based priority test и четыре новых теста этого изменения).
+- Четыре новых теста — **AUTHORED, NOT RUN**. Тест age-based priority — присутствует в текущем файле, но после его добавления в исторический набор не подтверждён новым запуском.
+- Попытка получить checkout через `git clone --depth 1 https://github.com/maksrugu123-sys/jarvis-ans100-alpha.git` в контейнере — **BLOCKED**: DNS/network environment returned `Could not resolve host: github.com`; поэтому `python3 -m unittest tools.cqe_reference.test_cqe -v` не запускалась.
+- GitHub combined status для последнего CQE test commit не вернул status checks. CI/GitHub Actions не запускались.
+- Сборки, APK/AAB, Gradle и device measurements — **NOT RUN** по ограничению пользователя.
+
+**Ограничения:** inbox/idempotency/outbox всё ещё volatile и теряются при restart; bounded inbox допускает повторную обработку события после вытеснения; idempotency ledger после 4 096 команд требует backpressure до durable JPVR ledger. Это reference implementation, не production NCC. Синтаксис и поведение новых тестов пока не подтверждены интерпретатором.
+
+**GitHub:** все изменения опубликованы в `main`. Ключевые commits: `f7dc307`, `feddcdf`, `f709828`, `46e343a`, `019a16c`, `7915fbd`, `f1ecfae`, `241cb50`, `bd0c90a`, `cfa79ed`.
+
+**Следующий шаг:** начать JPVR_FORMAT_V1 с независимого, тестируемого binary codec для CRC32C, superblock и 4-KiB page header; затем добавить строгие negative/corruption tests. Не подключать durable commit к CQE до появления и проверки этих нижних уровней.
