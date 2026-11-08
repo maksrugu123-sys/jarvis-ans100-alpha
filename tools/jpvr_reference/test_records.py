@@ -157,7 +157,7 @@ class SmallRecordCodecTests(unittest.TestCase):
 
     def test_record_rejects_header_crc_corruption(self):
         raw = bytearray(encode_record(1, 1, 1, self.OBJECT_ID, 1, b"abc"))
-        raw[8] ^= 1
+        raw[16] ^= 1
         with self.assertRaisesRegex(JPVRFormatError, "header CRC32C"):
             decode_record(raw)
 
