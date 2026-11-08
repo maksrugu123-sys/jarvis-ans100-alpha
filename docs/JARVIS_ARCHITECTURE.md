@@ -1,7 +1,7 @@
 # JARVIS ANS-100 Alpha — архитектура и журнал решений
 
 **Статус документа:** рабочая спецификация и журнал согласованных проектных решений  
-**Дата последнего обновления:** 7 ноября 2026 года  
+**Дата последнего обновления:** 8 ноября 2026 года  
 **Репозиторий:** `maksrugu123-sys/jarvis-ans100-alpha` (Private)  
 **Основная ветка:** `main`
 
@@ -3081,6 +3081,10 @@ V4.3 необходимо запускать только после focused tes
 В многонейронном режиме можно отдельно проверить общий низкоразмерный slow-context state вместо повторения длинной временной памяти в каждом нейроне. Работа Nature Machine Intelligence 2026 о dual-memory-pathway SNN — научная мотивация для эксперимента, а не готовое доказательство для JARVIS. Работа ICLR 2026 по checkpointing и lossless spike compression относится к BPTT; текущий JARVIS использует online STDP/R-STDP и не должен переносить этот метод в hot path без появления соответствующего training regime.
 
 **Ближайшие ворота:** сначала выполнить усиленные V4.3 focused tests, smoke и pilot, затем по held-out метрикам решить, сохранять ли decision-latched policy или frozen V4. После этого снять baseline RAM/latency на устройстве и реализовать отдельный F64 compact-state prototype без изменения проверенных математических правил. Сравнивать полную RAM, latency, spike sequence, weights, traces, eligibility, reward updates и held-out quality. Не вводить F32 и более низкую точность до F64 differential equivalence. Масштабировать 1 → 10 → 100 → 1,000 → 10,000 только после прохождения предыдущего gate.
+
+### 3.29. SuperNeuron research track — Boundary-Triggered Counterfactual Credit (BTCC)
+
+**Статус:** PROPOSED / NOT IMPLEMENTED / NOT TESTED / NOT MEASURED. BTCC предлагает ограниченный leave-one-event-out replay только для ошибочных или пограничных эпизодов и формирует causal credit по разнице task loss. Это инженерная комбинация известных направлений — e-prop, expected eligibility, EventProp и adaptive compute — а не заявка на доказанную научную новизну. V4.3 показал, что decision-latched eligibility меняет динамику обучения, но не превосходит frozen V4 по held-out accuracy; поэтому следующий кандидат должен измерять причинную полезность входных событий, а не только менять момент обновления. Полный математический протокол, compute gate, риски, ablations и критерии принятия: `docs/JARVIS_SUPER_NEURON_BTCC_RESEARCH.md`. Канонический STARTER и все контрольные реализации остаются неизменными.
 
 ## 4. Гибридная память нейросети
 

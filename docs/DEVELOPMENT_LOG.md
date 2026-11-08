@@ -270,3 +270,20 @@ Status at publication: authored, NOT RUN. No tests or benchmark have been run by
 **Not run:** resource baseline smoke/pilot, full repository tests, CPU/latency/energy benchmark, packed-state candidate, builds, APK/AAB, CI or GitHub Actions. No memory reduction is claimed.
 
 **Next step:** user runs focused baseline tests, then smoke and phone-friendly pilot. Use those measurements to choose the packed-state layout; do not skip the baseline gate.
+
+
+## 2026-11-08 — SuperNeuron BTCC research specification
+
+**Objective:** define a research candidate aimed at improving causal credit assignment while keeping extra computation conditional and bounded.
+
+**Added:** `docs/JARVIS_SUPER_NEURON_BTCC_RESEARCH.md` — proposed Boundary-Triggered Counterfactual Credit (BTCC), including decision-margin scoring, leave-one-event-out loss differences, bounded shadow replays, a compute gate, a proposed normalized event-credit update, mathematical/finite-difference acceptance checks, controls, and a harder temporal/noise benchmark plan.
+
+**Research audit:** reviewed e-prop, Expected Eligibility Traces, EventProp-based event learning with delays, 2026 diffusive neuromodulatory credit, and predictive early stopping in SNN accelerators. These establish related prior art. BTCC is described only as a JARVIS-specific engineering composition; no claim that nobody has proposed a similar method or that it is scientifically novel is made.
+
+**Changed:** README and `docs/JARVIS_ARCHITECTURE.md` now link the proposal. README V4.3 status was corrected to reflect the user's completed 7/7 tests and smoke/pilot result; the full repository suite remains NOT RUN.
+
+**Tests:** none; documentation/research specification only. No implementation or benchmark is claimed.
+
+**Not run:** BTCC replay oracle, finite-difference checks, unit tests, task experiments, resource profiling, builds, APK/AAB, CI and GitHub Actions.
+
+**Next step:** complete V5.1 reference-resource baseline separately, then implement a deterministic BTCC replay oracle and compare its local event-credit direction with central finite-difference loss gradients before running any task-level benchmark.
