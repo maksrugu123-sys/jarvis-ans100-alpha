@@ -22,13 +22,26 @@ from .records import (
 from .blob import DecodedBlobRecord, decode_blob_pages, encode_blob_pages
 from .data import DecodedDataPage, decode_data_page, encode_data_page
 from .layout import AppendPlan, plan_append, validate_append_plan
+from .manifest import (
+    DecodedManifestPage,
+    Manifest,
+    PageRef,
+    decode_manifest_page,
+    decode_manifest_payload,
+    encode_manifest_page,
+    encode_manifest_payload,
+    validate_manifest,
+)
 
 __all__ = [
     "AppendPlan",
     "DecodedBlobRecord",
     "DecodedDataPage",
+    "DecodedManifestPage",
     "DecodedPage",
     "DecodedRecord",
+    "Manifest",
+    "PageRef",
     "PageType",
     "Superblock",
     "TLVField",
@@ -36,16 +49,21 @@ __all__ = [
     "crc32c",
     "decode_blob_pages",
     "decode_data_page",
+    "decode_manifest_page",
+    "decode_manifest_payload",
     "decode_page",
     "decode_record",
     "decode_superblock",
     "decode_tlv",
     "encode_blob_pages",
     "encode_data_page",
+    "encode_manifest_page",
+    "encode_manifest_payload",
     "encode_page",
     "encode_record",
     "encode_superblock",
     "encode_tlv",
     "plan_append",
     "validate_append_plan",
+    "validate_manifest",
 ]
