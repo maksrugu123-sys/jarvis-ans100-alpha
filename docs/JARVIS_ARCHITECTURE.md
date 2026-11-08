@@ -2264,7 +2264,7 @@ Payload CRC покрывает точные байты payload; header CRC по�
 - `decode_data_page(page)` проверяет PageType.DATA, полный размер payload area, внешний page CRC и последовательно декодирует JREC до полностью нулевого остатка. Ненулевой мусор после последней записи не игнорируется.
 - Пустая DATA page допустима; записи сохраняют порядок и не пересекают границу страницы.
 
-`tools/jpvr_reference/test_data.py` содержит 14 тестов для single/multiple/empty pages, ordering, capacity, canonical record framing, malformed records, wrong page type/size/physical page number, outer CRC, inner record CRC и nonzero trailing bytes. Вместе с 23 `test_codec.py`, 23 `test_records.py` и 15 `test_blob.py` пакет содержит 75 тестовых методов; все **AUTHORED, NOT RUN**.
+`tools/jpvr_reference/test_data.py` содержит 14 тестов для single/multiple/empty pages, ordering, capacity, canonical record framing, malformed records, wrong page type/size/physical page number, outer CRC, inner record CRC и nonzero trailing bytes. Вместе с 23 `test_codec.py`, 23 `test_records.py`, 15 `test_blob.py` и 15 `test_layout.py` пакет содержит 90 тестовых методов; все **AUTHORED, NOT RUN**.
 
 **Границы:** packer работает только с одной страницей за вызов. Он не выполняет file I/O и не резервирует page numbers; чистый append planner для диапазонов описан в 3.21.19. Object indexes, manifest, transaction journal, commit/outbox, durability, recovery и compaction отсутствуют.
 
