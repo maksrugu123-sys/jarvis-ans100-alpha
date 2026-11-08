@@ -110,6 +110,13 @@ class AppendPlannerTests(unittest.TestCase):
         with self.assertRaisesRegex(JPVRFormatError, "inconsistent"):
             validate_append_plan(tampered, current)
 
+    def test_plan_validation_rejects_boolean_numeric_fields(self):
+        current = plan_append(self.genesis(), 1, self.COMMIT_ID_1).new_superblock
+        plan = plan_append(current, 1, self.COMMIT_ID_2)
+        tampered = replace(plan, expected_generation=True)
+        with self.assertRaises(JPVRFormatError):
+            validate_append_plan(tampered, current)
+
     def test_invalid_current_superblock_is_rejected(self):
         invalid = replace(self.genesis(), slot_id=2)
         with self.assertRaises(JPVRFormatError):
