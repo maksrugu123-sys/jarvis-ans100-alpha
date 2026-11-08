@@ -32,8 +32,10 @@ DEADLINE_MS = 40
 DIAGNOSTIC_WEIGHT = 0.70
 INITIAL_REWARD_BASELINE = 0.5
 MODES = ("fixed", "stdp", "rstdp", "rstdp_neutral")
-FAST_GAPS = ((2, 2), (2, 3), (3, 2), (3, 3))
-SLOW_GAPS = ((18, 18), (18, 19), (19, 18), (19, 19))
+TRAIN_FAST_GAPS = ((2, 2), (2, 3), (3, 2), (3, 3))
+TRAIN_SLOW_GAPS = ((18, 18), (18, 19), (19, 18), (19, 19))
+HELDOUT_FAST_GAPS = ((4, 4), (4, 5), (5, 4), (5, 5))
+HELDOUT_SLOW_GAPS = ((15, 15), (15, 16), (16, 15), (16, 16))
 
 
 @dataclass(frozen=True)
@@ -98,8 +100,14 @@ def _build_split(
             )
             for offset in (0, 4, 8)
         )
-        fast_gaps = FAST_GAPS[digest[12] % len(FAST_GAPS)]
-        slow_gaps = SLOW_GAPS[digest[13] % len(SLOW_GAPS)]
+        if split == "train":
+            fast_pool, slow_pool = TRAIN_FAST_GAPS, TRAIN_SLOW_GAPS
+        elif split == "heldout":
+            fast_pool, slow_pool = HELDOUT_FAST_GAPS, HELDOUT_SLOW_GAPS
+        else:
+            raise ValueError("split must be 'train' or 'heldout'")
+        fast_gaps = fast_pool[digest[12] % len(fast_pool)]
+        slow_gaps = slow_pool[digest[13] % len(slow_pool)]
         distractors = _make_distractors(
             seed, split, index, noise_count, max_noise_strength
         )
@@ -154,13 +162,18 @@ def build_dataset(
     }
     if not train_signatures.isdisjoint(held_signatures):
         raise AssertionError("train and held-out signal/noise signatures overlap")
-    _validate_split(train, train_pairs, noise_count)
-    _validate_split(held, held_out_pairs, noise_count)
+    train_timing = {row.gaps_ms for row in train}
+    held_timing = {row.gaps_ms for row in held}
+    if not train_timing.isdisjoint(held_timing):
+        raise AssertionError("train and held-out temporal gap signatures overlap")
+    _validate_split(train, train_pairs, noise_count, "train")
+    _validate_split(held, held_out_pairs, noise_count, "heldout")
     return train, held
 
 
 def _validate_split(
-    episodes: tuple[NoiseEpisode, ...], expected_pairs: int, noise_count: int,
+    episodes: tuple[NoiseEpisode, ...], expected_pairs: int,
+    noise_count: int, split: str,
 ) -> None:
     if len(episodes) != expected_pairs * 2:
         raise AssertionError("each pair must contain exactly two episodes")
@@ -177,10 +190,12 @@ def _validate_split(
             raise AssertionError("distractor outside frozen bounds")
         if sum(episode.gaps_ms) > DEADLINE_MS:
             raise AssertionError("signal occurs after decision deadline")
-        if episode.label == "FAST" and episode.gaps_ms not in FAST_GAPS:
-            raise AssertionError("FAST timing outside frozen timing set")
-        if episode.label == "SLOW" and episode.gaps_ms not in SLOW_GAPS:
-            raise AssertionError("SLOW timing outside frozen timing set")
+        fast_pool = TRAIN_FAST_GAPS if split == "train" else HELDOUT_FAST_GAPS
+        slow_pool = TRAIN_SLOW_GAPS if split == "train" else HELDOUT_SLOW_GAPS
+        if episode.label == "FAST" and episode.gaps_ms not in fast_pool:
+            raise AssertionError("FAST timing outside the split's frozen timing set")
+        if episode.label == "SLOW" and episode.gaps_ms not in slow_pool:
+            raise AssertionError("SLOW timing outside the split's frozen timing set")
     for members in by_pair.values():
         if len(members) != 2 or {row.label for row in members} != {"FAST", "SLOW"}:
             raise AssertionError("pair must contain exactly one FAST and one SLOW episode")
@@ -435,6 +450,7 @@ def run_benchmark(profile: str = "smoke") -> dict[str, object]:
             "matched_noise_per_pair": True,
             "held_out_is_inference_only": True,
             "held_out_signatures_are_disjoint": True,
+            "held_out_temporal_gaps_are_disjoint": True,
             "performance_threshold": None,
         },
         "runs": runs,
