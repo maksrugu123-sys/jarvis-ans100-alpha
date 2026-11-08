@@ -34,19 +34,19 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = ROOT / "tools"
 
 CAPABILITY_MATRIX = {
-    "Adaptive LIF-DT membrane integration and analytical decay": "TESTED",
-    "Dynamic threshold and spike adaptation": "TESTED",
-    "Attention-to-input gain bounds": "TESTED_AS_A_SCALAR_FUNCTION_ONLY",
-    "Spike emission, reset, refractory period and timestamp ordering": "TESTED",
-    "Simultaneous input batches and deterministic summation": "TESTED",
-    "Excitatory pair-based STDP": "TESTED",
-    "Reward-modulated STDP, eligibility, context and expiry": "TESTED",
-    "Numerical input/state/parameter bounds": "TESTED",
-    "Long deterministic randomized event sequences": "TESTED",
-    "Float32 conversion helper": "HELPER_ONLY_NO_FLOAT32_RUNTIME_CANDIDATE",
-    "BTCC counterfactual replay": "UNIT_TESTED_ONLY_NOT_EVALUATED_AS_A_LEARNING_RULE",
-    "Noisy temporal train/held-out task": "EXPLORATORY_BENCHMARK_NO_ACCEPTANCE_THRESHOLD",
-    "V5.1 resource measurements": "PYTHON_REFERENCE_OBJECTS_ONLY",
+    "Adaptive LIF-DT membrane integration and analytical decay": "UNIT_TEST_TARGET",
+    "Dynamic threshold and spike adaptation": "UNIT_TEST_TARGET",
+    "Attention-to-input gain bounds": "UNIT_TEST_TARGET_SCALAR_FUNCTION_ONLY",
+    "Spike emission, reset, refractory period and timestamp ordering": "UNIT_TEST_TARGET",
+    "Simultaneous input batches and deterministic summation": "UNIT_TEST_TARGET",
+    "Excitatory pair-based STDP": "UNIT_TEST_TARGET",
+    "Reward-modulated STDP, eligibility, context and expiry": "UNIT_TEST_TARGET",
+    "Numerical input/state/parameter bounds": "UNIT_TEST_TARGET",
+    "Long deterministic randomized event sequences": "UNIT_TEST_TARGET",
+    "Float32 conversion helper": "UNIT_TEST_TARGET_HELPER_ONLY_NO_FLOAT32_RUNTIME",
+    "BTCC counterfactual replay": "UNIT_TEST_TARGET_ONLY_NO_TASK_LEVEL_TRAINING_EVALUATION",
+    "Noisy temporal train/held-out task": "NOISE_BENCHMARK_TARGET_NO_ACCEPTANCE_THRESHOLD",
+    "V5.1 resource measurements": "RESOURCE_MEASUREMENT_TARGET_PYTHON_REFERENCE_ONLY",
     "Adaptive predictive model and prediction-error learning": "NOT_IMPLEMENTED",
     "Surprise, familiarity and habituation state": "NOT_IMPLEMENTED",
     "Fatigue and recovery controller": "NOT_IMPLEMENTED",
@@ -68,6 +68,40 @@ NOT_COVERED = [
     "BTCC task-level learning advantage or production integration",
     "Builds, APK/AAB packaging, CI and GitHub Actions",
 ]
+
+
+def _resolve_capability_matrix(
+    unit_status: str, noise_status: str, resource_status: str,
+) -> dict[str, str]:
+    resolved: dict[str, str] = {}
+    for capability, target in CAPABILITY_MATRIX.items():
+        if target.startswith("UNIT_TEST_TARGET"):
+            resolved[capability] = (
+                "PASS_UNIT_TESTS" if unit_status == "PASS"
+                else "FAIL_UNIT_TESTS" if unit_status == "FAIL"
+                else "NOT_RUN"
+            )
+            if "SCALAR_FUNCTION_ONLY" in target:
+                resolved[capability] += "_SCALAR_FUNCTION_ONLY"
+            if "HELPER_ONLY" in target:
+                resolved[capability] += "_HELPER_ONLY"
+            if "NO_TASK_LEVEL" in target:
+                resolved[capability] += "_NO_TASK_LEVEL_TRAINING_EVIDENCE"
+        elif target.startswith("NOISE_BENCHMARK_TARGET"):
+            resolved[capability] = (
+                "COMPLETED_OBSERVATIONAL_NO_THRESHOLD"
+                if noise_status == "COMPLETED_OBSERVATIONAL"
+                else "FAILED_OR_NOT_RUN"
+            )
+        elif target.startswith("RESOURCE_MEASUREMENT_TARGET"):
+            resolved[capability] = (
+                "MEASURED_PYTHON_REFERENCE_ONLY"
+                if resource_status == "MEASURED_REFERENCE_ONLY"
+                else "FAILED_OR_NOT_RUN"
+            )
+        else:
+            resolved[capability] = target
+    return resolved
 
 
 def _count_cases(suite: unittest.TestSuite | unittest.TestCase) -> int:
@@ -294,7 +328,11 @@ def main(argv: list[str] | None = None) -> int:
             "report": resource_report,
             "error": resource_error,
         },
-        "capability_matrix": CAPABILITY_MATRIX,
+        "capability_matrix": _resolve_capability_matrix(
+            str(unit_report.get("status")),
+            noise_status,
+            resource_status,
+        ),
         "not_covered_or_not_implemented": NOT_COVERED,
         "critical_interpretation": [
             "A test PASS only covers the assertions and implemented mechanisms listed above.",
@@ -323,7 +361,10 @@ def main(argv: list[str] | None = None) -> int:
 
     total_duration = time.perf_counter() - started
     print(f"\nOVERALL AUTOMATED STATUS: {report['status']}")
-    print(f"Capability completeness: PARTIAL — {sum(v == 'NOT_IMPLEMENTED' for v in CAPABILITY_MATRIX.values())} mechanisms not implemented")
+    resolved_matrix = _resolve_capability_matrix(
+        str(unit_report.get("status")), noise_status, resource_status
+    )
+    print(f"Capability completeness: PARTIAL — {sum(v == 'NOT_IMPLEMENTED' for v in resolved_matrix.values())} mechanisms not implemented")
     print("Research metrics are observations, not proof that a learning method is better.")
     print(f"JSON report: {write_status} — {report_path}")
     print(f"Total time: {total_duration:.2f}s")
