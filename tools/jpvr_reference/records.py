@@ -86,7 +86,10 @@ def _encode_tlv_value(wire_type: WireType, value: Any) -> bytes:
     if wire_type in (WireType.F32, WireType.F64):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise JPVRFormatError("floating TLV values must be numeric")
-        number = float(value)
+        try:
+            number = float(value)
+        except (OverflowError, ValueError) as exc:
+            raise JPVRFormatError("floating TLV value is outside the wire range") from exc
         if not math.isfinite(number):
             raise JPVRFormatError("NaN and infinity are forbidden in JPVR")
         if number == 0.0:
@@ -322,9 +325,10 @@ def decode_record(
     ) = struct.unpack_from("<4sHHIHH16sQIIII", raw, offset)
     if magic != RECORD_MAGIC:
         raise JPVRFormatError("invalid JREC magic")
+    if reserved != 0:
+        raise JPVRFormatError("JREC reserved field must be zero")
     if (record_type == 0 or schema_id == 0 or schema_version == 0
-            or record_version == 0 or flags != 0 or header_bytes != RECORD_HEADER_BYTES
-            or reserved != 0):
+            or record_version == 0 or flags != 0 or header_bytes != RECORD_HEADER_BYTES):
         raise JPVRFormatError("invalid JREC header fields")
     if payload_length > MAX_SMALL_RECORD_PAYLOAD:
         raise JPVRFormatError("JREC payload exceeds 3976 bytes")
