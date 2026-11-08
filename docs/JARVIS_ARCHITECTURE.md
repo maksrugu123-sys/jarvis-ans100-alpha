@@ -2188,7 +2188,20 @@ v1 использует append-only размещение: подтверждён
 
 Источники используются как подтверждение принципов долговечной записи, CRC32C и платформенных границ flush/sync; JPVR не копирует внутренний формат SQLite и не заявляет его уровень проверенной надёжности без собственных испытаний.
 
+#### 3.21.15. Начальный бинарный codec reference slice
 
+**Статус:** исходный код реализован, тесты **AUTHORED, NOT RUN**. Это первый нижний слой JPVR_FORMAT_V1, а не Storage Engine.
+
+Пакет `tools/jpvr_reference/` содержит:
+- стандартно-совместимую реализацию CRC32C Castagnoli с контрольным вектором;
+- encode/decode 4-KiB Superblock A/B с проверкой magic, версии, header size, endian marker, page size, slot id, CRC32C, нулевого резерва и согласованности genesis/active-commit ссылок;
+- encode/decode 4-KiB обычной страницы с 64-byte header и 4 032-byte payload area; проверяются page type, version, flags, reserved, page_no, generation, transaction id, длина, CRC32C заголовка/всей payload area, нулевой padding и соответствие ожидаемой физической позиции.
+
+`tools/jpvr_reference/test_codec.py` содержит 23 детерминированных тестовых метода для CRC контрольного вектора, round-trip genesis/committed superblock, обеих slot-копий, page round-trip (empty/small/full payload), границ, corruption CRC, reserved/flags, padding и physical page number. Они **AUTHORED, NOT RUN**; никаких PASS для нового codec не заявляется.
+
+**Границы реализации:** файловый контейнер, file/process lock, DATA/JREC/TLV record codec, BLOB fragmentation, copy-on-write индексы, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, durable flush/sync, reopen/recovery, compaction и fault injection ещё не реализованы. Этот пакет нельзя использовать как доказательство durability или безопасного хранения данных.
+
+Следующий слой после запуска тестов — строгий JREC/TLV codec и BLOB fragment codec; интеграция с CQE запрещена до появления и проверки transaction/recovery path.
 
 ### 3.22. JARVIS Numerical Oracle v0.1 — эталонная числовая реализация
 
@@ -3448,7 +3461,7 @@ ZRAM может выступать дополнительной системно
 - отдельный направленный контракт Synapse v1, фиксированная полярность, локальные trace/eligibility и идемпотентность обучения определены в разделе 3.18;
 - математические правила EXCITATORY_PAIR_EXP_STDP_V1 и EXCITATORY_PAIR_EXP_R_STDP_V1, reward baseline, ограничения и сценарии проверки описаны в разделе 3.19; численная калибровка и отдельное правило iSTDP ещё открыты;
 - стартовый числовой профиль и план sweep-калибровки описаны в разделе 3.20; значения являются экспериментальными кандидатами, а не откалиброванным runtime-профилем;
-- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; реализация и crash-тесты отсутствуют;
+- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; начальный binary codec для CRC32C, superblock и page envelope реализован в tools/jpvr_reference, но его 23 теста AUTHORED, NOT RUN; полноценный Storage Engine и crash-тесты отсутствуют;
 - для постоянного представления числовых полей v1 выбрано F64; рабочая точность runtime ещё не определена;
 - первый Python reference coordinator реализован в tools/neuron_runtime: один Adaptive LIF-DT нейрон с несколькими входящими возбуждающими синапсами; его 15 тестов вошли в пользовательский полный Termux запуск 216/216 PASS от 8 ноября 2026 года (19.280 s). Многонейронный NetworkRuntime V1 с направленными задержанными связями, bounded event queue и in-memory timestamp commit реализован в разделе 3.31; его 14 тестов AUTHORED, NOT RUN против настоящего Oracle. Оба слоя остаются Python reference, не production NCC и не persistence.
 - отдельный JARVIS Numerical Oracle v0.1 реализован в tools/numerical_oracle как float64 reference tool; все 29 его unit-тестов прошли в полном запуске 64 тестов на Android Termux 7 ноября 2026 года (версия Python не записана); генератор Round 1 на 99 сценариев и генератор Round 2 на 23 сценария выполнены; числовые значения всех 23 сценариев Round 2 рассмотрены и записаны; STARTER не откалиброван; это не runtime JARVIS;
