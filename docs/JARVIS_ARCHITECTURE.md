@@ -868,28 +868,28 @@ NCC проверяет capability при приёме команды и повт
 - реестр модулей и маршрутизация по зарегистрированным схемам/операциям;
 - deny-by-default capability для Command с проверкой subject, operation/schema, priority, policy version и expiry, а также повторной проверкой перед commit; отдельные ограничения по domain/object scope и resource budgets в reference пока не реализованы;
 - определение приоритета политикой NCC, а не доверие к запрошенному приоритету отправителя;
-- ограниченные очереди P0–P4, квоты классов, per-source limit и FIFO внутри класса;
+- ограниченные очереди P0–P4, квоты классов, per-source limit, FIFO внутри класса и age-based promotion ожидающих сообщений (один уровень за 5 секунд);
 - проверки размера конверта, inline payload, descriptor, query result и deadline;
 - operation_id/idempotency_key, lookup статуса и проверка expected_state_version;
 - последовательный volatile commit coordinator с single-writer version check;
-- формирование Event только после успешного commit receipt, дедупликация на уровне подписчика и ограниченная volatile retry queue;
+- формирование Event только после успешного commit receipt, bounded subscriber dedup history (последние 4 096 ключей) и ограниченная volatile retry queue; старое событие после вытеснения из окна может быть обработано повторно;
 - повторная проверка deadline после работы обработчика, до commit.
 
-**Проверки:** 26 специализированных unit-тестов CQE reference прошли на Python 3.13.5 командой:
+**Историческая проверка:** 26 специализированных unit-тестов CQE reference прошли на Python 3.13.5 командой:
 
 ```sh
 python3 -m unittest tools.cqe_reference.test_cqe -v
 ```
 
-Это результат только для `tools.cqe_reference.test_cqe`. Полный набор тестов репозитория и Oracle в этом запуске не выполнялся.
+Это исторический результат только для `tools.cqe_reference.test_cqe`; полный набор тестов репозитория и Oracle в том запуске не выполнялся. В текущем файле 31 тестовый метод: после исторического запуска добавлены проверка age-based priority, а также четыре новых теста для bounded event inbox, idempotency/result backpressure, некорректных event descriptors и лимита количества событий. Эти пять новых/изменённых проверок после добавления **не запускались**; текущий PASS для них не заявляется.
 
 **Строгие ограничения reference slice:**
 - `InMemoryCommitCoordinator` хранит состояние только в RAM процесса и выдаёт `durable=false`;
 - Command с `requires_durable=True` отклоняется до мутации состояния, потому что JPVR adapter отсутствует;
-- Event outbox и subscriber inbox — только in-memory; они теряются при завершении процесса;
+- Event outbox и subscriber inbox — только in-memory; они теряются при завершении процесса. Inbox хранит последние 4 096 пар subscriber/event_id; после вытеснения старый event_id может быть обработан повторно;
 - commit record и outbox пока не записываются одной атомарной durable-транзакцией;
-- crash recovery, flush/sync, JPVR_FORMAT_V1 reader/writer, durable idempotency retention, реальная многопоточность и полный lifecycle/resource/recovery NCC не реализованы;
-- Aging/старение очереди и защита от голодания, предусмотренные разделом 3.13.5, в reference-диспетчере не реализованы: он выбирает классы в строгом порядке P0→P1→P2→P3→P4 и FIFO внутри класса; отдельные тесты долгого ожидания и starvation protection отсутствуют. Это известное ограничение reference slice, а не подтверждённое свойство будущего production NCC.
+- crash recovery, flush/sync, JPVR_FORMAT_V1 reader/writer, durable idempotency retention, реальная многопоточность и полный lifecycle/resource/recovery NCC не реализованы. In-memory idempotency/result ledger удерживает до 4 096 принятых команд и затем возвращает DEFERRED/RESOURCE_EXHAUSTED; записи намеренно не вытесняются до появления durable ledger, чтобы не допустить повторного выполнения команды;
+- Age-based promotion реализован в reference-диспетчере: ожидающее сообщение повышается на один эффективный уровень за каждые 5 секунд; тест добавлен, но после добавления не запускался. Это свойство reference slice, не production NCC, и оно требует повторной проверки вместе с остальными CQE тестами.
 - Отдельные capability-ограничения по диапазонам доменов/объектов и ресурсным квотам из разделов 3.13.6 и 3.15.5 не представлены в текущей структуре `Capability` и не проверяются; существующая проверка operation/schema не заменяет эти ограничения. До production NCC необходимо определить и протестировать явный scope/resource contract.
 
 Поэтому текущий код позволяет проверять контрактные правила и порядок взаимодействия, но **не подтверждает durable commit, восстановление после сбоя, production-безопасность или готовность полноценного JARVIS**. Отсутствие JPVR не скрывается эмуляцией: persistent Command возвращает `MODULE_UNAVAILABLE` до изменения состояния.
