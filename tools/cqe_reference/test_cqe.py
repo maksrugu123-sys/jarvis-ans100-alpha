@@ -341,6 +341,47 @@ class CQEReferenceTests(unittest.TestCase):
         self.assertEqual(self.ncc.pending_outbox_count, 0)
         self.assertEqual(attempts[0], 2)
 
+    def test_committed_events_reject_duplicate_ids_and_boolean_versions(self):
+        event_id = uid()
+        events_holder = [
+            EventSpec(event_id, "state.changed", 1, {"value": 1}),
+            EventSpec(event_id, "state.changed", 1, {"value": 2}),
+        ]
+
+        def command_with_events(_message):
+            return CommandProposal("neuron", 0, {"value": 1}, events=tuple(events_holder))
+
+        self.ncc.register_module(ModuleSpec(
+            "invalid-events-manager", {"invalid-events": frozenset({1})},
+            command_handlers={"invalid-events": command_with_events},
+            published_event_schemas=frozenset({"state.changed"}),
+        ))
+        self.ncc.register_capability(Capability(
+            "cap-invalid-events", "signal-module", frozenset({"invalid-events"}),
+            Priority.P3, 1000.0, 1,
+        ))
+
+        duplicate_message = self.command(
+            target_module_id="invalid-events-manager", schema_id="invalid-events",
+            operation_id=uid(), idempotency_key="duplicate-event-ids",
+            capability_id="cap-invalid-events",
+        )
+        self.assertEqual(self.ncc.submit(duplicate_message).status, "ACCEPTED")
+        duplicate_result = self.ncc.drain_one()
+        self.assertEqual((duplicate_result.status, duplicate_result.code), ("FAILED", "INVALID_MESSAGE"))
+        self.assertEqual(self.store.read("neuron"), (0, {"value": 0}))
+
+        events_holder[:] = [EventSpec(uid(), "state.changed", True, {"value": 1})]
+        boolean_version_message = self.command(
+            target_module_id="invalid-events-manager", schema_id="invalid-events",
+            operation_id=uid(), idempotency_key="boolean-event-version",
+            capability_id="cap-invalid-events",
+        )
+        self.assertEqual(self.ncc.submit(boolean_version_message).status, "ACCEPTED")
+        boolean_result = self.ncc.drain_one()
+        self.assertEqual((boolean_result.status, boolean_result.code), ("FAILED", "INVALID_MESSAGE"))
+        self.assertEqual(self.store.read("neuron"), (0, {"value": 0}))
+
     def test_outbox_capacity_is_checked_before_commit(self):
         events = tuple(EventSpec(uid(), "state.changed", 1, {"index": i}) for i in range(241))
         def many_events(_message):
