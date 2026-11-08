@@ -2201,7 +2201,42 @@ v1 использует append-only размещение: подтверждён
 
 **Границы реализации:** файловый контейнер, file/process lock, DATA/JREC/TLV record codec, BLOB fragmentation, copy-on-write индексы, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, durable flush/sync, reopen/recovery, compaction и fault injection ещё не реализованы. Этот пакет нельзя использовать как доказательство durability или безопасного хранения данных.
 
-Следующий слой после запуска тестов — строгий JREC/TLV codec и BLOB fragment codec; интеграция с CQE запрещена до появления и проверки transaction/recovery path.
+Следующий слой после запуска тестов — BLOB fragment codec; интеграция с CQE запрещена до появления и проверки transaction/recovery path.
+
+#### 3.21.16. JREC small-record и TLV codec reference slice
+
+**Статус:** исходный код реализован; тесты **AUTHORED, NOT RUN**. Пакет `tools/jpvr_reference/records.py` добавляет small-record framing и generic deterministic TLV encoding/decoding поверх бинарных примитивов 3.21.15.
+
+**JREC header v1 (56 bytes):**
+- offset 0: `JREC` magic (4 bytes);
+- 4: record_type (u16), 6: flags (u16; пока только 0);
+- 8: schema_id (u32), 12: schema_version (u16), 14: header_bytes=56 (u16);
+- 16: object_id (16 bytes), 32: record_version (u64);
+- 40: payload_length (u32), 44: payload_crc32c (u32), 48: header_crc32c (u32), 52: reserved=0 (u32).
+
+Payload CRC покрывает точные байты payload; header CRC покрывает 56-byte header с собственным CRC-полем, временно равным нулю. Следующая запись выравнивается на 8 bytes нулевым padding. Small record не пересекает DATA page; максимум payload — 3 976 bytes.
+
+**Начальная таблица wire_type (u8):**
+
+| Код | Тип | Кодирование |
+|---:|---|---|
+| 1 | U8 | little-endian, 1 byte |
+| 2 | U16 | little-endian, 2 bytes |
+| 3 | U32 | little-endian, 4 bytes |
+| 4 | U64 | little-endian, 8 bytes |
+| 5 | I64 | little-endian signed, 8 bytes |
+| 6 | BOOL | один byte, только 0 или 1 |
+| 7 | F32 | IEEE-754 little-endian, finite |
+| 8 | F64 | IEEE-754 little-endian, finite |
+| 9 | ID128 | 16 opaque bytes |
+| 10 | BYTES | непрозрачные байты |
+| 11 | UTF8 | строгий UTF-8 |
+
+Для TLV v1 выбран `OPTIONAL=0x01`; остальные flag bits запрещены. `field_id=0` зарезервирован. Поля сериализуются по возрастанию field_id без дублей; каждый header (u16 field_id, u8 wire_type, u8 flags, u32 value_length) + value выравнивается нулевыми байтами до 8. Неизвестное поле разрешено пропустить только при OPTIONAL и известном wire_type; неизвестный wire_type всегда отклоняется. При передаче schema map decoder также проверяет обязательность и ожидаемый wire_type. NaN/Infinity запрещены; encoder нормализует −0.0 в +0.0, decoder отклоняет ненормализованный −0.0. Максимальный логический TLV payload — 16 MiB.
+
+`tools/jpvr_reference/test_records.py` содержит 23 тестовых метода для всех 11 wire types, сортировки/дублей, unknown optional/mandatory, type mismatch, malformed values, UTF-8, alignment, JREC round-trip, несколько записей на странице, CRC, reserved/flags и границ размера. Вместе с 23 тестами `test_codec.py` в JPVR reference сейчас 46 тестовых методов; **все 46 AUTHORED, NOT RUN**.
+
+**Границы:** BLOB fragmentation, record registry/schema migration, DATA page packing/indexing, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, file/container I/O, durable sync, recovery и compaction не реализованы. Числовые коды wire_type и OPTIONAL bit — зафиксированный начальный выбор этого reference slice; изменение после появления persisted files потребует явной schema/format compatibility policy.
 
 ### 3.22. JARVIS Numerical Oracle v0.1 — эталонная числовая реализация
 
@@ -3461,7 +3496,7 @@ ZRAM может выступать дополнительной системно
 - отдельный направленный контракт Synapse v1, фиксированная полярность, локальные trace/eligibility и идемпотентность обучения определены в разделе 3.18;
 - математические правила EXCITATORY_PAIR_EXP_STDP_V1 и EXCITATORY_PAIR_EXP_R_STDP_V1, reward baseline, ограничения и сценарии проверки описаны в разделе 3.19; численная калибровка и отдельное правило iSTDP ещё открыты;
 - стартовый числовой профиль и план sweep-калибровки описаны в разделе 3.20; значения являются экспериментальными кандидатами, а не откалиброванным runtime-профилем;
-- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; начальный binary codec для CRC32C, superblock и page envelope реализован в tools/jpvr_reference, но его 23 теста AUTHORED, NOT RUN; полноценный Storage Engine и crash-тесты отсутствуют;
+- бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; начальные reference codecs для CRC32C, superblock, page envelope, JREC и TLV реализованы в tools/jpvr_reference; 46 тестов AUTHORED, NOT RUN; полноценный Storage Engine и crash-тесты отсутствуют;
 - для постоянного представления числовых полей v1 выбрано F64; рабочая точность runtime ещё не определена;
 - первый Python reference coordinator реализован в tools/neuron_runtime: один Adaptive LIF-DT нейрон с несколькими входящими возбуждающими синапсами; его 15 тестов вошли в пользовательский полный Termux запуск 216/216 PASS от 8 ноября 2026 года (19.280 s). Многонейронный NetworkRuntime V1 с направленными задержанными связями, bounded event queue и in-memory timestamp commit реализован в разделе 3.31; его 14 тестов AUTHORED, NOT RUN против настоящего Oracle. Оба слоя остаются Python reference, не production NCC и не persistence.
 - отдельный JARVIS Numerical Oracle v0.1 реализован в tools/numerical_oracle как float64 reference tool; все 29 его unit-тестов прошли в полном запуске 64 тестов на Android Termux 7 ноября 2026 года (версия Python не записана); генератор Round 1 на 99 сценариев и генератор Round 2 на 23 сценария выполнены; числовые значения всех 23 сценариев Round 2 рассмотрены и записаны; STARTER не откалиброван; это не runtime JARVIS;
@@ -3492,7 +3527,7 @@ ZRAM может выступать дополнительной системно
 - логические контракты NeuronStateRecord и SynapseRecord v1, включая версии, временную модель, знаки весов, локальное состояние пластичности, индексы и восстановление (разделы 3.17–3.18);
 - математические правила парного возбуждающего STDP и R-STDP, reward baseline, ограничения и набор будущих проверок (раздел 3.19);
 - единый стартовый числовой профиль Adaptive LIF-DT/STDP/R-STDP, sweep-диапазоны и политика точности вычислений (раздел 3.20); профиль пока не откалиброван;
-- физический бинарный формат JPVR_FORMAT_V1: кодирование, страницы, записи, BLOB, индексы, транзакции, durable outbox, dual-superblock recovery, компактизация и миграции (раздел 3.21); формат пока не реализован и не проверен на сбоях;
+- физический бинарный формат JPVR_FORMAT_V1: кодирование, страницы, записи, BLOB, индексы, транзакции, durable outbox, dual-superblock recovery, компактизация и миграции (раздел 3.21); CRC32C/superblock/page/JREC/TLV reference codec частично реализован, но 46 тестов AUTHORED, NOT RUN; контейнер и crash recovery не реализованы;
 - JARVIS Numerical Oracle v0.1 — отдельный float64 reference module, контрольные тесты, длинные последовательности и генераторы exploratory sweeps/behavioral characterization (раздел 3.22); все 29 Oracle-тестов прошли в составе полного запуска из 64 тестов; это проверка reference tool, а не production/runtime или task-level калибровка;
 - CQE v1 executable contract reference (раздел 3.15.9) — отдельный Python package tools/cqe_reference с маршрутизацией, авторизацией, bounded queues, age-based promotion, idempotency/version checks и volatile commit/event flow; 26 тестов имеют исторический PASS на Python 3.13.5, текущий файл содержит 31 метод, из которых пять добавлены после того запуска и AUTHORED, NOT RUN; persistence/recovery и production runtime отсутствуют;
 - концептуальная архитектура Reasoning Engine v0.1: декомпозиция задач, гипотезы, оценка доказательств, планирование, Safety Gate и проверка результата (раздел 3.23); это последующий слой, не часть первого нейронного прототипа.
