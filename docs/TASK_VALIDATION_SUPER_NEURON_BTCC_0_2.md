@@ -69,7 +69,7 @@ and the diagnostic descent direction is their product. This is explicitly an app
 
 This version does not yet implement an adaptive learned threshold for the gate. Temperature, uncertainty band and ridge must be frozen before any held-out experiment.
 
-## 4. Tests authored (15 focused tests)
+## 4. Focused tests (17 tests)
 
 The dedicated suite covers:
 - deterministic replay and order-independent timestamp batching;
@@ -78,6 +78,7 @@ The dedicated suite covers:
 - confident-correct skip, wrong-prediction trigger and correct-near-boundary trigger;
 - shadow isolation/reproducibility;
 - malformed IDs, missing weights, invalid labels, deadline violations and event-buffer limits;
+- deadline-triggered spikes from refractory-retained input and empty-episode deadline margins.
 - an explicit redundancy counterexample.
 
 ## 5. Known counterexample: redundant independent events
@@ -94,11 +95,11 @@ The test \`test_redundant_independent_events_expose_leave_one_out_blind_spot\` i
 
 ## 6. Verification state
 
-**AUTHORED / NOT RUN.** The assistant environment currently has no directly available local checkout or Python execution path for the private repository. The test module has not been executed. No numerical agreement percentage, benchmark improvement or device measurement is claimed.
+**PASS — 17/17 focused tests**, 0 failures, Python 3.13.5 on Linux x86_64 container. The exact uploaded ZIP archive was used; this is not an Android Termux run.
 
-User command after pulling:
+Executed command:
 \`\`\`sh
 python3 -m unittest tools.super_neuron_btcc.test_credit_oracle -v
 \`\`\`
 
-No task-level training benchmark should be run until the focused tests pass and the gradient-direction agreement is inspected. No builds, APK/AAB, CI or GitHub Actions are part of this work.
+The test run verifies the implemented replay contract and deterministic toy cases. It is not a task-level training benchmark and does not report an aggregate finite-difference agreement rate. No learning-rule integration, quality improvement, Android resource measurement, build, APK/AAB, CI or GitHub Actions run is claimed.

@@ -1,7 +1,7 @@
 # JARVIS SuperNeuron Research Track 0.1
 ## Boundary-Triggered Counterfactual Credit (BTCC)
 
-**Status:** PROPOSED / NOT IMPLEMENTED / NOT TESTED / NOT MEASURED  
+**Status:** research hypothesis PROPOSED; BTCC 0.2 reference replay oracle IMPLEMENTED and unit-tested (17/17 PASS on Python 3.13.5/Linux x86_64); NOT TASK-BENCHMARKED / NOT INTEGRATED / NOT DEVICE-MEASURED  
 **Date:** 8 November 2026  
 **Scope:** one Adaptive LIF-DT neuron and a small set of excitatory input synapses  
 **Relationship to V5:** parallel learning-quality research; does not replace or bypass the V5.1 reference-resource baseline  
@@ -248,9 +248,9 @@ No full network, consciousness or general intelligence claim follows from this d
 ## 7. Development stages
 
 - **0.1 — research specification:** this document. No code or behavior changes.
-- **0.2 — mathematical replay oracle:** deterministic score and leave-one-event-out reference calculations.
-- **0.3 — unit and finite-difference tests:** correctness before training.
-- **0.4 — V4-compatible mechanism diagnostic:** smoke and pilot.
+- **0.2 — mathematical replay oracle:** IMPLEMENTED; bounded deterministic score and leave-one-event-out reference calculations, including explicit deadline evaluation.
+- **0.3 — unit and finite-difference tests:** IMPLEMENTED; 17/17 focused tests PASS. This is unit/toy-case evidence, not an aggregate task-dataset gradient agreement result.
+- **0.4 — V4-compatible mechanism diagnostic:** NOT RUN; only start after pre-registering train/held-out protocol and checking replay/compute budget.
 - **0.5 — harder temporal/noise benchmark:** multiple seeds and untouched held-out distributions.
 - **0.6 — compute/memory profiling:** measure shadow replay cost and bounded-buffer overhead.
 - **0.7 — decision:** promote, revise once with an explicit hypothesis, or reject.
@@ -268,12 +268,16 @@ No full network, consciousness or general intelligence claim follows from this d
 
 The first reference replay implementation is in `tools/super_neuron_btcc/credit_oracle.py`. It captures pre-reset margins at input timestamps and, when a deadline is supplied, performs the explicit empty-batch evaluation at that deadline. This matters because inputs retained during refractoriness may trigger a spike when the refractory interval expires. The implementation has a hard upper bound of 64 events per audited episode; the default remains 8. The replay tests include deadline-triggered spikes, empty-episode deadline margins and the leave-one-out redundancy counterexample.
 
-This is still a reference diagnostic, not a learning-rule integration. The 17 focused tests are authored and must be run before interpreting the implementation as verified.
+This is still a reference diagnostic, not a learning-rule integration. The 17 focused tests passed on Python 3.13.5/Linux x86_64 in the exact uploaded repository archive. This does not establish task-level usefulness.
 
 ## 10. Current status
 
-**PROPOSED / NOT IMPLEMENTED / NOT TESTED / NOT MEASURED.**
+The BTCC 0.2 reference replay oracle is implemented. Its 17 focused tests passed in a local Linux x86_64 container using Python 3.13.5:
 
-This specification does not change the Numerical Oracle, neuron equations, STDP/R-STDP, STARTER values, V4 protocols, V5 compact-state specification or resource baseline. No performance claim is made.
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.super_neuron_btcc.test_credit_oracle -v
+```
 
-Next action: keep the V5.1 reference baseline as its own workstream; then implement the BTCC replay oracle and mathematical tests as a separate research branch within main. Never replace frozen controls.
+This verifies the covered replay contracts and mathematical toy cases only. It does not establish gradient-direction agreement rates across a representative task dataset, task-level accuracy improvement, resource efficiency on Android, or production-learning integration. The leave-one-out redundancy counterexample remains an explicit limitation. No canonical STARTER values or production learning equations were changed.
+
+**Overall BTCC learning method status:** PROPOSED / NOT TASK-BENCHMARKED / NOT INTEGRATED / NOT DEVICE-MEASURED.

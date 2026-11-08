@@ -232,19 +232,28 @@ class BTCCReplayTests(unittest.TestCase):
             )
 
     def test_decision_deadline_processes_retained_refractory_input(self):
+        # Begin inside a refractory interval created before this episode.
+        # The event is retained at 1 ms and must be evaluated when refractoriness
+        # ends at the 2 ms decision deadline.
         events = (
-            BTCCEvent("first-spike", "synapse-a", 0, 1.0),
             BTCCEvent("refractory-input", "synapse-a", 1 * MS, 1.0, 1.0),
         )
+        initial_state = NeuronState(
+            u=0.5,
+            last_update_model_time_ns=0,
+            refractory_until_model_time_ns=2 * MS,
+            spike_sequence=1,
+            last_spike_model_time_ns=0,
+        )
         result = replay_episode(
-            events, {"synapse-a": 1.0}, NeuronState(),
+            events, {"synapse-a": 1.0}, initial_state,
             NeuronParams(), SynapseParams(), 1,
             deadline_ns=2 * MS, temperature=TEMPERATURE,
         )
         self.assertTrue(result.predicted_fast)
         self.assertEqual(result.first_spike_time_ns, 2 * MS)
         self.assertEqual(result.margin_evaluation_time_ns, 2 * MS)
-        self.assertEqual(result.processed_event_count, 2)
+        self.assertEqual(result.processed_event_count, 1)
 
     def test_empty_episode_evaluates_margin_at_deadline(self):
         import math

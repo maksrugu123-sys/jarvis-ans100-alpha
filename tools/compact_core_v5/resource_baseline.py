@@ -211,6 +211,7 @@ def run_baseline(profile: str = "smoke", include_process_metrics: bool = True) -
             "The illustrative shared-parameter scenario is not the current Oracle object layout.",
             "No event latency, CPU time, energy, JPVR storage or production-runtime performance is measured.",
             "A lower theoretical payload size is not evidence of lower total RAM or preserved model quality.",
+            "Deep object-graph and tracemalloc measurements can vary between runs because of Python allocator and instance-dictionary state; compare them as runtime observations, not deterministic fixture values.",
         ],
     }
 

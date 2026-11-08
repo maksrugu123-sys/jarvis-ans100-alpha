@@ -312,3 +312,39 @@ A static review after the single-synapse omission regression was added confirmed
 ### 2026-11-08 — BTCC deadline replay audit
 
 A static code audit found that the first BTCC replay version only evaluated decision margins at sensory-event timestamps, even when the protocol supplied a later decision deadline. This could miss a spike caused by an input retained during refractoriness and could omit the deadline from the margin trajectory. Added an explicit empty-batch deadline evaluation when the deadline is later than the final sensory event; a deadline coincident with an input timestamp is not processed twice. Added a hard maximum of 64 candidate events per episode (default remains 8), plus tests for a refractory-retained input that spikes exactly at the deadline and an empty episode whose margin is evaluated at the deadline. Focused suite now contains 17 tests. **AUTHORED / NOT RUN**; no task benchmark or learning-rule integration. This is a static-review correction, not an experimentally verified fix.
+
+### 2026-11-08 — Clean uploaded-archive regression repairs and complete verification
+
+**Objective:** use a fresh extraction of the exact uploaded `jarvis-ans100-alpha-main.zip` as the only source of truth, reproduce its failing checks, repair the regressions without changing the neural equations, and run the full available unit suite.
+
+**Environment:** exact uploaded ZIP freshly extracted; Python 3.13.5, Linux x86_64 (`Linux-6.18.57-x86_64-with-glibc2.41`). No `.git` metadata is present in the uploaded archive.
+
+**Failures reproduced before the fix:**
+- `python3 -m unittest discover -s tools -t . -v` — **FAIL, 156/158 tests passed; 2 failures**.
+- BTCC failure: `test_decision_deadline_processes_retained_refractory_input` supplied an event at time 0 that emitted the first spike, then asserted that the *first* spike occurred at 2 ms. The assertion contradicted the fixture's own event sequence. Corrected the fixture to begin with an explicit `NeuronState` already inside a refractory interval that expires at 2 ms; a single event at 1 ms is retained and produces the first episode spike exactly at the decision deadline. The production replay implementation was not changed.
+- V5.1 failure: the smoke test compared two complete resource reports for equality. The report includes `sys.getsizeof` object-graph estimates and tracemalloc observations, which varied with CPython instance-dictionary/key-sharing and allocator state even for equivalent logical populations. The fixture shape and pickle diagnostic size were stable.
+
+**Changed implementation/tests:**
+- `tools/super_neuron_btcc/test_credit_oracle.py` — corrected the refractory regression fixture to model a pre-existing refractory interval. It now tests the intended behavior (input retained during refractoriness, evaluated at deadline) without first creating another spike inside the same episode.
+- `tools/compact_core_v5/test_resource_baseline.py` — replaced whole-report equality with checks of deterministic population shape, object counts, pickle-size diagnostics and fixed report fields; measured deep-size/tracemalloc values are checked for valid non-negative integers; `/proc` fields are checked as absent when disabled.
+- `tools/compact_core_v5/resource_baseline.py` — the report limitations now explicitly state that deep object-graph and tracemalloc readings are runtime observations, not deterministic fixture values.
+
+**Documentation/status updates:**
+- `README.md` — records exact-archive verification and clarifies BTCC/V5.1 state.
+- `docs/JARVIS_ARCHITECTURE.md` — records the 17/17 BTCC and 6/6 V5.1 unit results, environment and unverified boundaries; removes the stale V4.3 next-step wording.
+- `docs/JARVIS_SUPER_NEURON_BTCC_RESEARCH.md` — marks 0.2/0.3 oracle/unit stages implemented, while keeping task-level validation pending.
+- `docs/TASK_VALIDATION_SUPER_NEURON_BTCC_0_2.md` — corrects test count to 17 and records the exact verification command and limitations.
+- `docs/DEVELOPMENT_LOG.md` — this append-only result record.
+
+**Final verification:**
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.super_neuron_btcc.test_credit_oracle -v` — **PASS, 17/17**, 0 failures.
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.compact_core_v5.test_resource_baseline -v` — **PASS, 6/6**, 0 failures.
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m tools.compact_core_v5.resource_baseline --profile smoke` — **PASS**, profile smoke (population sizes 1 and 10). One container run reported deep-object-graph sizes 4,006 / 16,710 bytes; pickle protocol 5 sizes 829 / 3,759 bytes; tracemalloc current deltas 9,495 / 37,715 bytes; tracemalloc peak deltas 16,428 / 52,328 bytes; `/proc` VmRSS/VmHWM deltas 28 / 0 KiB. These are container-only Python-reference measurements, not device or packed-candidate results.
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools -t . -v` — **PASS, 158/158**, 0 failures (final verification rerun 4.102 s).
+
+**Scientific interpretation:** BTCC now has a correct, passing deadline/refractory unit regression, but that does not demonstrate a task-level advantage, a representative gradient-direction agreement rate, or an accepted learning rule. Its leave-one-out redundancy limitation remains. V5.1 smoke measures only the existing Python Oracle representation; no compact packed-state candidate or memory reduction has been demonstrated.
+
+**Not run:** BTCC task-level smoke/pilot/harder temporal-noise benchmark; V5.1 pilot/full; Android Termux resource measurement; packed-state implementation or F64 differential experiment; builds, APK/AAB, CI or GitHub Actions.
+
+**Next meaningful step:** pre-register a harder BTCC temporal/noise task with independent held-out inputs, frozen baseline controls and an explicit compute budget before testing any training integration. Keep the canonical STARTER and production learning equations unchanged until that evidence exists.
+

@@ -46,10 +46,34 @@ class ResourceBaselineTests(unittest.TestCase):
             first["synapses_rstdp"][2].eligibility_last_update_model_time_ns,
         )
 
-    def test_smoke_report_is_deterministic_and_json_safe_without_os_metrics(self):
+    def test_smoke_report_has_reproducible_fixture_and_json_safe_metrics(self):
         first = run_baseline("smoke", include_process_metrics=False)
         second = run_baseline("smoke", include_process_metrics=False)
-        self.assertEqual(first, second)
+
+        # Population shape and pickle output are deterministic. Deep-size and
+        # tracemalloc values are observations of the current Python runtime;
+        # dict key-sharing, allocator state and temporary allocations can make
+        # those measurements differ even for identical logical populations.
+        stable_fields = (
+            "population_items",
+            "objects",
+            "reference_pickle_protocol_5_bytes",
+            "scope",
+        )
+        for left, right in zip(first["measurements"], second["measurements"]):
+            for field in stable_fields:
+                self.assertEqual(left[field], right[field], field)
+            self.assertIsNone(left["process_memory_before_kib"])
+            self.assertIsNone(left["process_memory_after_kib"])
+            self.assertIsNone(left["process_memory_delta_kib"])
+            for field in (
+                "reference_object_graph_deep_bytes",
+                "tracemalloc_current_delta_bytes",
+                "tracemalloc_peak_delta_bytes",
+            ):
+                self.assertIsInstance(left[field], int, field)
+                self.assertGreaterEqual(left[field], 0, field)
+
         encoded = json.dumps(first, sort_keys=True, allow_nan=False)
         self.assertIn("JARVIS_V5_REFERENCE_RESOURCE_BASELINE_V1", encoded)
         self.assertEqual(len(first["measurements"]), 2)
