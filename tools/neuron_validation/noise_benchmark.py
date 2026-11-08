@@ -98,8 +98,8 @@ def _build_split(
             )
             for offset in (0, 4, 8)
         )
-        fast_gaps = FAST_GAPS[digest[3] % len(FAST_GAPS)]
-        slow_gaps = SLOW_GAPS[digest[4] % len(SLOW_GAPS)]
+        fast_gaps = FAST_GAPS[digest[12] % len(FAST_GAPS)]
+        slow_gaps = SLOW_GAPS[digest[13] % len(SLOW_GAPS)]
         distractors = _make_distractors(
             seed, split, index, noise_count, max_noise_strength
         )
