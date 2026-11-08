@@ -648,3 +648,34 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 ### 2026-11-08 — JPVR test-count correction
 
 Correction to the immediately preceding append-planner entry: a fresh count of `^s+def test_` in `tools/jpvr_reference/test_layout.py` returns **15**, not 14. The five module counts are 23 (`test_codec.py`) + 23 (`test_records.py`) + 15 (`test_blob.py`) + 14 (`test_data.py`) + 15 (`test_layout.py`) = **90 test methods**. README and architecture status were corrected to 90. All 90 remain **AUTHORED, NOT RUN**; this is a source-count correction, not a test result.
+
+### 2026-11-08 — JPVR MANIFEST payload/page codec and root validation
+
+**Цель:** реализовать минимальную структуру согласованного snapshot manifest и проверить его обязательные корни по физическим page headers/durable prefix в памяти.
+
+**Добавлено:**
+- `tools/jpvr_reference/manifest.py`:
+  - Manifest TLV schema: field 1 container_uuid, 2 generation, 3–9 seven required index roots, 10 checkpoint_page_no, 11 journal_high_water_page_no, 12 outbox_high_water_page_no;
+  - PageRef serialized as 16 bytes: little-endian page_no u64 + expected_commit_generation u64;
+  - обязательные поля не могут быть OPTIONAL; неизвестные optional пропускаются, неизвестные mandatory/wire_type mismatch отклоняются;
+  - encode/decode PageType.MANIFEST page envelope с совпадением payload generation и outer commit_generation;
+  - validate_manifest сверяет container UUID/generation с Superblock, root PageRefs с INDEX page headers, checkpoint/JOURNAL/OUTBOX page types, generation bounds и durable_tail.
+  - разрешены неизменяемые root pages предыдущих поколений при точном совпадении PageRef и generation не новее manifest.
+- `tools/jpvr_reference/test_manifest.py` — 19 тестов для TLV round-trip, optional/mandatory, required fields, manifest page envelope, root types/generation/bounds, container identity и missing references.
+- `tools/jpvr_reference/__init__.py` — exports manifest API.
+- `docs/JARVIS_ARCHITECTURE.md` — раздел 3.21.20 фиксирует field IDs, PageRef layout и validation semantics.
+- `README.md` — обновлён JPVR scope и test count.
+
+**Проверки и доказательства:**
+- GitHub readback/static inspection — выполнены; это не Python runtime verification.
+- Новые manifest tests: 19 **AUTHORED, NOT RUN**.
+- Текущий JPVR пакет содержит 6 test modules: 23 page/superblock + 23 JREC/TLV + 15 BLOB + 14 DATA + 15 append planner + 19 manifest = **109 test methods, all AUTHORED, NOT RUN**.
+- Python syntax/focused tests/full suite — **NOT RUN**: assistant container has no checkout; git clone blocked by DNS/network.
+- B+ tree operations, index rebuild/fullness verification, file/container I/O, journal/commit, durability/recovery, fault injection, Android/Termux/device measurements — **NOT RUN / NOT IMPLEMENTED**.
+- Builds, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN** по ограничению пользователя.
+
+**Ограничения и решения:** journal/outbox high-water marks в этом initial reference profile трактуются как page numbers. Manifest validator проверяет только перечисленные корни/служебные страницы; он не разбирает B+ tree nodes и не доказывает полноту индекса. Это не production manifest, не transaction commit и не recovery engine.
+
+**GitHub:** опубликовано в `main`. Commits: `9faa0e3`, `9f6e9c2`, `b742ba7`, `af6f497`, `1ae8db3`, `46fb891`, `76d5ccb`, `60e3071`.
+
+**Следующий шаг:** реализовать минимальный immutable COW B+ tree node codec/validator и поиск по RecordLocation; не добавлять mutating tree writer до прохождения 109 focused tests.
