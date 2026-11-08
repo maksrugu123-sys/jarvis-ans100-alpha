@@ -302,3 +302,8 @@ Status at publication: authored, NOT RUN. No tests or benchmark have been run by
 **Not run:** BTCC unit tests, full repository suite, task-level benchmark, finite-difference agreement measurement, resource profiling, builds, APK/AAB, CI and GitHub Actions. No quality or performance improvement is claimed.
 
 **Next step:** inspect user-run focused results. If the mathematical tests pass, add sampled coalition/redundancy handling as a separately measured candidate and then test BTCC on a harder temporal/distractor benchmark before considering integration with the learning rule.
+
+
+### 2026-11-08 — BTCC 0.2 post-publication static audit correction
+
+A static review after the single-synapse omission regression was added confirmed that the focused BTCC test module contains **15 tests**, not 14 as stated in the initial entry. The extra test covers removing the only event belonging to a synapse; the counterfactual replay now filters the shadow weight map to only synapses remaining in that episode. Target labels now require integer 0/1, max-event bounds are validated before comparison, and finite-difference setup validates synapse parameters. These are static-reviewed changes only. **All 15 tests remain AUTHORED / NOT RUN.** The README V4.3 status bullet was also corrected to match the user-run 7/7 tests and smoke/pilot evidence. No build or CI was run.

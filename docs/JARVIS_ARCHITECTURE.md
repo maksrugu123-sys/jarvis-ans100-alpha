@@ -3092,7 +3092,7 @@ V4.3 необходимо запускать только после focused tes
 
 Добавлены `tools/super_neuron_btcc/credit_oracle.py` и dedicated tests. Реализация использует функции существующего Numerical Oracle для точного replay event sequence, выделяет pre-reset/non-refractory margin, вычисляет binary cross-entropy score и bounded leave-one-event-out contribution. Отдельно оценивает локальное направление descent и сравнивает его с central finite-difference dL/dw. Режимы ALWAYS/GATED; по умолчанию не более 8 событий в audited episode.
 
-**Статус:** AUTHORED / NOT RUN. Формула credit остаётся диагностическим приближением, не правилом обучения. Добавлен отрицательный redundancy-контрпример: два независимых одинаково полезных сигнала могут иметь нулевой leave-one-out delta каждый, хотя общий вес имеет ненулевой gradient. Этот предел не скрывается и должен быть решён отдельным тестируемым механизмом до продвижения BTCC.
+**Статус:** AUTHORED / NOT RUN; 15 dedicated tests authored. Формула credit остаётся диагностическим приближением, не правилом обучения. Добавлен отрицательный redundancy-контрпример: два независимых одинаково полезных сигнала могут иметь нулевой leave-one-out delta каждый, хотя общий вес имеет ненулевой gradient. Этот предел не скрывается и должен быть решён отдельным тестируемым механизмом до продвижения BTCC.
 
 ## 4. Гибридная память нейросети
 

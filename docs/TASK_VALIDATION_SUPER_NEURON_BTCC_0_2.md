@@ -69,7 +69,7 @@ and the diagnostic descent direction is their product. This is explicitly an app
 
 This version does not yet implement an adaptive learned threshold for the gate. Temperature, uncertainty band and ridge must be frozen before any held-out experiment.
 
-## 4. Tests authored
+## 4. Tests authored (15 focused tests)
 
 The dedicated suite covers:
 - deterministic replay and order-independent timestamp batching;
