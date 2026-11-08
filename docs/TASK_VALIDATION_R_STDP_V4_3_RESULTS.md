@@ -5,6 +5,15 @@
 
 The protocol and reference implementation are published, but no V4.3 test or benchmark has been run at publication time. No result or learning improvement is claimed.
 
+**Pre-run audit correction (8 November 2026):** a static review found that the earlier assertion only required the skipped-event count to be non-negative, which did not prove that the decision latch actually skipped anything. The test and diagnostics were strengthened without changing the learning rule or neuron behavior:
+- sensory inputs are counted only after process_neuron_batch returns;
+- post-decision sensory inputs are counted independently from plasticity updates;
+- the decision-latched training condition must report a strictly positive skipped-event count, and post-decision sensory-input count must equal skipped plasticity count;
+- total processed sensory inputs must equal three per training episode;
+- a matched FAST episode must retain identical spike times and prediction under frozen V4 and decision-latched policies.
+
+These checks are **AUTHORED / NOT RUN**. The implementation, tests and benchmark still await user execution.
+
 Run on Android Termux:
 
 ```sh

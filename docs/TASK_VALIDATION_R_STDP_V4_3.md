@@ -1,7 +1,7 @@
 # V4.3 — Decision-Boundary Temporal-Credit Experiment
 
 **Benchmark:** `JARVIS_R_STDP_DECISION_BOUNDARY_CREDIT_V4_3`  
-**Status:** protocol and Python reference implementation authored; tests and benchmark not yet run.  
+**Status:** protocol and Python reference implementation authored; pre-run regression checks strengthened to prove sensory inputs remain processed while post-decision plasticity is skipped. Tests and benchmark have NOT RUN.  
 **Date:** 8 November 2026  
 **Production runtime:** not implemented by this experiment.
 
@@ -65,11 +65,16 @@ The full profile is not recommended as the first phone run.
 
 - exact replay parity between V4.3's frozen `rstdp_v4` condition and the existing V4 `_run_condition`;
 - no held-out weight changes;
-- number of post-decision plasticity events skipped;
+- exact number of sensory input events processed, counted after each successful return from process_neuron_batch;
+- positive, non-zero count of post-decision sensory inputs processed by the neuron;
+- equality between post-decision sensory-input count and skipped post-decision plasticity-event count for the latched R-STDP condition;
+- identical spike times and prediction for a matched FAST episode under frozen V4 and decision-latched policies;
 - positive/negative/zero eligibility, modulator and weight-update counts;
 - held-out accuracy, balanced accuracy, macro-F1 and confusion counts for every control;
 - per-seed comparisons against V4, FIXED, neutral R-STDP and STDP;
 - deterministic JSON-safe report.
+
+The focused regression tests must fail if the latched path skips zero plasticity events, if any sensory pulse is omitted, or if the neuron produces a different spike sequence on the same FAST episode. The frozen V4 baseline must still process and learn from all three pulses.
 
 A positive weight-update count alone is not success. The decision-latched policy must improve held-out error metrics over frozen V4 and controls consistently across seeds, without trading away correct FAST recognition.
 

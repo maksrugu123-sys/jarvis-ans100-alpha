@@ -1,7 +1,7 @@
 # Task-Level Validation V4 — R-STDP Feedback and Error Recovery
 
 **Benchmark:** `JARVIS_R_STDP_FEEDBACK_ERROR_RECOVERY_V4`  
-**Status:** V4 reference experiment implemented; exploratory two-seed pilot completed. V4.1 user-run follow-up: 15 dedicated tests passed and pilot 8/8 conditions completed. Full pre-registered V4 profile remains pending. V4.2 pulse-level diagnostic authored; execution pending. Pilot results: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md.  
+**Status:** V4 reference experiment and exploratory pilot completed; V4.1 alignment audit completed; V4.2 causal-credit audit user-run (6/6 dedicated tests; smoke and pilot completed). V4.3 decision-boundary temporal-credit experiment is authored and awaiting user tests/benchmark. Full pre-registered V4 profile remains pending. Results: docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md and docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.  
 **Date:** 7 November 2026  
 **Production runtime:** not implemented by this benchmark.
 
@@ -178,4 +178,6 @@ Protocol and interpretation: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md.
 Code: tools/task_validation/rstdp_causal_credit_v42.py.  
 Tests: tools/task_validation/test_rstdp_causal_credit_v42.py.
 
-V4.2 code and tests are authored but NOT RUN. The dedicated tests and phone-friendly smoke/pilot must be run before treating its output as evidence. STARTER 0.5, diagnostic initial weight 0.70, Oracle equations, reward policy and V4 data remain unchanged.
+V4.2 was subsequently run by the user on Android Termux: 6/6 dedicated tests passed in 0.288 s; smoke (128 episodes) and pilot (2,048 episodes, two seeds) completed. The pilot still showed 1,355 negative, zero positive and 693 zero weight updates; the 1 ns shadow changed the aggregate eligibility sum but not per-episode sign classifications. Details: docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.
+
+V4.3 now tests a separate decision-latched credit policy. Its current status is AUTHORED / NOT RUN; see docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md. STARTER 0.5, diagnostic initial weight 0.70, Oracle equations and the frozen V4 reference path remain unchanged.

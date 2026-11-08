@@ -87,6 +87,8 @@ def _run_episode(
     first_spike_pulse_index: int | None = None
     decision_latched = False
     stats: dict[str, int | float] = {
+        "sensory_input_event_count": 0,
+        "postdecision_sensory_input_event_count": 0,
         "plasticity_event_count": 0,
         "skipped_postdecision_plasticity_event_count": 0,
         "positive_q_count": 0,
@@ -100,6 +102,7 @@ def _run_episode(
         zip(pulse_times, episode.strengths)
     ):
         time_ns = start_ns + relative_ms * NS_PER_MS
+        was_decision_latched = decision_latched
         step = process_neuron_batch(
             neuron_state,
             time_ns,
@@ -112,6 +115,10 @@ def _run_episode(
             neuron_params,
         )
         neuron_state = step.state
+        # Count sensory input only after the neuron processing call returns.
+        stats["sensory_input_event_count"] += 1
+        if was_decision_latched:
+            stats["postdecision_sensory_input_event_count"] += 1
         n_post = int(step.spike_emitted)
         if step.spike_emitted:
             spike_times_ms.append(relative_ms)
@@ -217,6 +224,8 @@ def _run_episode(
 
 def _new_diagnostics() -> dict[str, Any]:
     return {
+        "sensory_input_event_count": 0,
+        "postdecision_sensory_input_event_count": 0,
         "plasticity_event_count": 0,
         "skipped_postdecision_plasticity_event_count": 0,
         "positive_q_count": 0,
@@ -246,6 +255,8 @@ def _record_diagnostics(
     stats: dict[str, int | float],
 ) -> None:
     for key in (
+        "sensory_input_event_count",
+        "postdecision_sensory_input_event_count",
         "plasticity_event_count",
         "skipped_postdecision_plasticity_event_count",
         "positive_q_count",
@@ -450,6 +461,11 @@ def run_benchmark(
                 "continue all three sensory inputs through the neuron, but stop "
                 "adding R-STDP eligibility events after the first output spike; "
                 "the spike-producing pulse itself remains eligible"
+            ),
+            "sensory_input_accounting": (
+                "count each sensory input after process_neuron_batch returns; "
+                "count post-decision inputs separately to prove sensory processing "
+                "continues while only plasticity is gated"
             ),
             "frozen_control": "rstdp_v4 replays all three plasticity events exactly as V4",
             "reward": "1.0 for correct, 0.0 for incorrect; neutral control uses current baseline",

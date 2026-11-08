@@ -3006,7 +3006,7 @@ V4.1 не меняет протокол V4, сигналы, reward policy, ал�
 
 ### 3.27.12. V4.2 — Pulse-Level R-STDP Causal-Credit Audit
 
-**Статус:** отдельный Python reference diagnostic и dedicated tests добавлены; исполнение ожидает проверки пользователем на Android Termux. Никакие learning rules или параметры не изменены.
+**Статус:** пользователь выполнил dedicated V4.2 tests (6/6, 0.288 s), smoke (128 episodes) и pilot (2,048 episodes) на Android Termux. Pilot подтвердил 1,355 отрицательных, 0 положительных и 693 нулевых reward-driven updates. 1 ns shadow изменил aggregate eligibility sum, но не per-episode eligibility/weight-update sign counts. Это диагностическое наблюдение, не исправление обучения; learning rules и параметры не менялись.
 
 V4.1 показал 2,048 feedback events: 1,024 correct FAST с negative eligibility / positive modulator / negative delta; 331 incorrect SLOW→FAST с positive eligibility / negative modulator / negative delta; 693 correct SLOW с zero eligibility / zero delta. Арифметика baseline/modulator и знак delta согласовались с существующей формулой. При этом V4.1 не сохранял значения traces и q на каждом из трёх импульсов.
 
@@ -3034,6 +3034,18 @@ V4.2 закрывает именно этот диагностический п�
 Canonical STARTER weight 0.5 remains unchanged; V4 diagnostic start weight remains 0.70. The V4.2 tool is a float64 reference diagnostic, not a production runtime, not a held-out learning benchmark, and does not collect device resource measurements.
 
 
+### 3.27.13. V4.3 — Decision-Boundary Temporal-Credit Experiment (8 November 2026)
+
+**Статус:** Python reference benchmark, protocol and regression tests are authored; V4.3 has NOT RUN. Предварительный аудит усилил acceptance tests: входной импульс учитывается после успешного возврата process_neuron_batch; общее число обработанных сенсорных импульсов должно равняться трём на каждый обучающий эпизод; post-decision sensory inputs должны быть ненулевыми и совпадать с числом пропущенных plasticity events; matched FAST episode должен сохранять те же output spike times и prediction, что frozen V4.
+
+Гипотеза: первый output spike необратимо фиксирует классификацию FAST. Импульс, вызвавший spike, остаётся eligible; последующие сенсорные входы продолжают поступать в нейрон, но их R-STDP eligibility events пропускаются. Это task-specific credit window, а не общее правило биологического STDP.
+
+Пять условий: FIXED, STDP, frozen V4 R-STDP, decision-latched R-STDP и neutral R-STDP. Все используют одинаковые matched данные, порядок и diagnostic initial weight 0.70. Canonical STARTER 0.5, параметры нейрона/обучения, reward equation, simultaneous-batch ordering и V4 dataset generator не изменены. Held-out остаётся inference-only.
+
+Файлы: `tools/task_validation/rstdp_feedback_v4_3.py`, `tools/task_validation/test_rstdp_feedback_v4_3.py`, `docs/TASK_VALIDATION_R_STDP_V4_3.md` и `docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md`.
+
+V4.3 необходимо запускать только после focused tests, затем smoke и pilot. Если тесты не подтверждают non-zero skip при полном sensory-input count, эксперимент считается невалидным. Даже при подтверждённом skip решение принимается по held-out результатам относительно frozen V4, FIXED, neutral R-STDP и STDP на нескольких seed; одного роста числа положительных weight updates недостаточно.
+
 ### 3.28. JARVIS Compact Adaptive Neuron Core V5 — proposed architecture (7 November 2026)
 
 **Статус: PROPOSED / NOT IMPLEMENTED / NOT MEASURED.** Полная спецификация: `docs/JARVIS_COMPACT_NEURON_CORE_V5.md`.
@@ -3056,7 +3068,7 @@ Canonical STARTER weight 0.5 remains unchanged; V4 diagnostic start weight remai
 
 В многонейронном режиме можно отдельно проверить общий низкоразмерный slow-context state вместо повторения длинной временной памяти в каждом нейроне. Работа Nature Machine Intelligence 2026 о dual-memory-pathway SNN — научная мотивация для эксперимента, а не готовое доказательство для JARVIS. Работа ICLR 2026 по checkpointing и lossless spike compression относится к BPTT; текущий JARVIS использует online STDP/R-STDP и не должен переносить этот метод в hot path без появления соответствующего training regime.
 
-**Ближайшие ворота:** выполнить V4.2 focused tests + smoke/pilot; затем измерить исходное представление на устройстве; затем реализовать отдельный F64 compact-state prototype без изменения математических правил. Сравнивать total memory, latency, spike sequence, weights, eligibility, reward updates и held-out quality. Масштабировать 1 → 10 → 100 → 1,000 → 10,000 только после прохождения предыдущего gate.
+**Ближайшие ворота:** сначала выполнить усиленные V4.3 focused tests, smoke и pilot, затем по held-out метрикам решить, сохранять ли decision-latched policy или frozen V4. После этого снять baseline RAM/latency на устройстве и реализовать отдельный F64 compact-state prototype без изменения проверенных математических правил. Сравнивать полную RAM, latency, spike sequence, weights, traces, eligibility, reward updates и held-out quality. Не вводить F32 и более низкую точность до F64 differential equivalence. Масштабировать 1 → 10 → 100 → 1,000 → 10,000 только после прохождения предыдущего gate.
 
 ## 4. Гибридная память нейросети
 
@@ -3408,7 +3420,7 @@ ZRAM может выступать дополнительной системно
 До отдельного разрешения пользователя сборки не запускаются. Архитектурная готовность, написание исходного кода, статические проверки, запуск тестов и сборка приложения — разные статусы и должны учитываться раздельно.
 
 
-**Ближайший исследовательский шаг — выполнить V4.2 smoke и pilot** на Android Termux, проверить совпадение replay с исходным V4 R-STDP и прочитать per-pulse q / eligibility contribution и разницу actual-vs-shadow ordering. V4.1 пользовательский запуск уже подтвердил 15/15 специализированных тестов и 8/8 pilot conditions; полный набор тестов после V4.1 ещё не запускался. Сам V4.2 пока AUTHORED / NOT RUN. Не менять одновременную batch семантику, формулу R-STDP или канонический STARTER до отдельного held-out эксперимента. Вес 0.70 остаётся только диагностическим. V2/V3 — завершённые исторические эксперименты, V4 pilot/V4.1 pilot — exploratory reference runs. CQE reference сохранить как acceptance oracle для будущего production NCC; JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
+**Ближайший исследовательский шаг — выполнить усиленные V4.3 focused tests, smoke и pilot** на Android Termux. Сначала подтвердить полную обработку сенсорных входов, ненулевые post-decision plasticity skips и неизменную output spike sequence относительно frozen V4; затем оценить held-out метрики всех пяти условий. Не менять canonical STARTER или формулу R-STDP на основании одного пилота. После решения по V4.3 перейти к V5 F64 compact-state prototype: снять baseline RAM/latency, реализовать packed representation и провести differential тестирование с Numerical Oracle; precision reduction разрешать только после F64 gate. Полный набор unit tests после V4.2 остаётся NOT RUN. Вес 0.70 — только диагностический. JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
 
 
 ### 12.2. Calibration Round 2 — историческая запись запуска 7 ноября 2026
@@ -3426,7 +3438,7 @@ ZRAM может выступать дополнительной системно
 
 
 
-### 12.3. Последнее пользовательское task-level validation — 7 ноября 2026
+### 12.3. Последнее пользовательское task-level validation — 8 ноября 2026
 
 - V1 temporal robustness выполнен в Android Termux: 82 unit tests passed, 0 failures, 0 errors за 3.228 s.
 - V1 held-out accuracy: FIXED 0.80, STDP 0.90, R-STDP 0.80; на выборке из 10 примеров STDP дал 9 правильных ответов против 8 у FIXED, но сделал один false positive. Это предварительный результат одного детерминированного набора.

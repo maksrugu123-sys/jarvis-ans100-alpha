@@ -234,3 +234,26 @@ V4.2 pulse-level evidence motivated a narrow hypothesis: in FAST episodes, the f
 Added a separate V4.3 reference benchmark comparing FIXED, STDP, frozen V4 R-STDP, decision-latched R-STDP and neutral R-STDP. The decision-latched path continues processing all sensory inputs but skips plasticity events after the first output spike; the spike-producing pulse itself remains eligible. Canonical STARTER 0.5, diagnostic initial weight 0.70, all learning parameters, event ordering, reward equation and V4 dataset generator are preserved. Added a frozen-V4 replay parity test and dedicated protocol/results documents.
 
 Status at publication: authored, NOT RUN. No tests or benchmark have been run by the assistant. No builds, APK/AAB, CI or GitHub Actions were run.
+
+
+## 2026-11-08 — V4.3 pre-run audit: prove sensory processing and decision-latched plasticity
+
+**Objective:** strengthen V4.3 regression evidence before the user runs it. Static review found that the previous test only asserted a skipped-event count was non-negative; zero skipped events would have passed.
+
+**Changed:**
+- `tools/task_validation/rstdp_feedback_v4_3.py` — added total sensory-input and post-decision sensory-input counters. They increment only after `process_neuron_batch` returns. The neuron, learning equations, event ordering and STARTER are unchanged.
+- `tools/task_validation/test_rstdp_feedback_v4_3.py` — added a matched FAST episode comparison between frozen V4 and decision-latched policies; asserts identical spike times/prediction, all three sensory inputs processed, and post-decision plasticity skipped. Aggregate assertions now require a positive skip count, complete sensory-input accounting and equality between post-decision sensory inputs and skipped plasticity updates.
+- `docs/TASK_VALIDATION_R_STDP_V4_3.md` and `docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md` — documented the stronger acceptance gate and kept execution status pending.
+- `docs/JARVIS_ARCHITECTURE.md`, `README.md`, `docs/TASK_VALIDATION_R_STDP_V4.md` and `docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md` — synchronized current V4.2/V4.3 status and documented the evidence-gated V5 transition; historical result records were not rewritten.
+
+**Repository review:** recursive Git tree contained 53 entries / 48 files, `truncated=false`. Reviewed contributor/test policy, project map/status, architecture, V5 proposal, development log, Numerical Oracle and tests, CQE reference and tests, calibration tools, V1–V4.3 implementations/tests/protocols/results. The earlier chat count of 42 tree entries was inaccurate and is superseded by this verified inventory.
+
+**Tests authored/updated:** `tools/task_validation/test_rstdp_feedback_v4_3.py` — non-zero decision-latched skipping, complete sensory-input processing, skipped-update reconciliation and unchanged output trajectory for a matched FAST episode. Status: **AUTHORED / NOT RUN**.
+
+**Verification performed:** latest `main` and file blob SHAs fetched before preparing the change; static source/protocol review only. No runtime test is claimed.
+
+**Not run:** V4.3 focused tests, smoke/pilot, full repository unit-test suite, builds, APK/AAB, CI, GitHub Actions and device RAM/CPU/latency measurements.
+
+**Limitations:** V4.3 remains untested. Decision-latched credit is task-specific and must not be generalized to biological STDP. The user must run the strengthened tests and benchmark on Android Termux before treating V4.3 as evidence.
+
+**Next step:** pull `main`, run focused V4.3 tests, then smoke and pilot; compare held-out metrics with frozen V4, FIXED, neutral R-STDP and STDP before beginning the V5 F64 packed-state prototype.

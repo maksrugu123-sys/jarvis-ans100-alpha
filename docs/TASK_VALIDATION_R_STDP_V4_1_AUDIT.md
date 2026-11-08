@@ -109,4 +109,6 @@ Code: tools/task_validation/rstdp_causal_credit_v42.py
 Tests: tools/task_validation/test_rstdp_causal_credit_v42.py  
 Protocol: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md
 
-The V4.2 code and tests are authored; they have **NOT RUN** at the time of this documentation update. Run the focused tests and a phone-friendly smoke/pilot on Android Termux before interpreting the pulse-level report.
+The user subsequently ran V4.2 on Android Termux: 6/6 dedicated tests passed in 0.288 seconds; smoke (128 episodes) and pilot (2,048 episodes) completed. The pilot recorded 1,355 negative, 0 positive and 693 zero updates. The 1 ns shadow changed aggregate eligibility but not per-episode eligibility or weight-update sign counts. Detailed evidence: [TASK_VALIDATION_R_STDP_V4_2_RESULTS.md](TASK_VALIDATION_R_STDP_V4_2_RESULTS.md).
+
+The next isolated task-level follow-up is V4.3 decision-latched temporal credit. It is authored but NOT RUN; see [TASK_VALIDATION_R_STDP_V4_3.md](TASK_VALIDATION_R_STDP_V4_3.md).

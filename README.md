@@ -4,7 +4,7 @@
 
 The repository is at the **architecture and reference-experiment stage**. It is not yet a production neural runtime or a finished assistant.
 
-## Current status — 7 November 2026
+## Current status — 8 November 2026
 
 - **Architecture:** the first-neuron design, Adaptive LIF-DT model, excitatory STDP/R-STDP rules, CQE v1 contract and JPVR_FORMAT_V1 storage format are specified in the architecture document.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
@@ -18,7 +18,9 @@ The repository is at the **architecture and reference-experiment stage**. It is 
 - **V4.1 alignment audit:** user-run Android Termux verification: **15/15 dedicated tests passed** and the two-seed pilot completed 8/8 conditions. R-STDP recorded 2,048 feedback events and 0 positive / 1,355 negative / 693 zero weight updates. The cross-tab showed correct FAST outcomes with negative eligibility (therefore depressing the weight), false-positive SLOW→FAST outcomes with positive eligibility (also depressing it), and correct SLOW outcomes with zero eligibility. Baseline/modulator and product/delta sign checks were consistent. Full repository suite after V4.1 remains NOT RUN. Details: docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md.
 - **V5 Compact Adaptive Neuron Core:** a research specification is proposed in `docs/JARVIS_COMPACT_NEURON_CORE_V5.md`. It separates hot numeric state from cold metadata, shares immutable parameter sets, and uses rule-specific synapse layouts. Proposed payload sizes are estimates only; no runtime implementation or device measurement exists yet. No learning equation or STARTER value was changed.
 - **V4.2 causal-credit audit:** user-run Android Termux verification: **6/6 dedicated tests passed**; smoke (128 episodes) and pilot (2,048 episodes) completed. In pilot, R-STDP produced 1,355 negative, 0 positive and 693 zero updates. Correct FAST episodes had negative eligibility despite positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility magnitude/sign balance but did not change any per-episode eligibility or weight-update signs. This diagnoses a temporal-credit alignment limitation, not a proven fix. Details: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md and docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.
-- **V4.3 decision-boundary temporal credit:** a reference experiment now compares frozen V4 R-STDP with a decision-latched eligibility policy that stops plasticity events after the first output spike while continuing to process sensory inputs. The hypothesis is that post-decision pulses contaminate credit for an already-latched FAST decision. Protocol and tests are authored; **V4.3 has NOT RUN**. No learning improvement is claimed. Details: docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md.\n- **Not implemented yet:** production neuron/NCC runtime, JNVM/JPVR storage engine, durable commit/outbox and crash recovery, full capability scopes/resource budgets, scheduler Aging/starvation protection, and Reasoning Engine execution.
+- **V4.3 decision-boundary temporal credit:** a reference experiment compares frozen V4 R-STDP with a decision-latched eligibility policy that stops plasticity events after the first output spike while continuing to process sensory inputs. A pre-run audit strengthened the tests to require full sensory-input accounting, a non-zero number of skipped post-decision plasticity events, and identical neuron spike output for a matched FAST episode under frozen V4 and decision-latched policies. These tests are **AUTHORED / NOT RUN**; **V4.3 benchmark has NOT RUN**. No learning improvement is claimed. Details: docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md.
+
+- **Not implemented yet:** production neuron/NCC runtime, JNVM/JPVR storage engine, durable commit/outbox and crash recovery, full capability scopes/resource budgets, scheduler Aging/starvation protection, and Reasoning Engine execution.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
@@ -39,8 +41,12 @@ The repository is at the **architecture and reference-experiment stage**. It is 
 | `docs/TASK_VALIDATION_R_STDP_V4_PILOT_RESULTS.md` | Exploratory V4 pilot metrics, interpretation and limitations |
 | `docs/TASK_VALIDATION_R_STDP_V4_1_AUDIT.md` | V4.1 eligibility/reward alignment audit protocol and user-run results |
 | `docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md` | V4.2 per-pulse eligibility and shadow event-order diagnostic protocol |
+| `docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md` | User-run V4.2 results and causal-credit interpretation |
+| `docs/TASK_VALIDATION_R_STDP_V4_3.md` | V4.3 decision-latched temporal-credit protocol |
+| `docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md` | V4.3 execution status and result summary instructions |
+| `docs/JARVIS_COMPACT_NEURON_CORE_V5.md` | V5 compact-state architecture proposal and acceptance gates |
 | `tools/numerical_oracle/` | Float64 reference equations, sweeps and tests |
-| `tools/task_validation/` | V1–V4.2 deterministic task benchmarks, audits and tests |
+| `tools/task_validation/` | V1–V4.3 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
@@ -83,6 +89,16 @@ python3 -m unittest tools.task_validation.test_rstdp_causal_credit_v42 -v
 ~~~
 
 V4.2 replays only the V4 R-STDP training split. It records per-pulse pair traces and eligibility contributions, and compares the existing batch update with a separate 1 ns pre→post shadow ordering. The shadow is diagnostic only and cannot change actual training. The full profile is deliberately not the default; start with smoke or pilot on a constrained phone. V4.2 is not a held-out learning benchmark and cannot justify a learning-rule change by itself.
+
+## Run the V4.3 decision-boundary temporal-credit experiment
+
+```sh
+python3 -m unittest tools.task_validation.test_rstdp_feedback_v4_3 -v
+python3 -m tools.task_validation.rstdp_feedback_v4_3 --profile smoke > rstdp_feedback_v4_3_smoke.json
+python3 -m tools.task_validation.rstdp_feedback_v4_3 --profile pilot > rstdp_feedback_v4_3_pilot.json
+```
+
+The smoke profile is deliberately small. The decision-latched condition continues processing each sensory input; it gates only later R-STDP updates after the first output spike. Review the protocol and result-status document before interpreting the report. Smoke and pilot are exploratory and do not replace the full pre-registered profile.
 
 ## Run historical temporal benchmarks
 
