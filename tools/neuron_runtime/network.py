@@ -268,7 +268,7 @@ class NetworkRuntime:
                         for conn in self._outgoing[node]:
                             if timestamp > _U64_MAX - conn.delay_ns:
                                 raise NetworkRuntimeError("propagated event timestamp overflows u64")
-                            raw_id = f"{node}\0{step.spike_sequence}\\0{conn.connection_id}".encode()
+                            raw_id = f"{node}\0{step.spike_sequence}\0{conn.connection_id}".encode()
                             event_id = _INTERNAL_PREFIX + hashlib.sha256(raw_id).hexdigest()
                             generated.append(_Event(timestamp + conn.delay_ns, event_id,
                                 conn.target_neuron_id, conn.target_synapse_id,
