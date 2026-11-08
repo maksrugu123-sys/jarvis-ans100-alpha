@@ -385,6 +385,27 @@ class CQEReferenceTests(unittest.TestCase):
         self.assertEqual(second.value["delivered"], 0)
         self.assertEqual(len(self.events), 1)
 
+    def test_idempotency_and_result_ledger_backpressure_is_bounded(self):
+        for index in range(4096):
+            message = self.command(
+                operation_id=uid(),
+                idempotency_key=f"bounded-ledger-{index}",
+                expected_state_version=0,
+            )
+            self.assertEqual(self.ncc.submit(message).status, "ACCEPTED")
+            self.assertIsNotNone(self.ncc.drain_one())
+
+        self.assertEqual(len(self.ncc._idempotency), 4096)
+        self.assertEqual(len(self.ncc._results), 4096)
+        overflow = self.ncc.submit(self.command(
+            operation_id=uid(),
+            idempotency_key="bounded-ledger-overflow",
+            expected_state_version=0,
+        ))
+        self.assertEqual((overflow.status, overflow.code), ("DEFERRED", "RESOURCE_EXHAUSTED"))
+        self.assertEqual(len(self.ncc._idempotency), 4096)
+        self.assertEqual(len(self.ncc._results), 4096)
+
     def test_event_inbox_is_bounded_to_recent_history(self):
         module = self.ncc._modules["observer"]
         event_ids = []
