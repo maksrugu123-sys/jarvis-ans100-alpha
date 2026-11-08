@@ -287,3 +287,18 @@ Status at publication: authored, NOT RUN. No tests or benchmark have been run by
 **Not run:** BTCC replay oracle, finite-difference checks, unit tests, task experiments, resource profiling, builds, APK/AAB, CI and GitHub Actions.
 
 **Next step:** complete V5.1 reference-resource baseline separately, then implement a deterministic BTCC replay oracle and compare its local event-credit direction with central finite-difference loss gradients before running any task-level benchmark.
+
+
+## 2026-11-08 — BTCC 0.2 replay oracle and finite-difference audit authored
+
+**Added:** `tools/super_neuron_btcc/credit_oracle.py` — bounded deterministic replay using Numerical Oracle event dynamics; pre-reset non-refractory margin capture; smooth binary loss; leave-one-event-out omissions; ALWAYS/GATED audit modes; approximate per-synapse descent direction; central finite-difference gradient comparator. Added `tools/super_neuron_btcc/test_credit_oracle.py` with 14 focused tests covering signs, gradients, gating, deterministic batches, isolation, invalid input and a redundancy counterexample. Added `docs/TASK_VALIDATION_SUPER_NEURON_BTCC_0_2.md`.
+
+**Mathematical audit:** BTCC leave-one-out contribution is a marginal loss difference, not a guaranteed causal attribution or Shapley value. The approximation for event contribution and gradient direction is tested against finite differences; it is not accepted as an update rule yet. The test suite explicitly records the redundancy blind spot: separate events can each have zero omission contribution while shared synaptic-weight gradient remains nonzero.
+
+**Updated:** README, `docs/JARVIS_ARCHITECTURE.md`; latest README V4.3 evidence text corrected to reflect user-supplied PASS and benchmark results.
+
+**Tests:** AUTHORED / NOT RUN. The assistant environment has no local private-repository checkout/Python runner; no test result is claimed. User command: `python3 -m unittest tools.super_neuron_btcc.test_credit_oracle -v`.
+
+**Not run:** BTCC unit tests, full repository suite, task-level benchmark, finite-difference agreement measurement, resource profiling, builds, APK/AAB, CI and GitHub Actions. No quality or performance improvement is claimed.
+
+**Next step:** inspect user-run focused results. If the mathematical tests pass, add sampled coalition/redundancy handling as a separately measured candidate and then test BTCC on a harder temporal/distractor benchmark before considering integration with the learning rule.

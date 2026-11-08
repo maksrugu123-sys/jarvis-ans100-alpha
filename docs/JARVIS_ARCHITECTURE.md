@@ -3086,6 +3086,14 @@ V4.3 необходимо запускать только после focused tes
 
 **Статус:** PROPOSED / NOT IMPLEMENTED / NOT TESTED / NOT MEASURED. BTCC предлагает ограниченный leave-one-event-out replay только для ошибочных или пограничных эпизодов и формирует causal credit по разнице task loss. Это инженерная комбинация известных направлений — e-prop, expected eligibility, EventProp и adaptive compute — а не заявка на доказанную научную новизну. V4.3 показал, что decision-latched eligibility меняет динамику обучения, но не превосходит frozen V4 по held-out accuracy; поэтому следующий кандидат должен измерять причинную полезность входных событий, а не только менять момент обновления. Полный математический протокол, compute gate, риски, ablations и критерии принятия: `docs/JARVIS_SUPER_NEURON_BTCC_RESEARCH.md`. Канонический STARTER и все контрольные реализации остаются неизменными.
 
+
+
+#### 3.29.1. BTCC 0.2 replay oracle
+
+Добавлены `tools/super_neuron_btcc/credit_oracle.py` и dedicated tests. Реализация использует функции существующего Numerical Oracle для точного replay event sequence, выделяет pre-reset/non-refractory margin, вычисляет binary cross-entropy score и bounded leave-one-event-out contribution. Отдельно оценивает локальное направление descent и сравнивает его с central finite-difference dL/dw. Режимы ALWAYS/GATED; по умолчанию не более 8 событий в audited episode.
+
+**Статус:** AUTHORED / NOT RUN. Формула credit остаётся диагностическим приближением, не правилом обучения. Добавлен отрицательный redundancy-контрпример: два независимых одинаково полезных сигнала могут иметь нулевой leave-one-out delta каждый, хотя общий вес имеет ненулевой gradient. Этот предел не скрывается и должен быть решён отдельным тестируемым механизмом до продвижения BTCC.
+
 ## 4. Гибридная память нейросети
 
 Выбран концептуальный вариант **C — Hybrid Memory**:
