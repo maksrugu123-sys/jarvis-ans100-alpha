@@ -586,3 +586,31 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **GitHub:** опубликовано в `main`. Commits: `cd1b00b`, `94e4736`, `d297bde`, `df5616a`, `a126912`, `6df352e`, `851faf4`, `14f05ac`.
 
 **Следующий шаг:** собрать JREC и BLOB записи в DATA/BLOB page packing layer, сохраняя строгие границы страницы и проверку всех CRC. Перед дальнейшим расширением выполнить 61 focused JPVR tests в Termux, если доступ к локальному checkout восстановлен.
+
+### 2026-11-08 — JPVR DATA page packing reference slice
+
+**Цель:** добавить безопасную упаковку нескольких небольших JREC записей в одну 4-KiB DATA page и обратное декодирование без выхода за границы страницы.
+
+**Добавлено:**
+- `tools/jpvr_reference/data.py`:
+  - `encode_data_page` принимает canonical padded JREC records, проверяет каждую запись через существующий decoder, размещает записи последовательно в 4 032-byte DATA payload и отказывает до page encoding при переполнении;
+  - `decode_data_page` проверяет outer PageType.DATA/page envelope и читает JREC последовательно до полностью нулевого остатка; ненулевой мусор не игнорируется;
+  - пустая DATA page поддерживается; порядок записей сохраняется.
+- `tools/jpvr_reference/test_data.py` — 14 тестов для empty/single/multiple records, ordering, capacity, malformed/noncanonical records, wrong page type/size/physical position, outer page CRC, inner JREC CRC и nonzero trailing bytes.
+- `tools/jpvr_reference/__init__.py` — экспорт DATA page API.
+- `docs/JARVIS_ARCHITECTURE.md` — раздел 3.21.18 описывает packer/parser и ограничения.
+- `README.md` — обновлены карта и статус JPVR.
+
+**Проверки и доказательства:**
+- GitHub readback/static inspection source and test assertions — выполнены; это не Python runtime test.
+- Новые DATA tests: 14 **AUTHORED, NOT RUN**.
+- Текущий JPVR набор: 23 page/superblock + 23 JREC/TLV + 15 BLOB + 14 DATA = **75 test methods, all AUTHORED, NOT RUN**.
+- Python syntax checks, focused tests и full suite — **NOT RUN**: локальный checkout отсутствует, clone blocked DNS/network.
+- Container file I/O, append allocator, indexing, transaction/recovery, fault injection, Android/Termux/device measurements — **NOT RUN**.
+- Builds, APK/AAB, Gradle, CI и GitHub Actions — **NOT RUN** по ограничению пользователя.
+
+**Ограничения:** это in-memory one-page packing/parser, не container writer. Нет file offsets/page allocator, multi-page DATA allocation, object indexes, manifest, JOURNAL, COMMIT, OUTBOX, flush/sync, durable reopen/recovery или compaction.
+
+**GitHub:** опубликовано в `main`. Commits: `0d3a985`, `53d0dda`, `a98ceb2`, `cbb3b03`, `6210c2a`.
+
+**Следующий шаг:** реализовать ограниченный in-memory container layout/append planner с выделением последовательных page_no и проверкой durable_tail boundaries; не выполнять реальный file I/O или commit, пока allocator и layout invariants не пройдут focused tests.
