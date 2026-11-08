@@ -556,3 +556,33 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **GitHub:** опубликовано в `main`. Commits: `2ae7021`, `4dd93b5`, `437c371`, `e07fe5c`, `4d8f2ad`, `48441f2`, `d602c14`, `68fdbc6`.
 
 **Следующий шаг:** реализовать BLOB fragment codec по разделу 3.21.5 с проверкой fragment order/count, total length, page CRC и full-record CRC; затем объединить DATA/BLOB records с page envelope только после прохождения всех focused tests.
+
+### 2026-11-08 — JPVR BLOB fragment codec reference slice
+
+**Цель:** реализовать и проверить на уровне исходного кода фрагментацию большой логической записи в BLOB-страницы JPVR_FORMAT_V1, не создавая преждевременно файловый Storage Engine или ложную durability-гарантию.
+
+**Добавлено:**
+- `tools/jpvr_reference/blob.py`:
+  - encode/decode JBLB 64-byte fragment header внутри 4 032-byte page payload;
+  - до 3 968 bytes данных на фрагмент, последовательные PageType.BLOB page_no;
+  - проверка общего record identity/schema/version, fragment_index/count, total length, transaction_id, commit_generation и zero padding;
+  - внешняя page CRC32C и итоговая full_payload_crc32c после сборки;
+  - ограничения 16 MiB на logical record и 8 192 pages на BLOB.
+- `tools/jpvr_reference/test_blob.py` — 15 тестов: multi-fragment round-trip, boundary lengths, small/oversized payload, page order/index, expected page number, page type, outer CRC, full-record CRC after outer checksum recomputation, padding, transaction/generation/metadata consistency.
+- `tools/jpvr_reference/__init__.py` — публичные exports для BLOB API, imports упорядочены по зависимостям.
+- `docs/JARVIS_ARCHITECTURE.md` — раздел 3.21.17 описывает JBLB header и validation; project status и test count согласованы.
+- `README.md` — JPVR codec status/map обновлены.
+
+**Проверки и доказательства:**
+- GitHub readback/static inspection BLOB offsets, struct layout, fragment lengths, page envelope coupling and tests — выполнены; это не runtime test.
+- Один test assertion для reverse-order scenario скорректирован по фактическому порядку validation: decoder сначала обнаруживает mismatch fragment_index.
+- Текущие тесты JPVR: 23 `test_codec.py` + 23 `test_records.py` + 15 `test_blob.py` = **61 test method, all AUTHORED, NOT RUN**.
+- Python syntax checks, focused tests и full suite — **NOT RUN** из-за отсутствия checkout и DNS/network blocker для git clone. Ни один runtime PASS не заявляется.
+- File I/O, container open/close, fault injection, durability, recovery и Android/Termux/device measurements — **NOT RUN**.
+- Builds, APK/AAB, Gradle, CI и GitHub Actions — **NOT RUN** по ограничению пользователя.
+
+**Ограничения:** BLOB codec работает только с in-memory полными страницами; он не резервирует page numbers/offsets в файле, не реализует DATA page packing, indexes, manifest, journal, commit/outbox, flush/sync, reopen/recovery или compaction. 16 MiB/8 192 являются форматными limits, а не измеренными device limits.
+
+**GitHub:** опубликовано в `main`. Commits: `cd1b00b`, `94e4736`, `d297bde`, `df5616a`, `a126912`, `6df352e`, `851faf4`, `14f05ac`.
+
+**Следующий шаг:** собрать JREC и BLOB записи в DATA/BLOB page packing layer, сохраняя строгие границы страницы и проверку всех CRC. Перед дальнейшим расширением выполнить 61 focused JPVR tests в Termux, если доступ к локальному checkout восстановлен.
