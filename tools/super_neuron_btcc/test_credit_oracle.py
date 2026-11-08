@@ -226,6 +226,40 @@ class BTCCReplayTests(unittest.TestCase):
                 events + (BTCCEvent("pulse-4", "synapse-a", 15 * MS, 0.2),),
                 weights, state, neuron, synapse, 1, max_events=3,
             )
+        with self.assertRaises(OracleInputError):
+            replay_episode(
+                events, weights, state, neuron, synapse, 1, max_events=65,
+            )
+
+    def test_decision_deadline_processes_retained_refractory_input(self):
+        events = (
+            BTCCEvent("first-spike", "synapse-a", 0, 1.0),
+            BTCCEvent("refractory-input", "synapse-a", 1 * MS, 1.0, 1.0),
+        )
+        result = replay_episode(
+            events, {"synapse-a": 1.0}, NeuronState(),
+            NeuronParams(), SynapseParams(), 1,
+            deadline_ns=2 * MS, temperature=TEMPERATURE,
+        )
+        self.assertTrue(result.predicted_fast)
+        self.assertEqual(result.first_spike_time_ns, 2 * MS)
+        self.assertEqual(result.margin_evaluation_time_ns, 2 * MS)
+        self.assertEqual(result.processed_event_count, 2)
+
+    def test_empty_episode_evaluates_margin_at_deadline(self):
+        import math
+        neuron = NeuronParams(tau_a_ns=5 * MS)
+        result = replay_episode(
+            (), {}, NeuronState(a=1.0), neuron, SynapseParams(), 0,
+            deadline_ns=20 * MS, temperature=TEMPERATURE,
+        )
+        self.assertFalse(result.predicted_fast)
+        self.assertEqual(result.margin_evaluation_time_ns, 20 * MS)
+        self.assertAlmostEqual(
+            result.decision_margin,
+            -1.0 - 0.5 * math.exp(-4.0),
+            places=12,
+        )
 
     def test_finite_difference_rejects_boundary_crossing_step(self):
         weights, state, neuron, synapse = common()

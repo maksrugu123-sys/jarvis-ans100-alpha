@@ -25,6 +25,7 @@ from tools.numerical_oracle.jarvis_oracle import (
 
 U64_MAX = (1 << 64) - 1
 DEFAULT_MAX_COUNTERFACTUAL_EVENTS = 8
+MAX_BTCC_EVENTS = 64
 DEFAULT_LOSS_EPSILON = 1e-12
 
 
@@ -146,8 +147,14 @@ def _validate_inputs(
 ) -> tuple[tuple[BTCCEvent, ...], dict[str, float], bool, float, float]:
     if not isinstance(events, (list, tuple)):
         raise OracleInputError("events must be a list or tuple")
-    if isinstance(max_events, bool) or not isinstance(max_events, int) or max_events < 1:
-        raise OracleInputError("max_events must be a positive integer")
+    if (
+        isinstance(max_events, bool)
+        or not isinstance(max_events, int)
+        or not 1 <= max_events <= MAX_BTCC_EVENTS
+    ):
+        raise OracleInputError(
+            f"max_events must be an integer in [1, {MAX_BTCC_EVENTS}]"
+        )
     if len(events) > max_events:
         raise OracleInputError(
             f"episode has {len(events)} events; bounded BTCC limit is {max_events}"
@@ -298,8 +305,29 @@ def replay_episode(
 
         state = step.state
 
+    # Match the task's explicit decision deadline. Refractory-period inputs
+    # remain in membrane state and may trigger a spike when refractoriness ends.
+    # If an event already occurred exactly at the deadline, that timestamp was
+    # evaluated in the loop above and must not be processed twice.
+    if deadline_ns is not None and (
+        not groups or deadline_ns > max(groups)
+    ):
+        decayed = decay_neuron_state(state, deadline_ns, neuron_params)
+        margin = decayed.u - effective_threshold(decayed, neuron_params)
+        refractory = deadline_ns < state.refractory_until_model_time_ns
+        step = process_neuron_batch(state, deadline_ns, [], neuron_params)
+        if first_spike_time is None and not refractory:
+            if selected_margin is None or margin > selected_margin:
+                selected_margin = margin
+                selected_time = deadline_ns
+            if step.spike_emitted:
+                first_spike_time = deadline_ns
+                selected_margin = margin
+                selected_time = deadline_ns
+        state = step.state
+
     if selected_margin is None:
-        # No non-refractory event was available to form a decision margin.
+        # No non-refractory decision evaluation was available.
         selected_margin = neuron_params.u_rest - neuron_params.theta_0
         selected_time = None
 

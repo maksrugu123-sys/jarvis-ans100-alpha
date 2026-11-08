@@ -264,7 +264,13 @@ No full network, consciousness or general intelligence claim follows from this d
 - Barretto-Bittar et al. (2026), “Diffusion of neuromodulators for temporal credit assignment,” PNAS 123(38), e2608831123. https://doi.org/10.1073/pnas.2608831123
 - Miao & Ikeda (2024), “Advancing energy efficiency of spiking neural network accelerator via dynamic predictive early stopping,” IEICE Electronics Express 21, 20240206. https://doi.org/10.1587/elex.21.20240206
 
-## 9. Current status
+## 9. Oracle implementation notes
+
+The first reference replay implementation is in `tools/super_neuron_btcc/credit_oracle.py`. It captures pre-reset margins at input timestamps and, when a deadline is supplied, performs the explicit empty-batch evaluation at that deadline. This matters because inputs retained during refractoriness may trigger a spike when the refractory interval expires. The implementation has a hard upper bound of 64 events per audited episode; the default remains 8. The replay tests include deadline-triggered spikes, empty-episode deadline margins and the leave-one-out redundancy counterexample.
+
+This is still a reference diagnostic, not a learning-rule integration. The 17 focused tests are authored and must be run before interpreting the implementation as verified.
+
+## 10. Current status
 
 **PROPOSED / NOT IMPLEMENTED / NOT TESTED / NOT MEASURED.**
 
