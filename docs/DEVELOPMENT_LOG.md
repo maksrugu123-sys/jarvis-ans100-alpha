@@ -412,3 +412,26 @@ A final static review tightened the exam's evidence reporting. `tools/neuron_val
 `tools/neuron_validation/test_neuron_full_exam.py` gained two tests for the coverage-report rules: a NOT RUN stage must never be labelled PASS, and completed stages must retain their scope qualifiers (for example BTCC unit-only and Python-reference resource-only).
 
 Verification: latest files were fetched from GitHub and reviewed statically. These two new coverage tests and the updated runner remain AUTHORED, NOT RUN. No Python tests, noise benchmark, resource benchmark, Android measurement, build or CI job was executed in this task.
+
+
+### 2026-11-08 — First-neuron Python reference coordinator V1
+
+**Goal:** start converting the documented first-neuron model into an executable, bounded orchestration layer without duplicating or changing the Numerical Oracle equations or canonical STARTER V1 profile.
+
+**Added:**
+- tools/neuron_runtime/__init__.py — package exports for the reference coordinator API.
+- tools/neuron_runtime/runtime.py — in-memory coordinator for one Adaptive LIF-DT output neuron and multiple incoming excitatory synapses. It supports none, STDP and R-STDP modes; groups all same-timestamp events into one Oracle call; routes each synapse's pre-count and the neuron's post-spike count to plasticity; and calculates candidate immutable states before committing an in-memory batch.
+- tools/neuron_runtime/test_runtime.py — 15 deterministic contract tests covering configuration bounds, simultaneous ordering, Oracle delegation, spike/sequence reporting, multiple pre-events on one synapse, post-event routing to all synapses, STDP, delayed R-STDP reward, external baseline ownership, context/time validation and no partial in-memory commit on a failed batch.
+- docs/JARVIS_RUNTIME_V1.md — scope, API, verification status and implementation limits.
+
+**Updated:** docs/JARVIS_ARCHITECTURE.md adds section 3.30 and updates current project/JPVR-001 status; README.md documents the reference coordinator and focused test command.
+
+**Implementation boundaries:** this is a Python reference orchestration layer around the existing Numerical Oracle, not an independent numerical engine or production NCC/runtime. It supports only one output neuron and excitatory weights in [0, 1]. baseline_before is provided by the external Reward Baseline Manager; the runtime returns baseline_after and does not own task baseline. There is no CQE routing, durable state commit, multi-synapse feedback transaction, idempotent feedback sequence, serialization, JPVR/JNVM, crash recovery, inhibitory plasticity, Android integration or device resource evidence. Canonical STARTER V1 and Oracle equations were not changed.
+
+**Verification actually executed in the authoring environment (Python 3.13.5):**
+- python -m py_compile /mnt/data/jarvis-runtime-v1/tools/neuron_runtime/*.py — **PASS**, syntax compilation only.
+- PYTHONPATH=/mnt/data/jarvis-runtime-harness python -m unittest tools.neuron_runtime.test_runtime -v — **PASS, 15/15** in an isolated harness. Important limitation: this harness injected an API-compatible test stand-in for Numerical Oracle. It validates the coordinator orchestration shape against that stand-in; it is not a test against the repository real tools.numerical_oracle.jarvis_oracle.
+
+**Repository verification:** the 15 focused tests are **AUTHORED, NOT RUN** against the real Numerical Oracle. The full repository unit suite is **NOT RUN** in this task. No Android/Termux test, JPVR serialization/recovery test, device RAM/CPU/latency/energy/I/O measurement, build, APK/AAB, CI or GitHub Actions workflow was run.
+
+**Next step:** run python3 -m unittest tools.neuron_runtime.test_runtime -v against the real Oracle, then python3 -m unittest discover -s tools -t . -v. Fix any real-Oracle integration failures before starting JPVR-001 serialization/recovery work.

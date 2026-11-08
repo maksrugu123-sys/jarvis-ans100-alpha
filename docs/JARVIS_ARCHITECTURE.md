@@ -3094,6 +3094,43 @@ V4.3 необходимо запускать только после focused tes
 
 **Статус:** reference oracle IMPLEMENTED; **17/17 focused tests PASS** на Python 3.13.5/Linux x86_64. Проверки включают явную оценку deadline, сохранённый во время refractory input и empty-episode deadline margin. Формула credit остаётся диагностическим приближением, не правилом обучения. Добавлен отрицательный redundancy-контрпример: два независимых одинаково полезных сигнала могут иметь нулевой leave-one-out delta каждый, хотя общий вес имеет ненулевой gradient. Задачный benchmark, held-out advantage, интеграция в production learning rule и Android measurement НЕ ВЫПОЛНЕНЫ; никакое улучшение обучения не заявляется.
 
+
+### 3.30. Первый исполняемый Python reference coordinator нейрона
+
+**Статус: IMPLEMENTED как ограниченный in-memory reference orchestration slice; NOT PRODUCTION / NOT JPVR-001 / NOT DEVICE-VERIFIED.** Пакет tools/neuron_runtime координирует один Adaptive LIF-DT output neuron и несколько входящих возбуждающих синапсов. Он вызывает функции Numerical Oracle и не содержит самостоятельной реализации математических уравнений.
+
+#### 3.30.1. API и путь события
+
+- NeuronRuntime создаётся с mapping synapse_id к weight или SynapseState, параметрами Oracle и одним из режимов none, stdp, rstdp.
+- SynapticInput передаёт event_id, synapse_id, нормализованную strength и attention.
+- Все входы одного model_time_ns передаются одним process_batch; Oracle обновляет нейрон один раз для всего одновременного пакета.
+- Для каждой связи считается собственный n_pre по числу входов этой связи. Единый n_post от output spike передаётся всем синапсам, включая те, у которых не было pre-события в этом пакете.
+- В режиме none меняется только состояние нейрона. STDP обновляет локальные trace/weight по Oracle. R-STDP накапливает eligibility под одним learning_context_id; изменение веса отложено до apply_reward.
+- Модельное время остаётся монотонным; идентификаторы событий уникальны в пределах одного timestamp batch.
+
+#### 3.30.2. Владение состоянием и reward baseline
+
+process_batch сначала рассчитывает candidate states нейрона и всех синапсов. Изменения фиксируются только после успешного завершения всех вычислений batch. Это ограниченная гарантия атомарности in-memory метода; она не заменяет NCC commit, JPVR transaction или crash recovery.
+
+baseline_before поступает в apply_reward из внешнего Reward Baseline Manager. Runtime возвращает baseline_after, но не хранит task baseline. Это сохраняет разделение ответственности раздела 3.19.6: baseline принадлежит reward_task_id, а не отдельному синапсу. Применение reward к нескольким синапсам, durable feedback sequence, duplicate prevention и единый commit веса/eligibility/baseline ещё не интегрированы.
+
+#### 3.30.3. Явные границы текущего среза
+
+- Только один output neuron и возбуждающие веса [0, 1]; inhibitory polarity/iSTDP не реализованы.
+- Нет нескольких нейронов, создания/удаления topology, event queue, scheduler, CQE routing или NCC state-commit path.
+- Нет сериализации, JPVR reader/writer, JNVM, durable storage, crash recovery или Android UI.
+- Это orchestration layer, вызывающий Numerical Oracle, а не независимый числовой runtime-кандидат; тесты не доказывают float32/F64 differential equivalence.
+- Нет device RAM/CPU/latency/energy/I/O измерений и не запускались сборки/CI.
+
+#### 3.30.4. Тесты и следующий gate
+
+Добавлен tools/neuron_runtime/test_runtime.py с 15 контрактными тестами: конфигурация и границы, порядок simultaneous inputs, Oracle delegation, spike/sequence, несколько pre-событий одной связи, доставка post-события всем синапсам, STDP, отложенный R-STDP reward, caller-owned baseline, context/time validation и отсутствие частичного in-memory commit при ошибке.
+
+На этапе authoring прошёл py_compile, а изолированный harness с API-compatible test stand-in для Oracle показал 15/15. Это не запуск против реального tools.numerical_oracle.jarvis_oracle; dedicated suite и полный suite помечены AUTHORED, NOT RUN до выполнения в репозитории/Termux.
+
+Следующий gate: выполнить focused suite и python3 -m unittest discover -s tools -t . -v против настоящего Oracle. Только после прохождения — отдельно специфицировать и реализовать сериализацию NeuronStateRecord/SynapseRecord и JPVR-001 close/reopen/recovery path. Масштабирование и изменения STARTER/формул не входят в этот gate.
+
+
 ## 4. Гибридная память нейросети
 
 Выбран концептуальный вариант **C — Hybrid Memory**:
@@ -3364,7 +3401,7 @@ ZRAM может выступать дополнительной системно
 
 - репозиторий JARVIS ANS-100 Alpha является приватным;
 - основная ветка — main;
-- проект находится на стадии исследования и архитектурного проектирования;
+- проект находится на стадии исследований, архитектуры и первого ограниченного in-memory Python reference coordinator (раздел 3.30); production NCC/runtime и JPVR-001 ещё не реализованы;
 - по архитектуре первого нейрона согласованы 10 из 10 предварительных решений; для вычислительного ядра выбрана Adaptive LIF-DT с событийным затуханием и динамическим порогом, описанная в разделе 3.16; это проектное решение, не реализованный и не измеренный код;
 - по Neural Core State согласованы все 10 предварительных решений, включая гибридное восстановление, согласованность, историю изменений, параллельные изменения, приоритеты, управление нехваткой RAM и автономный перезапуск;
 - по Neural Core State Engine согласованы все 10 из 10 предварительных решений; это не процент готовности реализации;
@@ -3376,16 +3413,17 @@ ZRAM может выступать дополнительной системно
 - стартовый числовой профиль и план sweep-калибровки описаны в разделе 3.20; значения являются экспериментальными кандидатами, а не откалиброванным runtime-профилем;
 - бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; реализация и crash-тесты отсутствуют;
 - для постоянного представления числовых полей v1 выбрано F64; рабочая точность runtime ещё не определена;
+- первый Python reference coordinator реализован в tools/neuron_runtime: один Adaptive LIF-DT нейрон, несколько возбуждающих синапсов и делегирование STDP/R-STDP Numerical Oracle; 15 dedicated tests AUTHORED, NOT RUN против реального Oracle; модуль не является production NCC/runtime и не реализует persistence (раздел 3.30);
 - отдельный JARVIS Numerical Oracle v0.1 реализован в tools/numerical_oracle как float64 reference tool; все 29 его unit-тестов прошли в полном запуске 64 тестов на Android Termux 7 ноября 2026 года (версия Python не записана); генератор Round 1 на 99 сценариев и генератор Round 2 на 23 сценария выполнены; числовые значения всех 23 сценариев Round 2 рассмотрены и записаны; STARTER не откалиброван; это не runtime JARVIS;
 - архитектура Reasoning Engine v0.1 описана в разделе 3.23 как отдельный ограниченный когнитивный слой; исходный код и исполняемые проверки отсутствуют, и он не входит в критерии JPVR-001;
 - сравнительные архитектуры Intel Loihi/Loihi 2 и SpiNNaker/SpiNNaker2 проанализированы в разделе 3.24; выявленные принципы рассматриваются как исследовательские ориентиры, без смены аппаратной платформы, модели первого нейрона или критериев JPVR-001;
 - методология систематической калибровки и экспериментального сравнения по Google Research Deep Learning Tuning Playbook адаптирована для JARVIS в разделе 3.25; она не заменяет STDP/R-STDP и не означает наличия полноценного training pipeline или завершённой калибровки;
 - описанные в документе подсистемы являются проектными решениями и предложениями;
-- production-реализация нейрона, NCC, JNVM и JPVR ещё не начата; tools/cqe_reference — отдельная тестируемая Python reference implementation протокола, не production runtime;
+- production-реализация нейрона и NCC, JNVM и JPVR ещё не начата; tools/neuron_runtime — in-memory Python reference orchestration layer, а tools/cqe_reference — отдельная reference implementation протокола; ни один из пакетов не является production runtime;
 - специализированные тесты CQE reference (26 методов) ранее прошли на Python 3.13.5; в более свежем полном запуске на Android Termux прошли 64 теста (26 CQE + 29 Numerical Oracle + 9 Round 2), 0 failures и 0 errors за 1.649 секунды; Round 1 sweep на 99 сценариев и Round 2 generator выполнены, но фактические метрики всех 23 сценариев Round 2 проанализированы и записаны в docs/CALIBRATION_ROUND2.md; task-level reference benchmark JARVIS_TEMPORAL_BURST_VS_SPARSE_V1 выполнен 7 ноября 2026 года: FIXED/STDP/R-STDP показали 100% на train и held-out; преимущество обучения не установлено, так как FIXED baseline уже решил выбранную задачу; crash-тесты production JPVR, runtime benchmarks и измерения ресурсов не проводились; сборки и GitHub Actions не запускались.
 
 
-### 12.1. Оценка готовности к первому прототипу
+### 12.1. Оценка готовности к JPVR-001 интегрированному прототипу
 
 **Оценка на 7 ноября 2026 года: примерно 78% архитектурной подготовки.**
 
@@ -3409,7 +3447,7 @@ ZRAM может выступать дополнительной системно
 - CQE v1 executable contract reference (раздел 3.15.9) — отдельный Python package tools/cqe_reference с маршрутизацией, авторизацией, bounded queues, idempotency/version checks и volatile commit/event flow; 26 специализированных тестов прошли на Python 3.13.5, но persistence/recovery и production runtime отсутствуют;
 - концептуальная архитектура Reasoning Engine v0.1: декомпозиция задач, гипотезы, оценка доказательств, планирование, Safety Gate и проверка результата (раздел 3.23); это последующий слой, не часть первого нейронного прототипа.
 
-#### Что необходимо завершить до начала реализации первого прототипа
+#### Что необходимо завершить до JPVR-001 интегрированного прототипа
 
 Ориентировочно остаётся **4–6 крупных архитектурных этапов**. Это оценка объёма оставшейся проектной работы, а не обязательное количество отдельных документов или пользовательских решений. Связанные этапы следует объединять, если это не снижает ясность спецификации.
 
@@ -3419,7 +3457,7 @@ ZRAM может выступать дополнительной системно
 4. Зафиксировать минимальную архитектуру первого исполняемого прототипа, конфигурацию, границы модулей и диагностические показатели.
 5. Подготовить проверяемый план JPVR-001 и критерии приёмки: корректность сигналов, обучение, сохранение/загрузка, восстановление, RAM, задержка и объём операций записи.
 
-После закрытия этих пунктов можно переходить к реализации минимального прототипа. Это не означает готовность полноценного JARVIS: первый прототип должен подтвердить только базовый цикл одного нейрона и нескольких синапсов.
+Первый in-memory Python reference coordinator уже добавлен в разделе 3.30. Перечисленные пункты остаются воротами до JPVR-001 интегрированного прототипа: reference coordinator сам по себе не подтверждает сериализацию, durable commit, восстановление или работу целевого устройства. Это не означает готовность полноценного JARVIS.
 
 #### Минимальный объём первого прототипа
 
@@ -3439,12 +3477,12 @@ ZRAM может выступать дополнительной системно
 
 #### Что означает переход к реализации
 
-«Готовность к реализации» означает, что спецификация достаточно полна для начала ограниченного эксперимента. Она не означает, что код уже существует, что выбранные алгоритмы доказали свою эффективность или что устройство сможет обеспечить желаемую производительность.
+«Готовность к реализации JPVR-001» означает, что спецификация достаточно полна для интегрированного эксперимента. Ограниченный in-memory coordinator из раздела 3.30 уже существует, но не означает, что production-код, JPVR persistence, recovery или выбранные алгоритмы подтверждены; производительность целевого устройства неизвестна.
 
 До отдельного разрешения пользователя сборки не запускаются. Архитектурная готовность, написание исходного кода, статические проверки, запуск тестов и сборка приложения — разные статусы и должны учитываться раздельно.
 
 
-**Ближайший исследовательский шаг — выполнить усиленные V4.3 focused tests, smoke и pilot** на Android Termux. Сначала подтвердить полную обработку сенсорных входов, ненулевые post-decision plasticity skips и неизменную output spike sequence относительно frozen V4; затем оценить held-out метрики всех пяти условий. Не менять canonical STARTER или формулу R-STDP на основании одного пилота. После решения по V4.3 перейти к V5 F64 compact-state prototype: снять baseline RAM/latency, реализовать packed representation и провести differential тестирование с Numerical Oracle; precision reduction разрешать только после F64 gate. Полный набор unit tests после V4.2 остаётся NOT RUN. Вес 0.70 — только диагностический. JPVR durable commit/outbox/recovery и Reasoning Engine v0.1 остаются отдельными последующими инженерными блоками.
+**Ближайший шаг реализации — выполнить 15 focused tests tools.neuron_runtime.test_runtime в Termux против настоящего Numerical Oracle, затем полный python3 -m unittest discover -s tools -t . -v. Сейчас tests AUTHORED, NOT RUN в настоящем репозитории; authoring harness с test stand-in не считается Oracle verification. После PASS следует отдельно реализовать сериализацию NeuronStateRecord/SynapseRecord и JPVR-001 close/reopen/recovery path, затем провести fault-injection и device resource measurements. Не менять canonical STARTER или формулы обучения; не масштабировать до прохождения одного нейрона и JPVR gates. Reasoning Engine v0.1 остаётся отдельным последующим блоком.
 
 
 ### 12.2. Calibration Round 2 — историческая запись запуска 7 ноября 2026

@@ -1,0 +1,32 @@
+# JARVIS Runtime V1 — first executable neuron coordinator
+
+**Status:** implemented as a Python reference orchestration slice; not a production runtime, not JPVR-001 complete, and not device-verified.
+
+## Scope
+
+tools/neuron_runtime adds an in-memory coordinator for one Adaptive LIF-DT output neuron and one or more incoming excitatory synapses. It calls the existing tools.numerical_oracle.jarvis_oracle functions. It does not reimplement or change the neuron's or plasticity's numerical equations.
+
+## Runtime contract
+
+- Inputs sharing a model timestamp are submitted together with NeuronRuntime.process_batch(time_ns, inputs).
+- Each input identifies a synapse, a unique event ID, normalized strength and optional attention.
+- The neuron is updated once per timestamp by the Numerical Oracle.
+- In STDP/R-STDP modes, every configured synapse receives the same postsynaptic spike count for that timestamp; its own presynaptic count is the number of input events routed through that synapse. Thus an output spike can update a synapse that had no input at that particular timestamp.
+- R-STDP batches require one stable learning_context_id for the episode. Local eligibility accumulates without changing weight; a reward operation consumes the eligibility and may update the weight.
+- baseline_before is supplied by the external Reward Baseline Manager. Runtime returns baseline_after but does not store or advance task baseline.
+- A timestamp batch is calculated into candidate immutable states and only committed to this in-memory coordinator after all synapse updates succeed.
+
+## Deliberate limitations
+
+This is a reference coordinator around the Oracle, not an independent production neuron engine. It is not a multi-neuron network, language model or reasoning engine. It has no CQE integration, NCC durable commit path, asynchronous queue, topology learning, inhibitory synapse type/iSTDP, serialization, JNVM/JPVR persistence, crash recovery, concurrency, Android UI or device performance measurements. Reward processing is one synapse at a time and does not implement feedback ID/sequence idempotency or an atomic multi-synapse plus baseline transaction. Those remain responsibilities of the future CQE/NCC/JPVR integration.
+
+## Verification
+
+tools/neuron_runtime/test_runtime.py adds 15 contract tests for simultaneous input ordering, Oracle delegation, spike reporting, per-synapse pre/post routing, STDP updates, delayed R-STDP reward, caller-owned baseline, context validation, time ordering and atomic failure of an in-memory batch.
+
+The authoring check ran Python syntax compilation and an isolated test harness with an API-compatible stand-in for the Oracle. This passed 15/15 in the harness, but is not a run against the repository real tools.numerical_oracle.jarvis_oracle. The 15 tests remain AUTHORED, NOT RUN against the real repository Oracle. Run these commands from the repository root in Termux:
+
+    python3 -m unittest tools.neuron_runtime.test_runtime -v
+    python3 -m unittest discover -s tools -t . -v
+
+Do not describe this module as integrated into JARVIS or JPVR-001 until the focused and full repository suites pass against the real Oracle and the remaining state ownership/persistence interfaces are implemented.
