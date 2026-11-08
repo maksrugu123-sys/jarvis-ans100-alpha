@@ -497,3 +497,32 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **GitHub:** все изменения опубликованы в `main`. Ключевые commits: `f7dc307`, `feddcdf`, `f709828`, `46e343a`, `019a16c`, `7915fbd`, `f1ecfae`, `241cb50`, `bd0c90a`, `cfa79ed`.
 
 **Следующий шаг:** начать JPVR_FORMAT_V1 с независимого, тестируемого binary codec для CRC32C, superblock и 4-KiB page header; затем добавить строгие negative/corruption tests. Не подключать durable commit к CQE до появления и проверки этих нижних уровней.
+
+### 2026-11-08 — JPVR_FORMAT_V1 CRC32C, Superblock and page codec slice
+
+**Цель:** начать реализацию JPVR снизу вверх: создать независимый бинарный codec для двух 4-KiB Superblock и обычных 4-KiB страниц, строго соответствующий уже зафиксированным offset/size/CRC правилам раздела 3.21.
+
+**Добавлено:**
+- `tools/jpvr_reference/__init__.py` — публичные exports reference codec.
+- `tools/jpvr_reference/codec.py`:
+  - CRC32C Castagnoli с reflected polynomial `0x82F63B78`;
+  - `Superblock` и encode/decode для 4 096 байт: magic/version/header size/flags/endian marker/page size, container UUID, generation, active commit/checkpoint/durable tail, commit ID, slot ID, CRC32C и zero-reserved region;
+  - `PageType`, `DecodedPage` и encode/decode обычной страницы: 64-byte header, 4 032-byte payload area, page/generation/transaction identifiers, payload/header CRC32C, strict length, zero padding and expected physical page number;
+  - fail-closed validation для неизвестных flags/types/versions, invalid bounds, inconsistent genesis/commit pointers, wrong slot, bad CRC и nonzero reserved/padding.
+- `tools/jpvr_reference/test_codec.py` — 23 детерминированных тестовых метода: CRC check vector, bytes-like inputs, genesis/committed superblock round-trip, A/B slots, corruption/slot/reserved/flag checks, page round-trip with empty/small/full payload, CRC corruption, padding, physical page number, type/bounds and boolean integer rejection.
+- `docs/JARVIS_ARCHITECTURE.md` — раздел 3.21.15 фиксирует scope и статус codec.
+- `README.md` — отражён начальный codec slice и добавлен путь пакета в repository map.
+
+**Статус реализации:** codec source **IMPLEMENTED**; тесты **AUTHORED, NOT RUN**. Полный JPVR Storage Engine не реализован: отсутствуют file/container I/O, lock, JREC/TLV, BLOB fragmentation, indexes, manifest, journal, COMMIT, OUTBOX, CHECKPOINT, flush/sync, reopen/recovery, compaction и fault injection.
+
+**Проверки и доказательства:**
+- GitHub fetch/readback новых файлов, подсчёт 23 тестовых методов и статическая сверка форматов struct/offset с разделом 3.21 — выполнены. Это source review, не Python syntax/runtime test.
+- `python3 -m unittest tools.jpvr_reference.test_codec -v` — **NOT RUN**: в текущем контейнере нет checkout; предыдущая попытка git clone была **BLOCKED** из-за DNS `Could not resolve host: github.com`. Никакой PASS для 23 тестов не заявляется.
+- Полная Python suite, JPVR file I/O, fault injection, Android/Termux/device measurements — **NOT RUN**.
+- Сборки, APK/AAB, Gradle, CI и GitHub Actions — **NOT RUN** согласно ограничению пользователя.
+
+**Ограничения:** код проверяет только отдельные бинарные блоки в памяти. Он не открывает файл-контейнер, не подтверждает durability и не обеспечивает transaction/recovery semantics. CRC32C обнаруживает случайную порчу, но не является криптографической аутентификацией.
+
+**GitHub:** опубликовано в `main`. Commits: `1d4d4e1`, `69ccfcb`, `807edd9`, `a5ea9f5`, `ddd1ecb`, `cc6c695`.
+
+**Следующий шаг:** запустить 23 focused codec tests в Termux, исправить реальные ошибки, затем реализовать JREC 56-byte header + deterministic TLV codec с отдельными bounds/CRC tests. После этого перейти к BLOB fragments. Не подключать codec к CQE commit path до появления transaction journal, durable commit и recovery tests.
