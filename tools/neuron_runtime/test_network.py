@@ -7,6 +7,7 @@ from tools.neuron_runtime.network import (
     NetworkBackpressureError, NetworkConnection, NetworkRuntime, NetworkRuntimeError,
 )
 from tools.neuron_runtime.runtime import NeuronRuntime
+from tools.numerical_oracle.jarvis_oracle import NeuronParams
 
 
 def make_network(*, max_pending_events=64, max_events_per_run=64):
@@ -100,8 +101,12 @@ class NetworkTests(unittest.TestCase):
         self.assertEqual(network.pending_events, 1)
 
     def test_recurrent_topology_is_bounded_by_run_budget(self):
-        neurons = {"a": NeuronRuntime({"ext": 1.0, "from-b": 1.0}),
-                   "b": NeuronRuntime({"from-a": 1.0})}
+        # Disable threshold adaptation so this test isolates scheduler budgeting.
+        fixed_threshold = NeuronParams(delta_a_spike=0.0)
+        neurons = {
+            "a": NeuronRuntime({"ext": 1.0, "from-b": 1.0}, neuron_params=fixed_threshold),
+            "b": NeuronRuntime({"from-a": 1.0}, neuron_params=fixed_threshold),
+        }
         links = [NetworkConnection("a-b", "a", "b", "from-a", 3_000_000),
                  NetworkConnection("b-a", "b", "a", "from-b", 3_000_000)]
         network = NetworkRuntime(neurons, links, max_pending_events=8, max_events_per_run=3)
@@ -117,9 +122,16 @@ class NetworkTests(unittest.TestCase):
             [NetworkConnection("route", "s", "t", "in", 1)],
         )
         network.schedule_input((1 << 64) - 1, "s", "ext", "last-time", 1.0)
+        source_before = network.neuron_states["s"]
+        target_before = network.neuron_states["t"]
+        source_synapse_before = network.synapse_states("s")["ext"]
+        clock_before = network.current_time_ns
         with self.assertRaises(NetworkRuntimeError):
             network.run()
-        self.assertEqual(network.neuron_states["s"].spike_sequence, 0)
+        self.assertEqual(network.neuron_states["s"], source_before)
+        self.assertEqual(network.neuron_states["t"], target_before)
+        self.assertEqual(network.synapse_states("s")["ext"], source_synapse_before)
+        self.assertEqual(network.current_time_ns, clock_before)
         self.assertEqual(network.pending_events, 1)
 
     def test_caller_runtime_is_not_mutated_by_network(self):
