@@ -86,6 +86,20 @@ class SuperblockCodecTests(unittest.TestCase):
         with self.assertRaises(JPVRFormatError):
             encode_superblock(invalid)
 
+    def test_superblock_rejects_unknown_flags(self):
+        invalid = Superblock(
+            container_uuid=bytes(16),
+            generation=0,
+            active_commit_page_no=0,
+            checkpoint_page_no=0,
+            durable_tail_page_no=1,
+            active_commit_id=bytes(16),
+            slot_id=0,
+            flags=1,
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "flags"):
+            encode_superblock(invalid)
+
     def test_superblock_rejects_wrong_physical_slot(self):
         raw = encode_superblock(self.make_genesis(slot_id=0))
         with self.assertRaisesRegex(JPVRFormatError, "physical slot"):
@@ -120,6 +134,10 @@ class PageCodecTests(unittest.TestCase):
         self.assertEqual(decoded.commit_generation, 1)
         self.assertEqual(decoded.transaction_id, self.TX_ID)
         self.assertEqual(decoded.payload, payload)
+
+    def test_empty_page_payload_round_trip(self):
+        decoded = decode_page(encode_page(PageType.DATA, 2, 1, self.TX_ID, b""))
+        self.assertEqual(decoded.payload, b"")
 
     def test_page_round_trip_full_payload(self):
         payload = bytes((index % 251 for index in range(PAGE_PAYLOAD_BYTES)))
@@ -165,6 +183,16 @@ class PageCodecTests(unittest.TestCase):
             encode_page(PageType.DATA, 2, 0, self.TX_ID, b"x")
         with self.assertRaises(JPVRFormatError):
             encode_page(PageType.DATA, 2, 1, self.TX_ID, bytes(PAGE_PAYLOAD_BYTES + 1))
+
+    def test_page_rejects_unknown_flags(self):
+        with self.assertRaisesRegex(JPVRFormatError, "flags"):
+            encode_page(PageType.DATA, 2, 1, self.TX_ID, b"x", flags=1)
+
+    def test_page_rejects_nonzero_reserved_header(self):
+        raw = bytearray(encode_page(PageType.DATA, 2, 1, self.TX_ID, b"x"))
+        struct.pack_into("<H", raw, 14, 1)
+        with self.assertRaisesRegex(JPVRFormatError, "reserved"):
+            decode_page(raw)
 
     def test_page_rejects_boolean_numeric_fields(self):
         with self.assertRaises(JPVRFormatError):
