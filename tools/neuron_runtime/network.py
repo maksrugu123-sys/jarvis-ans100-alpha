@@ -13,7 +13,9 @@ import heapq
 import math
 from typing import Mapping, Sequence
 
-from .runtime import NeuronRuntime, RewardUpdate, RuntimeStep, SynapticInput
+from tools.numerical_oracle.jarvis_oracle import OracleInputError
+
+from .runtime import NeuronRuntime, NeuronRuntimeError, RewardUpdate, RuntimeStep, SynapticInput
 
 _U64_MAX = (1 << 64) - 1
 _DEFAULT_QUEUE_LIMIT = 4096
@@ -278,6 +280,9 @@ class NetworkRuntime:
                         raise NetworkRuntimeError("generated event ID collision")
                     if len(self._queue) + len(generated) > self._queue_limit:
                         raise NetworkBackpressureError("generated events exceed queue capacity")
+                except (NeuronRuntimeError, OracleInputError) as exc:
+                    self._restore(group)
+                    raise NetworkRuntimeError(f"neuron batch rejected: {exc}") from exc
                 except Exception:
                     self._restore(group)
                     raise
