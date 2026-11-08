@@ -1,5 +1,6 @@
 """JPVR_FORMAT_V1 binary reference codecs."""
 
+from .blob import DecodedBlobRecord, decode_blob_pages, encode_blob_pages
 from .codec import (
     DecodedPage,
     PageType,
@@ -21,6 +22,7 @@ from .records import (
 )
 
 __all__ = [
+    "DecodedBlobRecord",
     "DecodedPage",
     "DecodedRecord",
     "PageType",
@@ -28,10 +30,12 @@ __all__ = [
     "TLVField",
     "WireType",
     "crc32c",
+    "decode_blob_pages",
     "decode_page",
     "decode_record",
     "decode_superblock",
     "decode_tlv",
+    "encode_blob_pages",
     "encode_page",
     "encode_record",
     "encode_superblock",
