@@ -459,12 +459,20 @@ class NoisyTemporalGeneralizationExam(unittest.TestCase):
             (row.strengths, row.distractors) for row in held
         }
         self.assertTrue(train_signatures.isdisjoint(held_signatures))
+        train_gaps = {row.gaps_ms for row in train}
+        held_gaps = {row.gaps_ms for row in held}
+        self.assertTrue(train_gaps.isdisjoint(held_gaps))
 
     def test_train_heldout_disjointness_also_holds_without_distractors(self):
         train, held = build_dataset(155921, 64, 32, 0)
         train_signatures = {row.strengths for row in train}
         held_signatures = {row.strengths for row in held}
         self.assertTrue(train_signatures.isdisjoint(held_signatures))
+        self.assertTrue(
+            {row.gaps_ms for row in train}.isdisjoint(
+                {row.gaps_ms for row in held}
+            )
+        )
         self.assertTrue(all(not row.distractors for row in train + held))
 
     def test_matched_pair_has_identical_noise_but_different_timing(self):
