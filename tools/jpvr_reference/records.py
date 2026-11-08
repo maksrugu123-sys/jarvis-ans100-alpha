@@ -20,6 +20,8 @@ from .codec import (
 RECORD_MAGIC = b"JREC"
 RECORD_HEADER_BYTES = 56
 MAX_SMALL_RECORD_PAYLOAD = PAGE_PAYLOAD_BYTES - RECORD_HEADER_BYTES
+MAX_LOGICAL_RECORD_BYTES = 16 * 1024 * 1024
+MAX_TLV_FIELD_COUNT = 0xFFFF
 TLV_OPTIONAL_FLAG = 0x01
 
 
@@ -168,6 +170,7 @@ def encode_tlv(fields: tuple[TLVField, ...] | list[TLVField]) -> bytes:
         raise JPVRFormatError("TLV fields must be a tuple or list")
     normalized = []
     seen: set[int] = set()
+    encoded_size = 0
     for field in fields:
         if not isinstance(field, TLVField):
             raise JPVRFormatError("TLV entries must be TLVField records")
@@ -178,8 +181,13 @@ def encode_tlv(fields: tuple[TLVField, ...] | list[TLVField]) -> bytes:
             raise JPVRFormatError("TLV optional flag must be bool")
         wire_type = _coerce_wire_type(field.wire_type)
         value = _encode_tlv_value(wire_type, field.value)
+        encoded_size += 8 + len(value) + (-(8 + len(value))) % 8
+        if encoded_size > MAX_LOGICAL_RECORD_BYTES:
+            raise JPVRFormatError("TLV payload exceeds 16 MiB")
         seen.add(field_id)
         normalized.append((field_id, wire_type, field.optional, value))
+        if len(normalized) > MAX_TLV_FIELD_COUNT:
+            raise JPVRFormatError("too many TLV fields")
 
     normalized.sort(key=lambda item: item[0])
     output = bytearray()
@@ -202,6 +210,8 @@ def decode_tlv(
     if not isinstance(data, (bytes, bytearray, memoryview)):
         raise JPVRFormatError("TLV input must be bytes-like")
     raw = bytes(data)
+    if len(raw) > MAX_LOGICAL_RECORD_BYTES:
+        raise JPVRFormatError("TLV payload exceeds 16 MiB")
     if len(raw) % 8:
         raise JPVRFormatError("TLV payload length must be 8-byte aligned")
     if known_fields is not None and not isinstance(known_fields, Mapping):
