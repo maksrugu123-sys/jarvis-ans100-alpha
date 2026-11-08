@@ -88,6 +88,18 @@ def validate_append_plan(plan: AppendPlan, current: Superblock) -> None:
     if not isinstance(plan, AppendPlan):
         raise JPVRFormatError("append plan must be an AppendPlan")
     encode_superblock(current)
+    _require_uint("plan.expected_generation", plan.expected_generation, 0xFFFFFFFFFFFFFFFF)
+    _require_uint("plan.expected_durable_tail_page_no", plan.expected_durable_tail_page_no, 0xFFFFFFFFFFFFFFFF)
+    _require_uint("plan.expected_active_slot_id", plan.expected_active_slot_id, 1)
+    _require_uint("plan.first_page_no", plan.first_page_no, 0xFFFFFFFFFFFFFFFF)
+    _require_uint("plan.last_page_no", plan.last_page_no, 0xFFFFFFFFFFFFFFFF)
+    _require_uint("plan.commit_page_no", plan.commit_page_no, 0xFFFFFFFFFFFFFFFF)
+    _require_uint("plan.target_superblock_slot_id", plan.target_superblock_slot_id, 1)
+    if not isinstance(plan.new_superblock, Superblock):
+        raise JPVRFormatError("append plan new_superblock must be a Superblock")
+    encode_superblock(plan.new_superblock)
+    if plan.last_page_no < plan.first_page_no or plan.commit_page_no != plan.last_page_no:
+        raise JPVRFormatError("append plan range or commit page is inconsistent")
     if (plan.expected_generation != current.generation
             or plan.expected_durable_tail_page_no != current.durable_tail_page_no
             or plan.expected_active_slot_id != current.slot_id):
