@@ -382,6 +382,35 @@ class CQEReferenceTests(unittest.TestCase):
         self.assertEqual((boolean_result.status, boolean_result.code), ("FAILED", "INVALID_MESSAGE"))
         self.assertEqual(self.store.read("neuron"), (0, {"value": 0}))
 
+    def test_event_descriptor_count_is_bounded_before_outbox_expansion(self):
+        events = tuple(
+            EventSpec(uid(), "state.changed", 1, {"index": index})
+            for index in range(257)
+        )
+        self.ncc.register_module(ModuleSpec(
+            "too-many-events-manager", {"too-many-events": frozenset({1})},
+            command_handlers={
+                "too-many-events": lambda _message: CommandProposal(
+                    "neuron", 0, {"value": 9}, events=events
+                )
+            },
+            published_event_schemas=frozenset({"state.changed"}),
+        ))
+        self.ncc.register_capability(Capability(
+            "cap-too-many-events", "signal-module", frozenset({"too-many-events"}),
+            Priority.P3, 1000.0, 1,
+        ))
+        message = self.command(
+            target_module_id="too-many-events-manager", schema_id="too-many-events",
+            operation_id=uid(), idempotency_key="too-many-events",
+            capability_id="cap-too-many-events",
+        )
+        self.assertEqual(self.ncc.submit(message).status, "ACCEPTED")
+        result = self.ncc.drain_one()
+        self.assertEqual((result.status, result.code), ("FAILED", "RESOURCE_EXHAUSTED"))
+        self.assertEqual(self.store.read("neuron"), (0, {"value": 0}))
+        self.assertEqual(self.ncc.pending_outbox_count, 0)
+
     def test_outbox_capacity_is_checked_before_commit(self):
         events = tuple(EventSpec(uid(), "state.changed", 1, {"index": i}) for i in range(241))
         def many_events(_message):
