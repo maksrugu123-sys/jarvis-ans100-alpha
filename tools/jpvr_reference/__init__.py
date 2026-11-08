@@ -21,8 +21,10 @@ from .records import (
 )
 from .blob import DecodedBlobRecord, decode_blob_pages, encode_blob_pages
 from .data import DecodedDataPage, decode_data_page, encode_data_page
+from .layout import AppendPlan, plan_append, validate_append_plan
 
 __all__ = [
+    "AppendPlan",
     "DecodedBlobRecord",
     "DecodedDataPage",
     "DecodedPage",
@@ -44,4 +46,6 @@ __all__ = [
     "encode_record",
     "encode_superblock",
     "encode_tlv",
+    "plan_append",
+    "validate_append_plan",
 ]
