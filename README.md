@@ -56,15 +56,23 @@ The repository is at the **architecture and reference-experiment stage**. It is 
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
-## Run reference unit tests
+## Run all automated Python checks
 
-From the repository root, with Python 3 installed:
+From the repository root, run one command:
 
 ```sh
-python3 -m unittest discover -s tools -t . -v
+python3 -m tools.run_all_checks
 ```
 
-This runs Python unit tests only. It is not a production build, application package, Android build or CI workflow. The V4-specific unit tests use a smaller deterministic smoke dataset; they do not substitute for the full V4 benchmark.
+The master runner performs three checks: (1) compiles every Python source under `tools/` without executing it, (2) checks that every `test*.py` module is discoverable by `unittest`, and (3) discovers and runs the complete Python unit-test suite. New test modules are included automatically when they follow the `test*.py` convention and reside in Python packages.
+
+To save a machine-readable report:
+
+```sh
+python3 -m tools.run_all_checks --json-report reports/master_test_report.json
+```
+
+A non-zero exit code means a syntax, discovery, or unit-test check failed. This command is the routine all-unit-tests entry point; focused modules may still be run directly while debugging. It does **not** run task-level research benchmarks, parameter sweeps, Android/Termux measurements, application builds, APK/AAB packaging, CI, or GitHub Actions. Those remain separate evidence gates and are never silently treated as passed.
 
 ## Run the V4 R-STDP feedback/error-recovery benchmark
 
