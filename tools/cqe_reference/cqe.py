@@ -30,6 +30,7 @@ MAX_OUTBOX_BYTES = 1024 * 1024
 MAX_IDEMPOTENCY_RECORDS = 4096
 MAX_EVENT_INBOX_RECORDS = 4096
 MAX_MESSAGE_ID_HISTORY = 4096
+PRIORITY_AGING_INTERVAL_SECONDS = 5.0
 
 
 class MessageType(str, Enum):
@@ -218,6 +219,7 @@ class _Queued:
     envelope: MessageEnvelope
     priority: Priority
     received_at: float
+    sequence: int
 
 
 class NCCDispatcher:
@@ -239,6 +241,7 @@ class NCCDispatcher:
         self._capabilities: dict[str, Capability] = {}
         self._queues: dict[Priority, Deque[_Queued]] = {p: deque() for p in _PRIORITY_ORDER}
         self._queued_total = 0
+        self._next_queue_sequence = 0
         self._source_counts: dict[str, int] = {}
         self._message_ids: set[str] = set()  # queued IDs plus a bounded recent-completion window
         self._pending_message_ids: set[str] = set()
@@ -320,7 +323,8 @@ class NCCDispatcher:
             self._source_counts[message.source_module_id] = count + 1
 
         now = self._clock()
-        self._queues[priority].append(_Queued(message, priority, now))
+        self._queues[priority].append(_Queued(message, priority, now, self._next_queue_sequence))
+        self._next_queue_sequence += 1
         self._queued_total += 1
         self._message_ids.add(message.message_id)
         self._pending_message_ids.add(message.message_id)
@@ -435,13 +439,24 @@ class NCCDispatcher:
             raise CQEError("UNAUTHORIZED", "capability expired or policy changed")
 
     def drain_one(self) -> OperationResult | None:
-        queued: _Queued | None = None
+        # Select by aged priority, then original arrival order. Aging promotes
+        # a waiting message one level per interval and eventually prevents
+        # starvation even while higher-priority traffic keeps arriving.
+        now = self._clock()
+        candidates: list[tuple[int, float, int, Priority]] = []
         for priority in _PRIORITY_ORDER:
-            if self._queues[priority]:
-                queued = self._queues[priority].popleft()
-                break
-        if queued is None:
+            queue = self._queues[priority]
+            if not queue:
+                continue
+            head = queue[0]
+            waited = max(0.0, now - head.received_at)
+            age_steps = int(waited // PRIORITY_AGING_INTERVAL_SECONDS)
+            effective_rank = max(0, _PRIORITY_RANK[priority] - age_steps)
+            candidates.append((effective_rank, head.received_at, head.sequence, priority))
+        if not candidates:
             return None
+        _, _, _, selected_priority = min(candidates)
+        queued = self._queues[selected_priority].popleft()
         self._queued_total -= 1
         if queued.priority in (Priority.P2, Priority.P3, Priority.P4):
             self._source_counts[queued.envelope.source_module_id] -= 1
