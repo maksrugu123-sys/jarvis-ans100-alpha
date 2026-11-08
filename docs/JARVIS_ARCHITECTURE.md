@@ -2282,7 +2282,7 @@ Payload CRC покрывает точные байты payload; header CRC по�
   
 `validate_append_plan` повторно проверяет типы/диапазон и отклоняет stale plan или изменённые поля до будущей записи. Планирование не резервирует физические offsets, не гарантирует отсутствие гонок между процессами и не выполняет write ordering/flush/sync; это должно обеспечить будущий locked writer по протоколу 3.21.10.
 
-`tools/jpvr_reference/test_layout.py` содержит 15 тестов для genesis/next-generation planning, alternating slots, checkpoint, overflow, invalid identifiers, stale/tampered plans и строгих numeric types. Вместе с 23 page/superblock, 23 JREC/TLV, 15 BLOB и 14 DATA tests пакет содержит 90 тестовых методов; все **AUTHORED, NOT RUN**.
+`tools/jpvr_reference/test_layout.py` содержит 15 тестов для genesis/next-generation planning, alternating slots, checkpoint, overflow, invalid identifiers, stale/tampered plans и строгих numeric types. Вместе с 23 page/superblock, 23 JREC/TLV, 15 BLOB и 14 DATA tests эти 15 layout tests дают 90 тестовых методов; все **AUTHORED, NOT RUN**.
 
 **Границы:** append planner не является allocator или transaction manager. Он не записывает страницы, не формирует COMMIT record, не проверяет содержимое новых страниц, не обновляет superblock на диске и не выполняет crash recovery.
 
