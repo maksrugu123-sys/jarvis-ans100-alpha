@@ -679,3 +679,7 @@ Correction to the immediately preceding append-planner entry: a fresh count of `
 **GitHub:** опубликовано в `main`. Commits: `9faa0e3`, `9f6e9c2`, `b742ba7`, `af6f497`, `1ae8db3`, `46fb891`, `76d5ccb`, `60e3071`.
 
 **Следующий шаг:** реализовать минимальный immutable COW B+ tree node codec/validator и поиск по RecordLocation; не добавлять mutating tree writer до прохождения 109 focused tests.
+
+### 2026-11-08 — JPVR binary-layout sanity check (not a module test run)
+
+A local isolated Python sanity snippet checked `struct.calcsize` for the intended Superblock prefix (24 bytes), page header (64), JREC header (56), JBLB header (64) and PageRef (16); all matched the documented sizes. The same snippet checked the CRC32C Castagnoli vector `123456789 → E3069283`. This did **not** import or execute repository modules and does not change the status of the 109 JPVR unit tests: all remain **AUTHORED, NOT RUN**.
