@@ -290,9 +290,31 @@ def _run_episode(
             stats["plasticity_events"] += 1
 
     deadline_ns = start_ns + DEADLINE_MS * NS_PER_MS
-    neuron_state = process_neuron_batch(
+    deadline_step = process_neuron_batch(
         neuron_state, deadline_ns, [], neuron_params
-    ).state
+    )
+    neuron_state = deadline_step.state
+    spike_seen = spike_seen or deadline_step.spike_emitted
+    stats["spikes"] += int(deadline_step.spike_emitted)
+
+    # The deadline is a genuine decision-evaluation time. If a retained input
+    # spikes exactly there, include that post event in the training trace.
+    if training and deadline_step.spike_emitted and mode == "stdp":
+        plasticity = update_stdp(
+            synapse_state, synapse_params, deadline_ns,
+            n_pre=0, n_post=1,
+        )
+        synapse_state = plasticity.state
+        stats["plasticity_events"] += 1
+        stats["positive_local_updates"] += int(plasticity.weight_delta > 0)
+        stats["negative_local_updates"] += int(plasticity.weight_delta < 0)
+    elif training and deadline_step.spike_emitted and mode in ("rstdp", "rstdp_neutral"):
+        plasticity = update_rstdp(
+            synapse_state, synapse_params, reward_params, deadline_ns,
+            n_pre=0, n_post=1, learning_context_id=context_id,
+        )
+        synapse_state = plasticity.state
+        stats["plasticity_events"] += 1
 
     if training and mode in ("rstdp", "rstdp_neutral"):
         reward = (
