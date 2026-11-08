@@ -246,10 +246,14 @@ class NCCDispatcher:
         self._message_ids: set[str] = set()  # queued IDs plus a bounded recent-completion window
         self._pending_message_ids: set[str] = set()
         self._completed_message_ids: Deque[str] = deque()
+        # Idempotency/results are retained together until the bounded ledger fills.
+        # Without durable storage, evicting these records could re-execute a command.
         self._idempotency: dict[tuple[str, str], str] = {}
         self._results: dict[str, OperationResult] = {}
         self._published_events: Deque[MessageEnvelope] = deque(maxlen=MAX_MESSAGE_ID_HISTORY)
+        # Event deduplication is a bounded recent-history window, not durable exactly-once.
         self._event_inbox: set[tuple[str, str]] = set()
+        self._event_inbox_history: Deque[tuple[str, str]] = deque()
         self._outbox_bytes = 0
         self._outbox: Deque[tuple[MessageEnvelope, ModuleSpec, int]] = deque()
 
@@ -305,13 +309,6 @@ class NCCDispatcher:
                 return SubmissionResult("REJECTED", "INVALID_MESSAGE", message.operation_id)
             if len(self._idempotency) >= MAX_IDEMPOTENCY_RECORDS:
                 return SubmissionResult("DEFERRED", "RESOURCE_EXHAUSTED", message.operation_id)
-        if message.message_type is MessageType.EVENT:
-            recipients = sum(1 for module in self._modules.values()
-                            if message.schema_id in module.event_handlers
-                            and message.schema_version in module.supported_schemas.get(message.schema_id, frozenset()))
-            if len(self._event_inbox) + recipients > MAX_EVENT_INBOX_RECORDS:
-                return SubmissionResult("DEFERRED", "RESOURCE_EXHAUSTED", message.operation_id)
-
         if message.message_id in self._message_ids:
             return SubmissionResult("REJECTED", "INVALID_MESSAGE", message.operation_id)
         if self._queued_total >= MAX_QUEUE_TOTAL or len(self._queues[priority]) >= QUEUE_QUOTAS[priority.value]:
@@ -586,7 +583,6 @@ class NCCDispatcher:
                                           "schema_version": event.schema_version, "payload": dict(event.payload)}))
             delivery_sizes.extend([event_size] * len(recipients))
         if (self._outbox_count + delivery_count > ORDINARY_OUTBOX_LIMIT
-                or len(self._event_inbox) + self._outbox_count + delivery_count > MAX_EVENT_INBOX_RECORDS
                 or self._outbox_bytes + sum(delivery_sizes) > MAX_OUTBOX_BYTES):
             raise CQEError("RESOURCE_EXHAUSTED", "outbox capacity unavailable before commit; critical reserve is protected")
         for event in events:
@@ -667,6 +663,13 @@ class NCCDispatcher:
         if handler is None:
             return False
         handler(message)
+        # Keep only the most recent event deliveries. This bounds RAM while
+        # making the deduplication guarantee explicitly windowed. Durable
+        # exactly-once semantics require a JPVR-backed inbox, not this reference.
+        if len(self._event_inbox_history) >= MAX_EVENT_INBOX_RECORDS:
+            expired_key = self._event_inbox_history.popleft()
+            self._event_inbox.discard(expired_key)
+        self._event_inbox_history.append(key)
         self._event_inbox.add(key)
         self._published_events.append(message)
         return True
