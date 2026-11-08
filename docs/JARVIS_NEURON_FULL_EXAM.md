@@ -56,7 +56,7 @@ These are checks of the current reference equations. They do not establish that 
 
 The new task is a separate diagnostic, not a replacement for earlier V4/V4.3 results.
 
-Each example has three task-relevant pulses and a fixed 40 ms decision deadline. FAST and SLOW examples have the same pulse count but different inter-pulse timing. Each matched FAST/SLOW pair receives identical signal strengths and identical weak excitatory distractors. The distractors are deterministically generated from seed, split and pair ID. Training and held-out signal/noise signatures are generated from separate split namespaces and checked for overlap.
+Each example has three task-relevant pulses and a fixed 40 ms decision deadline. FAST and SLOW examples have the same pulse count but different inter-pulse timing. Each matched FAST/SLOW pair receives identical signal strengths and identical weak excitatory distractors. The distractors are deterministically generated from seed, split and pair ID. Training and held-out signal/noise signatures are generated from separate split namespaces and checked for overlap. The held-out set also uses entirely different temporal gap pairs: training FAST uses 2–3 ms gaps and SLOW uses 18–19 ms gaps; held-out FAST uses 4–5 ms gaps and held-out SLOW uses 15–16 ms gaps. All patterns remain inside the 40 ms decision deadline. The exact temporal gap signatures are checked for overlap.
 
 The benchmark compares four conditions on the same train/held-out protocol:
 - FIXED diagnostic weight;
