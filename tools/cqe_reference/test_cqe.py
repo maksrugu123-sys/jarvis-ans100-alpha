@@ -190,6 +190,47 @@ class CQEReferenceTests(unittest.TestCase):
         self.ncc.drain_all()
         self.assertEqual(processed, ["urgent", "ordinary"])
 
+    def test_priority_aging_prevents_starvation(self):
+        processed = []
+
+        def register(module_id, schema_id, priority):
+            def handler(message):
+                processed.append(schema_id)
+                return CommandProposal("neuron", message.expected_state_version,
+                                       {"value": len(processed)})
+            self.ncc.register_module(ModuleSpec(
+                module_id, {schema_id: frozenset({1})},
+                command_handlers={schema_id: handler},
+                command_priorities={schema_id: priority},
+            ))
+            self.ncc.register_capability(Capability(
+                f"cap-{schema_id}", "signal-module", frozenset({schema_id}),
+                priority, 200.0, 1,
+            ))
+
+        register("aged-manager", "aged-ordinary", Priority.P3)
+        register("fresh-manager", "fresh-urgent", Priority.P2)
+
+        aged = self.command(
+            target_module_id="aged-manager", schema_id="aged-ordinary",
+            operation_id=uid(), idempotency_key="aged-ordinary",
+            capability_id="cap-aged-ordinary",
+        )
+        self.assertEqual(self.ncc.submit(aged).status, "ACCEPTED")
+
+        # One aging interval promotes the waiting P3 message to effective P2.
+        self.now[0] += 5.0
+        urgent = self.command(
+            target_module_id="fresh-manager", schema_id="fresh-urgent",
+            operation_id=uid(), idempotency_key="fresh-urgent",
+            capability_id="cap-fresh-urgent",
+        )
+        self.assertEqual(self.ncc.submit(urgent).status, "ACCEPTED")
+
+        first = self.ncc.drain_one()
+        self.assertEqual(first.operation_id, aged.operation_id)
+        self.assertEqual(processed, ["aged-ordinary"])
+
     def test_expired_deadline_prevents_execution(self):
         self.ncc.submit(self.command(deadline_budget_ms=10))
         self.now[0] += 0.011
