@@ -403,3 +403,12 @@ Files changed: tools/neuron_validation/noise_benchmark.py, tools/neuron_validati
 Verification: GitHub fetch/static inspection only. New and modified executable tests remain AUTHORED, NOT RUN. No benchmark metrics or full-suite status are claimed.
 
 Interpretation: this creates a stricter synthetic temporal distribution-shift test, but does not establish real-world generalization. The held-out timing bands still preserve the intended FAST/SLOW ordering and must be reviewed after the first run; no accuracy threshold is imposed before observing the results.
+
+
+### 2026-11-08 — Comprehensive exam reporting gates tightened
+
+A final static review tightened the exam's evidence reporting. `tools/neuron_validation/full_exam.py` now resolves capability statuses from the actual outcomes of the unit suite, noisy benchmark and resource stage; mechanisms are no longer pre-labelled as tested before execution. The unit-suite PASS gate also requires that every discovered case ran, with no loader errors, skips or unexpected successes.
+
+`tools/neuron_validation/test_neuron_full_exam.py` gained two tests for the coverage-report rules: a NOT RUN stage must never be labelled PASS, and completed stages must retain their scope qualifiers (for example BTCC unit-only and Python-reference resource-only).
+
+Verification: latest files were fetched from GitHub and reviewed statically. These two new coverage tests and the updated runner remain AUTHORED, NOT RUN. No Python tests, noise benchmark, resource benchmark, Android measurement, build or CI job was executed in this task.
