@@ -239,23 +239,14 @@ def _run_episode(
     reward_params = starter_reward_params()
     start_ns = episode_index * EPISODE_SPACING_NS
 
-    batches: dict[int, list[InputSignal]] = defaultdict(list)
+    batches: dict[int, list[tuple[str, float]]] = defaultdict(list)
     signal_times = (0, episode.gaps_ms[0], sum(episode.gaps_ms))
     for index, (relative_ms, strength) in enumerate(zip(signal_times, episode.strengths)):
-        batches[relative_ms * NS_PER_MS].append(InputSignal(
-            source_id=f"signal-{index}",
-            signed_weight=synapse_state.weight,
-            strength=strength,
-            attention=0.0,
-        ))
+        batches[relative_ms * NS_PER_MS].append((f"signal-{index}", strength))
     for index, pulse in enumerate(episode.distractors):
-        batches[pulse.time_ms * NS_PER_MS].append(InputSignal(
-            source_id=f"distractor-{index}",
-            signed_weight=synapse_state.weight,
-            strength=pulse.strength,
-            attention=0.0,
-        ))
+        batches[pulse.time_ms * NS_PER_MS].append((f"distractor-{index}", pulse.strength))
 
+    neuron_state = NeuronState(last_update_model_time_ns=start_ns)
     spike_seen = False
     stats: dict[str, int | float] = {
         "input_events": 0, "spikes": 0, "plasticity_events": 0,
@@ -264,13 +255,15 @@ def _run_episode(
     context_id = f"noise-benchmark-{episode.episode_id}"
 
     for relative_ns in sorted(batches):
-        batch = batches[relative_ns]
         time_ns = start_ns + relative_ns
+        # Construct each impulse with the current weight: within-episode STDP
+        # updates must affect later signal events, not a stale episode snapshot.
+        batch = [
+            InputSignal(source_id, synapse_state.weight, strength, 0.0)
+            for source_id, strength in batches[relative_ns]
+        ]
         step = process_neuron_batch(
-            NeuronState() if relative_ns == 0 else neuron_state,
-            time_ns,
-            batch,
-            neuron_params,
+            neuron_state, time_ns, batch, neuron_params,
         )
         neuron_state = step.state
         n_post = int(step.spike_emitted)
