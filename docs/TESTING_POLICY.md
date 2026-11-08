@@ -41,21 +41,32 @@ If a required test is not feasible, the contributor must state why, identify the
 
 ## 4. Running tests
 
-From the repository root, the current Python reference-tool suite can be run with:
+From the repository root, use the unified lightweight verification entry point:
 
 ```sh
-python3 -m unittest discover -s tools -t . -v
+python3 -m tools.run_all_checks
 ```
 
-Run the narrowest relevant test module first, for example:
+The runner:
+1. Syntax-compiles every Python source below `tools/` without importing or executing those source files.
+2. Enumerates `test*.py` files and flags nested test modules that cannot be reached by standard `unittest` package discovery.
+3. Discovers and runs the complete `unittest` suite below `tools/`.
+
+For a machine-readable result:
 
 ```sh
-python3 -m unittest tools.task_validation.test_rstdp_feedback_v4 -v
+python3 -m tools.run_all_checks --json-report reports/master_test_report.json
 ```
 
-Use the commands documented by the relevant benchmark/protocol for task-level experiments. A reduced pilot is exploratory and must not be reported as the full pre-registered benchmark.
+A failing syntax check, undiscoverable test module, empty test suite, test failure, or test import error makes the overall result fail. The runner includes new test modules automatically when they follow the `test*.py` naming convention and are inside importable Python packages.
 
-The test commands above are Python test/experiment commands. They are not permission to run application builds, package generation, CI, or GitHub Actions.
+Focused debugging remains supported, for example:
+
+```sh
+python3 -m unittest tools.super_neuron_btcc.test_credit_oracle -v
+```
+
+The master runner intentionally does not launch task-level research benchmarks, sweeps, Android/Termux measurements, builds, APK/AAB packaging, CI, or GitHub Actions. These checks have different costs and scientific meanings and must be run and reported separately. A master-test PASS is not evidence that those excluded activities passed.
 
 ## 5. Evidence recording
 
