@@ -142,7 +142,15 @@ def _run_unit_suite(quiet: bool) -> dict[str, object]:
         "unexpected_successes": [str(test) for test in result.unexpectedSuccesses],
         "loader_errors": list(loader.errors),
         "status": (
-            "PASS" if result.wasSuccessful() and discovered > 0 and not loader.errors
+            "PASS"
+            if (
+                result.wasSuccessful()
+                and discovered > 0
+                and result.testsRun == discovered
+                and not loader.errors
+                and not result.skipped
+                and not result.unexpectedSuccesses
+            )
             else "FAIL"
         ),
     }
