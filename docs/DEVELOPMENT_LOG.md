@@ -348,3 +348,25 @@ A static code audit found that the first BTCC replay version only evaluated deci
 
 **Next meaningful step:** pre-register a harder BTCC temporal/noise task with independent held-out inputs, frozen baseline controls and an explicit compute budget before testing any training integration. Keep the canonical STARTER and production learning equations unchanged until that evidence exists.
 
+
+
+### 2026-11-08 — Unified Python master test runner authored
+
+**Goal:** provide one repeatable command for routine Python verification so contributors do not have to remember and launch every focused unit-test module separately.
+
+**Added:**
+- `tools/run_all_checks.py` — a standard-library-only master entry point. It syntax-compiles Python files below `tools/` without executing them, checks test-module discoverability, runs the full `unittest` discovery suite, prints one overall PASS/FAIL result, and can optionally save a JSON report with `--json-report`.
+- `tools/test_run_all_checks.py` — four tests for generated-directory exclusion, syntax-error reporting, test-package discoverability, and nested-suite counting.
+
+**Updated:** `README.md` and `docs/TESTING_POLICY.md` now document `python3 -m tools.run_all_checks` as the routine full-unit-suite command.
+
+**Verification:** before publication, an isolated temporary copy of the runner and its four guardrail tests was executed with Python in the assistant's Linux container: **PASS, 4/4, 0 failures**. This validates those runner helper behaviors only; it is not a run of the repository's existing tests.
+
+**Repository test status:** the committed `tools/test_run_all_checks.py` is **AUTHORED, NOT RUN** against the full repository. The master runner has **NOT RUN** against the full GitHub checkout in this session, so no current full-suite count or PASS is claimed. Its discovery is based on the existing `unittest discover -s tools -t .` policy and automatically includes future `test*.py` modules inside packages.
+
+**Not run:** existing full repository unit suite through the new entry point; task-level BTCC/noise benchmark; V5.1 pilot/full resource profiles; Android/Termux measurements; builds, APK/AAB, CI and GitHub Actions. These remain intentionally outside the master runner.
+
+**Limitations:** a passing master test checks Python syntax and discovered unit-test assertions only. It does not prove task-level learning benefit, complete behavioral correctness, runtime resource use, Android compatibility, production readiness, or any excluded benchmark/build/CI result.
+
+**Next step:** run `python3 -m tools.run_all_checks` from the project root in Termux and share the complete summary if any module fails or is not discovered.
+
