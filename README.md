@@ -6,7 +6,7 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 8 November 2026
 
-- **Architecture:** the first-neuron design, Adaptive LIF-DT model, excitatory STDP/R-STDP rules, CQE v1 contract and JPVR_FORMAT_V1 storage format are specified in the architecture document. Initial JPVR reference codecs cover CRC32C, Superblock, 4-KiB pages, JREC small records, deterministic TLV fields and BLOB fragments; three test modules contain 61 tests total, all AUTHORED, NOT RUN. This is not a container/storage engine.
+- **Architecture:** the first-neuron design, Adaptive LIF-DT model, excitatory STDP/R-STDP rules, CQE v1 contract and JPVR_FORMAT_V1 storage format are specified in the architecture document. Initial JPVR reference codecs cover CRC32C, Superblock, 4-KiB pages, JREC/TLV, BLOB fragments and one-page DATA record packing; four test modules contain 75 tests total, all AUTHORED, NOT RUN. This is not a container/storage engine.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. Its 15 focused tests were included in the user's full Termux run on 8 November 2026: 216/216 repository tests passed in 19.280 s. This is Python reference verification, not production NCC/runtime or device performance evidence.
 - **Multi-neuron network coordinator:** `tools/neuron_runtime/network.py` adds directed delayed connections, deterministic same-timestamp batching, bounded event/run budgets and in-memory timestamp-level candidate commit. Fourteen focused network tests are authored; they have not yet been run against the repository's real Numerical Oracle. This remains a single-threaded Python reference layer, not production NCC or durable scheduling.
@@ -58,7 +58,7 @@ The repository has entered the first executable Python reference-orchestration s
 | `docs/JARVIS_NETWORK_RUNTIME_V1.md` | Multi-neuron event-loop reference contract, queue limits and verification scope |
 | `tools/task_validation/` | V1–V4.3 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
-| `tools/jpvr_reference/` | JPVR_FORMAT_V1 CRC32C, superblock/page, JREC/TLV and BLOB binary codec references (not a storage engine) |
+| `tools/jpvr_reference/` | JPVR_FORMAT_V1 CRC32C, superblock/page, JREC/TLV, BLOB and DATA-page packing references (not a storage engine) |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
 ## Run the comprehensive one-neuron exam
