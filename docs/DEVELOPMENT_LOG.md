@@ -257,3 +257,16 @@ Status at publication: authored, NOT RUN. No tests or benchmark have been run by
 **Limitations:** V4.3 remains untested. Decision-latched credit is task-specific and must not be generalized to biological STDP. The user must run the strengthened tests and benchmark on Android Termux before treating V4.3 as evidence.
 
 **Next step:** pull `main`, run focused V4.3 tests, then smoke and pilot; compare held-out metrics with frozen V4, FIXED, neutral R-STDP and STDP before beginning the V5 F64 packed-state prototype.
+
+
+## 2026-11-08 — Record V4.3 user results and author V5.1 resource baseline
+
+**V4.3 user evidence (Android Termux):** focused tests PASS (7 tests, 1.636 s); smoke and pilot completed. Pilot: two seeds, 512 training pairs and 128 held-out pairs per seed. Held-out accuracy: FIXED 81.8359%, STDP 100%, frozen V4 R-STDP 83.0078%, Decision-Latched 82.2266%, Neutral 81.8359%. Decision-Latched processed all 6,144 sensory inputs, including 1,024 post-decision inputs, and skipped 1,024 post-decision plasticity updates; it did not beat V4. Retain it as experimental, not as default. Details in `docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md`.
+
+**Added V5.1 baseline harness:** `tools/compact_core_v5/resource_baseline.py`, package initializer and `test_resource_baseline.py`. Measures Python object graph size, pickle protocol 5 reference serialization size, tracemalloc allocations and `/proc/self/status` RSS/HWM where available. Population profiles: smoke (1,10), pilot (1,10,100,1,000), full (1,10,100,1,000,10,000). A shared-vs-replicated parameter scenario is labeled illustrative, not the current Oracle layout. Pickle is diagnostic only, not a persistent-storage format.
+
+**Tests authored:** `tools/compact_core_v5/test_resource_baseline.py` covers shared-object accounting, deterministic population construction, profile shapes, JSON safety and invalid inputs. Status: **AUTHORED / NOT RUN**.
+
+**Not run:** resource baseline smoke/pilot, full repository tests, CPU/latency/energy benchmark, packed-state candidate, builds, APK/AAB, CI or GitHub Actions. No memory reduction is claimed.
+
+**Next step:** user runs focused baseline tests, then smoke and phone-friendly pilot. Use those measurements to choose the packed-state layout; do not skip the baseline gate.

@@ -3046,6 +3046,18 @@ Canonical STARTER weight 0.5 remains unchanged; V4 diagnostic start weight remai
 
 V4.3 необходимо запускать только после focused tests, затем smoke и pilot. Если тесты не подтверждают non-zero skip при полном sensory-input count, эксперимент считается невалидным. Даже при подтверждённом skip решение принимается по held-out результатам относительно frozen V4, FIXED, neutral R-STDP и STDP на нескольких seed; одного роста числа положительных weight updates недостаточно.
 
+### 3.27.14. V4.3 user-run decision-boundary result (8 November 2026)
+
+**Статус:** пользователь запустил dedicated V4.3 tests: 7/7 PASS за 1.636 s; smoke и pilot завершились. Pilot held-out accuracy: FIXED 81.8359%, STDP 100%, frozen R-STDP V4 83.0078%, Decision-Latched 82.2266%, neutral 81.8359%. Decision-Latched обработал все 6,144 сенсорных входа и пропустил 1,024 post-decision plasticity events, но уступил frozen V4 на 0.78125 процентного пункта. Decision-Latched не становится default; frozen V4 остаётся R-STDP reference. Подробности: `docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md`.
+
+
+
+### 3.28.2. V5.1 — reference resource-baseline harness (8 November 2026)
+
+Добавлен `tools/compact_core_v5/resource_baseline.py` и dedicated tests. Harness создаёт детерминированные Oracle-shaped объекты и отдельно измеряет deep Python object-graph size, pickle protocol 5 reference bytes, tracemalloc allocations и `/proc/self/status` VmRSS/VmHWM на Linux/Android, если доступны. Дополнительно оценивается сценарий shared parameter bank против отдельных parameter triples; это только иллюстрация, поскольку Oracle передаёт параметры в функции и не встраивает их в State dataclasses.
+
+Профили: smoke 1/10, pilot 1/10/100/1,000, full 1/10/100/1,000/10,000 элементов. Начинать с smoke. Pickle используется только как диагностическая serialization-size метрика, не как формат хранения. Harness не измеряет latency, CPU time, энергию или JPVR и не сравнивает пока packed candidate. Tests: `tools/compact_core_v5/test_resource_baseline.py`; статус AUTHORED / NOT RUN.
+
 ### 3.28. JARVIS Compact Adaptive Neuron Core V5 — proposed architecture (7 November 2026)
 
 **Статус: PROPOSED / NOT IMPLEMENTED / NOT MEASURED.** Полная спецификация: `docs/JARVIS_COMPACT_NEURON_CORE_V5.md`.

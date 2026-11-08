@@ -1,7 +1,7 @@
 # JARVIS Compact Adaptive Neuron Core V5
 ## Proposal: maximum useful capability per byte and per operation
 
-**Status:** PROPOSED — architecture research only; not implemented or verified  
+**Status:** architecture specified; V5.1 reference resource-baseline harness AUTHORED / NOT RUN; compact-state prototype not yet implemented; no resource benefit measured  
 **Date:** 7 November 2026  
 **Scope:** first Adaptive LIF-DT neuron, synapse-state representation, event path, and future multi-neuron memory organization  
 **Compatibility rule:** preserve the current Numerical Oracle, V4/V4.1/V4.2 protocols, canonical STARTER values, and simultaneous-event semantics until a separate experiment authorizes a behavioral change.
@@ -259,10 +259,10 @@ A compact representation that saves bytes but changes the learning trajectory is
 
 ## 8. Staged implementation plan
 
-1. **V5 specification (this document):** architecture and acceptance gates; no runtime changes.
-2. **V4.2 diagnostic:** user-run focused tests and smoke/pilot; record actual per-pulse evidence before modifying learning semantics.
-3. **Resource baseline harness:** measure current reference-object and serialized-state costs on Android Termux; do not guess actual RAM.
-4. **F64 compact-state prototype:** versioned encode/decode and rule-specific records, preserving Oracle equations.
+1. **V5 specification (this document):** architecture and acceptance gates.
+2. **V4.2/V4.3 diagnostics:** user-run focused tests and smoke/pilot completed; Decision-Latched remains experimental and is not promoted over frozen V4.
+3. **Resource baseline harness:** `tools/compact_core_v5/resource_baseline.py` is authored; run smoke and phone-friendly pilot before implementing the packed candidate.
+4. **F64 compact-state prototype:** only after baseline evidence, add versioned encode/decode and rule-specific records, preserving Oracle equations.
 5. **Differential verification:** golden vectors, deterministic generated event streams, boundaries, restart/context cases and exact spike-train comparison.
 6. **Device profiling:** compare total memory, allocations and latency under safe population profiles.
 7. **Precision research:** only then evaluate F32 and threshold-margin escalation.
@@ -277,8 +277,8 @@ A compact representation that saves bytes but changes the learning trajectory is
 
 ## 10. Current status and next decision
 
-**PROPOSED / NOT IMPLEMENTED / NOT MEASURED.**
+**SPECIFIED / V5.1 BASELINE HARNESS AUTHORED, NOT RUN / COMPACT PROTOTYPE NOT IMPLEMENTED / NOT MEASURED.**
 
 This specification does not change the Oracle, neuron equations, plasticity rules, STARTER, JPVR format or production architecture. No tests or benchmarks are claimed.
 
-The next technical implementation should be a small resource-baseline and F64 packed-state prototype, preceded by the V4.2 smoke/pilot evidence supplied by the user. Do not implement new temporal-memory or quantization mechanisms in the same change; first isolate the representation gain and prove behavioural equivalence.
+The V4.2 and V4.3 user-run evidence is now available. The next technical action is to run the V5.1 reference-baseline harness on Android Termux. Only after the baseline is recorded should the F64 packed-state prototype be added and compared with the Oracle. Do not implement new temporal-memory or quantization mechanisms in the same change; isolate representation cost and prove behavioural equivalence.

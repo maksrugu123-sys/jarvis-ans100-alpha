@@ -1,6 +1,6 @@
 # V4.3 — Decision-Boundary Temporal-Credit Results
 
-**Status:** AWAITING USER RUN  
+**Status:** user-run tests PASS; smoke and pilot completed; exploratory result  
 **Date:** 8 November 2026
 
 The protocol and reference implementation are published, but no V4.3 test or benchmark has been run at publication time. No result or learning improvement is claimed.
@@ -14,7 +14,25 @@ The protocol and reference implementation are published, but no V4.3 test or ben
 
 These checks are **AUTHORED / NOT RUN**. The implementation, tests and benchmark still await user execution.
 
-Run on Android Termux:
+## User-run result (Android Termux, 8 November 2026)
+
+- Dedicated tests: **7/7 PASS, 1.636 s**.
+- Smoke: all five conditions completed; Decision-Latched accuracy 76.5625%; processed 384 inputs, including 64 post-decision inputs, and skipped 64 post-decision plasticity updates.
+- Pilot: two seeds, 512 training pairs and 128 held-out pairs per seed (2,048 train and 512 held-out episodes pooled per condition).
+
+| Condition | Held-out accuracy | Balanced accuracy | Macro-F1 | FP | FN |
+|---|---:|---:|---:|---:|---:|
+| FIXED | 81.8359% | 81.8359% | 0.812162 | 93 | 0 |
+| STDP | 100% | 100% | 1.000000 | 0 | 0 |
+| R-STDP V4 | 83.0078% | 83.0078% | 0.825026 | 87 | 0 |
+| Decision-Latched R-STDP | 82.2266% | 82.2266% | 0.816468 | 91 | 0 |
+| R-STDP Neutral | 81.8359% | 81.8359% | 0.812162 | 93 | 0 |
+
+Decision-Latched was 0.78125 percentage points below V4 and 16.796875 points below STDP. It processed all 6,144 sensory inputs, including 1,024 post-decision inputs; exactly 1,024 post-decision plasticity events were skipped. It produced 1,024 positive / 343 negative / 681 zero weight updates. The policy is mechanically verified but not promoted as a better learner. Keep V4 frozen as the R-STDP control; STDP is best only on this synthetic benchmark.
+
+No full repository suite, build, CI or GitHub Actions was run.
+
+The following commands are retained for reproducing the experiment (do not rerun full solely to seek a reversal of this pilot):
 
 ```sh
 cd ~/jarvis-ans100-alpha
