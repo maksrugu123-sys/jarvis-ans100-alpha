@@ -9,3 +9,13 @@ __all__ = [
     "LearningRule", "NeuronRuntime", "NeuronRuntimeError", "RewardUpdate",
     "RuntimeStep", "SynapseUpdate", "SynapticInput",
 ]
+
+from .network import (
+    NetworkBackpressureError, NetworkConnection, NetworkRunResult,
+    NetworkRuntime, NetworkRuntimeError, NetworkSpike,
+)
+
+__all__ += [
+    "NetworkBackpressureError", "NetworkConnection", "NetworkRunResult",
+    "NetworkRuntime", "NetworkRuntimeError", "NetworkSpike",
+]

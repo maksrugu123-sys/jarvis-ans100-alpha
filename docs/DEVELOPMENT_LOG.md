@@ -435,3 +435,33 @@ Verification: latest files were fetched from GitHub and reviewed statically. The
 **Repository verification:** the 15 focused tests are **AUTHORED, NOT RUN** against the real Numerical Oracle. The full repository unit suite is **NOT RUN** in this task. No Android/Termux test, JPVR serialization/recovery test, device RAM/CPU/latency/energy/I/O measurement, build, APK/AAB, CI or GitHub Actions workflow was run.
 
 **Next step:** run python3 -m unittest tools.neuron_runtime.test_runtime -v against the real Oracle, then python3 -m unittest discover -s tools -t . -v. Fix any real-Oracle integration failures before starting JPVR-001 serialization/recovery work.
+
+
+### 2026-11-08 — Bounded multi-neuron event loop V1
+
+**Цель:** следующий исполняемый слой после первого NeuronRuntime — маршрутизация output spikes между несколькими нейронами с ограниченной очередью и детерминированной обработкой времени.
+
+**Добавлено:**
+- `tools/neuron_runtime/network.py` — NetworkConnection, NetworkRuntime, bounded pending queue/run budget, положительные задержки, группировка одного timestamp в batch, резервирование fan-out и timestamp-level in-memory candidate commit.
+- `tools/neuron_runtime/test_network.py` — 14 детерминированных contract tests.
+- `docs/JARVIS_NETWORK_RUNTIME_V1.md` — API, владение синапсом, семантика времени, ограничения и команды проверки.
+
+**Обновлено:**
+- `tools/neuron_runtime/__init__.py` — публичные network exports.
+- `README.md` — статус, карта файлов и focused test command.
+- `docs/JARVIS_ARCHITECTURE.md` — раздел 3.31, результаты предыдущего NeuronRuntime test run и текущий следующий gate.
+
+**Архитектурные решения:** вес связи остаётся авторитетным в target synapse; NetworkConnection содержит только routing metadata/delay/strength/attention. Zero-delay links запрещены. Все события одного timestamp к одному нейрону обрабатываются единым batch. Весь затронутый timestamp рассчитывается на копиях Runtime и фиксируется в памяти только после успешных вычислений и проверки очереди. Рекуррентная топология допускается только с положительной задержкой и ограничена queue/run budgets. Reward baseline по-прежнему внешний. Oracle equations и canonical STARTER не менялись.
+
+**Тесты:** добавлены 14 tests в `tools/neuron_runtime/test_network.py`, включая propagation через три нейрона, same-time batching, topology validation, queue/run limits, fan-out backpressure, no-partial-commit, timestamp overflow, recurrent budget и deterministic order. Тесты нового модуля **AUTHORED, NOT RUN** против настоящего Numerical Oracle.
+
+**Фактические проверки:**
+- `python3 -m py_compile tools/neuron_runtime/network.py tools/neuron_runtime/test_network.py` — **PASS**, syntax only.
+- Isolated authoring harness with API-compatible Runtime/Oracle stand-in — **PASS, 14/14, 0.003 s**. Это проверка сетевой логики на stand-in, не интеграционная проверка с репозиторным Oracle.
+- Пользовательский `python3 -m unittest discover -s tools -t . -v` на Android Termux до добавления NetworkRuntime — **PASS, 216/216, 0 failures, 0 errors, 19.280 s**. Включает предыдущий NeuronRuntime и Oracle; не включает новый test_network.py. Python version не указана в переданном выводе.
+
+**Не запускалось:** focused network tests against real Oracle, post-change full repository suite, benchmark полезности/обучения сети, Android RAM/CPU/latency/energy/I/O, builds, APK/AAB, CI, GitHub Actions.
+
+**Ограничения:** одно-поточная in-memory reference модель; нет CQE authorization/idempotency, durable queue, production NCC, concurrency, JPVR/JNVM persistence, crash recovery, inhibitory connections/iSTDP, topology learning или device performance evidence. Backpressure использует консервативное резервирование worst-case fan-out.
+
+**Следующий шаг:** пользователь запускает `python3 -m unittest tools.neuron_runtime.test_network -v`, затем `python3 -m unittest discover -s tools -t . -v`. После проверки исправить реальные интеграционные ошибки; только затем решать следующий gate по persistent state/JPVR-001.

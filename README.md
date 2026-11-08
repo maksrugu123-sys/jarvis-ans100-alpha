@@ -8,7 +8,8 @@ The repository has entered the first executable Python reference-orchestration s
 
 - **Architecture:** the first-neuron design, Adaptive LIF-DT model, excitatory STDP/R-STDP rules, CQE v1 contract and JPVR_FORMAT_V1 storage format are specified in the architecture document.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
-- **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. It is not production NCC/runtime, has no CQE/JPVR persistence, and does not implement inhibitory plasticity. Its 15 tests are authored but not yet run against the repository real Oracle.
+- **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. Its 15 focused tests were included in the user's full Termux run on 8 November 2026: 216/216 repository tests passed in 19.280 s. This is Python reference verification, not production NCC/runtime or device performance evidence.
+- **Multi-neuron network coordinator:** `tools/neuron_runtime/network.py` adds directed delayed connections, deterministic same-timestamp batching, bounded event/run budgets and in-memory timestamp-level candidate commit. Fourteen focused network tests are authored; they have not yet been run against the repository's real Numerical Oracle. This remains a single-threaded Python reference layer, not production NCC or durable scheduling.
 - **CQE reference:** a partial, single-threaded Python contract reference exists. Its commit store and event inbox/outbox are volatile; durable JPVR integration is not implemented.
 - **Latest test evidence:** before V4, the user ran 107 tests. Dedicated V4, V4.1 and V4.2 suites passed (12, 15 and 6 tests). On 8 November, V4.3 focused tests passed (7 tests, 1.636 s); smoke and pilot completed. Pilot held-out accuracy: FIXED 81.84%, STDP 100%, frozen R-STDP V4 83.01%, Decision-Latched 82.23%, Neutral 81.84%. Decision-Latched processed all 6,144 inputs and skipped 1,024 post-decision updates, but did not beat V4. Separately, the exact uploaded repository archive passed local container verification on Python 3.13.5/Linux x86_64 after two regression-test corrections: BTCC 17/17, V5.1 tests 6/6, and full repository suite 158/158. These are reference/unit checks, not an Android-device run or task-level BTCC benchmark.
 - **Calibration:** Round 1's 99-scenario sweep was generated and reviewed. Round 2's 23-scenario report was generated locally and summarized in docs/CALIBRATION_ROUND2.md. The canonical STARTER parameter profile has not been calibrated or changed.
@@ -53,7 +54,8 @@ The repository has entered the first executable Python reference-orchestration s
 | `tools/compact_core_v5/resource_baseline.py` | V5.1 reference-object and process-resource baseline harness |
 | `tools/compact_core_v5/test_resource_baseline.py` | V5.1 baseline harness unit tests |
 | `tools/numerical_oracle/` | Float64 reference equations, sweeps and tests |
-| `tools/neuron_runtime/` | In-memory one-neuron/multi-excitatory-synapse reference coordinator and tests |
+| `tools/neuron_runtime/` | One-neuron coordinator, bounded multi-neuron event loop and tests |
+| `docs/JARVIS_NETWORK_RUNTIME_V1.md` | Multi-neuron event-loop reference contract, queue limits and verification scope |
 | `tools/task_validation/` | V1–V4.3 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
@@ -80,6 +82,14 @@ python3 -m unittest tools.neuron_runtime.test_runtime -v
 ```
 
 The focused suite covers the in-memory coordinator contract. It must be run against the real Numerical Oracle; the authoring-stage harness result is not a repository test pass.
+
+## Run bounded multi-neuron network tests
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_network -v
+```
+
+The network test module currently has 14 tests. They are authored but not yet run against the real Numerical Oracle. The previously reported 216/216 Termux run predates this network module and therefore does not verify the new network layer.
 
 ## Run all automated Python checks
 

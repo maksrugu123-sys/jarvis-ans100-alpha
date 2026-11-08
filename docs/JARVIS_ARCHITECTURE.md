@@ -3124,12 +3124,49 @@ baseline_before поступает в apply_reward из внешнего Reward 
 
 #### 3.30.4. Тесты и следующий gate
 
-Добавлен tools/neuron_runtime/test_runtime.py с 15 контрактными тестами: конфигурация и границы, порядок simultaneous inputs, Oracle delegation, spike/sequence, несколько pre-событий одной связи, доставка post-события всем синапсам, STDP, отложенный R-STDP reward, caller-owned baseline, context/time validation и отсутствие частичного in-memory commit при ошибке.
+Добавлен tools/neuron_runtime/test_runtime.py с 15 контрактными тестами. Пользователь выполнил полный запуск `python3 -m unittest discover -s tools -t . -v` в Android Termux 8 ноября 2026 года: **216/216 PASS, 0 failures, 0 errors, 19.280 s**. В этот запуск входили реальные tools.neuron_runtime.test_runtime и Numerical Oracle. Версия Python в переданном выводе не указана.
 
-На этапе authoring прошёл py_compile, а изолированный harness с API-compatible test stand-in для Oracle показал 15/15. Это не запуск против реального tools.numerical_oracle.jarvis_oracle; dedicated suite и полный suite помечены AUTHORED, NOT RUN до выполнения в репозитории/Termux.
+Следующий gate для нового сетевого слоя: выполнить `python3 -m unittest tools.neuron_runtime.test_network -v`, затем повторить полный suite. Только после проверки — отдельно специфицировать и реализовать сериализацию NeuronStateRecord/SynapseRecord и JPVR-001 close/reopen/recovery path. Масштабирование и изменения STARTER/формул не входят в этот gate.
 
-Следующий gate: выполнить focused suite и python3 -m unittest discover -s tools -t . -v против настоящего Oracle. Только после прохождения — отдельно специфицировать и реализовать сериализацию NeuronStateRecord/SynapseRecord и JPVR-001 close/reopen/recovery path. Масштабирование и изменения STARTER/формул не входят в этот gate.
 
+### 3.31. Ограниченный многонейронный Python event loop V1
+
+**Статус: IMPLEMENTED как одно-процессный in-memory reference coordinator; 14 тестов AUTHORED, NOT RUN против настоящего Numerical Oracle. NOT PRODUCTION / NOT DURABLE / NOT DEVICE-VERIFIED.**
+
+Пакет `tools/neuron_runtime/network.py` композитно использует существующие `NeuronRuntime` объекты. Нейронные и пластические уравнения не дублируются и не меняются.
+
+#### 3.31.1. Топология и владение синапсом
+
+- `NetworkConnection` задаёт направленный маршрут от output spike исходного нейрона к одному входному синапсу целевого нейрона.
+- Авторитетный вес хранится только в `NeuronRuntime` целевого нейрона. Connection хранит ID маршрута, задержку, нормализованные strength/attention.
+- Одна входящая связь владеет одним target synapse; внешние события не могут одновременно писать в этот же синапс.
+- Задержка должна быть положительным целым числом наносекунд модельного времени. Нулевые задержки запрещены, чтобы исключить same-timestamp рекурсивное распространение.
+
+#### 3.31.2. Очередь и обработка
+
+- Внешние входы добавляются через `schedule_input`; очередь упорядочена по timestamp и стабильному event ID.
+- Все события одного времени группируются по целевому нейрону и обрабатываются одним `NeuronRuntime.process_batch` на нейрон за timestamp.
+- Output spike порождает одно событие на каждый исходящий connection с временем `spike_time + delay_ns`.
+- `max_pending_events` ограничивает очередь; `max_events_per_run` ограничивает обработку за один вызов. Полный timestamp batch не делится из-за лимита; оставшиеся события сохраняются pending.
+- Перед фиксацией timestamp резервируется worst-case fan-out для всех затронутых нейронов. При backpressure batch откладывается без частичного изменения состояния.
+- Кандидаты затронутых NeuronRuntime вычисляются на копиях; состояние нейронов и события очереди фиксируются вместе только после успешного расчёта timestamp. Это только in-memory гарантия одного timestamp, не durable transaction.
+- Рекуррентные маршруты разрешены только с положительной задержкой и остаются ограниченными лимитами очереди и запуска.
+
+#### 3.31.3. R-STDP, время и ограничения
+
+`learning_context_id` передаётся в работающие R-STDP узлы; reward можно направить через `NetworkRuntime.apply_reward`. Reward baseline по-прежнему принадлежит внешнему Reward Baseline Manager. Часы модели — u64 nanoseconds; переполнение propagated timestamp отклоняется до commit.
+
+Это одно-поточное Python reference orchestration, не production Neural Core Controller и не CQE scheduler. Не реализованы concurrency, durable queue/idempotency, CQE authorization, NCC durable commit, serialization, JPVR/JNVM, crash recovery, topology learning, inhibitory synapses/iSTDP, Android integration и ресурсные измерения. Cyclic topology сама по себе не подтверждает устойчивость или полезность рекуррентной динамики.
+
+#### 3.31.4. Тесты и следующий gate
+
+`tools/neuron_runtime/test_network.py` содержит 14 контрактных тестов: топология/задержки, проверка endpoints и synapse ownership, дедупликация pending event IDs, пределы очереди и run budget, целостный same-timestamp batch, задержанное распространение через несколько нейронов, fan-out backpressure без partial commit, recurrent budget, timestamp overflow, изоляция входных Runtime и детерминизм порядка входов.
+
+Статус нового набора: **AUTHORED, NOT RUN** против настоящего Numerical Oracle. Локально выполнены только:
+- `python3 -m py_compile tools/neuron_runtime/network.py tools/neuron_runtime/test_network.py` — **PASS**, синтаксис;
+- изолированный авторский harness с API-compatible stand-in для Runtime/Oracle — **PASS, 14/14**; не является интеграционным запуском против настоящего Oracle.
+
+До добавления network.py пользователь выполнил полный Termux suite: **216/216 PASS за 19.280 s**; этот результат проверяет прежний репозиторий и существующий NeuronRuntime, но не новый сетевой модуль. Следующая команда: `python3 -m unittest tools.neuron_runtime.test_network -v`, затем полный discovery suite. STARTER и Oracle formulas не менялись.
 
 ## 4. Гибридная память нейросети
 
@@ -3413,13 +3450,13 @@ ZRAM может выступать дополнительной системно
 - стартовый числовой профиль и план sweep-калибровки описаны в разделе 3.20; значения являются экспериментальными кандидатами, а не откалиброванным runtime-профилем;
 - бинарный формат контейнера JPVR_FORMAT_V1, включая dual-superblock, 4-KiB страницы, TLV-записи, BLOB, copy-on-write индексы, COMMIT/outbox, recovery и миграции, специфицирован в разделе 3.21; реализация и crash-тесты отсутствуют;
 - для постоянного представления числовых полей v1 выбрано F64; рабочая точность runtime ещё не определена;
-- первый Python reference coordinator реализован в tools/neuron_runtime: один Adaptive LIF-DT нейрон, несколько возбуждающих синапсов и делегирование STDP/R-STDP Numerical Oracle; 15 dedicated tests AUTHORED, NOT RUN против реального Oracle; модуль не является production NCC/runtime и не реализует persistence (раздел 3.30);
+- первый Python reference coordinator реализован в tools/neuron_runtime: один Adaptive LIF-DT нейрон с несколькими входящими возбуждающими синапсами; его 15 тестов вошли в пользовательский полный Termux запуск 216/216 PASS от 8 ноября 2026 года (19.280 s). Многонейронный NetworkRuntime V1 с направленными задержанными связями, bounded event queue и in-memory timestamp commit реализован в разделе 3.31; его 14 тестов AUTHORED, NOT RUN против настоящего Oracle. Оба слоя остаются Python reference, не production NCC и не persistence.
 - отдельный JARVIS Numerical Oracle v0.1 реализован в tools/numerical_oracle как float64 reference tool; все 29 его unit-тестов прошли в полном запуске 64 тестов на Android Termux 7 ноября 2026 года (версия Python не записана); генератор Round 1 на 99 сценариев и генератор Round 2 на 23 сценария выполнены; числовые значения всех 23 сценариев Round 2 рассмотрены и записаны; STARTER не откалиброван; это не runtime JARVIS;
 - архитектура Reasoning Engine v0.1 описана в разделе 3.23 как отдельный ограниченный когнитивный слой; исходный код и исполняемые проверки отсутствуют, и он не входит в критерии JPVR-001;
 - сравнительные архитектуры Intel Loihi/Loihi 2 и SpiNNaker/SpiNNaker2 проанализированы в разделе 3.24; выявленные принципы рассматриваются как исследовательские ориентиры, без смены аппаратной платформы, модели первого нейрона или критериев JPVR-001;
 - методология систематической калибровки и экспериментального сравнения по Google Research Deep Learning Tuning Playbook адаптирована для JARVIS в разделе 3.25; она не заменяет STDP/R-STDP и не означает наличия полноценного training pipeline или завершённой калибровки;
 - описанные в документе подсистемы являются проектными решениями и предложениями;
-- production-реализация нейрона и NCC, JNVM и JPVR ещё не начата; tools/neuron_runtime — in-memory Python reference orchestration layer, а tools/cqe_reference — отдельная reference implementation протокола; ни один из пакетов не является production runtime;
+- production-реализация нейрона и NCC, JNVM и JPVR ещё не начата; tools/neuron_runtime содержит in-memory reference coordinator одного нейрона и bounded multi-neuron event loop, а tools/cqe_reference — отдельную reference implementation протокола; ни один из пакетов не является production runtime;
 - специализированные тесты CQE reference (26 методов) ранее прошли на Python 3.13.5; в более свежем полном запуске на Android Termux прошли 64 теста (26 CQE + 29 Numerical Oracle + 9 Round 2), 0 failures и 0 errors за 1.649 секунды; Round 1 sweep на 99 сценариев и Round 2 generator выполнены, но фактические метрики всех 23 сценариев Round 2 проанализированы и записаны в docs/CALIBRATION_ROUND2.md; task-level reference benchmark JARVIS_TEMPORAL_BURST_VS_SPARSE_V1 выполнен 7 ноября 2026 года: FIXED/STDP/R-STDP показали 100% на train и held-out; преимущество обучения не установлено, так как FIXED baseline уже решил выбранную задачу; crash-тесты production JPVR, runtime benchmarks и измерения ресурсов не проводились; сборки и GitHub Actions не запускались.
 
 
