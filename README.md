@@ -81,7 +81,7 @@ The report explicitly distinguishes tested mechanisms from NOT_IMPLEMENTED featu
 python3 -m unittest tools.neuron_runtime.test_runtime -v
 ```
 
-The focused suite covers the in-memory coordinator contract. It must be run against the real Numerical Oracle; the authoring-stage harness result is not a repository test pass.
+The first-neuron focused suite is included in the 216/216 full Termux run recorded above. The separate network coordinator test module is tracked below.
 
 ## Run bounded multi-neuron network tests
 
