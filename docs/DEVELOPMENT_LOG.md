@@ -370,3 +370,25 @@ A static code audit found that the first BTCC replay version only evaluated deci
 
 **Next step:** run `python3 -m tools.run_all_checks` from the project root in Termux and share the complete summary if any module fails or is not discovered.
 
+
+
+### 2026-11-08 — Comprehensive one-neuron exam authored
+
+**Goal:** replace fragmented checking with one repeatable research/engineering exam that covers all implemented reference-neuron mechanisms and clearly identifies architecture that cannot yet be tested because it is not implemented.
+
+**Added:**
+- `tools/neuron_validation/test_neuron_full_exam.py` — broad deterministic contract tests for analytical membrane/adaptation decay, threshold and attention bounds, simultaneous input determinism, excitatory/inhibitory saturation, refractory boundary behavior, spike/reset/adaptation state, timestamp overflow, invalid states/parameters, STDP timing signs and traces, long bounded STDP updates, R-STDP eligibility/reward direction/context/expiry, float32 helper comparison, and multi-seed randomized event/reward stress.
+- `tools/neuron_validation/noise_benchmark.py` — a separate same-count FAST/SLOW temporal task with weak excitatory distractors; matched distractors for each pair; split-specific deterministic signatures; FIXED, STDP, R-STDP and neutral R-STDP controls; inference-only held-out evaluation; accuracy, balanced accuracy, macro-F1, confusion counts and resource counters. The diagnostic starting weight is 0.70; canonical STARTER 0.50 remains unchanged.
+- `tools/neuron_validation/full_exam.py` — one entry point running syntax/discovery checks, all repository unit tests, the noisy temporal benchmark and the V5.1 reference-object resource baseline. It saves a machine-readable JSON report and explicitly labels unimplemented capabilities.
+
+**Updated:** `README.md` and `docs/TESTING_POLICY.md` now identify the comprehensive exam as the broad one-command validation path. Added `docs/JARVIS_NEURON_FULL_EXAM.md` with profiles, protocol, coverage matrix and interpretation rules.
+
+**Important implementation detail:** each event in a noisy episode is constructed with the synapse's current weight, so within-episode STDP changes affect later input pulses. Decision-deadline spikes are counted and, when present, included as a post event before R-STDP reward application. Training/held-out signatures use 96-bit signal-strength material plus separate split namespaces.
+
+**Verification:** GitHub fetches confirmed the new files and documentation were published on `main`. Code was reviewed statically, but no Python interpreter was run against the current GitHub checkout during this task. The new comprehensive test module, noise benchmark and full-exam command are **AUTHORED, NOT RUN**. No full-suite PASS, noisy-task metric, resource result or runtime correctness claim is made.
+
+**Not run:** complete repository unit tests through the comprehensive runner; noise benchmark smoke/pilot/full; V5.1 resource measurement through the exam; Android/Termux measurements; BTCC task-level learning comparison; float32 runtime equivalence; builds, APK/AAB, CI and GitHub Actions.
+
+**Limitations:** the current reference code does not yet implement predictive/surprise/familiarity learning, fatigue/recovery, long-term associative memory and forgetting, structural synapse creation/deletion, a dedicated homeostatic controller, JNVM/JPVR persistence/recovery, a production neuron runtime, or network-level behavior. The exam reports these as NOT_IMPLEMENTED. The noisy task uses weak excitatory distractors only and has no preselected promotion threshold; its results must be interpreted as exploratory evidence, not proof that a learning rule is superior.
+
+**Next step:** run the default pilot command from Termux, preserve the complete JSON report, fix any failures, then review per-seed held-out results before designing a larger pre-registered acceptance experiment. Keep STARTER and production learning rules unchanged until evidence justifies a change.
