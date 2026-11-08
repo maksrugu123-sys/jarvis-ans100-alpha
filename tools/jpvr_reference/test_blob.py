@@ -62,7 +62,7 @@ class BlobCodecTests(unittest.TestCase):
 
     def test_blob_page_order_is_required(self):
         pages = self.make_pages(self.payload(5000))
-        with self.assertRaisesRegex(JPVRFormatError, "contiguous"):
+        with self.assertRaisesRegex(JPVRFormatError, "order/index"):
             decode_blob_pages(tuple(reversed(pages)))
 
     def test_expected_first_page_number_is_enforced(self):
