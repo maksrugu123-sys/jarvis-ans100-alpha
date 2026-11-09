@@ -77,7 +77,7 @@ def _validate_commit_record(record: CommitRecord) -> tuple[bytes, bytes, bytes]:
     )
     if (record.manifest_ref.page_no < 2
             or record.manifest_ref.expected_commit_generation != record.generation):
-        raise JPVRFormatError("manifest PageRef must point to this commit generation")
+        raise JPVRFormatError("manifest PageRef must point to current commit generation")
 
     _require_uint("durable_tail_page_no", record.durable_tail_page_no, 0xFFFFFFFFFFFFFFFF)
     if record.durable_tail_page_no < 2:
