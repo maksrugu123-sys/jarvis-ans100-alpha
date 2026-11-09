@@ -185,7 +185,7 @@ class OutboxSequenceTests(unittest.TestCase):
         return DecodedOutboxPage(page_no, generation, txid, value)
 
     def test_valid_adjacent_sequence_same_generation(self):
-        first = self.decoded(18, 2, TX1, event())
+        first = self.decoded(18, 2, TX1, event(commit_ref=PageRef(23, 2)))
         second = self.decoded(
             21, 2, TX1,
             event(
@@ -197,6 +197,21 @@ class OutboxSequenceTests(unittest.TestCase):
             ),
         )
         self.assertIsNone(validate_outbox_sequence(first, second))
+
+    def test_same_generation_events_share_source_commit(self):
+        first = self.decoded(18, 2, TX1, event(commit_ref=PageRef(23, 2)))
+        second = self.decoded(
+            21, 2, TX1,
+            event(
+                event_id=bytes.fromhex("04040404040404040404040404040404"),
+                idempotency_key=bytes.fromhex("05050505050505050505050505050505"),
+                sequence=2,
+                commit_ref=PageRef(24, 2),
+                previous_event_ref=PageRef(18, 2),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "share source COMMIT"):
+            validate_outbox_sequence(first, second)
 
     def test_sequence_requires_previous_reference(self):
         first = self.decoded(18, 2, TX1, event())
