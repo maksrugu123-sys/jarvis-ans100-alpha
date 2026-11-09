@@ -800,3 +800,16 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **GitHub:** опубликовано в `main`. Основные commits: `bf355f4` (JOURNAL codec), `fa2db24` (32 initial tests), `b2bb808` / `9873169` / `1d02d4b` (validation hardening), `4b7acf4` (COMMIT_UNKNOWN resolution regressions), `8608881` (package exports), `da9ed18` (JOURNAL contract), `2ddfea4` (architecture update), `daaa64c` and `71c75e9` (README/architecture totals).
 
 **Следующий шаг:** пользовательский запуск 20 JCOM tests, 32 JOURNAL tests и полного 193-test JPVR набора. После подтверждения перейти к OUTBOX codec; transaction sequence planner делать только после согласования JOURNAL/OUTBOX/COMMIT reference semantics. Файловую запись и durability barriers не начинать без отдельного тестирования order/recovery invariants.
+
+
+### 2026-11-09 — JPVR JOURNAL lifecycle hardening and status correction
+
+**Дополнение к записи JNRL выше:** после дополнительного статического review state machine была ужесточена. Принятая операция не может перейти из QUEUED обратно в DEFERRED. Переход COMMIT_UNKNOWN → FAILED теперь требует явного аргумента `confirmed_no_commit=True`; вызывающая сторона обязана предварительно подтвердить отсутствие опубликованного commit по авторитетному storage state. Ненулевые transaction_id проверяются и в transition validator. Добавлены два regression test methods: запрет QUEUED → DEFERRED и обязательное подтверждение no-commit. Итоговый `test_journal.py` содержит **34**, а не 32 метода.
+
+**Уточнение тестового статуса:** весь текущий JPVR source set содержит **195 test methods** в десяти модулях: 141 тест пользователь сообщил как PASS в Termux; дополнительные 20 JCOM и 34 JNRL теста — **AUTHORED, NOT RUN**. Новые 54 теста не запускались. Static GitHub readback подтвердил полный список модулей и количество методов; Python import/syntax/unit tests здесь не выполнялись.
+
+**Документы/команды:** README full-suite command теперь включает все десять модулей, в том числе `test_journal`. README, COW/JCOM/JOURNAL contracts и architecture status синхронизированы с числом 195 и финальной state machine.
+
+**Ограничения без изменений:** JOURNAL пока не обеспечивает глобальную idempotency uniqueness, не сканирует/восстанавливает полный journal, не реализует OUTBOX или полный transaction planner. Нет file I/O, page reservation lock, flush/sync, superblock publication или crash recovery. Сборки, Gradle, CI и GitHub Actions не запускались.
+
+**Следующий шаг:** пользователь запускает 20 JCOM tests, 34 JOURNAL tests и все 195 JPVR tests на Termux; только после фактического PASS продолжать с OUTBOX codec и transaction-sequence planning.
