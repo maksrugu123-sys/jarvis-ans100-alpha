@@ -750,3 +750,24 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **GitHub:** изменения опубликованы в `main`; см. commits этого этапа в истории репозитория.
 
 **Следующий шаг:** выполнить 16 focused COW tests и весь 141-test JPVR set в Termux. Только после подтверждения перейти к формированию transaction page sequence (DATA/BLOB/INDEX/MANIFEST/JOURNAL/COMMIT), по-прежнему без file I/O и superblock mutation до отдельной проверки ordering/recovery invariants.
+
+
+### 2026-11-09 — JPVR user verification update and JCOM v1 descriptor codec
+
+**Verification correction:** пользователь сообщил, что весь предыдущий JPVR набор прошёл. Для данного этапа это **141 тест**: 109 codec/record/blob/data/layout/manifest + 16 immutable INDEX + 16 COW. Это пользовательский запуск на Termux; я не повторял его в этой среде.
+
+**Добавлено:**
+- `tools/jpvr_reference/commit.py` — фиксированный JCOM v1 COMMIT payload (112 bytes), page envelope, строгие generation/ID/PageRef rules и проверка, что COMMIT является последней страницей durable prefix.
+- `validate_commit_snapshot` сверяет payload с outer page header, MANIFEST identity/generation/transaction_id, предыдущим COMMIT (generation chain) и, при наличии page catalog + Superblock, проверяет семь manifest roots и high-water references.
+- `tools/jpvr_reference/test_commit.py` — 20 тестов на layout, reserved bytes, идентификаторы, поколения, порядок ссылок, outer envelope, предыдущий commit и superblock cross-check.
+- `docs/JPVR_COMMIT_V1.md`, раздел 3.21.21 архитектуры, README и package exports обновлены.
+
+**Проверки и ограничения:**
+- Предыдущие 141 JPVR tests: **USER-REPORTED PASS**.
+- Новые JCOM tests: 20 **AUTHORED, NOT RUN**. Static source review не считается runtime test.
+- Сборки, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN**.
+- JOURNAL/OUTBOX codecs, transaction sequence planner, page reservation, file I/O, flush/sync, superblock publication и recovery пока отсутствуют.
+
+**GitHub:** `9060c6d7` (JCOM codec), `6e966462` (JCOM tests), далее commits документации/exports в истории `main`.
+
+**Следующий шаг:** после прохождения 20 focused JCOM tests и полного 161-test JPVR набора добавить строгий JOURNAL record/page codec; затем OUTBOX codec и только после них transaction-sequence planner. Не начинать файловую запись до отдельной проверки recovery/order invariants.
