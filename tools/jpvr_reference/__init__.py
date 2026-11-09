@@ -59,6 +59,16 @@ from .commit import (
     encode_commit_payload,
     validate_commit_snapshot,
 )
+from .journal import (
+    DecodedJournalPage,
+    JournalEntry,
+    OperationStatus,
+    decode_journal_page,
+    decode_journal_payload,
+    encode_journal_page,
+    encode_journal_payload,
+    validate_journal_transition,
+)
 
 __all__ = [
     "AppendPlan",
@@ -67,6 +77,7 @@ __all__ = [
     "DecodedBlobRecord",
     "DecodedCommitPage",
     "DecodedDataPage",
+    "DecodedJournalPage",
     "DecodedIndexPage",
     "DecodedManifestPage",
     "DecodedPage",
@@ -75,6 +86,8 @@ __all__ = [
     "IndexEntry",
     "IndexNode",
     "IndexTreeStats",
+    "JournalEntry",
+    "OperationStatus",
     "Manifest",
     "NewIndexPage",
     "PageRef",
@@ -90,6 +103,8 @@ __all__ = [
     "decode_data_page",
     "decode_index_node",
     "decode_index_page",
+    "decode_journal_page",
+    "decode_journal_payload",
     "decode_manifest_page",
     "decode_manifest_payload",
     "decode_page",
@@ -102,6 +117,8 @@ __all__ = [
     "encode_data_page",
     "encode_index_node",
     "encode_index_page",
+    "encode_journal_page",
+    "encode_journal_payload",
     "encode_manifest_page",
     "encode_manifest_payload",
     "encode_page",
@@ -112,6 +129,7 @@ __all__ = [
     "plan_append",
     "validate_append_plan",
     "validate_commit_snapshot",
+    "validate_journal_transition",
     "validate_index_tree",
     "validate_manifest",
 ]
