@@ -325,7 +325,7 @@ class JournalTransitionTests(unittest.TestCase):
             )
         )
         with self.assertRaisesRegex(JPVRFormatError, "invalid JOURNAL status transition"):
-            validate_journal_transition(previous, current, confirmed_no_commit=True)
+            validate_journal_transition(previous, current)
 
     def test_commit_unknown_failed_requires_explicit_confirmation(self):
         previous = self.decoded(10, 1, TX1, entry(OperationStatus.COMMIT_UNKNOWN))
@@ -380,7 +380,7 @@ class JournalTransitionTests(unittest.TestCase):
                 previous_entry_ref=PageRef(10, 1),
             ),
         )
-        validate_journal_transition(previous, current)
+        validate_journal_transition(previous, current, confirmed_no_commit=True)
 
     def test_transition_rejects_expected_version_change(self):
         previous = self.decoded(
