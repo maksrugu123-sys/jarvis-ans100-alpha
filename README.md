@@ -223,7 +223,8 @@ For detailed status, unresolved decisions and the next implementation gates, sta
 Focused COMMIT descriptor tests:
 
 ```sh
-python3 -m unittest tools.jpvr_reference.test_commit -v
+python3 -m unittest tools.jpvr_reference.test_commit \
+ tools.jpvr_reference.test_journal -v
 ```
 
 Focused JOURNAL tests:
@@ -247,4 +248,4 @@ python3 -m unittest \
  tools.jpvr_reference.test_commit -v
 ```
 
-The preceding 141 JPVR tests (including COW) are user-reported as passing in Termux. The 20 COMMIT tests and 30 JOURNAL tests are new and remain **AUTHORED, NOT RUN**. The complete current JPVR set therefore contains 191 test methods across ten modules; that count is a source count, not a test result. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md) and [JOURNAL contract](docs/JPVR_JOURNAL_V1.md).
+The preceding 141 JPVR tests (including COW) are user-reported as passing in Termux. The 20 COMMIT tests and 32 JOURNAL tests are new and remain **AUTHORED, NOT RUN**. The complete current JPVR set therefore contains 193 test methods across ten modules; that count is a source count, not a test result. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md) and [JOURNAL contract](docs/JPVR_JOURNAL_V1.md).
