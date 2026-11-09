@@ -829,3 +829,22 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Verification status:** fixes are pushed to `main`; they have **not yet been rerun** in Termux. Do not report the 195-test suite as passing until the user reruns it. No builds, CI or GitHub Actions were started.
 
 **Next action:** run focused COW and COMMIT modules, then the complete 195-test JPVR suite. If green, proceed to OUTBOX codec and transaction-sequence planning.
+
+### 2026-11-09 — JPVR INDEX encoder/decoder depth parity hardening
+
+**Цель:** устранить возможность кодировать INTERNAL INDEX node, который собственный decoder отвергает из-за максимальной глубины.
+
+**Статический аудит:** `_validate_node` ранее проверял только, что `node.level` помещается в uint8 (0–255), тогда как `decode_index_node` уже отклонял уровни `>= MAX_INDEX_DEPTH` (64). Поэтому `encode_index_node` мог выдавать заведомо не round-trip совместный payload для уровней 64–255.
+
+**Изменения:**
+- `tools/jpvr_reference/index.py` — encoder validation теперь требует `node.level < MAX_INDEX_DEPTH`, сохраняя uint8/type validation.
+- `tools/jpvr_reference/test_index.py` — добавлен regression test: максимальный допустимый уровень 63 проходит encode/decode round-trip, уровни 64 и 255 отклоняются encoder-ом.
+- `README.md`, `docs/JARVIS_ARCHITECTURE.md`, JPVR COW/JCOM/JOURNAL contracts — синхронизирован текущий источник тестов и история последнего полного запуска.
+
+**Количество тестов:** статический подсчёт десяти JPVR модулей: 23 + 23 + 15 + 14 + 15 + 19 + 17 + 16 + 20 + 34 = **196 test methods**. Новый INDEX regression test — **AUTHORED, NOT RUN**.
+
+**Уточнение предыдущей записи:** фраза «original 141-test baseline passed again» была слишком широкой. Последний полный запуск 195 методов содержал COW test, который завершился ERROR; следовательно этот запуск не подтверждает PASS всего 141-test агрегата. Ранее сообщённый 141 PASS сохраняется только как исторический пользовательский результат. Самый свежий фактический результат остаётся **192 PASS, 2 FAIL, 1 ERROR** до повторного запуска после уже опубликованных COW/COMMIT fixes.
+
+**Проверки:** выполнен только static GitHub source inspection и подсчёт test methods; Python tests и syntax/import checks **NOT RUN**. Новая regression test и текущие 196 методов не объявляются прошедшими. Builds, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN**.
+
+**Следующий шаг:** после `git pull --ff-only origin main` запустить focused INDEX/COW/COMMIT tests, затем полный 196-test JPVR command. Только после подтверждённого PASS переходить к OUTBOX codec. Файловую запись, durability barriers и recovery по-прежнему не начинать.
