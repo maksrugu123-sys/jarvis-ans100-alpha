@@ -245,6 +245,7 @@ def lookup_index(
     ref = root
     visited = set()
     parent_generation = None
+    expected_level = None
     for _ in range(MAX_INDEX_DEPTH):
         if ref.page_no > durable_tail_page_no:
             raise JPVRFormatError("index child is outside durable prefix")
@@ -262,6 +263,8 @@ def lookup_index(
         if page.node.tree_id != expected_tree:
             raise JPVRFormatError("index tree ID mismatch")
         node = page.node
+        if expected_level is not None and node.level != expected_level:
+            raise JPVRFormatError("index child level does not match parent")
         if node.level == 0:
             for entry in node.entries:
                 if entry.key == target:
@@ -275,5 +278,6 @@ def lookup_index(
                 break
             child = separator.page_ref
         ref = child
+        expected_level = node.level - 1
         parent_generation = page.commit_generation
     raise JPVRFormatError("index tree exceeds maximum depth")
