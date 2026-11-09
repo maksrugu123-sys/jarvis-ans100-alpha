@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 from .codec import (
     JPVRFormatError,
-    PAGE_PAYLOAD_BYTES,
     _fixed_bytes,
     _require_uint,
 )
