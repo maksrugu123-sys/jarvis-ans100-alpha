@@ -867,7 +867,7 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 - полный десятимодульный JPVR набор — **PASS, 196/196**, Android Termux, 2.204 s.
 Эти результаты относятся к исходному набору до добавления OUTBOX. Статический подсчёт после добавления: 23 + 23 + 15 + 14 + 15 + 19 + 17 + 16 + 20 + 34 + 35 = **231 test methods / 11 modules**. OUTBOX 35 тестов — **AUTHORED, NOT RUN**.
 
-**Не запускалось:** Python tests для нового OUTBOX кода, общий 229-test suite, syntax/import checks, сборки, Gradle, APK/AAB, CI и GitHub Actions. Не утверждается, что новый модуль уже прошёл runtime verification.
+**Не запускалось:** Python tests для нового OUTBOX кода, общий 231-test suite, syntax/import checks, сборки, Gradle, APK/AAB, CI и GitHub Actions. Не утверждается, что новый модуль уже прошёл runtime verification.
 
 **Ограничения:** нет global event/idempotency index, publisher worker, subscriber ACK/cursor pages, retry/retention, transaction page-sequence planner, page allocator/lock, container I/O, flush/sync, superblock publication или crash recovery. Adjacent validator не заменяет полное сканирование chain. Valid OUTBOX page не доказывает active/durable COMMIT.
 
