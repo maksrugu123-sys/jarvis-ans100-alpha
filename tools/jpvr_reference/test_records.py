@@ -63,11 +63,19 @@ class TLVCodecTests(unittest.TestCase):
             encode_tlv([TLVField(0, WireType.U8, 1)])
 
     def test_decoder_rejects_non_increasing_field_ids(self):
-        encoded = encode_tlv([TLVField(1, WireType.U8, 1), TLVField(2, WireType.U8, 2)])
-        raw = bytearray(encoded)
-        struct.pack_into("<H", raw, 8, 1)
-        with self.assertRaisesRegex(JPVRFormatError, "strictly increasing"):
-            decode_tlv(raw)
+        first = TLVField(2, WireType.U8, 1)
+        second = TLVField(3, WireType.U8, 2)
+        encoded = encode_tlv([first, second])
+        second_header_offset = len(encode_tlv([first]))
+
+        # Each one-byte value is padded to a 16-byte TLV entry. Mutate the
+        # second header, not byte 8 (which belongs to the first value).
+        for invalid_second_id in (2, 1):
+            with self.subTest(invalid_second_id=invalid_second_id):
+                raw = bytearray(encoded)
+                struct.pack_into("<H", raw, second_header_offset, invalid_second_id)
+                with self.assertRaisesRegex(JPVRFormatError, "strictly increasing"):
+                    decode_tlv(raw)
 
     def test_unknown_wire_type_is_rejected_even_when_optional(self):
         raw = bytearray(struct.pack("<HBBI", 1, 99, 1, 1) + b"x" + bytes(7))
