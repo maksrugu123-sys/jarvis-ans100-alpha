@@ -278,7 +278,11 @@ def cow_upsert_index(
             if promoted is None:
                 continue
             left_node = _internal_node(expected_tree, level, pairs[:split_at])
-            right_node = _internal_node(expected_tree, level, pairs[split_at:])
+            # The promoted separator becomes the parent boundary; the right
+            # node stores its former right child as its first (separator-less)
+            # child pointer.
+            right_pairs = [(None, pairs[split_at][1])] + pairs[split_at + 1:]
+            right_node = _internal_node(expected_tree, level, right_pairs)
             left_size = _node_payload_size(left_node)
             right_size = _node_payload_size(right_node)
             if left_size is not None and right_size is not None:
