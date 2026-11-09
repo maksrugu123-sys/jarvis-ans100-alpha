@@ -813,3 +813,19 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Ограничения без изменений:** JOURNAL пока не обеспечивает глобальную idempotency uniqueness, не сканирует/восстанавливает полный journal, не реализует OUTBOX или полный transaction planner. Нет file I/O, page reservation lock, flush/sync, superblock publication или crash recovery. Сборки, Gradle, CI и GitHub Actions не запускались.
 
 **Следующий шаг:** пользователь запускает 20 JCOM tests, 34 JOURNAL tests и все 195 JPVR tests на Termux; только после фактического PASS продолжать с OUTBOX codec и transaction-sequence planning.
+
+
+### 2026-11-09 — JPVR Termux result: COW split and COMMIT validation fixes
+
+**User-reported run:** the complete 195-test JPVR command executed in Termux. Result: **192 passed, 2 failed, 1 error**. The original 141-test baseline passed again. The three failures were isolated to the newer COW and COMMIT slices.
+
+**Root causes and fixes:**
+1. `cow.py`: when splitting an INTERNAL node, the promoted separator was incorrectly retained as the first separator of the right node. In the B+ tree representation, the promoted separator belongs to the new parent; the right node must start with the corresponding child PageRef as its separator-less first child. The split builder now constructs that right-child list correctly. The existing deep internal-root split test covers the regression.
+2. `test_commit.py`: the negative fixture `PageRef(9, 1)` for generation 2 was actually valid: it correctly references generation 1, and page 9 precedes manifest page 10. The invalid page-number fixture is now `PageRef(1, 1)`; the wrong-generation fixture remains `PageRef(9, 3)`. This corrects the test rather than weakening valid COMMIT semantics.
+3. `commit.py`: clarified the manifest-generation validation error text to explicitly say "current commit generation", matching the contract/test wording.
+
+**Commits:** COW fix `55a89d0`; COMMIT validation wording `81fc33e`; COMMIT negative-fixture correction `8189cf0`.
+
+**Verification status:** fixes are pushed to `main`; they have **not yet been rerun** in Termux. Do not report the 195-test suite as passing until the user reruns it. No builds, CI or GitHub Actions were started.
+
+**Next action:** run focused COW and COMMIT modules, then the complete 195-test JPVR suite. If green, proceed to OUTBOX codec and transaction-sequence planning.
