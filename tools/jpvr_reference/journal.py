@@ -124,7 +124,9 @@ def _validate_entry(entry: JournalEntry) -> tuple[bytes, bytes, bytes]:
     owner_module_id = _fixed_bytes("owner_module_id", entry.owner_module_id, 16)
     if any(value == bytes(16) for value in (operation_id, idempotency_key, owner_module_id)):
         raise JPVRFormatError("operation_id, idempotency_key and owner_module_id must be nonzero")
-    status = _status(entry.status)
+    if not isinstance(entry.status, OperationStatus):
+        raise JPVRFormatError("status must be an OperationStatus")
+    status = entry.status
 
     if entry.expected_state_version is not None:
         _require_uint(
@@ -285,11 +287,14 @@ def encode_journal_page(
 ) -> bytes:
     """Encode one JOURNAL page; entry links are checked against its physical order."""
     _validate_entry_page_refs(entry, page_no, commit_generation)
+    tx_id = _fixed_bytes("transaction_id", transaction_id, 16)
+    if tx_id == bytes(16):
+        raise JPVRFormatError("JOURNAL transaction_id must be nonzero")
     return encode_page(
         PageType.JOURNAL,
         page_no,
         commit_generation,
-        transaction_id,
+        tx_id,
         encode_journal_payload(entry),
     )
 
@@ -302,6 +307,8 @@ def decode_journal_page(
     page: DecodedPage = decode_page(page_bytes, expected_page_no=expected_page_no)
     if page.page_type is not PageType.JOURNAL:
         raise JPVRFormatError("page type is not JOURNAL")
+    if page.transaction_id == bytes(16):
+        raise JPVRFormatError("JOURNAL transaction_id must be nonzero")
     entry = decode_journal_payload(page.payload)
     _validate_entry_page_refs(entry, page.page_no, page.commit_generation)
     return DecodedJournalPage(
@@ -352,6 +359,14 @@ def validate_journal_transition(
     """Validate one append-only state transition for the same logical operation."""
     if not isinstance(previous, DecodedJournalPage) or not isinstance(current, DecodedJournalPage):
         raise JPVRFormatError("journal transition requires decoded JOURNAL pages")
+    _validate_entry_page_refs(
+        previous.entry, previous.page_no, previous.commit_generation
+    )
+    _validate_entry_page_refs(
+        current.entry, current.page_no, current.commit_generation
+    )
+    _fixed_bytes("previous.transaction_id", previous.transaction_id, 16)
+    _fixed_bytes("current.transaction_id", current.transaction_id, 16)
     if current.page_no <= previous.page_no:
         raise JPVRFormatError("JOURNAL revisions must be appended in page order")
     if current.commit_generation < previous.commit_generation:
@@ -387,6 +402,8 @@ def validate_journal_transition(
     if current.commit_generation == previous.commit_generation:
         if current.transaction_id != previous.transaction_id:
             raise JPVRFormatError("same-generation JOURNAL pages must share transaction_id")
+    elif current.transaction_id == previous.transaction_id:
+        raise JPVRFormatError("new-generation JOURNAL pages must use a new transaction_id")
     allowed = _ALLOWED_TRANSITIONS[previous.entry.status]
     if current.entry.status not in allowed:
         raise JPVRFormatError(
