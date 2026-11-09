@@ -215,6 +215,7 @@ def cow_upsert_index(
     transaction_id: bytes,
 ) -> CowIndexPlan:
     """Plan one insert/replace by path-copying nodes; the input snapshot stays intact."""
+    _validate_ref(root)
     target = _validate_key(key)
     if not isinstance(value, (bytes, bytearray, memoryview)):
         raise JPVRFormatError("index value must be bytes-like")
