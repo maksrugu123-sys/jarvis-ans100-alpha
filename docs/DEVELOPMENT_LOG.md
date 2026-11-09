@@ -771,3 +771,32 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **GitHub:** `9060c6d7` (JCOM codec), `6e966462` (JCOM tests), далее commits документации/exports в истории `main`.
 
 **Следующий шаг:** после прохождения 20 focused JCOM tests и полного 161-test JPVR набора добавить строгий JOURNAL record/page codec; затем OUTBOX codec и только после них transaction-sequence planner. Не начинать файловую запись до отдельной проверки recovery/order invariants.
+
+
+### 2026-11-09 — JPVR JNRL v1 append-only operation-state codec
+
+**Цель:** добавить проверяемое представление истории CQE operation status в JPVR и связать повторные записи одной операции с предыдущими JOURNAL pages, не заявляя durable storage.
+
+**Добавлено:**
+- `tools/jpvr_reference/journal.py`:
+  - JNRL v1 payload: 8-byte prefix и детерминированные TLV fields для operation_id, idempotency_key, owner_module_id, status, expected/new state versions, commit_id/PageRef, previous-entry PageRef и result_object_id;
+  - PageType.JOURNAL encode/decode с проверкой transaction_id, commit generation и физического порядка ссылок;
+  - `validate_journal_transition` проверяет неизменность identity/version/commit fields, ссылку на предыдущую запись, смену transaction_id между поколениями и разрешённую машину состояний;
+  - COMMIT_UNKNOWN может разрешиться в COMMITTED либо в FAILED только после подтверждения, что commit не состоялся; такой переход не означает автоматический retry side effect.
+- `tools/jpvr_reference/test_journal.py` — 32 теста для TLV schema, unknown optional/mandatory fields, malformed IDs/status/PageRefs, page envelope/order, state-version invariants, valid lifecycle, illegal jumps и resolution COMMIT_UNKNOWN.
+- `tools/jpvr_reference/__init__.py` — экспорт JournalEntry, OperationStatus, page/payload codecs и transition validator.
+- `docs/JPVR_JOURNAL_V1.md`, разделы 3.21.22–3.21.23 архитектуры, README и COW/JCOM reference docs обновлены.
+
+**Проверки и доказательства:**
+- Пользователь ранее сообщил PASS для 141 JPVR tests, включая COW (109 ранних codecs/manifest + 16 INDEX + 16 COW); это user-reported Termux verification.
+- Добавлены 20 JCOM tests и 32 JOURNAL tests. Они **AUTHORED, NOT RUN**; новые 52 теста не объявляются пройденными.
+- Статическая GitHub readback проверка подтвердила наличие исходников/документов и посчитала test methods; это не запуск Python tests.
+- В ходе review найден некорректно записанный import block в `__init__.py` (буквальные `\\n` внутри исходника); package file переписан нормальным Python multiline syntax и повторно прочитан. Отдельного Python import/syntax run не было.
+- Текущий JPVR source set: 10 test modules, 193 test methods (141 user-reported PASS + 20 JCOM + 32 JOURNAL AUTHORED, NOT RUN).
+- Builds, Gradle, APK/AAB, CI и GitHub Actions **NOT RUN**.
+
+**Ограничения:** JOURNAL codec не обеспечивает глобальную уникальность operation_id/idempotency_key, не создаёт idempotency index, не сканирует полную историю и не разрешает result_object_id в RecordLocation. OUTBOX codec, complete transaction page-sequence planner, exclusive page reservation, file I/O, flush/sync, superblock publication, crash recovery, rollback и orphan-page handling отсутствуют. Валидная JOURNAL page не подтверждает commit и не доказывает durability.
+
+**GitHub:** опубликовано в `main`. Основные commits: `bf355f4` (JOURNAL codec), `fa2db24` (32 initial tests), `b2bb808` / `9873169` / `1d02d4b` (validation hardening), `4b7acf4` (COMMIT_UNKNOWN resolution regressions), `8608881` (package exports), `da9ed18` (JOURNAL contract), `2ddfea4` (architecture update), `daaa64c` and `71c75e9` (README/architecture totals).
+
+**Следующий шаг:** пользовательский запуск 20 JCOM tests, 32 JOURNAL tests и полного 193-test JPVR набора. После подтверждения перейти к OUTBOX codec; transaction sequence planner делать только после согласования JOURNAL/OUTBOX/COMMIT reference semantics. Файловую запись и durability barriers не начинать без отдельного тестирования order/recovery invariants.
