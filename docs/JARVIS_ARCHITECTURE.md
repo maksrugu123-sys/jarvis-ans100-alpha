@@ -2216,22 +2216,22 @@ v1 использует append-only размещение: подтверждён
 
 #### 3.21.15. Начальный бинарный codec reference slice
 
-**Статус:** исходный код реализован, тесты **AUTHORED, NOT RUN**. Это первый нижний слой JPVR_FORMAT_V1, а не Storage Engine.
+**Статус:** исходный код реализован. 23 теста `test_codec.py` вошли в совокупный 141-test набор JPVR, который пользователь сообщил как прошедший в Android Termux; независимый повторный запуск здесь не выполнялся. Это нижний binary-codec слой, а не Storage Engine.
 
 Пакет `tools/jpvr_reference/` содержит:
 - стандартно-совместимую реализацию CRC32C Castagnoli с контрольным вектором;
 - encode/decode 4-KiB Superblock A/B с проверкой magic, версии, header size, endian marker, page size, slot id, CRC32C, нулевого резерва и согласованности genesis/active-commit ссылок;
 - encode/decode 4-KiB обычной страницы с 64-byte header и 4 032-byte payload area; проверяются page type, version, flags, reserved, page_no, generation, transaction id, длина, CRC32C заголовка/всей payload area, нулевой padding и соответствие ожидаемой физической позиции.
 
-`tools/jpvr_reference/test_codec.py` содержит 23 детерминированных тестовых метода для CRC контрольного вектора, round-trip genesis/committed superblock, обеих slot-копий, page round-trip (empty/small/full payload), границ, corruption CRC, reserved/flags, padding и physical page number. Они **AUTHORED, NOT RUN**; никаких PASS для нового codec не заявляется.
+`tools/jpvr_reference/test_codec.py` содержит 23 детерминированных тестовых метода для CRC контрольного вектора, round-trip genesis/committed superblock, обеих slot-копий, page round-trip (empty/small/full payload), границ, corruption CRC, reserved/flags, padding и physical page number. Эти 23 теста входят в user-reported PASS набор из 141 JPVR tests; этот результат не подтверждает файловую durability или recovery.
 
-**Границы реализации:** файловый контейнер, file/process lock, DATA page indexing, copy-on-write индексы, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, durable flush/sync, reopen/recovery, compaction и fault injection ещё не реализованы. Этот пакет нельзя использовать как доказательство durability или безопасного хранения данных.
+**Границы реализации:** файловый контейнер и file/process lock, автоматическое построение DATA RecordLocation/index entries, сборка одной транзакции из отдельных COW/manifest/JOURNAL/COMMIT кодеков, OUTBOX codec, CHECKPOINT, durable flush/sync, reopen/recovery, compaction и fault injection ещё не реализованы. Этот пакет нельзя использовать как доказательство durability или безопасного хранения данных.
 
 Этот page-envelope slice является нижним уровнем; JREC/TLV и BLOB codecs описаны в разделах 3.21.16–3.21.17. Интеграция с CQE запрещена до появления и проверки transaction/recovery path.
 
 #### 3.21.16. JREC small-record и TLV codec reference slice
 
-**Статус:** исходный код реализован; тесты **AUTHORED, NOT RUN**. Пакет `tools/jpvr_reference/records.py` добавляет small-record framing и generic deterministic TLV encoding/decoding поверх бинарных примитивов 3.21.15.
+**Статус:** исходный код реализован. 23 теста `test_records.py` вошли в совокупный 141-test набор JPVR, который пользователь сообщил как прошедший в Android Termux. Пакет `tools/jpvr_reference/records.py` добавляет small-record framing и generic deterministic TLV encoding/decoding поверх бинарных примитивов 3.21.15.
 
 **JREC header v1 (56 bytes):**
 - offset 0: `JREC` magic (4 bytes);
@@ -2260,13 +2260,13 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 Для TLV v1 выбран `OPTIONAL=0x01`; остальные flag bits запрещены. `field_id=0` зарезервирован. Поля сериализуются по возрастанию field_id без дублей; каждый header (u16 field_id, u8 wire_type, u8 flags, u32 value_length) + value выравнивается нулевыми байтами до 8. Неизвестное поле разрешено пропустить только при OPTIONAL и известном wire_type; неизвестный wire_type всегда отклоняется. При передаче schema map decoder также проверяет обязательность и ожидаемый wire_type. NaN/Infinity запрещены; encoder нормализует −0.0 в +0.0, decoder отклоняет ненормализованный −0.0. Максимальный логический TLV payload — 16 MiB.
 
-`tools/jpvr_reference/test_records.py` содержит 23 тестовых метода для всех 11 wire types, сортировки/дублей, unknown optional/mandatory, type mismatch, malformed values, UTF-8, alignment, JREC round-trip, несколько записей на странице, CRC, reserved/flags и границ размера. Вместе с 23 тестами `test_codec.py` и 15 тестами `test_blob.py` в JPVR reference сейчас 61 тестовый метод; **все 61 AUTHORED, NOT RUN**.
+`tools/jpvr_reference/test_records.py` содержит 23 тестовых метода для всех 11 wire types, сортировки/дублей, unknown optional/mandatory, type mismatch, malformed values, UTF-8, alignment, JREC round-trip, несколько записей на странице, CRC, reserved/flags и границ размера. 23 теста `test_records.py` входят в базовые 109 тестов ранних JPVR codecs; все 109 были частью совокупного 141-test набора, который пользователь сообщил как PASS.
 
-**Границы:** BLOB fragmentation реализован отдельным reference slice в 3.21.17, но не проверен запуском; record registry/schema migration, DATA page indexing, manifest, JOURNAL, COMMIT, OUTBOX, CHECKPOINT, file/container I/O, durable sync, recovery и compaction не реализованы. Числовые коды wire_type и OPTIONAL bit — зафиксированный начальный выбор этого reference slice; изменение после появления persisted files потребует явной schema/format compatibility policy.
+**Границы:** BLOB fragmentation реализован отдельным reference slice в 3.21.17; его 15 тестов вошли в user-reported PASS набор из 141 JPVR tests. Record registry/schema migration, автоматический DATA page indexing/RecordLocation builder, file/container I/O, durable sync, recovery и compaction не реализованы. Отдельные MANIFEST/JOURNAL/COMMIT codecs теперь существуют, но ещё не собраны в транзакционный writer; OUTBOX и CHECKPOINT codecs отсутствуют. Числовые коды wire_type и OPTIONAL bit — зафиксированный начальный выбор этого reference slice; изменение после появления persisted files потребует явной schema/format compatibility policy.
 
 #### 3.21.17. BLOB fragment codec reference slice
 
-**Статус:** исходный код реализован; 15 тестов **AUTHORED, NOT RUN**. `tools/jpvr_reference/blob.py` кодирует большую логическую запись в последовательность полных PageType.BLOB страниц и выполняет обратную проверку/сборку.
+**Статус:** исходный код реализован; 15 тестов `test_blob.py` вошли в совокупный 141-test набор, user-reported PASS в Termux. `tools/jpvr_reference/blob.py` кодирует большую логическую запись в последовательность полных PageType.BLOB страниц и выполняет обратную проверку/сборку.
 
 64-byte JBLB fragment header внутри 4 032-byte page payload:
 - offset 0: `JBLB` magic (4 bytes);
@@ -2278,25 +2278,25 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 Одна BLOB page содержит до 3 968 bytes fragment data после заголовка. Внешний page envelope проверяет CRC32C всех 4 032 bytes payload area, включая JBLB header и zero padding; full_payload_crc32c проверяется после сборки всей логической записи. Decoder требует последовательные page_no, одинаковые transaction_id/commit_generation и record metadata, точный fragment_index/count/length, нулевой padding, полный размер и full-record CRC. Максимум logical record — 16 MiB; максимум страниц BLOB — 8 192.
 
-`tools/jpvr_reference/test_blob.py` содержит 15 тестов для round-trip, fragment boundary, малого/слишком большого payload, порядка страниц/индексов, expected page number, outer CRC, full-record CRC после повторного outer checksum, padding, transaction/generation/metadata consistency и page type. Вместе с 23 `test_codec.py` и 23 `test_records.py` пакет содержит 61 тестовый метод; все **AUTHORED, NOT RUN**.
+`tools/jpvr_reference/test_blob.py` содержит 15 тестов для round-trip, fragment boundary, малого/слишком большого payload, порядка страниц/индексов, expected page number, outer CRC, full-record CRC после повторного outer checksum, padding, transaction/generation/metadata consistency и page type. Эти 15 BLOB tests входят в базовые 109 ранних JPVR tests; все 109 были включены в совокупный user-reported PASS набор из 141.
 
 **Границы:** BLOB codec не резервирует file offsets/pages, не создаёт DATA/INDEX/MANIFEST страницы, не управляет транзакциями, не выполняет file I/O, flush/sync, durable commit, recovery, outbox или compaction. Он проверяет только in-memory последовательность уже предоставленных полных страниц.
 
 #### 3.21.18. DATA page record packing reference slice
 
-**Статус:** исходный код реализован; 14 тестов **AUTHORED, NOT RUN**. `tools/jpvr_reference/data.py` добавляет ограниченный one-page packer/parser для JREC records.
+**Статус:** исходный код реализован; 14 тестов `test_data.py` вошли в совокупный 141-test набор, user-reported PASS в Termux. `tools/jpvr_reference/data.py` добавляет ограниченный one-page packer/parser для JREC records.
 
 - `encode_data_page(records, page_no, commit_generation, transaction_id)` принимает только canonical padded JREC byte strings, проверяет каждый через `decode_record`, укладывает их последовательно в 4 032-byte payload и отклоняет переполнение до outer page encoding.
 - `decode_data_page(page)` проверяет PageType.DATA, полный размер payload area, внешний page CRC и последовательно декодирует JREC до полностью нулевого остатка. Ненулевой мусор после последней записи не игнорируется.
 - Пустая DATA page допустима; записи сохраняют порядок и не пересекают границу страницы.
 
-`tools/jpvr_reference/test_data.py` содержит 14 тестов для single/multiple/empty pages, ordering, capacity, canonical record framing, malformed records, wrong page type/size/physical page number, outer CRC, inner record CRC и nonzero trailing bytes. Вместе с 23 `test_codec.py`, 23 `test_records.py`, 15 `test_blob.py`, 15 `test_layout.py` и 19 `test_manifest.py` пакет содержит 109 тестовых методов; все **AUTHORED, NOT RUN**.
+`tools/jpvr_reference/test_data.py` содержит 14 тестов для single/multiple/empty pages, ordering, capacity, canonical record framing, malformed records, wrong page type/size/physical page number, outer CRC, inner record CRC и nonzero trailing bytes. 14 DATA tests входят в базовые 109 тестов шести ранних JPVR modules; пользователь сообщил PASS для расширенного набора из 141 теста, включая INDEX и COW.
 
 **Границы:** packer работает только с одной страницей за вызов. Он не выполняет file I/O и не резервирует page numbers; чистый append planner для диапазонов описан в 3.21.19. Object indexes, manifest, transaction journal, commit/outbox, durability, recovery и compaction отсутствуют.
 
 #### 3.21.19. In-memory append planner reference slice
 
-**Статус:** исходный код реализован; 15 тестов **AUTHORED, NOT RUN**. `tools/jpvr_reference/layout.py` содержит pure planner, который не открывает и не изменяет файлы.
+**Статус:** исходный код реализован; 15 тестов `test_layout.py` входят в базовые 109 JPVR tests, которые пользователь включил в совокупный 141-test PASS набор. `tools/jpvr_reference/layout.py` содержит pure planner, который не открывает и не изменяет файлы.
 
 `plan_append(current_superblock, page_count, active_commit_id)`:
 - начинает диапазон со следующего номера после `durable_tail_page_no`;
@@ -2308,13 +2308,13 @@ Payload CRC покрывает точные байты payload; header CRC по�
   
 `validate_append_plan` повторно проверяет типы/диапазон и отклоняет stale plan или изменённые поля до будущей записи. Планирование не резервирует физические offsets, не гарантирует отсутствие гонок между процессами и не выполняет write ordering/flush/sync; это должно обеспечить будущий locked writer по протоколу 3.21.10.
 
-`tools/jpvr_reference/test_layout.py` содержит 15 тестов для genesis/next-generation planning, alternating slots, checkpoint, overflow, invalid identifiers, stale/tampered plans и строгих numeric types. Вместе с 23 page/superblock, 23 JREC/TLV, 15 BLOB, 14 DATA и 19 manifest tests эти 15 layout tests дают 109 тестовых методов; все **AUTHORED, NOT RUN**.
+`tools/jpvr_reference/test_layout.py` содержит 15 тестов для genesis/next-generation planning, alternating slots, checkpoint, overflow, invalid identifiers, stale/tampered plans и строгих numeric types. Эти 15 layout tests завершают базовые 109 тестов шести ранних JPVR modules; пользователь сообщил PASS для совокупного набора из 141 tests, включающего также INDEX и COW.
 
 **Границы:** append planner не является allocator или transaction manager. Он не записывает страницы, не формирует COMMIT record, не проверяет содержимое новых страниц, не обновляет superblock на диске и не выполняет crash recovery.
 
 #### 3.21.20. MANIFEST payload/page codec и root validation
 
-**Статус:** исходный код реализован; 19 тестов **AUTHORED, NOT RUN**. `tools/jpvr_reference/manifest.py` реализует начальный TLV payload schema, MANIFEST page envelope и проверку корневых ссылок.
+**Статус:** исходный код реализован; 19 тестов `test_manifest.py` входят в базовые 109 JPVR tests, user-reported PASS в составе совокупных 141 tests. `tools/jpvr_reference/manifest.py` реализует начальный TLV payload schema, MANIFEST page envelope и проверку корневых ссылок.
 
 **Manifest TLV field IDs:**
 - 1: container_uuid (ID128);
