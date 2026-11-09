@@ -1,6 +1,6 @@
 # JPVR v1 — OUTBOX immutable event reference codec
 
-**Status:** JOUT v1 payload/page codec and adjacent sequence validator implemented as a Python reference slice on 9 November 2026. The focused tests are authored but not run. This is not a publisher, acknowledgement store, durable worker, or recovery engine.
+**Status:** JOUT v1 payload/page codec and adjacent sequence validator implemented as a Python reference slice on 9 November 2026. The 33 focused tests are authored but not run. This is not a publisher, acknowledgement store, durable worker, or recovery engine.
 
 ## Purpose and atomicity boundary
 
@@ -64,4 +64,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_outbox -v
 ```
 
-Then run the complete JPVR test command in README.md. At authoring time, the user has reported **196/196 PASS** on Android Termux for the previous ten-module JPVR suite. The new OUTBOX tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
+Then run the complete JPVR test command in README.md. At authoring time, the user has reported **196/196 PASS** on Android Termux for the previous ten-module JPVR suite. The 33 OUTBOX tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
