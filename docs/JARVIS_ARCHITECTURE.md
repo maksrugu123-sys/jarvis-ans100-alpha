@@ -1,7 +1,7 @@
 # JARVIS ANS-100 Alpha — архитектура и журнал решений
 
 **Статус документа:** рабочая спецификация и журнал согласованных проектных решений  
-**Дата последнего обновления:** 8 ноября 2026 года  
+**Дата последнего обновления:** 9 ноября 2026 года  
 **Репозиторий:** `maksrugu123-sys/jarvis-ans100-alpha` (Private)  
 **Основная ветка:** `main`
 
@@ -2054,7 +2054,7 @@ INTERNAL entry: `u16 separator_length`, 6 нулевых reserved bytes, `u64 ch
 
 В v1 максимальная высота дерева ограничена 64 уровнями. Все PageRef проверяются по page number и expected generation; read-only lookup дополнительно проверяет тип INDEX, tree_id, durable prefix, отсутствие циклов и согласованность уровня дочернего узла с уровнем родителя. Неизвестные версии/типы, ненулевые reserved/padding, некорректные длины и переполнение страницы отклоняются.
 
-**Реализовано в `tools/jpvr_reference/index.py`:** кодирование/декодирование LEAF и INTERNAL payload, INDEX page envelope и snapshot lookup по предоставленному page catalog. Это immutable/read-only reference layer. Он не пишет файл, не строит дерево, не выполняет split/merge/path-copy, не проверяет полноту производного индекса относительно DATA/BLOB и не подтверждает транзакции. Формат должен считаться частью JPVR_FORMAT_V1 после прохождения тестов и совместимости с последующими writer/recovery слоями.
+**Реализовано:** `tools/jpvr_reference/index.py` кодирует/декодирует LEAF и INTERNAL nodes, INDEX page envelope и read-only snapshot lookup; отдельный `tools/jpvr_reference/cow.py` выполняет full-tree validation и in-memory COW upsert с path-copy и split. COW слой описан в разделе 3.21.22. Оба модуля работают с переданным in-memory page catalog: физическая запись и durability ими не обеспечиваются.
 
 #### 3.21.7. Журнал, commit и связь с CQE durable outbox
 
@@ -2328,9 +2328,9 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 `encode_manifest_page/decode_manifest_page` помещают TLV payload в PageType.MANIFEST; generation payload обязана совпадать с generation внешней страницы. `validate_manifest` сверяет container UUID и generation с Superblock, проверяет все семь INDEX roots по PageRef/page header/expected generation, а checkpoint/JOURNAL/OUTBOX references — по page type и durable_tail. Неизменяемые root pages предыдущего поколения разрешены, если их generation совпадает с PageRef и не превышает manifest generation.
 
-`tools/jpvr_reference/test_manifest.py` содержит 19 тестов для TLV round-trip, unknown optional/mandatory, required fields, MANIFEST page envelope, root generation/type/bounds, container identity и отсутствующих страниц. Вместе с остальными JPVR модулями текущий набор содержит 109 тестовых методов; все **AUTHORED, NOT RUN**.
+`tools/jpvr_reference/test_manifest.py` содержит 19 тестов для TLV round-trip, unknown optional/mandatory, required fields, MANIFEST page envelope, root generation/type/bounds, container identity и отсутствующих страниц. Они входят в базовые 109 тестов шести ранних JPVR modules; пользователь позднее сообщил PASS для совокупного набора из 141 теста, включавшего эти модули, INDEX и COW.
 
-**Границы:** это проверка структуры manifest и root page references в памяти. B+ tree node parsing, поиск/обновление индексов, COW path copying, построение manifest из transaction candidate, проверка полноты индекса сканированием авторитетных записей, file I/O, journal/commit и recovery не реализованы.
+**Границы:** это проверка структуры manifest и root page references в памяти. INDEX codec/lookup и COW planner существуют отдельно, однако построение manifest из полного transaction candidate, проверка полноты индексов сканированием авторитетных DATA/BLOB-записей, file I/O и recovery не реализованы.
 
 #### 3.21.21. COMMIT descriptor JCOM v1 — reference codec
 
@@ -2357,6 +2357,40 @@ Payload CRC покрывает точные байты payload; header CRC по�
 **Реализация:** `tools/jpvr_reference/commit.py` содержит payload/page encode/decode и `validate_commit_snapshot`. Последняя функция сверяет COMMIT с MANIFEST, проверяет предыдущую commit-ссылку и, если одновременно предоставлены Superblock и page catalog, вызывает существующую проверку корней/служебных страниц manifest. 20 тестов находятся в `test_commit.py`; они написаны, но пока **AUTHORED, NOT RUN**.
 
 **Границы:** это только codec и in-memory cross-check по переданным байтам. JOURNAL/OUTBOX codec, сборка полной последовательности DATA/BLOB/INDEX/MANIFEST/JOURNAL/OUTBOX/COMMIT, эксклюзивная reservation, файловая запись, два flush/sync, публикация superblock, crash recovery и orphan-page handling не реализованы. Валидный COMMIT descriptor не означает DURABLE_COMMITTED.
+
+#### 3.21.22. Full-tree validation и COW B+ tree upsert planner
+
+`tools/jpvr_reference/cow.py` реализует две операции поверх immutable JIDX nodes:
+
+- `validate_index_tree` обходит все достижимые nodes и сверяет PageRef, page generation, durable prefix, tree_id, уровни потомков, отсутствие циклов и повторного использования child page, точное равенство separator минимальному ключу правого поддерева и отсутствие пересекающихся диапазонов ключей.
+- `cow_upsert_index` вставляет один новый ключ или заменяет значение существующего через path-copy. Неизменённые поддеревья переиспользуют старые PageRef; переполненные LEAF/INTERNAL nodes делятся, а split root создаёт новый уровень. Новые INDEX page numbers планируются последовательно после переданного durable tail.
+
+`CowIndexPlan` содержит staged page bytes и новый root, но не резервирует место в контейнере, не пишет диск и не подтверждает новый durable prefix. Delete/merge, bulk update, redistribution и compaction отсутствуют. Полная проверка дерева имеет O(number of reachable INDEX pages) стоимость. Точный контракт: `docs/JPVR_COW_WRITER_V1.md`.
+
+**Тесты:** 16 COW tests вошли в совокупный 141-test набор, который пользователь сообщил как прошедший в Android Termux. Это user-reported verification; независимый повторный запуск здесь не выполнялся.
+
+#### 3.21.23. JOURNAL operation-state JNRL v1 — reference codec
+
+`tools/jpvr_reference/journal.py` кодирует одну immutable operation-state revision в одной PageType.JOURNAL page. Восьмибайтовый префикс JNRL содержит magic/version/header size; далее идут упорядоченные TLV fields:
+
+| Field ID | Wire type | Назначение |
+|---:|---|---|
+| 1 | ID128 | operation_id |
+| 2 | ID128 | idempotency_key |
+| 3 | ID128 | owner_module_id из Module Registry |
+| 4 | U8 | lifecycle status |
+| 5 | U64 | expected_state_version (optional) |
+| 6 | U64 | new_state_version (optional) |
+| 7 | ID128 | commit_id (optional) |
+| 8 | BYTES[16] | commit PageRef, paired with field 7 |
+| 9 | BYTES[16] | previous JOURNAL entry PageRef (optional) |
+| 10 | ID128 | result_object_id (optional) |
+
+Статусы v1: QUEUED=1, RUNNING=2, PREPARED=3, COMMITTED=4, COMPLETED=5, DEFERRED=6, REJECTED=7, FAILED=8, CANCELLED=9, COMMIT_UNKNOWN=10. ACCEPTED остаётся queue acknowledgement, а не persistent operation state. Каждая следующая revision должна указывать на предыдущую страницу той же операции; identities и expected version неизменны, назначенный new version и commit identity нельзя переписывать. `validate_journal_transition` проверяет порядок страниц/поколений, транзакционные ID и разрешённые переходы состояний.
+
+COMMITTED/COMPLETED требуют commit_id + commit_ref. Одинаковое поколение означает, что JOURNAL page предшествует будущей COMMIT page в том же append prefix; ссылка на COMMIT предыдущего поколения должна вести назад. COMMIT_UNKNOWN — специальное неопределённое состояние, а не разрешение повторно выполнить side effect.
+
+**Тесты и границы:** 30 тестов `test_journal.py` написаны, но **AUTHORED, NOT RUN**. Совокупный JPVR набор насчитывает 191 test method: 141 прежних тестов user-reported PASS + 20 новых JCOM tests и 30 JNRL tests, ещё не запущенных. JOURNAL codec не ведёт глобальный idempotency index, не доказывает уникальность operation_id, не сканирует полный журнал, не разрешает result_object_id в RecordLocation и не реализует retention/recovery. OUTBOX, transaction sequence assembly, page reservation, file I/O, flush/sync и superblock publication также не реализованы. Полный контракт: `docs/JPVR_JOURNAL_V1.md`.
 
 ### 3.22. JARVIS Numerical Oracle v0.1 — эталонная числовая реализация
 
