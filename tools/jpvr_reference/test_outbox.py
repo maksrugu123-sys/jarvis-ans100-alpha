@@ -322,6 +322,19 @@ class OutboxSequenceTests(unittest.TestCase):
         with self.assertRaisesRegex(JPVRFormatError, "invalid OUTBOX page number"):
             validate_outbox_sequence(malformed, current)
 
+    def test_previous_generation_commit_must_precede_next_event(self):
+        first = self.decoded(18, 1, TX1, event(commit_ref=PageRef(25, 1)))
+        current = self.decoded(
+            21, 2, TX2,
+            event(
+                sequence=2,
+                commit_ref=PageRef(23, 2),
+                previous_event_ref=PageRef(18, 1),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "previous generation COMMIT"):
+            validate_outbox_sequence(first, current)
+
     def test_new_generation_requires_new_transaction_id(self):
         first = self.decoded(18, 1, TX1, event(commit_ref=PageRef(20, 1)))
         second = self.decoded(
