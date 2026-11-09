@@ -136,6 +136,10 @@ class OutboxPayloadTests(unittest.TestCase):
         with self.assertRaisesRegex(JPVRFormatError, "exceeds 3500"):
             encode_outbox_payload(event(event_payload=bytes(MAX_OUTBOX_EVENT_PAYLOAD_BYTES + 1)))
 
+    def test_payload_accepts_exact_event_payload_limit(self):
+        value = event(event_payload=bytes(MAX_OUTBOX_EVENT_PAYLOAD_BYTES))
+        self.assertEqual(decode_outbox_payload(encode_outbox_payload(value)), value)
+
     def test_payload_rejects_zero_sequence(self):
         with self.assertRaisesRegex(JPVRFormatError, "sequence must be positive"):
             encode_outbox_payload(event(sequence=0))
@@ -227,6 +231,71 @@ class OutboxSequenceTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(JPVRFormatError, "increase by exactly one"):
             validate_outbox_sequence(first, second)
+
+    def test_sequence_rejects_page_order_regression(self):
+        first = self.decoded(18, 2, TX1, event())
+        current = self.decoded(
+            17, 2, TX1,
+            event(sequence=2, commit_ref=PageRef(23, 2), previous_event_ref=PageRef(18, 2)),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "strictly append ordered"):
+            validate_outbox_sequence(first, current)
+
+    def test_sequence_rejects_generation_regression(self):
+        first = self.decoded(18, 2, TX1, event())
+        current = self.decoded(
+            21, 1, TX2,
+            event(
+                sequence=2,
+                commit_ref=PageRef(23, 1),
+                previous_event_ref=PageRef(18, 2),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "generation cannot regress"):
+            validate_outbox_sequence(first, current)
+
+    def test_sequence_rejects_adjacent_duplicate_event_id(self):
+        first = self.decoded(18, 2, TX1, event())
+        current = self.decoded(
+            21, 2, TX1,
+            event(
+                idempotency_key=bytes.fromhex("05050505050505050505050505050505"),
+                sequence=2,
+                commit_ref=PageRef(23, 2),
+                previous_event_ref=PageRef(18, 2),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "event_id must be unique"):
+            validate_outbox_sequence(first, current)
+
+    def test_sequence_rejects_adjacent_duplicate_idempotency_key(self):
+        first = self.decoded(18, 2, TX1, event())
+        current = self.decoded(
+            21, 2, TX1,
+            event(
+                event_id=bytes.fromhex("04040404040404040404040404040404"),
+                sequence=2,
+                commit_ref=PageRef(23, 2),
+                previous_event_ref=PageRef(18, 2),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "idempotency_key must be unique"):
+            validate_outbox_sequence(first, current)
+
+    def test_same_generation_requires_same_transaction_id(self):
+        first = self.decoded(18, 2, TX1, event())
+        current = self.decoded(
+            21, 2, TX2,
+            event(
+                event_id=bytes.fromhex("04040404040404040404040404040404"),
+                idempotency_key=bytes.fromhex("05050505050505050505050505050505"),
+                sequence=2,
+                commit_ref=PageRef(23, 2),
+                previous_event_ref=PageRef(18, 2),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "same-generation OUTBOX pages"):
+            validate_outbox_sequence(first, current)
 
     def test_new_generation_requires_new_transaction_id(self):
         first = self.decoded(18, 1, TX1, event(commit_ref=PageRef(20, 1)))
