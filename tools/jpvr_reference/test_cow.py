@@ -203,10 +203,10 @@ class CowIndexUpsertTests(unittest.TestCase):
         c0 = b"c" + b"0" * 1023
         d0 = b"d" + b"0" * 1023
         catalog = {
-            2: leaf_page(2, [(a0, b"A")]),
-            3: leaf_page(3, [(b0, b"B")]),
-            4: leaf_page(4, [(c0, b"C")]),
-            5: leaf_page(5, [(d0, b"D")]),
+            2: leaf_page(2, [(a0, b"A" * 2048)]),
+            3: leaf_page(3, [(b0, b"B" * 2048)]),
+            4: leaf_page(4, [(c0, b"C" * 2048)]),
+            5: leaf_page(5, [(d0, b"D" * 2048)]),
             6: encode_index_page(
                 IndexNode(
                     TREE, 1, first_child=PageRef(2, 1),
