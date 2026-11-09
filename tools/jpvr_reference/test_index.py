@@ -93,6 +93,20 @@ class IndexNodeCodecTests(unittest.TestCase):
         with self.assertRaisesRegex(JPVRFormatError, "generation mismatch"):
             lookup_index(PageRef(2, 1), catalog, b"x", tree_id=TREE, durable_tail_page_no=2)
 
+    def test_lookup_rejects_child_level_mismatch(self):
+        leaf = IndexNode(TREE, 0, (IndexEntry(b"a", b"A"),))
+        # The root declares level 2, but its referenced child is a leaf (level 0).
+        root = IndexNode(TREE, 2, first_child=PageRef(2, 1), children=(IndexChild(b"m", PageRef(3, 1)),))
+        catalog = {
+            2: encode_index_page(IndexNode(TREE, 1, first_child=PageRef(4, 1), children=(IndexChild(b"a", PageRef(5, 1)),)), 2, 1, TX),
+            3: encode_index_page(leaf, 3, 1, TX),
+            4: encode_index_page(leaf, 4, 1, TX),
+            5: encode_index_page(leaf, 5, 1, TX),
+            6: encode_index_page(root, 6, 2, TX),
+        }
+        with self.assertRaisesRegex(JPVRFormatError, "child level"):
+            lookup_index(PageRef(6, 2), catalog, b"z", tree_id=TREE, durable_tail_page_no=6)
+
     def test_lookup_rejects_wrong_tree_id(self):
         catalog = {2: encode_index_page(IndexNode(TREE, 0), 2, 1, TX)}
         with self.assertRaisesRegex(JPVRFormatError, "tree ID mismatch"):
