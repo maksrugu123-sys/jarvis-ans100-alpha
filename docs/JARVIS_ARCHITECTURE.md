@@ -3757,10 +3757,10 @@ The immutable JIDX layer now has a pure in-memory one-key copy-on-write upsert p
 
 #### 3.21.24. OUTBOX immutable event JOUT v1 — reference codec
 
-**Статус:** добавлен Python reference codec для одной immutable OUTBOX event page и проверки соседних элементов глобальной последовательности. Контракт: [JPVR_OUTBOX_V1.md](JPVR_OUTBOX_V1.md). 35 новых тестовых методов **AUTHORED, NOT RUN** на момент записи.
+**Статус:** добавлен Python reference codec для одной immutable OUTBOX event page и проверки соседних элементов глобальной последовательности. Контракт: [JPVR_OUTBOX_V1.md](JPVR_OUTBOX_V1.md). 36 новых тестовых методов **AUTHORED, NOT RUN** на момент записи.
 
 JOUT v1 хранит ненулевые event_id, idempotency_key, operation_id и commit_id; event_type (UTF-8, максимум 128 байт); непрозрачный event_payload (максимум 3 500 байт); глобальный sequence; source commit PageRef; необязательную ссылку на предыдущую OUTBOX event. Страница обязана иметь ненулевой transaction_id, ссылаться на COMMIT того же поколения, физически следующую за событием. Соседний sequence validator проверяет точную ссылку на предыдущее событие, непрерывность sequence, отсутствие непосредственного повтора event/idempotency identity и согласованность transaction_id/source COMMIT в пределах поколения.
 
 Это только неизменяемая запись намерения события. Кодек не публикует Event, не ведёт subscriber ACK/cursor, retry/retention, глобальный dedup index или publisher worker. Он также не доказывает, что source COMMIT стал активным durable commit: перед публикацией будущий reader обязан проверить COMMIT chain и активный superblock. Доставка остаётся at-least-once; exactly-once не заявляется.
 
-**Проверка:** пользователь сообщил, что предыдущий десятимодульный JPVR suite прошёл **196/196** на Android Termux за 2.204 s. Новый OUTBOX модуль увеличивает исходный набор до 11 модулей и 231 метод; 35 OUTBOX тестов ещё не запускались. Сборки/CI не запускались.
+**Проверка:** пользователь сообщил, что предыдущий десятимодульный JPVR suite прошёл **196/196** на Android Termux за 2.204 s. Новый OUTBOX модуль увеличивает исходный набор до 11 модулей и 232 метода; 36 OUTBOX тестов ещё не запускались. Сборки/CI не запускались.
