@@ -277,5 +277,7 @@ def validate_outbox_sequence(
     if current.commit_generation == previous.commit_generation:
         if current.transaction_id != previous.transaction_id:
             raise JPVRFormatError("same-generation OUTBOX pages must share transaction_id")
+        if current.event.commit_ref != previous.event.commit_ref:
+            raise JPVRFormatError("same-generation OUTBOX events must share source COMMIT")
     elif current.transaction_id == previous.transaction_id:
         raise JPVRFormatError("new-generation OUTBOX page must use a new transaction_id")
