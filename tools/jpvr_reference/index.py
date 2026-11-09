@@ -159,8 +159,10 @@ def decode_index_node(payload: bytes | bytearray | memoryview) -> IndexNode:
     magic, version, kind, level, count, reserved, tree_id, first_page, first_gen = INDEX_NODE_HEADER.unpack_from(raw)
     if magic != INDEX_NODE_MAGIC or version != INDEX_NODE_VERSION:
         raise JPVRFormatError("invalid index node magic or version")
-    if reserved != 0 or kind not in (0, 1) or (kind == 0) != (level == 0):
+    if reserved != 0 or kind not in (0, 1) or (kind == 0) != (level == 0) or level >= MAX_INDEX_DEPTH:
         raise JPVRFormatError("invalid index node kind, level, or reserved field")
+    if kind == 1 and count == 0:
+        raise JPVRFormatError("internal node must contain separator children")
     offset = INDEX_NODE_HEADER_BYTES
     if kind == 0:
         if first_page or first_gen:
@@ -197,6 +199,8 @@ def decode_index_node(payload: bytes | bytearray | memoryview) -> IndexNode:
         if offset + INTERNAL_ENTRY_HEADER.size > len(raw):
             raise JPVRFormatError("truncated internal entry header")
         key_len, page_no, generation = INTERNAL_ENTRY_HEADER.unpack_from(raw, offset)
+        if any(raw[offset + 2:offset + 8]):
+            raise JPVRFormatError("internal entry reserved bytes must be zero")
         end = offset + INTERNAL_ENTRY_HEADER.size + key_len
         padded_end = offset + ((end - offset + 7) // 8) * 8
         if not key_len or key_len > MAX_INDEX_KEY_BYTES or padded_end > len(raw):
