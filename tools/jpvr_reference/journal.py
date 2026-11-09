@@ -359,8 +359,10 @@ def validate_journal_transition(
     """Validate one append-only state transition for the same logical operation."""
     if not isinstance(previous, DecodedJournalPage) or not isinstance(current, DecodedJournalPage):
         raise JPVRFormatError("journal transition requires decoded JOURNAL pages")
-    _fixed_bytes("previous.transaction_id", previous.transaction_id, 16)
-    _fixed_bytes("current.transaction_id", current.transaction_id, 16)
+    previous_tx_id = _fixed_bytes("previous.transaction_id", previous.transaction_id, 16)
+    current_tx_id = _fixed_bytes("current.transaction_id", current.transaction_id, 16)
+    if previous_tx_id == bytes(16) or current_tx_id == bytes(16):
+        raise JPVRFormatError("JOURNAL transaction_id must be nonzero")
     if current.page_no <= previous.page_no:
         raise JPVRFormatError("JOURNAL revisions must be appended in page order")
     if current.commit_generation < previous.commit_generation:
