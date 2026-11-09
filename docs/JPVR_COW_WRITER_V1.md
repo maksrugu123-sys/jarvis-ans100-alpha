@@ -64,4 +64,4 @@ Run the new focused suite:
 python3 -m unittest tools.jpvr_reference.test_cow -v
 ```
 
-Run the complete ten-module JPVR reference suite using the command in README.md. The user reported 141 JPVR tests (including these 16 COW tests) as PASS in Termux. The separate JCOM module adds 20 tests and the JOURNAL module adds 32 tests; both are AUTHORED, NOT RUN. The current complete JPVR source set contains 193 test methods across ten modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete ten-module JPVR reference suite using the command in README.md. The user reported 141 JPVR tests (including these 16 COW tests) as PASS in Termux. The separate JCOM module adds 20 tests and the JOURNAL module adds 34 tests; both are AUTHORED, NOT RUN. The current complete JPVR source set contains 195 test methods across ten modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
