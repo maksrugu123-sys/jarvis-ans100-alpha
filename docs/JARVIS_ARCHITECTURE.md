@@ -2030,6 +2030,32 @@ MANIFEST-страница фиксирует поколение и корнев�
 
 Если индекс повреждён, он не используется как достоверный. При наличии целостных авторитетных DATA/BLOB-записей разрешено перестроить производный индекс сканированием подтверждённого префикса. Если невозможно доказать полноту/целостность исходных записей, система не должна выдавать частичный индекс за полный.
 
+#### 3.21.6.1. INDEX node payload v1 — reference codec
+
+Для первого read-only слоя INDEX payload фиксируется компактный формат узла `JIDX`. Он занимает обычную INDEX-страницу и не меняет 64-байтовый внешний page envelope.
+
+**Заголовок payload — 44 байта, little-endian:**
+
+| Смещение | Тип | Поле |
+|---:|---|---|
+| 0 | 4 bytes | magic = `JIDX` |
+| 4 | u16 | node_format_version = 1 |
+| 6 | u8 | node_kind: 0 LEAF, 1 INTERNAL |
+| 7 | u8 | level: 0 для LEAF, больше 0 для INTERNAL |
+| 8 | u16 | entry_count |
+| 10 | u16 | reserved = 0 |
+| 12 | 16 bytes | tree_id |
+| 28 | u64 | first_child_page_no (0 для LEAF) |
+| 36 | u64 | first_child_commit_generation (0 для LEAF) |
+
+LEAF entry: `u16 key_length`, `u16 value_length`, key bytes, value bytes, затем нулевое дополнение до 8-байтовой длины entry. Ключ непустой, максимум 1 024 байта; value максимум 2 048 байт. Ключи строго возрастают.
+
+INTERNAL entry: `u16 separator_length`, 6 нулевых reserved bytes, `u64 child_page_no`, `u64 child_commit_generation`, separator bytes, затем нулевое дополнение до 8-байтовой длины entry. Первый child хранится в заголовке. Separator — минимальный ключ соответствующего правого child; поиск направляет равный separator в правое поддерево. Разделители строго возрастают.
+
+В v1 максимальная высота дерева ограничена 64 уровнями. Все PageRef проверяются по page number и expected generation; read-only lookup дополнительно проверяет тип INDEX, tree_id, durable prefix, отсутствие циклов и согласованность уровня дочернего узла с уровнем родителя. Неизвестные версии/типы, ненулевые reserved/padding, некорректные длины и переполнение страницы отклоняются.
+
+**Реализовано в `tools/jpvr_reference/index.py`:** кодирование/декодирование LEAF и INTERNAL payload, INDEX page envelope и snapshot lookup по предоставленному page catalog. Это immutable/read-only reference layer. Он не пишет файл, не строит дерево, не выполняет split/merge/path-copy, не проверяет полноту производного индекса относительно DATA/BLOB и не подтверждает транзакции. Формат должен считаться частью JPVR_FORMAT_V1 после прохождения тестов и совместимости с последующими writer/recovery слоями.
+
 #### 3.21.7. Журнал, commit и связь с CQE durable outbox
 
 JPVR сохраняет append-only историю транзакций. JOURNAL хранит operation_id, idempotency_key, владельца домена, ожидаемую и новую версии, состояние обработки и ссылки на commit/result. COMMIT фиксирует границу подтверждённого изменения. OUTBOX хранит Event, обязательные метаданные доставки, event_id, commit_id, sequence/cursor и подтверждения подписчиков.
