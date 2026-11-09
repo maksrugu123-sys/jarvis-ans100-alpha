@@ -49,4 +49,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_commit -v
 ```
 
-Then run all ten JPVR modules as shown in README.md. The preceding 141 JPVR tests were reported by the user as passing; the 20 tests in `test_commit.py` and 30 tests in `test_journal.py` are new and remain **AUTHORED, NOT RUN**. The current source set contains 191 test methods, not 191 passing tests. No build or CI task was started.
+Then run all ten JPVR modules as shown in README.md. The preceding 141 JPVR tests were reported by the user as passing; the 20 tests in `test_commit.py` and 32 tests in `test_journal.py` are new and remain **AUTHORED, NOT RUN**. The current source set contains 193 test methods, not 191 passing tests. No build or CI task was started.
