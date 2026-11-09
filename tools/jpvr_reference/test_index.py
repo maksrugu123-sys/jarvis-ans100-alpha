@@ -3,7 +3,12 @@ import struct
 
 from .codec import JPVRFormatError, PageType, encode_page
 from .index import (
-    INDEX_NODE_HEADER_BYTES, MAX_INDEX_DEPTH, IndexChild, IndexEntry, IndexNode, PageRef,
+    INDEX_NODE_HEADER_BYTES,
+    MAX_INDEX_DEPTH,
+    IndexChild,
+    IndexEntry,
+    IndexNode,
+    PageRef,
     decode_index_node, decode_index_page, encode_index_node, encode_index_page,
     lookup_index,
 )
@@ -53,6 +58,7 @@ class IndexNodeCodecTests(unittest.TestCase):
             with self.subTest(level=level):
                 with self.assertRaisesRegex(JPVRFormatError, "maximum depth"):
                     encode_index_node(node)
+
     def test_leaf_rejects_nonzero_padding(self):
         raw = bytearray(encode_index_node(IndexNode(TREE, 0, (IndexEntry(b"a", b"x"),))))
         raw[-1] = 1
