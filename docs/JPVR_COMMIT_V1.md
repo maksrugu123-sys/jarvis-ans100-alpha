@@ -49,4 +49,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_commit -v
 ```
 
-Then run all ten JPVR modules as shown in README.md. The preceding 141 JPVR tests were reported by the user as passing; the 20 tests in `test_commit.py` and 34 tests in `test_journal.py` are new and remain **AUTHORED, NOT RUN**. The current source set contains 195 test methods, not 191 passing tests. No build or CI task was started.
+Then run all ten JPVR modules as shown in README.md. The earlier 141-test aggregate was user-reported PASS. The latest full 195-test Termux run produced 192 PASS, 2 FAIL and 1 ERROR, including two COMMIT failures; the COMMIT corrections are published but not yet rerun. The current ten-module source set contains 196 test methods after one additional INDEX regression test (AUTHORED, NOT RUN). No build or CI task was started.
