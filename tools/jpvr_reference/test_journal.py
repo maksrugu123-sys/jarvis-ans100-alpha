@@ -243,16 +243,24 @@ class JournalPageTests(unittest.TestCase):
             value,
         )
 
+    def test_page_rejects_zero_transaction_id(self):
+        with self.assertRaisesRegex(JPVRFormatError, "transaction_id must be nonzero"):
+            encode_journal_page(entry(), 18, 2, bytes(16))
+
 
 class JournalTransitionTests(unittest.TestCase):
     def decoded(self, page_no, generation, txid, value):
         return DecodedJournalPage(page_no, generation, txid, value)
 
     def test_valid_lifecycle(self):
-        queued = self.decoded(10, 1, TX1, entry())
+        queued = self.decoded(
+            10, 1, TX1,
+            entry(expected_state_version=7),
+        )
         running = self.decoded(
             11, 1, TX1, entry(
                 OperationStatus.RUNNING,
+                expected_state_version=7,
                 previous_entry_ref=PageRef(10, 1),
             )
         )
@@ -334,14 +342,24 @@ class JournalTransitionTests(unittest.TestCase):
         with self.assertRaisesRegex(JPVRFormatError, "expected_state_version cannot change"):
             validate_journal_transition(previous, current)
 
-    def test_transition_rejects_page_order_and_generation_regression(self):
-        previous = self.decoded(10, 2, TX2, entry())
+    def test_transition_rejects_page_order_regression(self):
+        previous = self.decoded(10, 1, TX1, entry())
         current = self.decoded(
             9, 1, TX1, entry(
-                OperationStatus.RUNNING, previous_entry_ref=PageRef(10, 2)
+                OperationStatus.RUNNING, previous_entry_ref=PageRef(10, 1)
             )
         )
         with self.assertRaisesRegex(JPVRFormatError, "page order"):
+            validate_journal_transition(previous, current)
+
+    def test_transition_rejects_generation_regression(self):
+        previous = self.decoded(10, 2, TX2, entry())
+        current = self.decoded(
+            11, 1, TX1, entry(
+                OperationStatus.RUNNING, previous_entry_ref=PageRef(10, 2)
+            )
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "generation cannot move backwards"):
             validate_journal_transition(previous, current)
 
 
