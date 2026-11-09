@@ -855,20 +855,20 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 
 **Добавлено:**
 - `tools/jpvr_reference/outbox.py` — JOUT v1 deterministic TLV payload codec, OUTBOX page envelope, source-COMMIT generation/order checks и adjacent global-sequence validator.
-- `tools/jpvr_reference/test_outbox.py` — 35 deterministic tests для round-trip, unknown optional/mandatory TLV, prefix/length/identity/type/payload limits, PageRef, page type/CRC, transaction identity, sequence continuity и same-generation COMMIT consistency.
+- `tools/jpvr_reference/test_outbox.py` — 36 deterministic tests для round-trip, unknown optional/mandatory TLV, prefix/length/identity/type/payload limits, PageRef, page type/CRC, transaction identity, sequence continuity и same-generation COMMIT consistency.
 - `docs/JPVR_OUTBOX_V1.md` — бинарный контракт, API и ограничения.
 
 **Архитектурные решения:** одна OUTBOX page хранит одно неизменяемое событие; обязательные идентификаторы — event_id, idempotency_key, operation_id и commit_id; event_type ограничен 128 UTF-8 bytes; opaque event payload — 3,500 bytes; sequence начинается с 1. Event ссылается на COMMIT того же поколения, который физически следует за OUTBOX page. Соседние события одного поколения должны принадлежать одному transaction_id и одному source COMMIT. Доставка остаётся at-least-once.
 
-**Изменено:** `docs/JARVIS_ARCHITECTURE.md` (раздел 3.21.24 и границы реализации), `docs/JPVR_JOURNAL_V1.md` (актуализированы ограничения), `README.md` (11 modules / 231 methods и evidence).
+**Изменено:** `docs/JARVIS_ARCHITECTURE.md` (раздел 3.21.24 и границы реализации), `docs/JPVR_JOURNAL_V1.md` (актуализированы ограничения), `README.md` (11 modules / 232 methods и evidence).
 
 **Проверки:** пользователь выполнил после исправлений COW/COMMIT/INDEX:
 - `python3 -m unittest tools.jpvr_reference.test_index tools.jpvr_reference.test_cow tools.jpvr_reference.test_commit -v` — **PASS, 53/53**.
 - полный десятимодульный JPVR набор — **PASS, 196/196**, Android Termux, 2.204 s.
-Эти результаты относятся к исходному набору до добавления OUTBOX. Статический подсчёт после добавления: 23 + 23 + 15 + 14 + 15 + 19 + 17 + 16 + 20 + 34 + 35 = **231 test methods / 11 modules**. OUTBOX 35 тестов — **AUTHORED, NOT RUN**.
+Эти результаты относятся к исходному набору до добавления OUTBOX. Статический подсчёт после добавления: 23 + 23 + 15 + 14 + 15 + 19 + 17 + 16 + 20 + 34 + 36 = **232 test methods / 11 modules**. OUTBOX 36 тестов — **AUTHORED, NOT RUN**.
 
-**Не запускалось:** Python tests для нового OUTBOX кода, общий 231-test suite, syntax/import checks, сборки, Gradle, APK/AAB, CI и GitHub Actions. Не утверждается, что новый модуль уже прошёл runtime verification.
+**Не запускалось:** Python tests для нового OUTBOX кода, общий 232-test suite, syntax/import checks, сборки, Gradle, APK/AAB, CI и GitHub Actions. Не утверждается, что новый модуль уже прошёл runtime verification.
 
 **Ограничения:** нет global event/idempotency index, publisher worker, subscriber ACK/cursor pages, retry/retention, transaction page-sequence planner, page allocator/lock, container I/O, flush/sync, superblock publication или crash recovery. Adjacent validator не заменяет полное сканирование chain. Valid OUTBOX page не доказывает active/durable COMMIT.
 
-**Следующий шаг:** пользователь запускает 35 focused OUTBOX tests, затем полный 231-test JPVR set. После PASS можно проектировать subscriber acknowledgement/dispatch cursor или integrated transaction planner; не начинать file I/O/durability до полного transaction/recovery design.
+**Следующий шаг:** пользователь запускает 36 focused OUTBOX tests, затем полный 232-test JPVR set. После PASS можно проектировать subscriber acknowledgement/dispatch cursor или integrated transaction planner; не начинать file I/O/durability до полного transaction/recovery design.
