@@ -683,3 +683,21 @@ Correction to the immediately preceding append-planner entry: a fresh count of `
 ### 2026-11-08 — JPVR binary-layout sanity check (not a module test run)
 
 A local isolated Python sanity snippet checked `struct.calcsize` for the intended Superblock prefix (24 bytes), page header (64), JREC header (56), JBLB header (64) and PageRef (16); all matched the documented sizes. The same snippet checked the CRC32C Castagnoli vector `123456789 → E3069283`. This did **not** import or execute repository modules and does not change the status of the 109 JPVR unit tests: all remain **AUTHORED, NOT RUN**.
+
+
+### 2026-11-09 — JPVR TLV ordering regression-test correction
+
+**Наблюдение из запуска в Termux:** пользователь запустил шесть JPVR test modules: 109 тестов, 108 прошли, один завершился FAIL — `test_decoder_rejects_non_increasing_field_ids`.
+
+**Причина:** тест изменял 16-битное значение по смещению 8. Для однобайтного TLV это байты значения первого поля, а не заголовок второго поля. Поэтому нарушенный порядок field IDs фактически не создавался. Реализация `decode_tlv` уже сравнивает каждый ID с предыдущим и отклоняет `field_id == 0` или `field_id <= previous_field_id`; исправление production decoder не требовалось.
+
+**Изменение:** тест теперь вычисляет смещение заголовка второго поля по размеру первого закодированного TLV и проверяет оба случая: дублирующийся ID и убывающий ID.
+
+**Проверки и ограничения:**
+- Исходный пользовательский запуск: 109 tests, 108 PASS, 1 FAIL из-за ошибки тестового смещения.
+- После исправления: новый тест опубликован, но повторный запуск пока **NOT RUN**; нельзя считать все 109 тестов прошедшими.
+- Сборки, CI и GitHub Actions — **NOT RUN** по ограничению пользователя.
+
+**GitHub:** изменение теста опубликовано в `main`, commit `22123075b81343d4d1e6c1777bd73c00bde05a61`.
+
+**Следующий шаг:** продолжить read-only аудит COW B+ Tree codec/validator и индексации RecordLocation, не начиная mutating tree writer до повторного прохождения focused JPVR suite.
