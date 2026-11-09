@@ -97,4 +97,4 @@ Focused suite:
 python3 -m unittest tools.jpvr_reference.test_journal -v
 ```
 
-Run the complete JPVR reference set using the ten-module command in README.md. The earlier 141-test aggregate was user-reported PASS. The user subsequently reran the corrected ten-module suite on Android Termux: **196/196 PASS** in 2.204 s. The new OUTBOX module is separate and contains 27 methods, authored but not run; current JPVR source total is 223 methods across eleven modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete JPVR reference set using the ten-module command in README.md. The earlier 141-test aggregate was user-reported PASS. The user subsequently reran the corrected ten-module suite on Android Termux: **196/196 PASS** in 2.204 s. The new OUTBOX module is separate and contains 35 methods, authored but not run; current JPVR source total is 231 methods across eleven modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
