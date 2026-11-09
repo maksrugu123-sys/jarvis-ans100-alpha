@@ -391,7 +391,13 @@ def validate_journal_transition(
     ):
         raise JPVRFormatError("new_state_version cannot change after it is assigned")
     if previous.entry.commit_id is not None:
-        if (
+        resolving_unknown_as_not_committed = (
+            previous.entry.status is OperationStatus.COMMIT_UNKNOWN
+            and current.entry.status is OperationStatus.FAILED
+            and current.entry.commit_id is None
+            and current.entry.commit_ref is None
+        )
+        if not resolving_unknown_as_not_committed and (
             current.entry.commit_id != previous.entry.commit_id
             or current.entry.commit_ref != previous.entry.commit_ref
         ):
