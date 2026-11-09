@@ -246,6 +246,8 @@ class OutboxSequenceTests(unittest.TestCase):
         current = self.decoded(
             21, 1, TX2,
             event(
+                event_id=bytes.fromhex("04040404040404040404040404040404"),
+                idempotency_key=bytes.fromhex("05050505050505050505050505050505"),
                 sequence=2,
                 commit_ref=PageRef(23, 1),
                 previous_event_ref=PageRef(18, 2),
@@ -327,6 +329,8 @@ class OutboxSequenceTests(unittest.TestCase):
         current = self.decoded(
             21, 2, TX2,
             event(
+                event_id=bytes.fromhex("04040404040404040404040404040404"),
+                idempotency_key=bytes.fromhex("05050505050505050505050505050505"),
                 sequence=2,
                 commit_ref=PageRef(23, 2),
                 previous_event_ref=PageRef(18, 1),
