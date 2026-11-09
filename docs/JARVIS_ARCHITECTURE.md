@@ -2390,7 +2390,7 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 COMMITTED/COMPLETED требуют commit_id + commit_ref. Одинаковое поколение означает, что JOURNAL page предшествует будущей COMMIT page в том же append prefix; ссылка на COMMIT предыдущего поколения должна вести назад. COMMIT_UNKNOWN — специальное неопределённое состояние, а не разрешение повторно выполнить side effect.
 
-**Тесты и границы:** 30 тестов `test_journal.py` написаны, но **AUTHORED, NOT RUN**. Совокупный JPVR набор насчитывает 191 test method: 141 прежних тестов user-reported PASS + 20 новых JCOM tests и 30 JNRL tests, ещё не запущенных. JOURNAL codec не ведёт глобальный idempotency index, не доказывает уникальность operation_id, не сканирует полный журнал, не разрешает result_object_id в RecordLocation и не реализует retention/recovery. OUTBOX, transaction sequence assembly, page reservation, file I/O, flush/sync и superblock publication также не реализованы. Полный контракт: `docs/JPVR_JOURNAL_V1.md`.
+**Тесты и границы:** 32 теста `test_journal.py` написаны, но **AUTHORED, NOT RUN**. Совокупный JPVR набор насчитывает 193 test methods: 141 прежних тестов user-reported PASS + 20 новых JCOM tests и 32 JNRL tests, ещё не запущенных. JOURNAL codec не ведёт глобальный idempotency index, не доказывает уникальность operation_id, не сканирует полный журнал, не разрешает result_object_id в RecordLocation и не реализует retention/recovery. OUTBOX, transaction sequence assembly, page reservation, file I/O, flush/sync и superblock publication также не реализованы. Полный контракт: `docs/JPVR_JOURNAL_V1.md`.
 
 ### 3.22. JARVIS Numerical Oracle v0.1 — эталонная числовая реализация
 
