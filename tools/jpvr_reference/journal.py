@@ -359,18 +359,18 @@ def validate_journal_transition(
     """Validate one append-only state transition for the same logical operation."""
     if not isinstance(previous, DecodedJournalPage) or not isinstance(current, DecodedJournalPage):
         raise JPVRFormatError("journal transition requires decoded JOURNAL pages")
-    _validate_entry_page_refs(
-        previous.entry, previous.page_no, previous.commit_generation
-    )
-    _validate_entry_page_refs(
-        current.entry, current.page_no, current.commit_generation
-    )
     _fixed_bytes("previous.transaction_id", previous.transaction_id, 16)
     _fixed_bytes("current.transaction_id", current.transaction_id, 16)
     if current.page_no <= previous.page_no:
         raise JPVRFormatError("JOURNAL revisions must be appended in page order")
     if current.commit_generation < previous.commit_generation:
         raise JPVRFormatError("JOURNAL generation cannot move backwards")
+    _validate_entry_page_refs(
+        previous.entry, previous.page_no, previous.commit_generation
+    )
+    _validate_entry_page_refs(
+        current.entry, current.page_no, current.commit_generation
+    )
     if current.entry.previous_entry_ref != PageRef(
         previous.page_no, previous.commit_generation
     ):
