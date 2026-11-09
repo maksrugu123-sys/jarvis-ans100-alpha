@@ -701,3 +701,14 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **GitHub:** изменение теста опубликовано в `main`, commit `22123075b81343d4d1e6c1777bd73c00bde05a61`.
 
 **Следующий шаг:** продолжить read-only аудит COW B+ Tree codec/validator и индексации RecordLocation, не начиная mutating tree writer до повторного прохождения focused JPVR suite.
+
+
+### 2026-11-09 — JPVR immutable INDEX node codec and snapshot lookup
+
+**Изменения:** добавлен `tools/jpvr_reference/index.py` с бинарным payload формата JIDX v1: 44-byte header, LEAF/INTERNAL entries, 8-byte entry alignment, tree_id, PageRef и strict validation. Добавлены INDEX page encode/decode и read-only B+ tree lookup с проверкой durable prefix, page generation, tree identity, циклов и child-level relation. Добавлен `test_index.py` с round-trip, malformed payload, ordering, page envelope, leaf lookup, internal descent и stale/wrong refs cases.
+
+**Граница реализации:** это только immutable node codec и read-only lookup по in-memory page catalog. COW writer, split/merge, page allocator, file I/O, transaction journal, commit, recovery и authoritative DATA/BLOB consistency scan отсутствуют.
+
+**Проверки:** тесты нового модуля написаны, но **NOT RUN**. Полный JPVR набор 109 тестов пользователь ранее сообщил как PASS после исправления TLV test offset; это пользовательский результат, не повторённый мной. Сборки, CI и GitHub Actions **NOT RUN**.
+
+**Коммиты:** `b97e4060` (index codec), `41688d84` (initial tests), `e8f9763e` (child-level validation), `382eeeaa` (child-level regression test).
