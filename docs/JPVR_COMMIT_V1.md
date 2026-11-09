@@ -1,6 +1,6 @@
 # JPVR v1 — COMMIT descriptor reference codec
 
-**Status:** JCOM v1 payload/page codec and in-memory snapshot cross-validator added on 9 November 2026. Its 20 focused tests are authored but have not yet been run. This is not a durable writer or recovery engine.
+**Status:** JCOM v1 payload/page codec and in-memory snapshot cross-validator added on 9 November 2026. Its 20 focused tests were included in the user's later 196/196 PASS ten-module JPVR run on Android Termux (2.204 s). This is not a durable writer or recovery engine.
 
 ## Binary payload
 
@@ -49,4 +49,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_commit -v
 ```
 
-Then run all ten JPVR modules as shown in README.md. The earlier 141-test aggregate was user-reported PASS. The latest full 195-test Termux run produced 192 PASS, 2 FAIL and 1 ERROR, including two COMMIT failures; the COMMIT corrections are published but not yet rerun. The current ten-module source set contains 196 test methods after one additional INDEX regression test (AUTHORED, NOT RUN). No build or CI task was started.
+Then run all ten JPVR modules as shown in README.md. The corrected ten-module JPVR suite was subsequently run by the user on Android Termux: **196/196 PASS** in 2.204 s, including the COMMIT regression cases. The separate OUTBOX module adds 33 tests (AUTHORED, NOT RUN); current total is 229 methods across eleven modules. No build or CI task was started.
