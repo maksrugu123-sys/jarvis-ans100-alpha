@@ -2356,7 +2356,7 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 **Реализация:** `tools/jpvr_reference/commit.py` содержит payload/page encode/decode и `validate_commit_snapshot`. Последняя функция сверяет COMMIT с MANIFEST, проверяет предыдущую commit-ссылку и, если одновременно предоставлены Superblock и page catalog, вызывает существующую проверку корней/служебных страниц manifest. 20 тестов находятся в `test_commit.py`; они написаны, но пока **AUTHORED, NOT RUN**.
 
-**Границы:** это только codec и in-memory cross-check по переданным байтам. JOURNAL/OUTBOX codec, сборка полной последовательности DATA/BLOB/INDEX/MANIFEST/JOURNAL/OUTBOX/COMMIT, эксклюзивная reservation, файловая запись, два flush/sync, публикация superblock, crash recovery и orphan-page handling не реализованы. Валидный COMMIT descriptor не означает DURABLE_COMMITTED.
+**Границы:** это только codec и in-memory cross-check по переданным байтам. JOURNAL/OUTBOX codec теперь существуют как отдельные reference slices; сборка полной последовательности DATA/BLOB/INDEX/MANIFEST/JOURNAL/OUTBOX/COMMIT, эксклюзивная reservation, файловая запись, два flush/sync, публикация superblock, crash recovery и orphan-page handling не реализованы. Валидный COMMIT descriptor не означает DURABLE_COMMITTED.
 
 #### 3.21.22. Full-tree validation и COW B+ tree upsert planner
 
@@ -3757,10 +3757,10 @@ The immutable JIDX layer now has a pure in-memory one-key copy-on-write upsert p
 
 #### 3.21.24. OUTBOX immutable event JOUT v1 — reference codec
 
-**Статус:** добавлен Python reference codec для одной immutable OUTBOX event page и проверки соседних элементов глобальной последовательности. Контракт: [JPVR_OUTBOX_V1.md](JPVR_OUTBOX_V1.md). 27 новых тестовых методов **AUTHORED, NOT RUN** на момент записи.
+**Статус:** добавлен Python reference codec для одной immutable OUTBOX event page и проверки соседних элементов глобальной последовательности. Контракт: [JPVR_OUTBOX_V1.md](JPVR_OUTBOX_V1.md). 33 новых тестовых метода **AUTHORED, NOT RUN** на момент записи.
 
 JOUT v1 хранит ненулевые event_id, idempotency_key, operation_id и commit_id; event_type (UTF-8, максимум 128 байт); непрозрачный event_payload (максимум 3 500 байт); глобальный sequence; source commit PageRef; необязательную ссылку на предыдущую OUTBOX event. Страница обязана иметь ненулевой transaction_id, ссылаться на COMMIT того же поколения, физически следующую за событием. Соседний sequence validator проверяет точную ссылку на предыдущее событие, непрерывность sequence, отсутствие непосредственного повтора event/idempotency identity и согласованность transaction_id/source COMMIT в пределах поколения.
 
 Это только неизменяемая запись намерения события. Кодек не публикует Event, не ведёт subscriber ACK/cursor, retry/retention, глобальный dedup index или publisher worker. Он также не доказывает, что source COMMIT стал активным durable commit: перед публикацией будущий reader обязан проверить COMMIT chain и активный superblock. Доставка остаётся at-least-once; exactly-once не заявляется.
 
-**Проверка:** пользователь сообщил, что предыдущий 11-модульный? Нет — предыдущий десятимодульный JPVR suite прошёл **196/196** на Android Termux за 2.204 s. Новый OUTBOX модуль увеличивает исходный набор до 11 модулей и 223 методов; 27 OUTBOX тестов ещё не запускались. Сборки/CI не запускались.
+**Проверка:** пользователь сообщил, что предыдущий 11-модульный? Нет — предыдущий десятимодульный JPVR suite прошёл **196/196** на Android Termux за 2.204 s. Новый OUTBOX модуль увеличивает исходный набор до 11 модулей и 229 методов; 33 OUTBOX теста ещё не запускались. Сборки/CI не запускались.
