@@ -49,4 +49,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_commit -v
 ```
 
-Then run all ten JPVR modules as shown in README.md. The corrected ten-module JPVR suite was subsequently run by the user on Android Termux: **196/196 PASS** in 2.204 s, including the COMMIT regression cases. The separate OUTBOX module adds 33 tests (AUTHORED, NOT RUN); current total is 229 methods across eleven modules. No build or CI task was started.
+Then run all ten JPVR modules as shown in README.md. The corrected ten-module JPVR suite was subsequently run by the user on Android Termux: **196/196 PASS** in 2.204 s, including the COMMIT regression cases. The separate OUTBOX module adds 35 tests (AUTHORED, NOT RUN); current total is 231 methods across eleven modules. No build or CI task was started.
