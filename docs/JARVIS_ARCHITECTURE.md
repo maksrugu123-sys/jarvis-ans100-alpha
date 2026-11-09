@@ -2332,6 +2332,32 @@ Payload CRC покрывает точные байты payload; header CRC по�
 
 **Границы:** это проверка структуры manifest и root page references в памяти. B+ tree node parsing, поиск/обновление индексов, COW path copying, построение manifest из transaction candidate, проверка полноты индекса сканированием авторитетных записей, file I/O, journal/commit и recovery не реализованы.
 
+#### 3.21.21. COMMIT descriptor JCOM v1 — reference codec
+
+Для однозначной сериализации COMMIT в reference profile выбран фиксированный payload JCOM v1 размером 112 байт. Это уточнение ранее описанного логического набора полей, а не доказательство готовности storage engine.
+
+| Смещение | Размер | Поле |
+|---:|---:|---|
+| 0 | 4 bytes | magic = `JCOM` |
+| 4 | u16 | version = 1 |
+| 6 | u16 | header_bytes = 112 |
+| 8 | u64 | generation |
+| 16 | 16 bytes | transaction_id |
+| 32 | 16 bytes | commit_id |
+| 48 | 16 bytes | operation_id |
+| 64 | u64 | previous_commit_page_no (0 только для generation 1) |
+| 72 | u64 | previous_commit_generation (0 только для generation 1) |
+| 80 | u64 | manifest_page_no |
+| 88 | u64 | manifest_generation (равен generation) |
+| 96 | u64 | durable_tail_page_no (равен page_no самого COMMIT) |
+| 104 | u64 | reserved = 0 |
+
+Внешний PageType.COMMIT header повторяет transaction_id и generation; decoder требует их точного совпадения. MANIFEST и предыдущий COMMIT должны физически предшествовать текущей COMMIT page. Для generation 1 previous reference отсутствует; для более поздних поколений указывается ровно generation − 1. commit_id, operation_id и transaction_id в этой reference-схеме ненулевые.
+
+**Реализация:** `tools/jpvr_reference/commit.py` содержит payload/page encode/decode и `validate_commit_snapshot`. Последняя функция сверяет COMMIT с MANIFEST, проверяет предыдущую commit-ссылку и, если одновременно предоставлены Superblock и page catalog, вызывает существующую проверку корней/служебных страниц manifest. 20 тестов находятся в `test_commit.py`; они написаны, но пока **AUTHORED, NOT RUN**.
+
+**Границы:** это только codec и in-memory cross-check по переданным байтам. JOURNAL/OUTBOX codec, сборка полной последовательности DATA/BLOB/INDEX/MANIFEST/JOURNAL/OUTBOX/COMMIT, эксклюзивная reservation, файловая запись, два flush/sync, публикация superblock, crash recovery и orphan-page handling не реализованы. Валидный COMMIT descriptor не означает DURABLE_COMMITTED.
+
 ### 3.22. JARVIS Numerical Oracle v0.1 — эталонная числовая реализация
 
 **Статус:** отдельный research/reference tool реализован в `tools/numerical_oracle/`. В полном запуске пользователя на Android Termux 7 ноября 2026 года прошли все 64 теста репозитория, включая 29 тестов Numerical Oracle; версия Python в этом запуске не записана. Ранее отдельно запускались 26 тестов CQE reference на Python 3.13.5. Результаты подтверждают только проверенные assertions эталонных инструментов, а не будущий JARVIS runtime, качество решения прикладной задачи, float32 или производительность. STARTER остаётся некалиброванным.
