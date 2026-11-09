@@ -78,9 +78,9 @@ class IndexTreeValidationTests(unittest.TestCase):
 
     def test_rejects_child_newer_than_parent(self):
         catalog = {
-            2: leaf_page(2, [(b"a", b"A")], generation=2),
+            2: leaf_page(2, [(b"a", b"A")], generation=3),
             3: encode_index_page(
-                IndexNode(TREE, 1, first_child=PageRef(2, 2),
+                IndexNode(TREE, 1, first_child=PageRef(2, 3),
                           children=(IndexChild(b"m", PageRef(4, 1)),)),
                 3, 2, TX2,
             ),
