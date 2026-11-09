@@ -721,3 +721,32 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Текущая проверка:** все 16 новых тестов **NOT RUN**. Предыдущие 109 JPVR тестов пользователь сообщил как PASS; новый INDEX модуль в тот запуск не входил. Следующий обязательный шаг — запустить новый модуль и весь набор на Termux до разработки writer.
 
 **Дополнительные коммиты:** `45e7be9e` (decoder hardening), `4633ec1b` (regression tests).
+
+
+### 2026-11-09 — JPVR full-tree validation and copy-on-write upsert planner
+
+**Цель:** перейти от immutable JIDX node codec/read-only lookup к первой проверяемой операции записи нового snapshot без создания ложной гарантии физической durability.
+
+**Добавлено:**
+- `tools/jpvr_reference/cow.py`:
+  - `validate_index_tree` обходит все reachable INDEX nodes и проверяет PageRef/page generation, durable prefix, tree_id, child level, child generation, циклы/повторное использование страниц, точное соответствие separator минимальному ключу правого subtree и непересечение key ranges;
+  - `cow_upsert_index` выполняет одну insert/replace операцию через immutable path-copy;
+  - переполняющиеся LEAF nodes делятся на два непустых узла; переполняющиеся INTERNAL nodes делятся с минимум двумя child pointers в каждой половине; при split root создаётся новый уровень;
+  - новые page numbers выдаются последовательно после переданного durable_tail, все новые страницы кодируются с заданными commit_generation и transaction_id;
+  - результат повторно валидируется, а все созданные страницы обязаны быть reachable из нового root;
+  - `CowIndexPlan` возвращает новый root, новые encoded pages, признаки replace и статистику старого/нового дерева.
+- `tools/jpvr_reference/test_cow.py` — 16 тестов на full-tree invariants, пустой root, insert/replace, сохранение старого snapshot, leaf split, path-copy с повторным использованием неизменённой ветки, internal split/root growth, поколения и последовательность allocation.
+- `tools/jpvr_reference/__init__.py` — exports COW API.
+- `docs/JPVR_COW_WRITER_V1.md`, README и этот log — обновлены.
+
+**Проверки и доказательства:**
+- Предыдущие 125 тестов JPVR (109 ранних модулей + 16 INDEX tests) пользователь сообщил как PASS в Termux.
+- Новые COW tests: 16 **AUTHORED, NOT RUN**. Runtime PASS не заявляется.
+- GitHub source readback/static review выполнены; это не замена Python unit-test execution.
+- Builds, Gradle, APK/AAB, CI и GitHub Actions **NOT RUN** по ограничению пользователя.
+
+**Границы:** это in-memory upsert planner, а не file writer. Нет delete/merge, bulk update, physical page reservation/lock, file I/O, flush/sync, JOURNAL/COMMIT/MANIFEST integration, superblock update, crash recovery, rollback или compaction. Полный validator обходит весь reachable tree и имеет O(number of INDEX pages) стоимость. `CowIndexPlan` сам по себе не является commit или подтверждением durability.
+
+**GitHub:** изменения опубликованы в `main`; см. commits этого этапа в истории репозитория.
+
+**Следующий шаг:** выполнить 16 focused COW tests и весь 141-test JPVR set в Termux. Только после подтверждения перейти к формированию transaction page sequence (DATA/BLOB/INDEX/MANIFEST/JOURNAL/COMMIT), по-прежнему без file I/O и superblock mutation до отдельной проверки ordering/recovery invariants.
