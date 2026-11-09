@@ -87,6 +87,8 @@ def _validate_node(node: IndexNode) -> bytes:
         raise JPVRFormatError("node must be an IndexNode")
     tree_id = _fixed_bytes("tree_id", node.tree_id, 16)
     _require_uint("node.level", node.level, 255)
+    if node.level >= MAX_INDEX_DEPTH:
+        raise JPVRFormatError("index node level exceeds maximum depth")
     if node.level == 0:
         if node.first_child is not None or node.children:
             raise JPVRFormatError("leaf node cannot contain child references")
