@@ -712,3 +712,12 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Проверки:** тесты нового модуля написаны, но **NOT RUN**. Полный JPVR набор 109 тестов пользователь ранее сообщил как PASS после исправления TLV test offset; это пользовательский результат, не повторённый мной. Сборки, CI и GitHub Actions **NOT RUN**.
 
 **Коммиты:** `b97e4060` (index codec), `41688d84` (initial tests), `e8f9763e` (child-level validation), `382eeeaa` (child-level regression test).
+
+
+### 2026-11-09 — JPVR INDEX decoder hardening
+
+После первичной реализации добавлены дополнительные строгие проверки: уровень узла ограничен 0–63, INTERNAL node не может иметь ноль separator entries, шесть reserved bytes каждого internal entry обязаны быть нулевыми. Добавлены два регрессионных теста. Итоговый `test_index.py` содержит 16 тестовых методов.
+
+**Текущая проверка:** все 16 новых тестов **NOT RUN**. Предыдущие 109 JPVR тестов пользователь сообщил как PASS; новый INDEX модуль в тот запуск не входил. Следующий обязательный шаг — запустить новый модуль и весь набор на Termux до разработки writer.
+
+**Дополнительные коммиты:** `45e7be9e` (decoder hardening), `4633ec1b` (regression tests).
