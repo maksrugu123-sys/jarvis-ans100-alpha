@@ -97,4 +97,4 @@ Focused suite:
 python3 -m unittest tools.jpvr_reference.test_journal -v
 ```
 
-Run the complete JPVR reference set using the ten-module command in README.md. The preceding 141 tests (through COW) are user-reported as passing in Termux. The 20 COMMIT tests and 34 JOURNAL tests are **AUTHORED, NOT RUN**. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete JPVR reference set using the ten-module command in README.md. The earlier 141-test aggregate was user-reported PASS. The later full 195-test Termux run produced 192 PASS, 2 FAIL and 1 ERROR; COW/COMMIT fixes are published but not yet rerun. The current source set contains 196 methods; the extra INDEX depth regression and all newer code remain unverified until the focused and full suites are rerun. No build, Gradle task, CI workflow or GitHub Actions run was started.
