@@ -1,6 +1,6 @@
 # JPVR v1 — JOURNAL operation-state reference codec
 
-**Status:** JNRL v1 payload/page codec and append-only transition validator implemented as a Python reference layer on 9 November 2026. The 32 focused tests are authored but have not been run. This is not a durable journal writer or recovery engine.
+**Status:** JNRL v1 payload/page codec and append-only transition validator implemented as a Python reference layer on 9 November 2026. The 34 focused tests are authored but have not been run. This is not a durable journal writer or recovery engine.
 
 ## Scope and page model
 
@@ -67,10 +67,10 @@ A `previous_entry_ref` must point to an earlier page and cannot reference a late
 Allowed transitions:
 
 - DEFERRED → QUEUED or REJECTED
-- QUEUED → RUNNING, DEFERRED, REJECTED, FAILED or CANCELLED
+- QUEUED → RUNNING, REJECTED, FAILED or CANCELLED
 - RUNNING → PREPARED, REJECTED, FAILED or CANCELLED
 - PREPARED → COMMITTED, FAILED, CANCELLED or COMMIT_UNKNOWN
-- COMMIT_UNKNOWN → COMMITTED or FAILED
+- COMMIT_UNKNOWN → COMMITTED or FAILED; resolving to FAILED requires the caller to pass `confirmed_no_commit=True` after an authoritative no-commit check
 - COMMITTED → COMPLETED
 
 COMPLETED, REJECTED, FAILED and CANCELLED are terminal in this initial profile. COMMIT_UNKNOWN can only be resolved after checking the durable commit state; it is not permission to re-execute the operation.
@@ -79,7 +79,7 @@ COMPLETED, REJECTED, FAILED and CANCELLED are terminal in this initial profile. 
 
 - `encode_journal_payload` / `decode_journal_payload` — JNRL v1 TLV payload codec.
 - `encode_journal_page` / `decode_journal_page` — PageType.JOURNAL envelope and physical PageRef ordering checks.
-- `validate_journal_transition` — checks a state transition between two decoded JOURNAL pages.
+- `validate_journal_transition(previous, current, confirmed_no_commit=False)` — checks a state transition between two decoded JOURNAL pages.
 
 ## Explicit limitations
 
@@ -97,4 +97,4 @@ Focused suite:
 python3 -m unittest tools.jpvr_reference.test_journal -v
 ```
 
-Run the complete JPVR reference set using the ten-module command in README.md. The preceding 141 tests (through COW) are user-reported as passing in Termux. The 20 COMMIT tests and 32 JOURNAL tests are **AUTHORED, NOT RUN**. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete JPVR reference set using the ten-module command in README.md. The preceding 141 tests (through COW) are user-reported as passing in Termux. The 20 COMMIT tests and 34 JOURNAL tests are **AUTHORED, NOT RUN**. No build, Gradle task, CI workflow or GitHub Actions run was started.
