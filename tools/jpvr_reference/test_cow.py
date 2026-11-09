@@ -231,7 +231,7 @@ class CowIndexUpsertTests(unittest.TestCase):
         self.assertEqual(plan.page_numbers, (7, 8, 9, 10, 11))
         new_catalog = dict(catalog)
         new_catalog.update({page.page_no: page.page_bytes for page in plan.pages})
-        for key, expected in ((a0, b"A"), (a1, b"A1"), (b0, b"B"), (c0, b"C"), (d0, b"D")):
+        for key, expected in ((a0, b"A" * 2048), (a1, b"A1"), (b0, b"B" * 2048), (c0, b"C" * 2048), (d0, b"D" * 2048)):
             self.assertEqual(
                 lookup_index(plan.new_root, new_catalog, key, tree_id=TREE,
                              durable_tail_page_no=plan.last_page_no),
@@ -240,7 +240,7 @@ class CowIndexUpsertTests(unittest.TestCase):
         self.assertIsNone(
             lookup_index(old_root, catalog, a1, tree_id=TREE, durable_tail_page_no=6)
         )
-        self.assertEqual(plan.new_stats.page_count, 9)
+        self.assertEqual(plan.new_stats.page_count, 8)
 
     def test_rejects_old_or_equal_commit_generation(self):
         root = PageRef(2, 1)
