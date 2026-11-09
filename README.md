@@ -6,7 +6,7 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 9 November 2026
 
-- **JPVR reference:** eleven modules contain **223 test methods**. The user ran the corrected ten-module set on Android Termux: **196/196 PASS** in 2.204 s. The new OUTBOX module adds 27 authored tests that are **NOT RUN** yet. Implemented reference layers include CRC32C/superblock/page, JREC/TLV, BLOB/DATA, append planning, MANIFEST, INDEX lookup/full-tree validation/COW upsert, COMMIT consistency, JOURNAL lifecycle validation, and an immutable OUTBOX event codec with adjacent sequence validation. This remains a reference layer, not a storage engine: transaction assembly, subscriber acknowledgements/publication, reservation locks, file I/O, durability barriers and recovery are not implemented.
+- **JPVR reference:** eleven modules contain **229 test methods**. The user ran the corrected ten-module set on Android Termux: **196/196 PASS** in 2.204 s. The new OUTBOX module adds 33 authored tests that are **NOT RUN** yet. Implemented reference layers include CRC32C/superblock/page, JREC/TLV, BLOB/DATA, append planning, MANIFEST, INDEX lookup/full-tree validation/COW upsert, COMMIT consistency, JOURNAL lifecycle validation, and an immutable OUTBOX event codec with adjacent sequence validation. This remains a reference layer, not a storage engine: transaction assembly, subscriber acknowledgements/publication, reservation locks, file I/O, durability barriers and recovery are not implemented.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. Its 15 focused tests were included in the user's full Termux run on 8 November 2026: 216/216 repository tests passed in 19.280 s. This is Python reference verification, not production NCC/runtime or device performance evidence.
 - **Multi-neuron network coordinator:** `tools/neuron_runtime/network.py` adds directed delayed connections, deterministic same-timestamp batching, bounded event/run budgets and in-memory timestamp-level candidate commit. Fourteen focused network tests are authored; they have not yet been run against the repository's real Numerical Oracle. This remains a single-threaded Python reference layer, not production NCC or durable scheduling.
@@ -58,10 +58,11 @@ The repository has entered the first executable Python reference-orchestration s
 | `docs/JARVIS_NETWORK_RUNTIME_V1.md` | Multi-neuron event-loop reference contract, queue limits and verification scope |
 | `tools/task_validation/` | V1–V4.3 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
-| `tools/jpvr_reference/` | JPVR_FORMAT_V1 codecs, DATA packing, append planning, manifest validation, immutable INDEX lookup, in-memory COW upsert, JCOM and JOURNAL reference codecs (not a storage engine) |
+| `tools/jpvr_reference/` | JPVR_FORMAT_V1 codecs, DATA packing, append planning, manifest validation, immutable INDEX lookup, in-memory COW upsert, JCOM, JOURNAL and OUTBOX reference codecs (not a storage engine) |
 | `docs/JPVR_COW_WRITER_V1.md` | COW upsert planner contract, validation invariants, test command and explicit non-goals |
 | `docs/JPVR_COMMIT_V1.md` | JCOM v1 fixed COMMIT payload, snapshot checks and non-goals |
 | `docs/JPVR_JOURNAL_V1.md` | JNRL v1 operation-state entries, immutable history links and lifecycle rules |
+| `docs/JPVR_OUTBOX_V1.md` | JOUT v1 immutable event/page and sequence contract |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
 ## Run the comprehensive one-neuron exam
@@ -246,7 +247,8 @@ python3 -m unittest \
  tools.jpvr_reference.test_index \
  tools.jpvr_reference.test_cow \
  tools.jpvr_reference.test_commit \
- tools.jpvr_reference.test_journal -v
+ tools.jpvr_reference.test_journal \
+ tools.jpvr_reference.test_outbox -v
 ```
 
-The earlier 141-test aggregate was user-reported PASS. The later full 195-test Termux run produced **192 passed, 2 failed, 1 error** (one COW internal-split error and two COMMIT failures). The COW/COMMIT corrections are on `main` but remain unrerun; the new INDEX level-bound regression test below is also authored but unrun. The current source set contains **196 test methods** across ten modules. The 196 count is a static source-method count, not a test result. Run focused INDEX/COW/COMMIT checks first, then all ten modules. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md) and [JOURNAL contract](docs/JPVR_JOURNAL_V1.md).
+The user ran the corrected ten-module JPVR suite on Android Termux: **196/196 PASS** in 2.204 s. The new OUTBOX module adds 33 tests, **AUTHORED, NOT RUN**; the eleven-module source set now contains 229 test methods. Run focused OUTBOX tests first, then all eleven modules. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md) and [OUTBOX contract](docs/JPVR_OUTBOX_V1.md).
