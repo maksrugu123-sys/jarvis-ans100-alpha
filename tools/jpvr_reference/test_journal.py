@@ -356,7 +356,7 @@ class JournalTransitionTests(unittest.TestCase):
         previous = self.decoded(10, 2, TX2, entry())
         current = self.decoded(
             11, 1, TX1, entry(
-                OperationStatus.RUNNING, previous_entry_ref=PageRef(10, 2)
+                OperationStatus.RUNNING, previous_entry_ref=PageRef(10, 1)
             )
         )
         with self.assertRaisesRegex(JPVRFormatError, "generation cannot move backwards"):
