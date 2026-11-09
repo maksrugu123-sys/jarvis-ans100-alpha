@@ -22,6 +22,7 @@ from .records import (
 from .blob import DecodedBlobRecord, decode_blob_pages, encode_blob_pages
 from .data import DecodedDataPage, decode_data_page, encode_data_page
 from .layout import AppendPlan, plan_append, validate_append_plan
+from .cow import CowIndexPlan, IndexTreeStats, NewIndexPage, cow_upsert_index, validate_index_tree
 from .manifest import (
     DecodedManifestPage,
     Manifest,
@@ -39,6 +40,9 @@ __all__ = [
     "DecodedDataPage",
     "DecodedManifestPage",
     "DecodedPage",
+    "CowIndexPlan",
+    "IndexTreeStats",
+    "NewIndexPage",
     "DecodedRecord",
     "Manifest",
     "PageRef",
@@ -47,6 +51,7 @@ __all__ = [
     "TLVField",
     "WireType",
     "crc32c",
+    "cow_upsert_index",
     "decode_blob_pages",
     "decode_data_page",
     "decode_manifest_page",
@@ -65,5 +70,6 @@ __all__ = [
     "encode_tlv",
     "plan_append",
     "validate_append_plan",
+    "validate_index_tree",
     "validate_manifest",
 ]
