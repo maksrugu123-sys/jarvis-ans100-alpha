@@ -6,7 +6,6 @@ outbox worker/recovery engine.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 import struct
 
@@ -260,6 +259,13 @@ def validate_outbox_sequence(
         current, DecodedOutboxPage
     ):
         raise JPVRFormatError("OUTBOX sequence values must be decoded OUTBOX pages")
+    for label, page in (("previous", previous), ("current", current)):
+        _validate_event_page_refs(
+            page.event, page.page_no, page.commit_generation
+        )
+        transaction_id = _fixed_bytes(f"{label}.transaction_id", page.transaction_id, 16)
+        if transaction_id == bytes(16):
+            raise JPVRFormatError("OUTBOX transaction_id must be nonzero")
     if current.page_no <= previous.page_no:
         raise JPVRFormatError("OUTBOX pages must be strictly append ordered")
     if current.commit_generation < previous.commit_generation:
@@ -279,5 +285,7 @@ def validate_outbox_sequence(
             raise JPVRFormatError("same-generation OUTBOX pages must share transaction_id")
         if current.event.commit_ref != previous.event.commit_ref:
             raise JPVRFormatError("same-generation OUTBOX events must share source COMMIT")
+        if current.event.commit_id != previous.event.commit_id:
+            raise JPVRFormatError("same-generation OUTBOX events must share commit_id")
     elif current.transaction_id == previous.transaction_id:
         raise JPVRFormatError("new-generation OUTBOX page must use a new transaction_id")
