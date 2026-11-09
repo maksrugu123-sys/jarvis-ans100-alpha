@@ -6,7 +6,7 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 9 November 2026
 
-- **JPVR reference:** seven earlier modules contain 125 tests that the user reports passed in Android Termux (109 codec/record/blob/data/layout/manifest tests plus 16 immutable INDEX tests). The new COW upsert planner and full-tree validator add 16 tests that are AUTHORED, NOT RUN. The implementation now covers INDEX node encoding, read-only lookup, full-tree range/separator validation, path-copy upsert and leaf/internal splits in memory. It is still not a file writer or storage engine: disk I/O, reservation locks, durable commit, recovery, deletion/merge and compaction are not implemented.
+- **JPVR reference:** eight modules contain 141 tests that the user reports passed in Android Termux (109 codec/record/blob/data/layout/manifest tests, 16 immutable INDEX tests and 16 COW tests). The new JCOM COMMIT descriptor codec adds 20 tests that are AUTHORED, NOT RUN. The reference layers now include INDEX lookup, full-tree validation, path-copy upsert, and local COMMIT/MANIFEST/previous-COMMIT/Superblock consistency checks. This is still not a file writer or storage engine: JOURNAL/OUTBOX codecs, page sequence assembly, reservation locks, file I/O, durability barriers and recovery are not implemented.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. Its 15 focused tests were included in the user's full Termux run on 8 November 2026: 216/216 repository tests passed in 19.280 s. This is Python reference verification, not production NCC/runtime or device performance evidence.
 - **Multi-neuron network coordinator:** `tools/neuron_runtime/network.py` adds directed delayed connections, deterministic same-timestamp batching, bounded event/run budgets and in-memory timestamp-level candidate commit. Fourteen focused network tests are authored; they have not yet been run against the repository's real Numerical Oracle. This remains a single-threaded Python reference layer, not production NCC or durable scheduling.
@@ -59,7 +59,7 @@ The repository has entered the first executable Python reference-orchestration s
 | `tools/task_validation/` | V1–V4.3 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `tools/jpvr_reference/` | JPVR_FORMAT_V1 codecs, DATA packing, append planning, manifest validation, immutable INDEX lookup and in-memory COW upsert planning (not a storage engine) |
-| `docs/JPVR_COW_WRITER_V1.md` | COW upsert planner contract, validation invariants, test command and explicit non-goals |
+| `docs/JPVR_COW_WRITER_V1.md` | COW upsert planner contract, validation invariants, test command and explicit non-goals |\n| `docs/JPVR_COMMIT_V1.md` | JCOM v1 fixed COMMIT payload, snapshot checks and non-goals |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
 ## Run the comprehensive one-neuron exam
@@ -218,10 +218,10 @@ For detailed status, unresolved decisions and the next implementation gates, sta
 
 ## Run JPVR reference tests
 
-Focused COW tests:
+Focused COMMIT descriptor tests:
 
 ```sh
-python3 -m unittest tools.jpvr_reference.test_cow -v
+python3 -m unittest tools.jpvr_reference.test_commit -v
 ```
 
 Complete JPVR reference suite:
@@ -235,7 +235,8 @@ python3 -m unittest \
  tools.jpvr_reference.test_layout \
  tools.jpvr_reference.test_manifest \
  tools.jpvr_reference.test_index \
- tools.jpvr_reference.test_cow -v
+ tools.jpvr_reference.test_cow \
+ tools.jpvr_reference.test_commit -v
 ```
 
-The 125 tests preceding the COW layer are user-reported as passing in Termux. The 16 new COW tests have not yet been run. See [the COW planner contract](docs/JPVR_COW_WRITER_V1.md) for scope and limitations.
+The preceding 141 JPVR tests (including COW) are user-reported as passing in Termux. The 20 new COMMIT tests are authored but have not yet been run. See [the COW planner contract](docs/JPVR_COW_WRITER_V1.md) and [JCOM v1 descriptor contract](docs/JPVR_COMMIT_V1.md) for scope and limitations.
