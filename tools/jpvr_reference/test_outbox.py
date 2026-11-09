@@ -238,7 +238,7 @@ class OutboxSequenceTests(unittest.TestCase):
             17, 2, TX1,
             event(sequence=2, commit_ref=PageRef(23, 2), previous_event_ref=PageRef(18, 2)),
         )
-        with self.assertRaisesRegex(JPVRFormatError, "strictly append ordered"):
+        with self.assertRaisesRegex(JPVRFormatError, "previous OUTBOX event must precede"):
             validate_outbox_sequence(first, current)
 
     def test_sequence_rejects_generation_regression(self):
@@ -253,7 +253,7 @@ class OutboxSequenceTests(unittest.TestCase):
                 previous_event_ref=PageRef(18, 2),
             ),
         )
-        with self.assertRaisesRegex(JPVRFormatError, "generation cannot regress"):
+        with self.assertRaisesRegex(JPVRFormatError, "cannot be newer than this page"):
             validate_outbox_sequence(first, current)
 
     def test_sequence_rejects_adjacent_duplicate_event_id(self):
