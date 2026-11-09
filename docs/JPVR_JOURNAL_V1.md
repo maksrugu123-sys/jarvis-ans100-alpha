@@ -1,6 +1,6 @@
 # JPVR v1 — JOURNAL operation-state reference codec
 
-**Status:** JNRL v1 payload/page codec and append-only transition validator implemented as a Python reference layer on 9 November 2026. The 30 focused tests are authored but have not been run. This is not a durable journal writer or recovery engine.
+**Status:** JNRL v1 payload/page codec and append-only transition validator implemented as a Python reference layer on 9 November 2026. The 32 focused tests are authored but have not been run. This is not a durable journal writer or recovery engine.
 
 ## Scope and page model
 
@@ -97,4 +97,4 @@ Focused suite:
 python3 -m unittest tools.jpvr_reference.test_journal -v
 ```
 
-Run the complete JPVR reference set using the ten-module command in README.md. The preceding 141 tests (through COW) are user-reported as passing in Termux. The 20 COMMIT tests and 30 JOURNAL tests are **AUTHORED, NOT RUN**. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete JPVR reference set using the ten-module command in README.md. The preceding 141 tests (through COW) are user-reported as passing in Termux. The 20 COMMIT tests and 32 JOURNAL tests are **AUTHORED, NOT RUN**. No build, Gradle task, CI workflow or GitHub Actions run was started.
