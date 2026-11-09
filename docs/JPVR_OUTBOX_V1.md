@@ -1,6 +1,6 @@
 # JPVR v1 — OUTBOX immutable event reference codec
 
-**Status:** JOUT v1 payload/page codec and adjacent sequence validator implemented as a Python reference slice on 9 November 2026. The 33 focused tests are authored but not run. This is not a publisher, acknowledgement store, durable worker, or recovery engine.
+**Status:** JOUT v1 payload/page codec and adjacent sequence validator implemented as a Python reference slice on 9 November 2026. The 35 focused tests are authored but not run. This is not a publisher, acknowledgement store, durable worker, or recovery engine.
 
 ## Purpose and atomicity boundary
 
@@ -40,7 +40,7 @@ All identifiers are nonzero 128-bit values. sequence starts at 1. event_type is 
 - Its commit_ref generation must equal the OUTBOX page's generation.
 - The source COMMIT page must physically follow the OUTBOX page.
 - previous_event_ref, when present, must point to an earlier page and cannot have a newer generation.
-- validate_outbox_sequence(previous, current) checks strictly increasing page numbers, non-regressing generations, exact previous-entry linkage, contiguous sequence numbers, adjacent event_id/idempotency_key uniqueness, and transaction_id behavior across generation boundaries.
+- validate_outbox_sequence(previous, current) checks strictly increasing page numbers, non-regressing generations, exact previous-entry linkage, contiguous sequence numbers, adjacent event_id/idempotency_key uniqueness, same-generation source commit_id/PageRef consistency, and transaction_id behavior across generation boundaries. It also validates the supplied decoded-page structures before comparing them.
 - Sequence validation is an adjacent-pair check. A caller must scan/validate the full chain and use the durable manifest high-water mark before treating a sequence as complete.
 
 ## API
@@ -64,4 +64,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_outbox -v
 ```
 
-Then run the complete JPVR test command in README.md. At authoring time, the user has reported **196/196 PASS** on Android Termux for the previous ten-module JPVR suite. The 33 OUTBOX tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
+Then run the complete JPVR test command in README.md. At authoring time, the user has reported **196/196 PASS** on Android Termux for the previous ten-module JPVR suite. The 35 OUTBOX tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
