@@ -111,7 +111,7 @@ class CommitPayloadTests(unittest.TestCase):
             encode_commit_payload(record)
 
     def test_later_generation_requires_immediate_previous_commit(self):
-        for previous in (None, PageRef(9, 1), PageRef(9, 3)):
+        for previous in (None, PageRef(1, 1), PageRef(9, 3)):
             record = CommitRecord(
                 2, TX2, COMMIT2, OP1, PageRef(10, 2), 11, previous
             )
