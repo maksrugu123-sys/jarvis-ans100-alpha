@@ -1,6 +1,6 @@
 # JPVR v1 — JOURNAL operation-state reference codec
 
-**Status:** JNRL v1 payload/page codec and append-only transition validator implemented as a Python reference layer on 9 November 2026. The 34 focused tests are authored but have not been run. This is not a durable journal writer or recovery engine.
+**Status:** JNRL v1 payload/page codec and append-only transition validator implemented as a Python reference layer on 9 November 2026. The 34 focused tests were included in the user's later 196/196 PASS ten-module JPVR run on Android Termux (2.204 s). This is not a durable journal writer or recovery engine.
 
 ## Scope and page model
 
