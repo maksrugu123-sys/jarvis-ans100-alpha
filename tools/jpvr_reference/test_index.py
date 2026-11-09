@@ -53,6 +53,20 @@ class IndexNodeCodecTests(unittest.TestCase):
         with self.assertRaisesRegex(JPVRFormatError, "reserved"):
             decode_index_node(raw)
 
+    def test_internal_rejects_nonzero_reserved_entry_bytes(self):
+        node = IndexNode(TREE, 1, first_child=PageRef(2, 1), children=(IndexChild(b"m", PageRef(3, 1)),))
+        raw = bytearray(encode_index_node(node))
+        raw[INDEX_NODE_HEADER_BYTES + 2] = 1
+        with self.assertRaisesRegex(JPVRFormatError, "reserved bytes"):
+            decode_index_node(raw)
+
+    def test_internal_rejects_zero_separator_count(self):
+        node = IndexNode(TREE, 1, first_child=PageRef(2, 1), children=(IndexChild(b"m", PageRef(3, 1)),))
+        raw = bytearray(encode_index_node(node))
+        struct.pack_into("<H", raw, 8, 0)
+        with self.assertRaisesRegex(JPVRFormatError, "separator children"):
+            decode_index_node(raw)
+
     def test_rejects_truncated_payload(self):
         with self.assertRaisesRegex(JPVRFormatError, "length"):
             decode_index_node(b"JIDX")
