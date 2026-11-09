@@ -1,6 +1,6 @@
 # JPVR v1 — Copy-on-Write B+ Tree Upsert Planner
 
-**Status:** implemented as a pure in-memory Python reference planner on 9 November 2026. The 16 focused tests are authored but have not yet been run. This document does not claim a durable storage implementation.
+**Status:** implemented as a pure in-memory Python reference planner on 9 November 2026. The 16 focused tests were included in the 141-test JPVR set that the user reported passing in Android Termux. This is user-reported verification, not an independent rerun here, and it does not claim durable storage.
 
 ## Scope
 
@@ -50,7 +50,7 @@ The planner chooses a legal split that minimizes the difference in encoded paylo
 - Merge, redistribution, minimum occupancy policy, bulk build and compaction are not implemented.
 - Page numbers are planned in memory; there is no file offset allocator, process lock or cross-process reservation.
 - Returned page bytes are not written, flushed or synced. A `CowIndexPlan` is not a committed transaction and does not extend a real durable prefix.
-- No JOURNAL, COMMIT page, MANIFEST update, inactive-superblock write, crash recovery or rollback protocol is implemented here.
+- The COW planner is not integrated with the separate JCOM/JOURNAL reference codecs, MANIFEST candidate construction, inactive-superblock publication, crash recovery or rollback.
 - The page catalog is an in-memory mapping, not a file-backed container. The planner's full-tree validation is O(number of reachable index pages).
 - No performance, RAM, energy or Android-device measurements have been made.
 
@@ -64,18 +64,8 @@ Run the new focused suite:
 python3 -m unittest tools.jpvr_reference.test_cow -v
 ```
 
-Run all eight JPVR reference test modules:
+Run the complete ten-module JPVR reference suite using the command in README.md:
 
-```sh
-python3 -m unittest \
- tools.jpvr_reference.test_codec \
- tools.jpvr_reference.test_records \
- tools.jpvr_reference.test_blob \
- tools.jpvr_reference.test_data \
- tools.jpvr_reference.test_layout \
- tools.jpvr_reference.test_manifest \
- tools.jpvr_reference.test_index \
- tools.jpvr_reference.test_cow -v
-```
 
-The user reported that the previous 125 JPVR tests passed in Termux. The 16 tests in `test_cow.py` are new and remain NOT RUN until the user executes them. No build, Gradle task, CI workflow or GitHub Actions run was started.
+
+The user reported 141 JPVR tests (including these 16 COW tests) as PASS in Termux. The separate JCOM module adds 20 tests and the JOURNAL module adds 30 tests; both are AUTHORED, NOT RUN. The current complete JPVR source set contains 191 test methods across ten modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
