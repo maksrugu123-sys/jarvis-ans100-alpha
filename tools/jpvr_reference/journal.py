@@ -323,7 +323,6 @@ _ALLOWED_TRANSITIONS = {
     OperationStatus.DEFERRED: frozenset((OperationStatus.QUEUED, OperationStatus.REJECTED)),
     OperationStatus.QUEUED: frozenset((
         OperationStatus.RUNNING,
-        OperationStatus.DEFERRED,
         OperationStatus.REJECTED,
         OperationStatus.FAILED,
         OperationStatus.CANCELLED,
@@ -355,10 +354,26 @@ _ALLOWED_TRANSITIONS = {
 def validate_journal_transition(
     previous: DecodedJournalPage,
     current: DecodedJournalPage,
+    *,
+    confirmed_no_commit: bool = False,
 ) -> None:
     """Validate one append-only state transition for the same logical operation."""
     if not isinstance(previous, DecodedJournalPage) or not isinstance(current, DecodedJournalPage):
         raise JPVRFormatError("journal transition requires decoded JOURNAL pages")
+    if not isinstance(confirmed_no_commit, bool):
+        raise JPVRFormatError("confirmed_no_commit must be a bool")
+    resolving_unknown_as_failed = (
+        previous.entry.status is OperationStatus.COMMIT_UNKNOWN
+        and current.entry.status is OperationStatus.FAILED
+    )
+    if resolving_unknown_as_failed and not confirmed_no_commit:
+        raise JPVRFormatError(
+            "COMMIT_UNKNOWN to FAILED requires confirmed_no_commit=True"
+        )
+    if confirmed_no_commit and not resolving_unknown_as_failed:
+        raise JPVRFormatError(
+            "confirmed_no_commit is only valid for COMMIT_UNKNOWN to FAILED"
+        )
     previous_tx_id = _fixed_bytes("previous.transaction_id", previous.transaction_id, 16)
     current_tx_id = _fixed_bytes("current.transaction_id", current.transaction_id, 16)
     if previous_tx_id == bytes(16) or current_tx_id == bytes(16):
