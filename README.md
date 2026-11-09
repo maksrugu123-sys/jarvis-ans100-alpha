@@ -6,7 +6,7 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 9 November 2026
 
-- **JPVR reference:** ten modules contain 191 test methods. The user-reported Termux PASS set is 141 tests (109 codec/record/blob/data/layout/manifest + 16 INDEX + 16 COW). The later JCOM module adds 20 tests and the JOURNAL module adds 30 tests; both are **AUTHORED, NOT RUN**. Implemented reference layers include INDEX lookup, full-tree validation, path-copy upsert, COMMIT/MANIFEST consistency checks, and append-only JOURNAL operation-state pages with lifecycle validation. This is still not a storage engine: OUTBOX codec, complete transaction assembly, reservation locks, file I/O, durability barriers and recovery are not implemented.
+- **JPVR reference:** ten modules contain 193 test methods. The user-reported Termux PASS set is 141 tests (109 codec/record/blob/data/layout/manifest + 16 INDEX + 16 COW). The later JCOM module adds 20 tests and the JOURNAL module adds 32 tests; both are **AUTHORED, NOT RUN**. Implemented reference layers include INDEX lookup, full-tree validation, path-copy upsert, COMMIT/MANIFEST consistency checks, and append-only JOURNAL operation-state pages with lifecycle validation. This is still not a storage engine: OUTBOX codec, complete transaction assembly, reservation locks, file I/O, durability barriers and recovery are not implemented.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. Its 15 focused tests were included in the user's full Termux run on 8 November 2026: 216/216 repository tests passed in 19.280 s. This is Python reference verification, not production NCC/runtime or device performance evidence.
 - **Multi-neuron network coordinator:** `tools/neuron_runtime/network.py` adds directed delayed connections, deterministic same-timestamp batching, bounded event/run budgets and in-memory timestamp-level candidate commit. Fourteen focused network tests are authored; they have not yet been run against the repository's real Numerical Oracle. This remains a single-threaded Python reference layer, not production NCC or durable scheduling.
@@ -223,8 +223,13 @@ For detailed status, unresolved decisions and the next implementation gates, sta
 Focused COMMIT descriptor tests:
 
 ```sh
-python3 -m unittest tools.jpvr_reference.test_commit \
- tools.jpvr_reference.test_journal -v
+python3 -m unittest tools.jpvr_reference.test_commit -v
+```
+
+Focused JOURNAL tests:
+
+```sh
+python3 -m unittest tools.jpvr_reference.test_journal -v
 ```
 
 Complete JPVR reference suite:
