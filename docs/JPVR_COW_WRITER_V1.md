@@ -1,6 +1,6 @@
 # JPVR v1 — Copy-on-Write B+ Tree Upsert Planner
 
-**Status:** implemented as a pure in-memory Python reference planner on 9 November 2026. The 16 focused tests were included in the 141-test JPVR set that the user reported passing in Android Termux. This is user-reported verification, not an independent rerun here, and it does not claim durable storage.
+**Status:** implemented as a pure in-memory Python reference planner on 9 November 2026. The user subsequently reran the corrected ten-module JPVR suite on Android Termux: **196/196 PASS** in 2.204 s, including the internal COW split regression. This is user-reported device verification, not evidence of durable storage.
 
 ## Scope
 
@@ -64,4 +64,4 @@ Run the new focused suite:
 python3 -m unittest tools.jpvr_reference.test_cow -v
 ```
 
-Run the complete ten-module JPVR reference suite using the command in README.md. The earlier 141-test aggregate was user-reported PASS. The later full 195-test Termux run produced 192 PASS, 2 FAIL and 1 ERROR, including the internal COW split case; the COW correction is published but not yet rerun. The current source set contains 196 test methods after adding an INDEX encoder-depth regression test, which is AUTHORED, NOT RUN. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete ten-module JPVR reference suite using the command in README.md. The corrected ten-module JPVR suite was subsequently run by the user on Android Termux: **196/196 PASS** in 2.204 s, including the COW internal-split regression. The new OUTBOX module adds 33 tests (AUTHORED, NOT RUN); current total is 229 methods across eleven modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
