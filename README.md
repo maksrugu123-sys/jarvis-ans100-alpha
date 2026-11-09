@@ -245,7 +245,8 @@ python3 -m unittest \
  tools.jpvr_reference.test_manifest \
  tools.jpvr_reference.test_index \
  tools.jpvr_reference.test_cow \
- tools.jpvr_reference.test_commit -v
+ tools.jpvr_reference.test_commit \
+ tools.jpvr_reference.test_journal -v
 ```
 
 The preceding 141 JPVR tests (including COW) are user-reported as passing in Termux. The 20 COMMIT tests and 34 JOURNAL tests are new and remain **AUTHORED, NOT RUN**. The complete current JPVR set therefore contains 195 test methods across ten modules; that count is a source count, not a test result. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md) and [JOURNAL contract](docs/JPVR_JOURNAL_V1.md).
