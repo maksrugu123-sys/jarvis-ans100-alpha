@@ -297,6 +297,31 @@ class OutboxSequenceTests(unittest.TestCase):
         with self.assertRaisesRegex(JPVRFormatError, "same-generation OUTBOX pages"):
             validate_outbox_sequence(first, current)
 
+    def test_same_generation_events_share_commit_id(self):
+        first = self.decoded(18, 2, TX1, event(commit_ref=PageRef(23, 2)))
+        second = self.decoded(
+            21, 2, TX1,
+            event(
+                event_id=bytes.fromhex("04040404040404040404040404040404"),
+                idempotency_key=bytes.fromhex("05050505050505050505050505050505"),
+                commit_id=bytes.fromhex("cccccccccccccccccccccccccccccccc"),
+                sequence=2,
+                commit_ref=PageRef(23, 2),
+                previous_event_ref=PageRef(18, 2),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "share commit_id"):
+            validate_outbox_sequence(first, second)
+
+    def test_sequence_rejects_malformed_decoded_page(self):
+        malformed = self.decoded(1, 2, TX1, event())
+        current = self.decoded(
+            21, 2, TX1,
+            event(sequence=2, commit_ref=PageRef(23, 2), previous_event_ref=PageRef(1, 2)),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "invalid OUTBOX page number"):
+            validate_outbox_sequence(malformed, current)
+
     def test_new_generation_requires_new_transaction_id(self):
         first = self.decoded(18, 1, TX1, event(commit_ref=PageRef(20, 1)))
         second = self.decoded(
