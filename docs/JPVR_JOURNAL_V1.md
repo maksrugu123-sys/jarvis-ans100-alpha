@@ -86,7 +86,7 @@ COMPLETED, REJECTED, FAILED and CANCELLED are terminal in this initial profile. 
 - The codec does not maintain a global operation_id/idempotency_key uniqueness index or guarantee deduplication by itself.
 - It does not scan the full journal chain, validate every referenced COMMIT page against a container, or implement journal retention/checkpoint policy.
 - It does not encode durable result payloads; result_object_id is only an object identity that a future index/RecordLocation layer must resolve.
-- No OUTBOX codec, complete transaction page-sequence planner, page allocator/lock, file I/O, flush/sync, superblock publication, crash recovery, rollback or orphan-page handling is implemented.
+- The OUTBOX event codec is a separate immutable-event reference slice; it does not implement subscriber acknowledgements, publication, complete transaction page-sequence planning, page allocator/lock, file I/O, flush/sync, superblock publication, crash recovery, rollback or orphan-page handling.
 - A valid JOURNAL page is not evidence that its transaction was published or durably committed.
 
 ## Tests
@@ -97,4 +97,4 @@ Focused suite:
 python3 -m unittest tools.jpvr_reference.test_journal -v
 ```
 
-Run the complete JPVR reference set using the ten-module command in README.md. The earlier 141-test aggregate was user-reported PASS. The later full 195-test Termux run produced 192 PASS, 2 FAIL and 1 ERROR; COW/COMMIT fixes are published but not yet rerun. The current source set contains 196 methods; the extra INDEX depth regression and all newer code remain unverified until the focused and full suites are rerun. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete JPVR reference set using the ten-module command in README.md. The earlier 141-test aggregate was user-reported PASS. The user subsequently reran the corrected ten-module suite on Android Termux: **196/196 PASS** in 2.204 s. The new OUTBOX module is separate and contains 27 methods, authored but not run; current JPVR source total is 223 methods across eleven modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
