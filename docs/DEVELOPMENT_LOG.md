@@ -964,3 +964,18 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Ограничения:** scanner принимает уже выбранный/декодированный Superblock; он не читает dual physical slots и не выбирает active slot. Полный contiguous catalog нужен в RAM, поэтому это не streaming reader. Active MANIFEST OUTBOX root проверяется как INDEX page, но B+ tree membership каждого event пока не traversed. Исторические MANIFEST descriptors сверяются, но их index roots не replay-ятся как historical snapshots. Логическая целостность не доказывает fsync/flush durability. Это read-side reference scanner, не storage engine, crash recovery или event publisher.
 
 **Следующий шаг:** пользователь запускает 16 scanner tests и 4 genesis tests, затем полный 262-method JPVR suite. При PASS следующий крупный этап — design/implementation transaction assembly planner, который связывает append layout, DATA/BLOB/INDEX/MANIFEST/JOURNAL/OUTBOX/COMMIT в одну атомарную страницу-цепочку; file I/O и durability barriers остаются за пределами до проверки этого planner.
+
+
+### 2026-11-10 — JPVR scanner and CQE priority-aging regression repair
+
+**Пользовательский сигнал:** полный запуск python3 -m unittest discover -s tools -t . -v завершился Ran 497 tests / FAILED (failures=3, errors=7).
+
+**Причины и исправления:**
+- tools/jpvr_reference/outbox_scan.py: DecodedOutboxPage содержит поля page_no, commit_generation, transaction_id и вложенный event: OutboxEvent. Scanner ошибочно читал event_id и idempotency_key на внешнем уровне. Исправлено на page.event.event_id / page.event.idempotency_key.
+- Тот же scanner теперь явно проверяет, что существующая страница MANIFEST outbox_high_water_page_no имеет тип OUTBOX, и выдаёт диагностическую ошибку до попытки декодировать её как OUTBOX event.
+- test_outbox_scan.py: fixture оборванной predecessor-связи ранее одновременно нарушал operation_id source COMMIT, поэтому падал на более ранней проверке. Fixture теперь сохраняет корректную привязку к generation-2 COMMIT и изолирует отсутствие predecessor link.
+- test_cqe.py: priority-aging test ожидал исполнение после 5 секунд, но default command deadline также равен 5 секундам. Для изоляции aging test теперь использует command deadline cap 10 секунд; production aging interval и deadline semantics не ослаблялись.
+
+**Коммиты:** scanner 1474fa54a90524ac50a19e2e3aeda569918c9e38; scanner regression fixture 17844da50253d1d0aa4544eb439a3afdca697052; CQE test c2f98928c9853ce1df42f2584dc4576da471eeb3; docs обновлены отдельными последовательными commits после этих исправлений.
+
+**Проверки:** исходный результат — пользовательский, 497 tests / 7 errors / 3 failures. После исправлений Python tests NOT RUN; требуется focused JPVR scanner + CQE tests и затем полный suite. Builds, Gradle, CI, GitHub Actions, APK/AAB NOT RUN.
