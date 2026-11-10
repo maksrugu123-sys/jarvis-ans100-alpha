@@ -174,7 +174,7 @@ class TransactionAssemblyTests(unittest.TestCase):
 
     def test_rejects_commit_not_at_final_physical_page(self):
         plan, _, commit = first_generation()
-        with self.assertRaisesRegex(JPVRFormatError, "not COMMIT"):
+        with self.assertRaisesRegex(JPVRFormatError, "physical page position"):
             assemble_transaction(
                 genesis_superblock(), plan.ordered_page_bytes[:-1],
                 encode_page(PageType.DATA, 11, 1, TX1, b"not commit"), {},
@@ -243,15 +243,16 @@ class TransactionAssemblyTests(unittest.TestCase):
 
     def test_failed_assembly_does_not_mutate_catalog(self):
         plan, catalog, _ = first_generation()
-        before = dict(catalog)
+        empty_catalog = {}
+        before = dict(empty_catalog)
         damaged_commit = bytearray(plan.ordered_page_bytes[-1])
         damaged_commit[-1] ^= 1
         with self.assertRaisesRegex(JPVRFormatError, "CRC32C"):
             assemble_transaction(
                 genesis_superblock(), plan.ordered_page_bytes[:-1],
-                bytes(damaged_commit), {},
+                bytes(damaged_commit), empty_catalog,
             )
-        self.assertEqual(catalog, before)
+        self.assertEqual(empty_catalog, before)
 
     def test_rejects_empty_staged_pages(self):
         with self.assertRaisesRegex(JPVRFormatError, "non-empty"):
