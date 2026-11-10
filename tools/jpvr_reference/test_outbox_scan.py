@@ -228,7 +228,7 @@ class OutboxSnapshotScannerTests(unittest.TestCase):
         # Point the first event at a valid page of the wrong type/generation.
         invalid_first = make_event(commit_ref=PageRef(10, 1))
         catalog[9] = encode_outbox_page(invalid_first, 9, 1, TX1)
-        with self.assertRaisesRegex(JPVRFormatError, "not OUTBOX|must follow"):
+        with self.assertRaisesRegex(JPVRFormatError, "not COMMIT"):
             scan_committed_outbox(superblock, catalog)
 
 
