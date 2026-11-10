@@ -81,6 +81,11 @@ from .outbox import (
     validate_outbox_genesis,
 )
 from .outbox_scan import OutboxScanResult, scan_committed_outbox
+from .transaction import (
+    TransactionAssemblyPlan,
+    assemble_transaction,
+    validate_transaction_assembly_plan,
+)
 
 __all__ = [
     "AppendPlan",
@@ -109,6 +114,7 @@ __all__ = [
     "PageType",
     "Superblock",
     "TLVField",
+    "TransactionAssemblyPlan",
     "WireType",
     "cow_upsert_index",
     "crc32c",
@@ -155,4 +161,6 @@ __all__ = [
     "scan_committed_outbox",
     "validate_index_tree",
     "validate_manifest",
+    "assemble_transaction",
+    "validate_transaction_assembly_plan",
 ]
