@@ -64,11 +64,11 @@ It returns the decoded COMMIT descriptor. This is a linkage check, **not** proof
 ## Explicit limitations
 
 - This is an immutable event codec, not delivery state. Subscriber acknowledgements, retry scheduling, retention, compaction, and subscriber-specific cursors are not implemented.
-- No global event_id/idempotency-key uniqueness index exists; the adjacent validator only catches immediate duplicates.
+- The adjacent validator catches immediate duplicates. The committed-history scanner additionally rejects duplicate event_id and idempotency_key values across the complete supplied chain; no persistent/incremental uniqueness index exists.
 - No file/container I/O, page allocator/reservation, locking, flush/sync, superblock publication, transaction assembly, publisher, or crash recovery exists.
-- Even a successful source-COMMIT binding check does not prove active durability or manifest reachability. A future reader must validate the COMMIT chain, MANIFEST OUTBOX root, high-water mark and active Superblock before publication.
+- The committed-history scanner validates the active Superblock snapshot, complete COMMIT chain, MANIFEST high-water mark and coverage of all durable OUTBOX pages in the supplied catalog. It validates the OUTBOX index root as an INDEX page but does not traverse the B+ tree to prove each event's index membership. It also cannot prove physical flush durability.
 
-## Tests
+See also [JPVR_OUTBOX_SCAN_V1.md](JPVR_OUTBOX_SCAN_V1.md) for the read-side committed-history scanner.\n\n## Tests
 
 Run:
 
@@ -76,4 +76,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_outbox -v
 ```
 
-Then run the complete JPVR test command in README.md. The user subsequently reported that all tests passed after the OUTBOX source-COMMIT change; the available historical baseline is **196/196 PASS** for the earlier ten-module set, and the 11-module JPVR source set at the time contained 242 methods. The current source contains **246 methods across eleven modules**: 46 OUTBOX cases are in the user-reported passing set and the four new genesis-validator tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
+Then run the complete twelve-module JPVR test command in README.md. The user reported that the prior 11-module source set passed after OUTBOX source-COMMIT validation (242 methods at that time; exact run details were not included in the latest message). Four genesis tests and 16 committed-history scanner tests have since been added. Current source: **262 methods across twelve modules**; those 20 new tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
