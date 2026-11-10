@@ -172,6 +172,9 @@ class CQEReferenceTests(unittest.TestCase):
                 module_id, {schema_id: frozenset({1})},
                 command_handlers={schema_id: handler},
                 command_priorities={schema_id: priority},
+                # Keep the command alive beyond the 5-second aging interval;
+                # this test isolates queue aging, not deadline expiration.
+                command_deadline_caps_ms={schema_id: 10_000},
             ))
             self.ncc.register_capability(Capability(
                 f"cap-{schema_id}", "signal-module", frozenset({schema_id}),
