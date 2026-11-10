@@ -942,3 +942,25 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Ограничения:** валидатор проверяет только genesis descriptor, но не подтверждает, что reader не пропустил более раннюю страницу. Для безопасного чтения всё ещё нужны committed MANIFEST root/high-water anchoring, полный COMMIT chain validation, активный Superblock, reachability, global event/idempotency uniqueness и fail-closed recovery. JPVR остаётся reference codecs/planners, а не durable storage engine.
 
 **Следующий шаг:** выполнить четыре новых focused genesis tests вместе с OUTBOX module, затем полный 246-method JPVR suite. При PASS проектировать read-side OUTBOX chain scanner прежде transaction assembly; не вводить file I/O/durability до утверждения и проверки полного transaction/recovery protocol.
+
+
+### 2026-11-10 — JPVR committed OUTBOX read-side scanner (one major stage)
+
+**Цель:** перейти от отдельных OUTBOX event/sequence validators к проверяемому read-side проходу по активному JPVR snapshot и всей истории committed OUTBOX.
+
+**Реализация:**
+- Добавлен `tools/jpvr_reference/outbox_scan.py` с immutable `OutboxScanResult` и `scan_committed_outbox(superblock, page_catalog)`.
+- Scanner требует полный непрерывный in-memory page catalog от page 2 до активного durable tail; проверяет page numbering, CRC/структуру всех страниц и отсутствие дыр.
+- Проверяет active COMMIT/MANIFEST snapshot через существующий `validate_commit_snapshot`, включая Superblock identity, durable tail, manifest roots/high-water references и предыдущий COMMIT descriptor.
+- Проходит весь COMMIT chain до generation 1; сверяет исторические COMMIT/MANIFEST references, transaction IDs, поколения и append order; требует, чтобы все COMMIT pages в durable catalog принадлежали активной цепочке.
+- Начинает OUTBOX traversal с MANIFEST `outbox_high_water_page_no`, идёт по predecessor references к genesis, проверяет source COMMIT каждого event, membership source COMMIT в активной chain, sequence continuity, genesis и глобальные event_id/idempotency_key duplicates.
+- Сверяет, что все OUTBOX pages в durable catalog покрыты цепочкой, а при high-water=0 OUTBOX pages отсутствуют.
+- Экспортированы `OutboxScanResult` и `scan_committed_outbox` из `tools.jpvr_reference`.
+- Добавлен `tools/jpvr_reference/test_outbox_scan.py`: 16 focused test methods, включая single/multi-generation scan, empty outbox, package exports, incomplete/corrupt catalog, Superblock mismatch, missing COMMIT, sequence gap, duplicate IDs, skipped high-water history, missing predecessor coverage и invalid source reference.
+- Добавлен [docs/JPVR_OUTBOX_SCAN_V1.md](JPVR_OUTBOX_SCAN_V1.md); обновлены README, OUTBOX contract и architecture section 3.21.25.
+
+**Проверки:** только GitHub source fetch/readback и ручная статическая проверка в этом ходе. Python tests/import/syntax checks **NOT RUN**. Предыдущий 11-module JPVR batch (242 methods на момент его формирования) пользователь сообщил как PASS; после него добавлены 4 genesis tests и 16 scanner tests. Текущий JPVR source count — **262 methods across 12 modules**, эти 20 новых методов — **AUTHORED, NOT RUN**. Ни build, Gradle, CI, GitHub Actions, APK/AAB, ни file I/O не запускались.
+
+**Ограничения:** scanner принимает уже выбранный/декодированный Superblock; он не читает dual physical slots и не выбирает active slot. Полный contiguous catalog нужен в RAM, поэтому это не streaming reader. Active MANIFEST OUTBOX root проверяется как INDEX page, но B+ tree membership каждого event пока не traversed. Исторические MANIFEST descriptors сверяются, но их index roots не replay-ятся как historical snapshots. Логическая целостность не доказывает fsync/flush durability. Это read-side reference scanner, не storage engine, crash recovery или event publisher.
+
+**Следующий шаг:** пользователь запускает 16 scanner tests и 4 genesis tests, затем полный 262-method JPVR suite. При PASS следующий крупный этап — design/implementation transaction assembly planner, который связывает append layout, DATA/BLOB/INDEX/MANIFEST/JOURNAL/OUTBOX/COMMIT в одну атомарную страницу-цепочку; file I/O и durability barriers остаются за пределами до проверки этого planner.
