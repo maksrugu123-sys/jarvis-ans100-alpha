@@ -65,6 +65,11 @@ def _decode_complete_catalog(
         if not isinstance(raw, (bytes, bytearray, memoryview)):
             raise JPVRFormatError("page_catalog values must be bytes-like")
         decoded[page_no] = decode_page(raw, expected_page_no=page_no)
+    expected_count = durable_tail_page_no - 1
+    if len(decoded) != expected_count:
+        raise JPVRFormatError("page_catalog is not complete through the active durable tail")
+    if set(decoded) != set(range(2, durable_tail_page_no + 1)):
+        raise JPVRFormatError("page_catalog has a gap in the active durable prefix")
     return decoded
 
 
@@ -125,7 +130,15 @@ def _scan_commit_chain(
             raise JPVRFormatError("COMMIT pages must be append ordered")
         current = previous
 
-    return tuple(reversed(newest_to_oldest))
+    commits = tuple(reversed(newest_to_oldest))
+    reachable = {item.page_no for item in commits}
+    catalog_commits = {
+        page_no for page_no, decoded in decoded_catalog.items()
+        if decoded.page_type is PageType.COMMIT
+    }
+    if reachable != catalog_commits:
+        raise JPVRFormatError("active COMMIT chain does not cover every durable COMMIT page")
+    return commits
 
 
 def _scan_outbox_chain(
@@ -149,7 +162,6 @@ def _scan_outbox_chain(
     newest_to_oldest = []
     seen_pages = set()
     page_no = high_water
-    expected_generation = None
     while True:
         if page_no in seen_pages:
             raise JPVRFormatError("OUTBOX chain contains a page cycle")
