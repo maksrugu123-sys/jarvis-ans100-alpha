@@ -35,6 +35,13 @@ The public API is exported from `tools.jpvr_reference`.
 
 ## Tests and verification
 
-`tools/jpvr_reference/test_outbox_scan.py` contains 16 focused test methods. They cover one- and two-generation scans, empty OUTBOX, package exports, incomplete/corrupt page catalogs, Superblock mismatch, missing COMMIT pages, sequence gaps, duplicate IDs/idempotency keys, high-water omissions, broken predecessor coverage and invalid source references.
+`tools/jpvr_reference/test_outbox_scan.py` contains 16 focused test methods. They cover one- and two-generation scans, empty OUTBOX, package exports, incomplete/corrupt page catalogs, Superblock mismatch, missing COMMIT pages, sequence gaps, duplicate IDs/idempotency keys, high-water omissions, broken predecessor coverage and invalid source references. Duplicate identity checks read the nested DecodedOutboxPage.event record; the scanner rejects a non-OUTBOX high-water page before attempting to decode it as an event.
 
 The previous 11-module JPVR set was reported by the user as passing at 242 methods. Since that run, four genesis-validator tests and these 16 scanner tests have been added. Current JPVR source count: **262 methods across 12 modules**; the 20 newer tests are **AUTHORED, NOT RUN**. No build, CI or GitHub Actions workflow is part of this verification.
+
+
+## Regression repair — 2026-11-10
+
+A user-run full repository test pass exposed incorrect field access in the scanner (event.event_id instead of event.event.event_id) and a missing early type guard for the MANIFEST high-water page. Both are corrected. The missing-predecessor fixture now preserves a valid generation-2 source COMMIT binding so it reaches the intended durable-coverage assertion.
+
+The first report contained 497 tests with 7 errors and 3 failures. The corrected tests and scanner have been committed, but the focused and full suites must be rerun; no new PASS is claimed yet.
