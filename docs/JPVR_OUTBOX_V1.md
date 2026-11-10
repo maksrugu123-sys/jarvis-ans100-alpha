@@ -1,6 +1,6 @@
 # JPVR v1 — OUTBOX immutable event reference codec
 
-**Status:** JOUT v1 payload/page codec, adjacent sequence validator and source-COMMIT binding validator are implemented as Python reference code. The 36 initial focused tests, one package-export regression, two cross-generation COMMIT identity tests and seven source-COMMIT binding tests (46 total) are authored but not run. This is not a publisher, acknowledgement store, durable worker, or recovery engine.
+**Status:** JOUT v1 payload/page codec, genesis validator, adjacent sequence validator and source-COMMIT binding validator are implemented as Python reference code. The user reports that the then-current 11-module JPVR suite passed after source-COMMIT binding was added (242 test methods at that time; the exact command/count/duration are not present in the chat). Four new genesis-validator tests are authored but not yet run; the OUTBOX module now has 50 methods (46 in the user-reported passing set + 4 new tests). This is not a publisher, acknowledgement store, durable worker, or recovery engine.
 
 ## Purpose and atomicity boundary
 
@@ -57,6 +57,7 @@ It returns the decoded COMMIT descriptor. This is a linkage check, **not** proof
 
 - encode_outbox_payload / decode_outbox_payload — JOUT v1 deterministic TLV codec.
 - encode_outbox_page / decode_outbox_page — PageType.OUTBOX envelope and source-COMMIT ordering.
+- validate_outbox_genesis — requires the first event to have sequence 1 and no predecessor reference. The caller must anchor scanning at the committed MANIFEST root/high-water mark; this helper cannot prove that an earlier reachable page was not omitted.
 - validate_outbox_sequence — validates one adjacent pair in the append-only event sequence.
 - validate_outbox_commit_reference — checks the OUTBOX event against the actual referenced COMMIT descriptor.
 
@@ -75,4 +76,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_outbox -v
 ```
 
-Then run the complete JPVR test command in README.md. At authoring time, the user reported **196/196 PASS** on Android Termux for the previous ten-module JPVR suite. The current eleven-module source set contains 242 test methods; all 46 OUTBOX tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
+Then run the complete JPVR test command in README.md. The user subsequently reported that all tests passed after the OUTBOX source-COMMIT change; the available historical baseline is **196/196 PASS** for the earlier ten-module set, and the 11-module JPVR source set at the time contained 242 methods. The current source contains **246 methods across eleven modules**: 46 OUTBOX cases are in the user-reported passing set and the four new genesis-validator tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
