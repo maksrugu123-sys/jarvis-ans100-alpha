@@ -902,3 +902,27 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Проверки:** static source review и GitHub readback; Python tests **NOT RUN**. Builds, Gradle, APK/AAB, CI и GitHub Actions **NOT RUN**.
 
 **Следующий шаг:** выполнить 39 focused OUTBOX tests, затем полный 235-test JPVR suite. Не переходить к transaction assembly или durable file I/O до подтверждения codec tests и отдельной спецификации recovery/order.
+
+### 2026-11-10 — JPVR OUTBOX source-COMMIT binding validator
+
+**Предшествующая пользовательская проверка:** после `git pull --ff-only origin main` пользователь выполнил:
+- focused INDEX/COW/COMMIT command — **PASS, 53/53**, 1.352 s;
+- полный десятимодульный JPVR command — **PASS, 196/196**, 2.204 s;
+- Android environment: Termux on TECNO device, according to the user-provided terminal output.
+Эти результаты подтверждают именно десятимодульный baseline до добавления OUTBOX.
+
+**Аудит:** JOUT event хранил `commit_id` и `commit_ref`, однако существующий adjacent-sequence validator не сверял их с actual encoded source COMMIT page. Это позволяло структурно корректной OUTBOX page ссылаться на страницу с другим commit descriptor.
+
+**Изменения:**
+- `tools/jpvr_reference/outbox.py` — добавлен `validate_outbox_commit_reference(outbox_page, commit_page_bytes)`. Валидатор декодирует точный физический COMMIT page из PageRef и сверяет physical page number, generation, transaction_id, commit_id и operation_id. Возвращает проверенный `DecodedCommitPage`.
+- `tools/jpvr_reference/test_outbox.py` — добавлены семь regression cases: корректная ссылка, несовпадение commit_id, operation_id, transaction_id, generation, физического номера страницы и forged OUTBOX page с нулевым transaction_id.
+- `tools/jpvr_reference/__init__.py` — экспорт нового API.
+- `docs/JPVR_OUTBOX_V1.md`, `docs/JARVIS_ARCHITECTURE.md` и `README.md` — описаны новый contract, ограничения и обновлён test count.
+
+**Границы:** source-COMMIT binding подтверждает только согласованность двух page descriptors. Он не доказывает, что COMMIT активен/durable, что OUTBOX page достижима из MANIFEST OUTBOX root или находится ниже committed high-water mark. До публикации будущий reader должен валидировать COMMIT chain, MANIFEST, active Superblock, root reachability и high-water. Publisher, subscriber ACK/cursor, retry/retention, file I/O и crash recovery всё ещё отсутствуют. Delivery semantics остаётся at-least-once.
+
+**Количество:** OUTBOX suite вырос с 39 до **46** методов. Одиннадцать JPVR modules содержат **242 test methods** (196 ранее проверенных baseline + 46 OUTBOX). Все 46 OUTBOX tests и новый source-binding API — **AUTHORED, NOT RUN**. Полный 242-test suite **NOT RUN**.
+
+**Проверки, выполненные в этой задаче:** только GitHub source readback и статическая проверка расположения API/tests/docs. Новые Python tests, import checks и весь 242-test suite **NOT RUN**. Builds, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN**.
+
+**Следующий шаг:** пользователь запускает 46 focused OUTBOX tests, затем полный одиннадцатимодульный 242-test suite. Не начинать publisher, acknowledgement cursor или file I/O до подтверждения codec и отдельной спецификации committed-root lookup/recovery.
