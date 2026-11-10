@@ -292,3 +292,5 @@ def validate_outbox_sequence(
             raise JPVRFormatError("previous generation COMMIT must precede the next OUTBOX page")
         if current.transaction_id == previous.transaction_id:
             raise JPVRFormatError("new-generation OUTBOX page must use a new transaction_id")
+        if current.event.commit_id == previous.event.commit_id:
+            raise JPVRFormatError("new-generation OUTBOX events must use a new commit_id")
