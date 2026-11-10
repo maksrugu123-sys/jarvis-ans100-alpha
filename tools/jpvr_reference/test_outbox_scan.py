@@ -214,12 +214,17 @@ class OutboxSnapshotScannerTests(unittest.TestCase):
             scan_committed_outbox(superblock, catalog)
 
     def test_rejects_missing_predecessor_link(self):
-        unlinked = make_event(
-            event_id=EVENT2,
-            idempotency_key=IDEM2,
-            sequence=1,
-            commit_id=COMMIT2,
-            commit_ref=PageRef(14, 2),
+        # Keep the event internally valid for generation 2, but deliberately
+        # sever its predecessor link so the scanner must detect uncovered page 9.
+        unlinked = replace(
+            make_event(
+                event_id=EVENT2,
+                idempotency_key=IDEM2,
+                sequence=1,
+                commit_id=COMMIT2,
+                commit_ref=PageRef(14, 2),
+            ),
+            operation_id=OP2,
         )
         superblock, catalog = make_snapshot(second_event=unlinked)
         with self.assertRaisesRegex(JPVRFormatError, "does not cover every durable OUTBOX page"):
