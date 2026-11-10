@@ -64,4 +64,4 @@ Run the new focused suite:
 python3 -m unittest tools.jpvr_reference.test_cow -v
 ```
 
-Run the complete eleven-module JPVR reference suite using the command in README.md. The corrected ten-module JPVR suite was subsequently run by the user on Android Termux: **196/196 PASS** in 2.204 s, including the COW internal-split regression. The new OUTBOX module adds 36 tests (AUTHORED, NOT RUN); current total is 232 methods across eleven modules. No build, Gradle task, CI workflow or GitHub Actions run was started.
+Run the complete eleven-module JPVR reference suite using the command in README.md. The user reports that the then-current 11-module JPVR suite passed after OUTBOX source-COMMIT validation; the separately recorded ten-module baseline is **196/196 PASS** in 2.204 s, including the COW internal-split regression. Four new OUTBOX genesis-validator tests have since been added; the current total is **246 methods across eleven modules**, with those four tests **AUTHORED, NOT RUN**. No build, Gradle task, CI workflow or GitHub Actions run was started.
