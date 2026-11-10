@@ -290,6 +290,28 @@ def validate_outbox_commit_reference(
         raise JPVRFormatError("source COMMIT operation_id does not match OUTBOX event")
     return source
 
+
+def validate_outbox_genesis(page: DecodedOutboxPage) -> None:
+    """Validate the first event in an OUTBOX sequence.
+
+    This checks the genesis descriptor only. The caller must anchor its scan
+    to the committed MANIFEST root/high-water mark to establish that no earlier
+    reachable OUTBOX event was omitted.
+    """
+    if not isinstance(page, DecodedOutboxPage):
+        raise JPVRFormatError(
+            "OUTBOX genesis validation requires a decoded OUTBOX page"
+        )
+    _validate_event_page_refs(page.event, page.page_no, page.commit_generation)
+    transaction_id = _fixed_bytes("OUTBOX transaction_id", page.transaction_id, 16)
+    if transaction_id == bytes(16):
+        raise JPVRFormatError("OUTBOX transaction_id must be nonzero")
+    if page.event.sequence != 1:
+        raise JPVRFormatError("first OUTBOX event must start at sequence 1")
+    if page.event.previous_event_ref is not None:
+        raise JPVRFormatError("first OUTBOX event must not reference a previous event")
+
+
 def validate_outbox_sequence(
     previous: DecodedOutboxPage,
     current: DecodedOutboxPage,
