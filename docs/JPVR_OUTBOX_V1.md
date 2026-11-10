@@ -64,4 +64,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_outbox -v
 ```
 
-Then run the complete JPVR test command in README.md. At authoring time, the user has reported **196/196 PASS** on Android Termux for the previous ten-module JPVR suite. The 36 OUTBOX tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
+Then run the complete JPVR test command in README.md. At authoring time, the user has reported **196/196 PASS** on Android Termux for the previous ten-module JPVR suite. All 39 OUTBOX tests are **AUTHORED, NOT RUN**. No build, CI, or GitHub Actions workflow was started.
