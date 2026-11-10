@@ -69,6 +69,15 @@ from .journal import (
     encode_journal_payload,
     validate_journal_transition,
 )
+from .outbox import (
+    DecodedOutboxPage,
+    OutboxEvent,
+    decode_outbox_page,
+    decode_outbox_payload,
+    encode_outbox_page,
+    encode_outbox_payload,
+    validate_outbox_sequence,
+)
 
 __all__ = [
     "AppendPlan",
@@ -81,6 +90,7 @@ __all__ = [
     "DecodedIndexPage",
     "DecodedManifestPage",
     "DecodedPage",
+    "DecodedOutboxPage",
     "DecodedRecord",
     "IndexChild",
     "IndexEntry",
@@ -88,6 +98,7 @@ __all__ = [
     "IndexTreeStats",
     "JournalEntry",
     "OperationStatus",
+    "OutboxEvent",
     "Manifest",
     "NewIndexPage",
     "PageRef",
@@ -107,6 +118,8 @@ __all__ = [
     "decode_journal_payload",
     "decode_manifest_page",
     "decode_manifest_payload",
+    "decode_outbox_page",
+    "decode_outbox_payload",
     "decode_page",
     "decode_record",
     "decode_superblock",
@@ -121,6 +134,8 @@ __all__ = [
     "encode_journal_payload",
     "encode_manifest_page",
     "encode_manifest_payload",
+    "encode_outbox_page",
+    "encode_outbox_payload",
     "encode_page",
     "encode_record",
     "encode_superblock",
@@ -130,6 +145,7 @@ __all__ = [
     "validate_append_plan",
     "validate_commit_snapshot",
     "validate_journal_transition",
+    "validate_outbox_sequence",
     "validate_index_tree",
     "validate_manifest",
 ]
