@@ -252,6 +252,16 @@ def scan_committed_outbox(
     active_manifest_raw = _page_bytes(
         page_catalog, active_commit.record.manifest_ref.page_no, "active COMMIT manifest"
     )
+    active_manifest = decode_manifest_page(
+        active_manifest_raw, expected_page_no=active_commit.record.manifest_ref.page_no
+    )
+    # Give the scanner a precise diagnostic for this root before the generic
+    # COMMIT snapshot validator resolves all MANIFEST references.
+    high_water = active_manifest.manifest.outbox_high_water_page_no
+    if high_water:
+        high_water_page = decoded_catalog.get(high_water)
+        if high_water_page is not None and high_water_page.page_type is not PageType.OUTBOX:
+            raise JPVRFormatError("MANIFEST OUTBOX high-water page is not OUTBOX")
     previous_raw = None
     previous_ref = active_commit.record.previous_commit_ref
     if previous_ref is not None:
@@ -265,9 +275,6 @@ def scan_committed_outbox(
         expected_commit_page_no=superblock.active_commit_page_no,
         superblock=superblock,
         page_catalog=page_catalog,
-    )
-    active_manifest = decode_manifest_page(
-        active_manifest_raw, expected_page_no=active_commit.record.manifest_ref.page_no
     )
     commits = _scan_commit_chain(active_commit, page_catalog, decoded_catalog)
     events = _scan_outbox_chain(
