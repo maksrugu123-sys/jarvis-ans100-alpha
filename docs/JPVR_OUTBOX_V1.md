@@ -1,6 +1,6 @@
 # JPVR v1 — OUTBOX immutable event reference codec
 
-**Status:** JOUT v1 payload/page codec and adjacent sequence validator implemented as a Python reference slice on 9 November 2026. The 36 initial focused tests are authored but not run; one additional package-export regression test has been added and is also not run. This is not a publisher, acknowledgement store, durable worker, or recovery engine.
+**Status:** JOUT v1 payload/page codec and adjacent sequence validator implemented as a Python reference slice on 9 November 2026. The 36 initial focused tests plus one package-export regression and two cross-generation COMMIT identity tests (39 total) are authored but not run. This is not a publisher, acknowledgement store, durable worker, or recovery engine.
 
 ## Purpose and atomicity boundary
 
@@ -40,7 +40,7 @@ All identifiers are nonzero 128-bit values. sequence starts at 1. event_type is 
 - Its commit_ref generation must equal the OUTBOX page's generation.
 - The source COMMIT page must physically follow the OUTBOX page.
 - previous_event_ref, when present, must point to an earlier page and cannot have a newer generation.
-- validate_outbox_sequence(previous, current) checks strictly increasing page numbers, non-regressing generations, exact previous-entry linkage, contiguous sequence numbers, adjacent event_id/idempotency_key uniqueness, same-generation source commit_id/PageRef consistency, and transaction_id behavior and prior-COMMIT page ordering across generation boundaries. It also validates the supplied decoded-page structures before comparing them.
+- validate_outbox_sequence(previous, current) checks strictly increasing page numbers, non-regressing generations, exact previous-entry linkage, contiguous sequence numbers, adjacent event_id/idempotency_key uniqueness, same-generation source commit_id/PageRef consistency, and transaction_id behavior, a changed commit_id for each new generation, and prior-COMMIT page ordering across generation boundaries. It also validates the supplied decoded-page structures before comparing them.
 - Sequence validation is an adjacent-pair check. A caller must scan/validate the full chain and use the durable manifest high-water mark before treating a sequence as complete.
 
 ## API
