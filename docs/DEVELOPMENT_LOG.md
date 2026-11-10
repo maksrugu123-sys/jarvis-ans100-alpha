@@ -1011,3 +1011,26 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Limitations:** planner consumes pre-encoded pages and does not itself create DATA/BLOB/INDEX/JOURNAL/OUTBOX content or verify every typed payload's internal semantics beyond the existing MANIFEST/COMMIT snapshot validators. Page allocation is not locked or reserved. A successful plan is not a durable commit and does not establish production readiness.
 
 **Next stage:** after focused and full JPVR tests pass, build a typed transaction builder that consumes DATA/BLOB/COW/JOURNAL/OUTBOX plans and emits the staged page sequence. Physical writer, flush barriers, dual-slot publication and crash recovery remain a separate later design.
+
+
+### 2026-11-10 — JPVR typed transaction builder V1 (one major stage)
+
+**Цель:** перейти от сборки уже закодированных страниц к typed API, который сам формирует страницы основных JPVR семейств и собирает единый проверяемый append plan. Physical writer и durability остаются вне этого этапа.
+
+**Добавлено:**
+- `tools/jpvr_reference/typed_transaction.py`: `DataRecordInput`, `BlobRecordInput`, `IndexPageInput`, `JournalEntryInput`, `TypedTransactionRequest`, `TypedTransactionBuildPlan`, `build_typed_transaction`, `validate_typed_transaction_plan`.
+- Канонический порядок страниц DATA → BLOB → INDEX → JOURNAL → OUTBOX → MANIFEST → COMMIT.
+- DATA JREC records автоматически кодируются и greedy-pack без разрыва записи между страницами.
+- Каждый BLOB record разбивается на непрерывный fragment run и проверяется round-trip decoder.
+- INDEX nodes кодируются в порядке caller; можно пометить страницу как один из семи MANIFEST roots. Неизменённые roots наследуются из активного MANIFEST.
+- Для non-genesis активные COMMIT/MANIFEST валидируются до наследования roots/high-water. Новый COMMIT physical page number вычисляется до кодирования JOURNAL и OUTBOX.
+- JOURNAL последовательности для одной operation автоматически связываются; supplied external predecessor refs должны разрешаться и проходить transition validator.
+- OUTBOX events получают ссылку на точный COMMIT новой транзакции, продолжают committed sequence и проходят source-COMMIT validation. Дубли внутри текущей транзакции отклоняются.
+- Export API в `tools/jpvr_reference/__init__.py`; добавлен контракт `docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md`; обновлены README и архитектура 3.21.27.
+- Добавлено 18 focused tests в `tools/jpvr_reference/test_typed_transaction.py`.
+
+**Тесты:** 18 новых методов — **AUTHORED, NOT RUN** по прямому запросу продолжить без проверки. Пользователь сообщил, что ошибки старого полного набора устранены; новые тесты в тот запуск не входили. В этом этапе Python tests, builds, Gradle, CI, GitHub Actions, APK/AAB не запускались.
+
+**Ограничения:** builder не строит B+ tree из key/value mutations и не вызывает COW автоматически: caller передаёт immutable INDEX nodes с готовыми child PageRefs и порядком размещения. Глобальную уникальность всей исторической OUTBOX цепочки проверяет scanner на полном catalog. Реального file I/O, page locking/reservation, flush/fsync, Superblock publication/arbitration и crash recovery по-прежнему нет. Успешный in-memory plan не является durable commit.
+
+**Фокусная команда для будущей проверки:** `python3 -m unittest tools.jpvr_reference.test_typed_transaction -v`.
