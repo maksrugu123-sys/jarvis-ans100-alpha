@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import struct
 
+from .commit import DecodedCommitPage, decode_commit_page
 from .codec import (
     DecodedPage,
     JPVRFormatError,
@@ -249,6 +250,45 @@ def decode_outbox_page(
         event=event,
     )
 
+
+
+def validate_outbox_commit_reference(
+    outbox_page: DecodedOutboxPage,
+    commit_page_bytes: bytes | bytearray | memoryview,
+) -> DecodedCommitPage:
+    """Verify that an OUTBOX page points to its exact source COMMIT page.
+
+    This proves descriptor linkage only. The caller must additionally validate
+    the COMMIT/MANIFEST chain and active Superblock before publishing the event.
+    """
+    if not isinstance(outbox_page, DecodedOutboxPage):
+        raise JPVRFormatError(
+            "OUTBOX source validation requires a decoded OUTBOX page"
+        )
+    _validate_event_page_refs(
+        outbox_page.event, outbox_page.page_no, outbox_page.commit_generation
+    )
+    transaction_id = _fixed_bytes(
+        "OUTBOX transaction_id", outbox_page.transaction_id, 16
+    )
+    if transaction_id == bytes(16):
+        raise JPVRFormatError("OUTBOX transaction_id must be nonzero")
+
+    source = decode_commit_page(
+        commit_page_bytes,
+        expected_page_no=outbox_page.event.commit_ref.page_no,
+    )
+    if source.commit_generation != outbox_page.event.commit_ref.expected_commit_generation:
+        raise JPVRFormatError("source COMMIT generation does not match OUTBOX PageRef")
+    if source.commit_generation != outbox_page.commit_generation:
+        raise JPVRFormatError("source COMMIT generation does not match OUTBOX page")
+    if source.transaction_id != transaction_id:
+        raise JPVRFormatError("source COMMIT transaction_id does not match OUTBOX page")
+    if source.record.commit_id != outbox_page.event.commit_id:
+        raise JPVRFormatError("source COMMIT commit_id does not match OUTBOX event")
+    if source.record.operation_id != outbox_page.event.operation_id:
+        raise JPVRFormatError("source COMMIT operation_id does not match OUTBOX event")
+    return source
 
 def validate_outbox_sequence(
     previous: DecodedOutboxPage,
