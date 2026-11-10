@@ -6,6 +6,10 @@ from .commit import CommitRecord, encode_commit_page
 from .manifest import INDEX_ROOT_NAMES, Manifest, PageRef, encode_manifest_page
 from .outbox import OutboxEvent, encode_outbox_page
 from .outbox_scan import scan_committed_outbox
+from . import (
+    OutboxScanResult as PackageOutboxScanResult,
+    scan_committed_outbox as package_scan_committed_outbox,
+)
 
 
 UUID = bytes.fromhex("00112233445566778899aabbccddeeff")
@@ -99,6 +103,10 @@ def make_snapshot(*, two_generations=True, second_event=None, high_water=None):
 
 
 class OutboxSnapshotScannerTests(unittest.TestCase):
+    def test_scanner_api_is_exported_from_package(self):
+        self.assertIs(PackageOutboxScanResult, type(scan_committed_outbox(*make_snapshot())))
+        self.assertIs(package_scan_committed_outbox, scan_committed_outbox)
+
     def test_scans_one_generation_and_one_committed_event(self):
         superblock, catalog = make_snapshot(two_generations=False)
         result = scan_committed_outbox(superblock, catalog)
