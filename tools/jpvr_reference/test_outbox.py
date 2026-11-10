@@ -2,6 +2,7 @@ import struct
 import unittest
 
 from .codec import JPVRFormatError, PageType, encode_page
+from .commit import CommitRecord, DecodedCommitPage, encode_commit_page
 from . import (
     DecodedOutboxPage as PackageDecodedOutboxPage,
     OutboxEvent as PackageOutboxEvent,
@@ -10,6 +11,7 @@ from . import (
     encode_outbox_page as package_encode_outbox_page,
     encode_outbox_payload as package_encode_outbox_payload,
     validate_outbox_sequence as package_validate_outbox_sequence,
+    validate_outbox_commit_reference as package_validate_outbox_commit_reference,
 )
 from .manifest import PageRef
 from .outbox import (
@@ -25,6 +27,7 @@ from .outbox import (
     encode_outbox_page,
     encode_outbox_payload,
     validate_outbox_sequence,
+    validate_outbox_commit_reference,
 )
 from .records import TLVField, WireType, encode_tlv
 
@@ -201,6 +204,81 @@ class OutboxPageTests(unittest.TestCase):
         raw[-1] ^= 1
         with self.assertRaises(JPVRFormatError):
             decode_outbox_page(raw)
+
+
+class OutboxCommitBindingTests(unittest.TestCase):
+    def source_commit(
+        self, *, page_no=20, generation=2, transaction_id=TX1,
+        commit_id=COMMIT, operation_id=OP,
+    ):
+        previous = PageRef(10, generation - 1) if generation > 1 else None
+        record = CommitRecord(
+            generation=generation,
+            transaction_id=transaction_id,
+            commit_id=commit_id,
+            operation_id=operation_id,
+            manifest_ref=PageRef(19, generation),
+            durable_tail_page_no=page_no,
+            previous_commit_ref=previous,
+        )
+        return encode_commit_page(record, page_no)
+
+    def decoded_event_page(self, *, transaction_id=TX1):
+        raw = encode_outbox_page(event(), 18, 2, transaction_id)
+        return decode_outbox_page(raw, expected_page_no=18)
+
+    def test_validates_exact_source_commit_reference(self):
+        page = self.decoded_event_page()
+        result = validate_outbox_commit_reference(page, self.source_commit())
+        self.assertIsInstance(result, DecodedCommitPage)
+        self.assertEqual(result.page_no, 20)
+        self.assertEqual(result.record.commit_id, COMMIT)
+        self.assertIs(
+            package_validate_outbox_commit_reference,
+            validate_outbox_commit_reference,
+        )
+
+    def test_rejects_source_commit_id_mismatch(self):
+        page = self.decoded_event_page()
+        raw = self.source_commit(commit_id=bytes.fromhex(
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ))
+        with self.assertRaisesRegex(JPVRFormatError, "commit_id"):
+            validate_outbox_commit_reference(page, raw)
+
+    def test_rejects_source_commit_operation_id_mismatch(self):
+        page = self.decoded_event_page()
+        raw = self.source_commit(operation_id=bytes.fromhex(
+            "cccccccccccccccccccccccccccccccc"
+        ))
+        with self.assertRaisesRegex(JPVRFormatError, "operation_id"):
+            validate_outbox_commit_reference(page, raw)
+
+    def test_rejects_source_commit_transaction_id_mismatch(self):
+        page = self.decoded_event_page()
+        raw = self.source_commit(transaction_id=TX2)
+        with self.assertRaisesRegex(JPVRFormatError, "transaction_id"):
+            validate_outbox_commit_reference(page, raw)
+
+    def test_rejects_source_commit_generation_mismatch(self):
+        page = self.decoded_event_page()
+        raw = self.source_commit(generation=3)
+        with self.assertRaisesRegex(JPVRFormatError, "generation"):
+            validate_outbox_commit_reference(page, raw)
+
+    def test_rejects_source_commit_at_wrong_physical_page(self):
+        page = self.decoded_event_page()
+        raw = self.source_commit(page_no=21)
+        with self.assertRaisesRegex(JPVRFormatError, "physical page"):
+            validate_outbox_commit_reference(page, raw)
+
+    def test_rejects_forged_outbox_page_with_zero_transaction_id(self):
+        page = self.decoded_event_page()
+        forged = DecodedOutboxPage(
+            page.page_no, page.commit_generation, bytes(16), page.event
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "transaction_id"):
+            validate_outbox_commit_reference(forged, self.source_commit())
 
 
 class OutboxSequenceTests(unittest.TestCase):
