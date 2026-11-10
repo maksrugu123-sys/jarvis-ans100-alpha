@@ -1028,7 +1028,7 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 - OUTBOX events получают ссылку на точный COMMIT новой транзакции, продолжают committed sequence и проходят source-COMMIT validation. Дубли внутри текущей транзакции отклоняются.
 - Request transaction/commit/operation IDs, а также JOURNAL/OUTBOX identity fields проверяются как строго bytes-like значения длиной 16 байт до любого преобразования; integer-like значения не могут случайно превратиться в байтовые буферы.
 - Export API в `tools/jpvr_reference/__init__.py`; добавлен контракт `docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md`; обновлены README и архитектура 3.21.27.
-- Добавлено 18 focused tests в `tools/jpvr_reference/test_typed_transaction.py`.
+- Добавлено 19 focused tests в `tools/jpvr_reference/test_typed_transaction.py`.
 
 **Тесты:** 18 новых методов — **AUTHORED, NOT RUN** по прямому запросу продолжить без проверки. Пользователь сообщил, что ошибки старого полного набора устранены; новые тесты в тот запуск не входили. В этом этапе Python tests, builds, Gradle, CI, GitHub Actions, APK/AAB не запускались.
 
