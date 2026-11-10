@@ -261,10 +261,11 @@ python3 -m unittest \
  tools.jpvr_reference.test_commit \
  tools.jpvr_reference.test_journal \
  tools.jpvr_reference.test_outbox \
- tools.jpvr_reference.test_outbox_scan -v
+ tools.jpvr_reference.test_outbox_scan \\
+ tools.jpvr_reference.test_transaction -v
 ```
 
-The user reported that the prior 11-module JPVR set passed after OUTBOX source-COMMIT validation; the source set at that time contained 242 methods, but the exact command/count/duration were not supplied in the latest message. Since that run, four genesis tests and 16 scanner tests were added. Current source: **262 methods across twelve JPVR modules**; those 20 newer tests are **AUTHORED, NOT RUN**. Run the focused genesis and scanner modules, then the full twelve-module command above. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md), [OUTBOX contract](docs/JPVR_OUTBOX_V1.md) and [OUTBOX scanner contract](docs/JPVR_OUTBOX_SCAN_V1.md).
+The user reported that the prior 11-module JPVR set passed after OUTBOX source-COMMIT validation; the source set at that time contained 242 methods, but the exact command/count/duration were not supplied in the latest message. Since that run, four genesis tests and 16 scanner tests were added. Current source before the transaction planner contained **262 methods across twelve JPVR modules**. The transaction planner adds a thirteenth module with 16 new methods; those 16 tests are **AUTHORED, NOT RUN** until run on Termux. The full command above includes the new module. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md), [OUTBOX contract](docs/JPVR_OUTBOX_V1.md) and [OUTBOX scanner contract](docs/JPVR_OUTBOX_SCAN_V1.md).
 
 
 ## JPVR transaction assembly planner
@@ -279,3 +280,6 @@ The in-memory planner assembles encoded staged pages, a final MANIFEST, and a fi
 
 
 The 2026-11-10 CQE priority-aging and JPVR OUTBOX scanner regressions were subsequently corrected; the user has confirmed that no errors remain in their current run. The transaction assembly tests added afterward are a new, separate test module and still require a focused run on the user's Termux environment.
+
+
+The 2026-11-10 CQE priority-aging and JPVR OUTBOX scanner regressions were subsequently corrected; the user has confirmed that no errors remain in their current full-suite run. The transaction assembly tests added afterward are a separate new module and still require a focused run on the user's Termux environment.
