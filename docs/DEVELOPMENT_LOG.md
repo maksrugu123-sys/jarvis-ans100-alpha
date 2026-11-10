@@ -887,3 +887,18 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Ограничения:** exports не означают, что OUTBOX работает как publisher или durable queue. Global event/idempotency uniqueness, subscriber ACK/cursors, retries, retention, transaction assembly, page reservation, file I/O, flush/sync, superblock publication и crash recovery не реализованы.
 
 **Следующий шаг:** пользователь запускает `python3 -m unittest tools.jpvr_reference.test_outbox -v`, затем полный одиннадцатимодульный JPVR набор. Только после фактического PASS выбирать следующий слой; file I/O/durability не начинать до transaction/recovery design.
+
+### 2026-11-10 — OUTBOX cross-generation COMMIT identity validation
+
+**Аудит:** `validate_outbox_sequence` уже требовал новый `transaction_id` на границе поколений и проверял физический порядок предыдущего COMMIT, но не запрещал повторное использование `commit_id` в следующем поколении. Это расходилось с JCOM `validate_commit_snapshot`, который требует менять commit_id между поколениями.
+
+**Изменения:**
+- `tools/jpvr_reference/outbox.py` — при переходе между поколениями соседние OUTBOX события теперь обязаны иметь разные `commit_id`.
+- `tools/jpvr_reference/test_outbox.py` — добавлены positive regression для корректного перехода gen1→gen2 и negative regression для повторного commit_id.
+- `docs/JPVR_OUTBOX_V1.md`, architecture, README и JPVR status docs — обновлены инвариант и счётчик.
+
+**Тестовый статус:** OUTBOX теперь содержит 39 test methods; весь одиннадцатимодульный source set содержит 235 методов. Все OUTBOX tests остаются **AUTHORED, NOT RUN**. Ранее пользователь сообщил PASS 196/196 для базового десятимодульного набора до OUTBOX.
+
+**Проверки:** static source review и GitHub readback; Python tests **NOT RUN**. Builds, Gradle, APK/AAB, CI и GitHub Actions **NOT RUN**.
+
+**Следующий шаг:** выполнить 39 focused OUTBOX tests, затем полный 235-test JPVR suite. Не переходить к transaction assembly или durable file I/O до подтверждения codec tests и отдельной спецификации recovery/order.
