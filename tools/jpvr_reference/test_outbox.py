@@ -2,6 +2,15 @@ import struct
 import unittest
 
 from .codec import JPVRFormatError, PageType, encode_page
+from . import (
+    DecodedOutboxPage as PackageDecodedOutboxPage,
+    OutboxEvent as PackageOutboxEvent,
+    decode_outbox_page as package_decode_outbox_page,
+    decode_outbox_payload as package_decode_outbox_payload,
+    encode_outbox_page as package_encode_outbox_page,
+    encode_outbox_payload as package_encode_outbox_payload,
+    validate_outbox_sequence as package_validate_outbox_sequence,
+)
 from .manifest import PageRef
 from .outbox import (
     MAX_OUTBOX_EVENT_PAYLOAD_BYTES,
@@ -42,6 +51,16 @@ def event(**kwargs):
     values.update(kwargs)
     return OutboxEvent(**values)
 
+
+class OutboxPackageExportTests(unittest.TestCase):
+    def test_outbox_public_api_is_exported_from_package(self):
+        self.assertIs(PackageOutboxEvent, OutboxEvent)
+        self.assertIs(PackageDecodedOutboxPage, DecodedOutboxPage)
+        self.assertIs(package_encode_outbox_payload, encode_outbox_payload)
+        self.assertIs(package_decode_outbox_payload, decode_outbox_payload)
+        self.assertIs(package_encode_outbox_page, encode_outbox_page)
+        self.assertIs(package_decode_outbox_page, decode_outbox_page)
+        self.assertIs(package_validate_outbox_sequence, validate_outbox_sequence)
 
 class OutboxPayloadTests(unittest.TestCase):
     def test_payload_round_trip_without_previous_reference(self):
