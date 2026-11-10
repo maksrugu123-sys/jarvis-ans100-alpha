@@ -265,3 +265,14 @@ python3 -m unittest \
 ```
 
 The user reported that the prior 11-module JPVR set passed after OUTBOX source-COMMIT validation; the source set at that time contained 242 methods, but the exact command/count/duration were not supplied in the latest message. Since that run, four genesis tests and 16 scanner tests were added. Current source: **262 methods across twelve JPVR modules**; those 20 newer tests are **AUTHORED, NOT RUN**. Run the focused genesis and scanner modules, then the full twelve-module command above. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md), [OUTBOX contract](docs/JPVR_OUTBOX_V1.md) and [OUTBOX scanner contract](docs/JPVR_OUTBOX_SCAN_V1.md).
+
+
+## JPVR transaction assembly planner
+
+Focused transaction assembly tests:
+
+```sh
+python3 -m unittest tools.jpvr_reference.test_transaction -v
+```
+
+The in-memory planner assembles encoded staged pages, a final MANIFEST, and a final COMMIT into one validated append plan. It checks page numbering/generation/transaction identity, COMMIT and previous-COMMIT linkage, all MANIFEST roots/high-water references, and the candidate inactive Superblock. Contract: [JPVR_TRANSACTION_ASSEMBLY_V1.md](docs/JPVR_TRANSACTION_ASSEMBLY_V1.md). This is a reference planner only: no physical writes, flush/sync, Superblock publication, locking, or crash recovery.
