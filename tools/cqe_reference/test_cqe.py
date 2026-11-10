@@ -205,6 +205,10 @@ class CQEReferenceTests(unittest.TestCase):
                 module_id, {schema_id: frozenset({1})},
                 command_handlers={schema_id: handler},
                 command_priorities={schema_id: priority},
+                # The aged command waits exactly one 5-second interval. Give
+                # this test a longer execution budget so it tests queue aging,
+                # not the independent deadline-expiration rule.
+                command_deadline_caps_ms={schema_id: 10_000},
             ))
             self.ncc.register_capability(Capability(
                 f"cap-{schema_id}", "signal-module", frozenset({schema_id}),
@@ -232,6 +236,7 @@ class CQEReferenceTests(unittest.TestCase):
 
         first = self.ncc.drain_one()
         self.assertEqual(first.operation_id, aged.operation_id)
+        self.assertEqual(first.status, "COMPLETED")
         self.assertEqual(processed, ["aged-ordinary"])
 
     def test_expired_deadline_prevents_execution(self):
