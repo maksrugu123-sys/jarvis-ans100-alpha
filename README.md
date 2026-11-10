@@ -243,7 +243,7 @@ python3 -m unittest tools.jpvr_reference.test_outbox -v
 Focused committed-history scanner tests:
 
 ```sh
-python3 -m unittest tools.jpvr_reference.test_outbox_scan -v
+python3 -m unittest tools.jpvr_reference.test_outbox_scan \\\n tools.jpvr_reference.test_transaction -v
 ```
 
 Complete JPVR reference suite:
@@ -276,3 +276,6 @@ python3 -m unittest tools.jpvr_reference.test_transaction -v
 ```
 
 The in-memory planner assembles encoded staged pages, a final MANIFEST, and a final COMMIT into one validated append plan. It checks page numbering/generation/transaction identity, COMMIT and previous-COMMIT linkage, all MANIFEST roots/high-water references, and the candidate inactive Superblock. Contract: [JPVR_TRANSACTION_ASSEMBLY_V1.md](docs/JPVR_TRANSACTION_ASSEMBLY_V1.md). This is a reference planner only: no physical writes, flush/sync, Superblock publication, locking, or crash recovery.
+
+
+The 2026-11-10 CQE priority-aging and JPVR OUTBOX scanner regressions were subsequently corrected; the user has confirmed that no errors remain in their current run. The transaction assembly tests added afterward are a new, separate test module and still require a focused run on the user's Termux environment.
