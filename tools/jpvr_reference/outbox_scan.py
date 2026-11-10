@@ -159,6 +159,10 @@ def _scan_outbox_chain(
             raise JPVRFormatError("OUTBOX pages exist but MANIFEST high-water mark is zero")
         return ()
 
+    high_water_page = decoded_catalog.get(high_water)
+    if high_water_page is not None and high_water_page.page_type is not PageType.OUTBOX:
+        raise JPVRFormatError("MANIFEST OUTBOX high-water page is not OUTBOX")
+
     newest_to_oldest = []
     seen_pages = set()
     page_no = high_water
@@ -205,12 +209,12 @@ def _scan_outbox_chain(
     event_ids = set()
     idempotency_keys = set()
     for index, event in enumerate(events):
-        if event.event_id in event_ids:
+        if event.event.event_id in event_ids:
             raise JPVRFormatError("OUTBOX chain contains a duplicate event_id")
-        if event.idempotency_key in idempotency_keys:
+        if event.event.idempotency_key in idempotency_keys:
             raise JPVRFormatError("OUTBOX chain contains a duplicate idempotency_key")
-        event_ids.add(event.event_id)
-        idempotency_keys.add(event.idempotency_key)
+        event_ids.add(event.event.event_id)
+        idempotency_keys.add(event.event.idempotency_key)
         if index:
             validate_outbox_sequence(events[index - 1], event)
 
