@@ -3783,3 +3783,12 @@ Scanner требует уже выбранный/декодированный Su
 
 
 **Follow-up regression correction 2026-11-10:** the prior CQE deadline-cap adjustment was accidentally applied to the neighboring priority-drain test rather than the starvation-aging test. The actual starvation test now registers a 10-second command cap and asserts COMPLETED after the one-interval wait; production scheduler aging semantics remain unchanged. JPVR scanner now checks the active MANIFEST OUTBOX high-water page type before generic snapshot validation, preserving a specific diagnostic. These corrections follow a second user-run report of 497 tests with two failures. Rerun is pending.
+
+
+### 3.21.26. JPVR transaction assembly planner — in-memory reference
+
+Added `tools/jpvr_reference/transaction.py` with `assemble_transaction`, immutable `TransactionAssemblyPlan`, and `validate_transaction_assembly_plan`. The planner consumes already encoded pages in append order, requires exactly one final staged MANIFEST and a final COMMIT, checks contiguous physical page numbers, generation and transaction identity, constructs the inactive-Superblock candidate via the existing append planner, and validates COMMIT↔MANIFEST↔previous-COMMIT plus all seven INDEX roots and high-water references against the combined page catalog. The caller's catalog is never mutated. API is exported from `tools.jpvr_reference`.
+
+The planner does not generate DATA/BLOB/COW/JOURNAL/OUTBOX pages, reorder pages, write a container, lock/reserve physical pages, flush/sync, publish either physical Superblock slot, or recover after a crash. It is a deterministic in-memory assembly/validation layer, not a durable transaction writer. Contract and commands: [JPVR_TRANSACTION_ASSEMBLY_V1.md](JPVR_TRANSACTION_ASSEMBLY_V1.md).
+
+`tools/jpvr_reference/test_transaction.py` adds 16 focused test methods for genesis and second-generation plans, page order and gaps, missing/duplicate MANIFEST, generation/transaction identity, predecessor COMMIT requirements, invalid catalog/root references, plan tampering, and failure immutability. These tests are **AUTHORED, NOT RUN** in this change. No build, CI, GitHub Actions, physical file I/O, or durability check was run.
