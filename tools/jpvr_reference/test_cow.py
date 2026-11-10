@@ -1,7 +1,7 @@
 import unittest
 
 from .codec import JPVRFormatError
-from .cow import cow_upsert_index, validate_index_tree
+from .cow import cow_apply_index_mutations, cow_upsert_index, validate_index_tree
 from .index import (
     IndexChild,
     IndexEntry,
@@ -295,6 +295,78 @@ class CowIndexUpsertTests(unittest.TestCase):
         self.assertEqual(plan.page_numbers, tuple(range(3, 3 + plan.page_count)))
         self.assertTrue(all(decode_index_page(p.page_bytes).commit_generation == 9 for p in plan.pages))
         self.assertEqual(plan.new_root.expected_commit_generation, 9)
+
+    def test_batch_upsert_rewrites_multiple_keys_in_one_tree_pass(self):
+        root, catalog, tail = empty_snapshot()
+        plan = cow_apply_index_mutations(
+            root, catalog, ((b"z", b"Z"), (b"a", b"A"), (b"m", b"M")),
+            tree_id=TREE, durable_tail_page_no=tail,
+            first_page_no=tail + 1, commit_generation=2, transaction_id=TX2,
+        )
+        self.assertEqual(plan.new_stats.entry_count, 3)
+        self.assertEqual(plan.page_count, 1)
+        new_catalog = dict(catalog)
+        new_catalog.update({page.page_no: page.page_bytes for page in plan.pages})
+        for key, value in ((b"a", b"A"), (b"m", b"M"), (b"z", b"Z")):
+            self.assertEqual(lookup_index(plan.new_root, new_catalog, key, tree_id=TREE,
+                                          durable_tail_page_no=plan.last_page_no), value)
+        self.assertIsNone(lookup_index(root, catalog, b"a", tree_id=TREE,
+                                       durable_tail_page_no=tail))
+
+    def test_batch_upsert_replaces_and_inserts_with_correct_statistics(self):
+        root = PageRef(2, 1)
+        catalog = {2: leaf_page(2, [(b"a", b"old"), (b"z", b"Z")])}
+        plan = cow_apply_index_mutations(
+            root, catalog, ((b"a", b"new"), (b"m", b"M")),
+            tree_id=TREE, durable_tail_page_no=2, first_page_no=3,
+            commit_generation=2, transaction_id=TX2,
+        )
+        self.assertTrue(plan.replaced_existing_key)
+        self.assertEqual((plan.old_stats.entry_count, plan.new_stats.entry_count), (2, 3))
+        new_catalog = dict(catalog)
+        new_catalog.update({page.page_no: page.page_bytes for page in plan.pages})
+        self.assertEqual(lookup_index(plan.new_root, new_catalog, b"a", tree_id=TREE,
+                                      durable_tail_page_no=plan.last_page_no), b"new")
+
+    def test_batch_upsert_splits_leaf_and_preserves_old_snapshot(self):
+        root = PageRef(2, 1)
+        catalog = {2: leaf_page(2, [(b"a", b"A" * 1800), (b"z", b"Z" * 1800)])}
+        plan = cow_apply_index_mutations(
+            root, catalog, ((b"m", b"M" * 1800),),
+            tree_id=TREE, durable_tail_page_no=2, first_page_no=3,
+            commit_generation=2, transaction_id=TX2,
+        )
+        self.assertGreater(plan.page_count, 1)
+        self.assertEqual(plan.new_stats.entry_count, 3)
+        new_catalog = dict(catalog)
+        new_catalog.update({page.page_no: page.page_bytes for page in plan.pages})
+        for key, value in ((b"a", b"A" * 1800), (b"m", b"M" * 1800), (b"z", b"Z" * 1800)):
+            self.assertEqual(lookup_index(plan.new_root, new_catalog, key, tree_id=TREE,
+                                          durable_tail_page_no=plan.last_page_no), value)
+        self.assertEqual(lookup_index(root, catalog, b"a", tree_id=TREE,
+                                      durable_tail_page_no=2), b"A" * 1800)
+
+    def test_batch_rejects_duplicate_keys_before_allocating(self):
+        root, catalog, tail = empty_snapshot()
+        with self.assertRaisesRegex(JPVRFormatError, "must be unique"):
+            cow_apply_index_mutations(
+                root, catalog, ((b"k", b"one"), (b"k", b"two")),
+                tree_id=TREE, durable_tail_page_no=tail, first_page_no=tail + 1,
+                commit_generation=2, transaction_id=TX2,
+            )
+        self.assertEqual(catalog, {2: leaf_page(2, [])})
+
+    def test_batch_rejects_empty_or_invalid_input_without_mutation(self):
+        root, catalog, tail = empty_snapshot()
+        with self.assertRaisesRegex(JPVRFormatError, "non-empty"):
+            cow_apply_index_mutations(root, catalog, (), tree_id=TREE,
+                durable_tail_page_no=tail, first_page_no=tail + 1,
+                commit_generation=2, transaction_id=TX2)
+        with self.assertRaisesRegex(JPVRFormatError, "value exceeds"):
+            cow_apply_index_mutations(root, catalog, ((b"k", b"x" * 2049),),
+                tree_id=TREE, durable_tail_page_no=tail, first_page_no=tail + 1,
+                commit_generation=2, transaction_id=TX2)
+        self.assertEqual(catalog, {2: leaf_page(2, [])})
 
 
 if __name__ == "__main__":

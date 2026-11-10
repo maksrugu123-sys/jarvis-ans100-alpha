@@ -5,8 +5,8 @@ write files, reserve physical offsets, flush data, or commit a container.
 """
 from __future__ import annotations
 
-from bisect import bisect_left
-from collections.abc import Mapping
+from bisect import bisect_left, bisect_right
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from .codec import (
@@ -381,6 +381,220 @@ def cow_upsert_index(
         commit_generation=commit_generation,
         pages=tuple(staged),
         replaced_existing_key=replaced,
+        old_stats=old_stats,
+        new_stats=new_stats,
+    )
+
+
+def cow_apply_index_mutations(
+    root: PageRef,
+    page_catalog: Mapping[int, bytes],
+    mutations: Sequence[tuple[bytes, bytes]],
+    *,
+    tree_id: bytes,
+    durable_tail_page_no: int,
+    first_page_no: int,
+    commit_generation: int,
+    transaction_id: bytes,
+) -> CowIndexPlan:
+    """Apply unique key/value upserts in one COW tree rewrite.
+
+    Each affected path is copied once for the batch. Unchanged subtrees retain
+    their PageRefs. New pages use one commit generation and contiguous,
+    child-before-parent allocation.
+    """
+    _validate_ref(root)
+    if not isinstance(mutations, (tuple, list)) or not mutations:
+        raise JPVRFormatError("mutations must be a non-empty tuple or list")
+
+    normalized: list[tuple[bytes, bytes]] = []
+    for item in mutations:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            raise JPVRFormatError("each index mutation must contain key and value")
+        key = _validate_key(item[0])
+        value = item[1]
+        if not isinstance(value, (bytes, bytearray, memoryview)):
+            raise JPVRFormatError("index value must be bytes-like")
+        payload = bytes(value)
+        if len(payload) > MAX_INDEX_VALUE_BYTES:
+            raise JPVRFormatError("index value exceeds supported bounds")
+        normalized.append((key, payload))
+    normalized.sort(key=lambda pair: pair[0])
+    if any(
+        normalized[index - 1][0] == normalized[index][0]
+        for index in range(1, len(normalized))
+    ):
+        raise JPVRFormatError("index mutation keys must be unique within one batch")
+
+    expected_tree = _fixed_bytes("tree_id", tree_id, 16)
+    tx_id = _fixed_bytes("transaction_id", transaction_id, 16)
+    _require_uint("durable_tail_page_no", durable_tail_page_no, 0xFFFFFFFFFFFFFFFF)
+    _require_uint("first_page_no", first_page_no, 0xFFFFFFFFFFFFFFFF)
+    _require_uint("commit_generation", commit_generation, 0xFFFFFFFFFFFFFFFF)
+    if (
+        durable_tail_page_no == 0xFFFFFFFFFFFFFFFF
+        or first_page_no != durable_tail_page_no + 1
+    ):
+        raise JPVRFormatError("first_page_no must immediately follow the durable prefix")
+    if commit_generation <= root.expected_commit_generation:
+        raise JPVRFormatError("new commit generation must advance beyond the old root")
+    if not isinstance(page_catalog, Mapping):
+        raise JPVRFormatError("page_catalog must be a mapping")
+
+    old_stats = validate_index_tree(
+        root,
+        page_catalog,
+        tree_id=expected_tree,
+        durable_tail_page_no=durable_tail_page_no,
+    )
+    staged: list[NewIndexPage] = []
+    next_page_no = first_page_no
+    replaced_count = 0
+
+    def allocate(node: IndexNode) -> PageRef:
+        nonlocal next_page_no
+        if next_page_no > 0xFFFFFFFFFFFFFFFF:
+            raise JPVRFormatError("INDEX page number space is exhausted")
+        page_no = next_page_no
+        page_bytes = encode_index_page(node, page_no, commit_generation, tx_id)
+        staged.append(NewIndexPage(page_no, page_bytes, node))
+        next_page_no += 1
+        return PageRef(page_no, commit_generation)
+
+    def split_leaf(entries: list[IndexEntry]) -> tuple[PageRef, bytes, PageRef]:
+        choices = []
+        for split_at in range(1, len(entries)):
+            left_node = IndexNode(expected_tree, 0, tuple(entries[:split_at]))
+            right_node = IndexNode(expected_tree, 0, tuple(entries[split_at:]))
+            left_size = _node_payload_size(left_node)
+            right_size = _node_payload_size(right_node)
+            if left_size is not None and right_size is not None:
+                choices.append((abs(left_size - right_size), split_at, left_node, right_node))
+        if not choices:
+            raise JPVRFormatError("leaf cannot be split into two valid INDEX pages")
+        _, split_at, left_node, right_node = min(
+            choices, key=lambda item: (item[0], item[1])
+        )
+        return allocate(left_node), entries[split_at].key, allocate(right_node)
+
+    def split_internal(
+        level: int,
+        pairs: list[tuple[bytes | None, PageRef]],
+    ) -> tuple[PageRef, bytes, PageRef]:
+        choices = []
+        for split_at in range(2, len(pairs) - 1):
+            promoted = pairs[split_at][0]
+            if promoted is None:
+                continue
+            left_node = _internal_node(expected_tree, level, pairs[:split_at])
+            right_pairs = [(None, pairs[split_at][1])] + pairs[split_at + 1:]
+            right_node = _internal_node(expected_tree, level, right_pairs)
+            left_size = _node_payload_size(left_node)
+            right_size = _node_payload_size(right_node)
+            if left_size is not None and right_size is not None:
+                choices.append((
+                    abs(left_size - right_size), split_at,
+                    promoted, left_node, right_node,
+                ))
+        if not choices:
+            raise JPVRFormatError("internal node overflow cannot be split without unary nodes")
+        _, _, promoted, left_node, right_node = min(
+            choices, key=lambda item: (item[0], item[1])
+        )
+        return allocate(left_node), promoted, allocate(right_node)
+
+    def rewrite(
+        ref: PageRef,
+        pending: list[tuple[bytes, bytes]],
+    ) -> tuple[PageRef, bytes | None, PageRef | None]:
+        nonlocal replaced_count
+        encoded = page_catalog.get(ref.page_no)
+        if encoded is None:
+            raise JPVRFormatError("index path references a missing old page")
+        page = decode_index_page(encoded, expected_page_no=ref.page_no)
+        node = page.node
+
+        if node.level == 0:
+            merged = {entry.key: bytes(entry.value) for entry in node.entries}
+            for key, value in pending:
+                if key in merged:
+                    replaced_count += 1
+                merged[key] = value
+            entries = [IndexEntry(key, merged[key]) for key in sorted(merged)]
+            candidate = IndexNode(expected_tree, 0, tuple(entries))
+            if _node_payload_size(candidate) is not None:
+                return allocate(candidate), None, None
+            left_ref, separator, right_ref = split_leaf(entries)
+            return left_ref, separator, right_ref
+
+        pairs: list[tuple[bytes | None, PageRef]] = [
+            (None, node.first_child)
+        ] + [(child.separator, child.page_ref) for child in node.children]
+        separators = [pair[0] for pair in pairs[1:]]
+        grouped: dict[int, list[tuple[bytes, bytes]]] = {}
+        for mutation in pending:
+            child_index = bisect_right(separators, mutation[0])
+            grouped.setdefault(child_index, []).append(mutation)
+
+        # Right-to-left insertion keeps original child indexes stable.
+        for child_index in sorted(grouped, reverse=True):
+            lower_bound, child_ref = pairs[child_index]
+            new_left, promoted, new_right = rewrite(
+                child_ref, grouped[child_index]
+            )
+            pairs[child_index] = (lower_bound, new_left)
+            if promoted is not None:
+                if new_right is None:
+                    raise JPVRFormatError("child split did not produce a right sibling")
+                pairs.insert(child_index + 1, (promoted, new_right))
+
+        candidate = _internal_node(expected_tree, node.level, pairs)
+        if _node_payload_size(candidate) is not None:
+            return allocate(candidate), None, None
+        left_ref, separator, right_ref = split_internal(node.level, pairs)
+        return left_ref, separator, right_ref
+
+    new_left, promoted, new_right = rewrite(root, normalized)
+    if promoted is None:
+        new_root = new_left
+    else:
+        if new_right is None:
+            raise JPVRFormatError("internal split did not produce a right sibling")
+        old_level = decode_index_page(
+            page_catalog[root.page_no], expected_page_no=root.page_no
+        ).node.level
+        if old_level + 1 >= MAX_INDEX_DEPTH:
+            raise JPVRFormatError("index root would exceed maximum depth")
+        new_root = allocate(IndexNode(
+            expected_tree,
+            old_level + 1,
+            first_child=new_left,
+            children=(IndexChild(promoted, new_right),),
+        ))
+
+    final_catalog = dict(page_catalog)
+    final_catalog.update({page.page_no: page.page_bytes for page in staged})
+    new_stats = validate_index_tree(
+        new_root,
+        final_catalog,
+        tree_id=expected_tree,
+        durable_tail_page_no=staged[-1].page_no,
+    )
+    inserted_count = len(normalized) - replaced_count
+    if new_stats.entry_count != old_stats.entry_count + inserted_count:
+        raise JPVRFormatError("copy-on-write batch has an inconsistent entry count")
+    old_pages = set(old_stats.page_numbers)
+    new_pages = set(new_stats.page_numbers)
+    planned_pages = {page.page_no for page in staged}
+    if new_pages - old_pages != planned_pages:
+        raise JPVRFormatError("copy-on-write batch contains unreachable or missing INDEX pages")
+
+    return CowIndexPlan(
+        old_root=root,
+        new_root=new_root,
+        commit_generation=commit_generation,
+        pages=tuple(staged),
+        replaced_existing_key=replaced_count > 0,
         old_stats=old_stats,
         new_stats=new_stats,
     )

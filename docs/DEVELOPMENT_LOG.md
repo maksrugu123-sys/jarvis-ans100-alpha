@@ -1035,3 +1035,20 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** builder не строит B+ tree из key/value mutations и не вызывает COW автоматически: caller передаёт immutable INDEX nodes с готовыми child PageRefs и порядком размещения. Глобальную уникальность всей исторической OUTBOX цепочки проверяет scanner на полном catalog. Реального file I/O, page locking/reservation, flush/fsync, Superblock publication/arbitration и crash recovery по-прежнему нет. Успешный in-memory plan не является durable commit.
 
 **Фокусная команда для будущей проверки:** `python3 -m unittest tools.jpvr_reference.test_typed_transaction -v`.
+
+
+### 2026-11-10 — JPVR COW-integrated index mutation pipeline V1
+
+**Цель:** связать существующий immutable B+ tree COW planner с typed transaction builder, чтобы прикладной код отправлял key/value mutations вместо ручной сборки всех INDEX nodes.
+
+**Реализация:**
+- `tools/jpvr_reference/cow.py`: добавлен `cow_apply_index_mutations`. Он проверяет batch unique keys/value bounds/tree invariants, маршрутизирует изменения по исходным child ranges, переписывает затронутые leaf/internal paths один раз за batch, повторно использует незатронутые subtree PageRefs, делит переполненные узлы и проверяет итоговую reachability/statistics. Все новые pages принадлежат одной commit generation и contiguous allocation.
+- `tools/jpvr_reference/typed_transaction.py`: добавлены `IndexMutationInput`, `IndexMutationBuildPlan` и `TypedTransactionRequest.index_mutations`. Builder группирует mutations по MANIFEST root, требует единый tree_id на root, обрабатывает roots в каноническом порядке, автоматически запускает batch COW, помещает generated INDEX pages в общий append plan и заменяет только соответствующие MANIFEST roots.
+- `tools/jpvr_reference/__init__.py`: новые API экспортированы.
+- `tools/jpvr_reference/test_cow.py`: добавлено пять batch-COW regression tests: multi-key path rewrite, replace+insert statistics, leaf split with old-snapshot preservation, duplicate-key rejection и invalid/empty batch immutability.
+- `tools/jpvr_reference/test_typed_transaction.py`: добавлено шесть builder integration tests: multi-key mutation, multiple roots/canonical order, replacement preserving old snapshot, duplicate keys, invalid tree/root and plan revalidation.
+- Обновлены `docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md`, `docs/JARVIS_ARCHITECTURE.md` (3.21.28) и README.
+
+**Проверки:** source readback и API cross-reference review выполнялись до публикации; Python tests, import/syntax checks **NOT RUN** в этом ходе. Все 11 новых методов — **AUTHORED, NOT RUN**. Нельзя считать их PASS до focused и полного JPVR запуска в Termux. Android/Gradle builds, CI, GitHub Actions, APK/AAB, физический file I/O, flush/fsync и crash recovery — **NOT RUN**.
+
+**Ограничения:** batch planner допускает несколько ключей одного дерева и несколько корней за транзакцию, но не удаление ключей/ребалансировку после удаления. Root tree_id предоставляется caller, поскольку MANIFEST хранит PageRef, а не tree_id. Новый generation root нельзя мутацировать повторно в той же транзакции. Все операции in-memory; durable writer, locking/page reservation, dual-Superblock publication/arbitration и crash recovery остаются отдельным следующим этапом.

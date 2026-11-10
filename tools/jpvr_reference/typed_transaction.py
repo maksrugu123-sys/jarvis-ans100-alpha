@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Sequence
 
 from .blob import decode_blob_pages, encode_blob_pages
+from .cow import CowIndexPlan, cow_apply_index_mutations
 from .codec import (
     PAGE_PAYLOAD_BYTES,
     JPVRFormatError,
@@ -91,6 +92,25 @@ class IndexPageInput:
 
 
 @dataclass(frozen=True)
+class IndexMutationInput:
+    """One key/value upsert against a named MANIFEST index tree."""
+
+    root_name: str
+    tree_id: bytes
+    key: bytes
+    value: bytes
+
+
+@dataclass(frozen=True)
+class IndexMutationBuildPlan:
+    """COW result for all mutations targeting one MANIFEST root."""
+
+    root_name: str
+    tree_id: bytes
+    cow_plan: CowIndexPlan
+
+
+@dataclass(frozen=True)
 class JournalEntryInput:
     """A JOURNAL revision and its explicit COMMIT_UNKNOWN resolution evidence."""
 
@@ -110,6 +130,7 @@ class TypedTransactionRequest:
     data_records: Sequence[DataRecordInput] = ()
     blob_records: Sequence[BlobRecordInput] = ()
     index_pages: Sequence[IndexPageInput] = ()
+    index_mutations: Sequence[IndexMutationInput] = ()
     journal_entries: Sequence[JournalEntryInput] = ()
     outbox_events: Sequence[OutboxEvent] = ()
     index_roots: Mapping[str, PageRef] | None = None
@@ -126,6 +147,7 @@ class TypedTransactionBuildPlan:
     data_page_numbers: tuple[int, ...]
     blob_page_numbers: tuple[int, ...]
     index_page_numbers: tuple[int, ...]
+    index_mutation_plans: tuple[IndexMutationBuildPlan, ...]
     journal_page_numbers: tuple[int, ...]
     outbox_page_numbers: tuple[int, ...]
 
@@ -223,6 +245,9 @@ def build_typed_transaction(
     data_records = _sequence("data_records", request.data_records, DataRecordInput)
     blob_records = _sequence("blob_records", request.blob_records, BlobRecordInput)
     index_pages = _sequence("index_pages", request.index_pages, IndexPageInput)
+    index_mutations = _sequence(
+        "index_mutations", request.index_mutations, IndexMutationInput
+    )
     journal_inputs = _sequence(
         "journal_entries", request.journal_entries, JournalEntryInput
     )
@@ -331,6 +356,60 @@ def build_typed_transaction(
                 raise JPVRFormatError("index_roots values must be PageRef values")
             roots[name] = ref
     roots.update(root_assignments)
+
+    # Group key/value upserts by MANIFEST tree and rewrite each affected tree
+    # once, so every new page shares this transaction's commit generation.
+    mutation_groups: dict[str, list[IndexMutationInput]] = {}
+    mutation_tree_ids: dict[str, bytes] = {}
+    for item in index_mutations:
+        if item.root_name not in INDEX_ROOT_NAMES:
+            raise JPVRFormatError("unknown MANIFEST index root name in mutation")
+        tree_id = _fixed_bytes("INDEX mutation tree_id", item.tree_id, 16)
+        previous_tree_id = mutation_tree_ids.get(item.root_name)
+        if previous_tree_id is not None and previous_tree_id != tree_id:
+            raise JPVRFormatError("mutations for one MANIFEST root must use one tree_id")
+        mutation_tree_ids[item.root_name] = tree_id
+        mutation_groups.setdefault(item.root_name, []).append(item)
+
+    mutation_plans: list[IndexMutationBuildPlan] = []
+    for root_name in INDEX_ROOT_NAMES:
+        grouped_mutations = mutation_groups.get(root_name)
+        if not grouped_mutations:
+            continue
+        old_root = roots.get(root_name)
+        if not isinstance(old_root, PageRef):
+            raise JPVRFormatError("COW mutation requires an existing MANIFEST root")
+        cow_catalog = dict(current_bytes)
+        cow_catalog.update({
+            page_no: encoded
+            for page_no, encoded in zip(
+                range(first_page_no, next_page_no), staged
+            )
+        })
+        cow_plan = cow_apply_index_mutations(
+            old_root,
+            cow_catalog,
+            tuple((item.key, item.value) for item in grouped_mutations),
+            tree_id=mutation_tree_ids[root_name],
+            durable_tail_page_no=next_page_no - 1,
+            first_page_no=next_page_no,
+            commit_generation=next_generation,
+            transaction_id=transaction_id,
+        )
+        for page in cow_plan.pages:
+            if page.page_no != next_page_no:
+                raise JPVRFormatError("COW INDEX allocator returned a non-contiguous page")
+            staged.append(page.page_bytes)
+            cow_catalog[page.page_no] = page.page_bytes
+            index_numbers.append(page.page_no)
+            next_page_no += 1
+        roots[root_name] = cow_plan.new_root
+        mutation_plans.append(IndexMutationBuildPlan(
+            root_name=root_name,
+            tree_id=mutation_tree_ids[root_name],
+            cow_plan=cow_plan,
+        ))
+
     if set(roots) != set(INDEX_ROOT_NAMES):
         raise JPVRFormatError("MANIFEST must resolve all seven index roots")
 
@@ -540,6 +619,7 @@ def build_typed_transaction(
         data_page_numbers=tuple(data_numbers),
         blob_page_numbers=tuple(blob_numbers),
         index_page_numbers=tuple(index_numbers),
+        index_mutation_plans=tuple(mutation_plans),
         journal_page_numbers=tuple(journal_numbers),
         outbox_page_numbers=tuple(outbox_numbers),
     )

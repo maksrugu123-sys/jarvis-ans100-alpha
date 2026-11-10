@@ -4,7 +4,7 @@ import unittest
 
 from .blob import decode_blob_pages
 from .codec import JPVRFormatError, Superblock
-from .index import IndexNode
+from .index import IndexEntry, IndexNode, lookup_index
 from .journal import JournalEntry, OperationStatus, decode_journal_page
 from .manifest import INDEX_ROOT_NAMES, PageRef
 from .outbox import OutboxEvent, decode_outbox_page, validate_outbox_commit_reference
@@ -12,6 +12,7 @@ from .typed_transaction import (
     BlobRecordInput,
     DataRecordInput,
     IndexPageInput,
+    IndexMutationInput,
     JournalEntryInput,
     TypedTransactionRequest,
     build_typed_transaction,
@@ -321,6 +322,128 @@ class TypedTransactionBuilderTests(unittest.TestCase):
         with self.assertRaises(JPVRFormatError):
             build_typed_transaction(request)
         self.assertEqual(catalog, {})
+
+    def test_integrated_cow_batch_updates_tree_and_manifest_root(self):
+        first = build_typed_transaction(full_genesis_request(
+            data_records=(), blob_records=(), journal_entries=(), outbox_events=(),
+        ))
+        old_root = first.manifest.index_roots["neuron"]
+        tree_id = bytes((2,)) * 16
+        second = build_typed_transaction(TypedTransactionRequest(
+            current_superblock=first.new_superblock, page_catalog=catalog_from_plan(first),
+            transaction_id=TX2, commit_id=COMMIT2, operation_id=OP2,
+            index_mutations=(
+                IndexMutationInput("neuron", tree_id, b"alpha", b"A"),
+                IndexMutationInput("neuron", tree_id, b"gamma", b"G"),
+                IndexMutationInput("neuron", tree_id, b"beta", b"B"),
+            ),
+        ))
+        combined = catalog_from_plan(first)
+        combined.update(catalog_from_plan(second))
+        new_root = second.manifest.index_roots["neuron"]
+        self.assertNotEqual(new_root, old_root)
+        self.assertEqual(len(second.index_mutation_plans), 1)
+        self.assertEqual(second.index_mutation_plans[0].root_name, "neuron")
+        self.assertEqual(second.index_mutation_plans[0].cow_plan.new_stats.entry_count, 3)
+        self.assertEqual(second.index_page_numbers, (11,))
+        for key, value in ((b"alpha", b"A"), (b"beta", b"B"), (b"gamma", b"G")):
+            self.assertEqual(lookup_index(new_root, combined, key, tree_id=tree_id,
+                durable_tail_page_no=second.new_superblock.durable_tail_page_no), value)
+        self.assertIsNone(lookup_index(old_root, catalog_from_plan(first), b"alpha",
+            tree_id=tree_id, durable_tail_page_no=first.new_superblock.durable_tail_page_no))
+
+    def test_integrated_cow_updates_multiple_manifest_roots_in_canonical_order(self):
+        first = build_typed_transaction(full_genesis_request(
+            data_records=(), blob_records=(), journal_entries=(), outbox_events=(),
+        ))
+        neuron_tree, synapse_tree = bytes((2,)) * 16, bytes((3,)) * 16
+        second = build_typed_transaction(TypedTransactionRequest(
+            current_superblock=first.new_superblock, page_catalog=catalog_from_plan(first),
+            transaction_id=TX2, commit_id=COMMIT2, operation_id=OP2,
+            index_mutations=(
+                IndexMutationInput("synapse", synapse_tree, b"s", b"S"),
+                IndexMutationInput("neuron", neuron_tree, b"n", b"N"),
+            ),
+        ))
+        self.assertEqual(tuple(item.root_name for item in second.index_mutation_plans),
+                         ("neuron", "synapse"))
+        self.assertEqual(second.index_page_numbers, (11, 12))
+        self.assertEqual(second.manifest.index_roots["neuron"], PageRef(11, 2))
+        self.assertEqual(second.manifest.index_roots["synapse"], PageRef(12, 2))
+
+    def test_integrated_cow_can_replace_existing_key_without_mutating_old_snapshot(self):
+        pages = list(root_pages())
+        tree_id = bytes((2,)) * 16
+        pages[1] = IndexPageInput(
+            IndexNode(tree_id, 0, (IndexEntry(b"existing", b"old"),)), root_name="neuron"
+        )
+        first = build_typed_transaction(full_genesis_request(
+            data_records=(), blob_records=(), journal_entries=(), outbox_events=(),
+            index_pages=tuple(pages),
+        ))
+        old_root = first.manifest.index_roots["neuron"]
+        second = build_typed_transaction(TypedTransactionRequest(
+            current_superblock=first.new_superblock, page_catalog=catalog_from_plan(first),
+            transaction_id=TX2, commit_id=COMMIT2, operation_id=OP2,
+            index_mutations=(
+                IndexMutationInput("neuron", tree_id, b"existing", b"new"),
+                IndexMutationInput("neuron", tree_id, b"inserted", b"value"),
+            ),
+        ))
+        combined = catalog_from_plan(first)
+        combined.update(catalog_from_plan(second))
+        self.assertTrue(second.index_mutation_plans[0].cow_plan.replaced_existing_key)
+        self.assertEqual(lookup_index(second.manifest.index_roots["neuron"], combined,
+            b"existing", tree_id=tree_id,
+            durable_tail_page_no=second.new_superblock.durable_tail_page_no), b"new")
+        self.assertEqual(lookup_index(old_root, catalog_from_plan(first), b"existing",
+            tree_id=tree_id, durable_tail_page_no=first.new_superblock.durable_tail_page_no), b"old")
+
+    def test_integrated_cow_rejects_duplicate_key_mutations_in_one_tree(self):
+        first = build_typed_transaction(full_genesis_request(
+            data_records=(), blob_records=(), journal_entries=(), outbox_events=(),
+        ))
+        tree_id = bytes((2,)) * 16
+        request = TypedTransactionRequest(
+            current_superblock=first.new_superblock, page_catalog=catalog_from_plan(first),
+            transaction_id=TX2, commit_id=COMMIT2, operation_id=OP2,
+            index_mutations=(
+                IndexMutationInput("neuron", tree_id, b"k", b"one"),
+                IndexMutationInput("neuron", tree_id, b"k", b"two"),
+            ),
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "must be unique"):
+            build_typed_transaction(request)
+
+    def test_integrated_cow_rejects_wrong_tree_identity_and_unknown_root(self):
+        first = build_typed_transaction(full_genesis_request(
+            data_records=(), blob_records=(), journal_entries=(), outbox_events=(),
+        ))
+        base_request = dict(
+            current_superblock=first.new_superblock, page_catalog=catalog_from_plan(first),
+            transaction_id=TX2, commit_id=COMMIT2, operation_id=OP2,
+        )
+        with self.assertRaisesRegex(JPVRFormatError, "tree ID"):
+            build_typed_transaction(TypedTransactionRequest(**base_request,
+                index_mutations=(IndexMutationInput("neuron", bytes(16), b"k", b"v"),)))
+        with self.assertRaisesRegex(JPVRFormatError, "unknown MANIFEST"):
+            build_typed_transaction(TypedTransactionRequest(**base_request,
+                index_mutations=(IndexMutationInput("unknown", bytes((2,)) * 16, b"k", b"v"),)))
+
+    def test_integrated_cow_plan_revalidation_rebuilds_mutation_pages(self):
+        first = build_typed_transaction(full_genesis_request(
+            data_records=(), blob_records=(), journal_entries=(), outbox_events=(),
+        ))
+        request = TypedTransactionRequest(
+            current_superblock=first.new_superblock, page_catalog=catalog_from_plan(first),
+            transaction_id=TX2, commit_id=COMMIT2, operation_id=OP2,
+            index_mutations=(IndexMutationInput("neuron", bytes((2,)) * 16, b"k", b"v"),),
+        )
+        plan = build_typed_transaction(request)
+        self.assertIsNone(validate_typed_transaction_plan(plan, request))
+        tampered = replace(plan, index_page_numbers=())
+        with self.assertRaisesRegex(JPVRFormatError, "fields are inconsistent"):
+            validate_typed_transaction_plan(tampered, request)
 
 
 if __name__ == "__main__":
