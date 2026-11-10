@@ -872,3 +872,18 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Ограничения:** нет global event/idempotency index, publisher worker, subscriber ACK/cursor pages, retry/retention, transaction page-sequence planner, page allocator/lock, container I/O, flush/sync, superblock publication или crash recovery. Adjacent validator не заменяет полное сканирование chain. Valid OUTBOX page не доказывает active/durable COMMIT.
 
 **Следующий шаг:** пользователь запускает 36 focused OUTBOX tests, затем полный 232-test JPVR set. После PASS можно проектировать subscriber acknowledgement/dispatch cursor или integrated transaction planner; не начинать file I/O/durability до полного transaction/recovery design.
+
+### 2026-11-10 — Export OUTBOX public API and add import regression
+
+**Цель:** сделать новый JOUT codec доступным через общий публичный пакет `tools.jpvr_reference`, сохранив ту же схему экспорта, что у INDEX/COW/COMMIT/JOURNAL.
+
+**Изменения:**
+- `tools/jpvr_reference/__init__.py` — экспортированы `OutboxEvent`, `DecodedOutboxPage`, encode/decode payload/page functions и `validate_outbox_sequence`.
+- `tools/jpvr_reference/test_outbox.py` — добавлен regression test, проверяющий идентичность package-level exports с исходными символами модуля.
+- `README.md`, `docs/JARVIS_ARCHITECTURE.md`, JPVR OUTBOX/JOURNAL/COMMIT/COW contracts — обновлён общий счётчик до 233 test methods / 11 modules и уточнён verification status.
+
+**Проверки:** выполнен static GitHub fetch/readback исходников и документации. Python import/unit tests **NOT RUN**. Десятимодульный baseline 196/196 PASS — пользовательский результат, сообщённый до добавления OUTBOX. OUTBOX module (теперь 37 методов) и общий 233-test suite остаются **AUTHORED, NOT RUN**.
+
+**Ограничения:** exports не означают, что OUTBOX работает как publisher или durable queue. Global event/idempotency uniqueness, subscriber ACK/cursors, retries, retention, transaction assembly, page reservation, file I/O, flush/sync, superblock publication и crash recovery не реализованы.
+
+**Следующий шаг:** пользователь запускает `python3 -m unittest tools.jpvr_reference.test_outbox -v`, затем полный одиннадцатимодульный JPVR набор. Только после фактического PASS выбирать следующий слой; file I/O/durability не начинать до transaction/recovery design.
