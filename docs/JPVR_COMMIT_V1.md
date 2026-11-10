@@ -49,4 +49,4 @@ Run:
 python3 -m unittest tools.jpvr_reference.test_commit -v
 ```
 
-Then run all eleven JPVR modules as shown in README.md. The corrected ten-module JPVR suite was subsequently run by the user on Android Termux: **196/196 PASS** in 2.204 s, including the COMMIT regression cases. The separate OUTBOX module adds 39 tests (AUTHORED, NOT RUN, including package-export and cross-generation COMMIT identity regressions); current total is 235 methods across eleven modules. No build or CI task was started.
+Then run all eleven JPVR modules as shown in README.md. The user reports that the then-current 11-module JPVR suite passed after the OUTBOX source-COMMIT binding change; the latest available historical baseline is **196/196 PASS** for the earlier ten-module set. At that run, the JPVR source set contained 242 methods. Four new OUTBOX genesis-validator tests have since been added; the current total is **246 methods across eleven modules**, with those four tests **AUTHORED, NOT RUN**. No build or CI task was started.
