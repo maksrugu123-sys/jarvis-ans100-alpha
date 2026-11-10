@@ -1,4 +1,4 @@
-"""JPVR_FORMAT_V1 binary reference codecs."""
+"""JPVR_FORMAT_V1 binary reference codecs and in-memory planners."""
 
 from .codec import (
     DecodedPage,
@@ -86,11 +86,23 @@ from .transaction import (
     assemble_transaction,
     validate_transaction_assembly_plan,
 )
+from .typed_transaction import (
+    BlobRecordInput,
+    DataRecordInput,
+    IndexPageInput,
+    JournalEntryInput,
+    TypedTransactionBuildPlan,
+    TypedTransactionRequest,
+    build_typed_transaction,
+    validate_typed_transaction_plan,
+)
 
 __all__ = [
     "AppendPlan",
+    "BlobRecordInput",
     "CommitRecord",
     "CowIndexPlan",
+    "DataRecordInput",
     "DecodedBlobRecord",
     "DecodedCommitPage",
     "DecodedDataPage",
@@ -103,8 +115,10 @@ __all__ = [
     "IndexChild",
     "IndexEntry",
     "IndexNode",
+    "IndexPageInput",
     "IndexTreeStats",
     "JournalEntry",
+    "JournalEntryInput",
     "OperationStatus",
     "OutboxEvent",
     "OutboxScanResult",
@@ -115,7 +129,11 @@ __all__ = [
     "Superblock",
     "TLVField",
     "TransactionAssemblyPlan",
+    "TypedTransactionBuildPlan",
+    "TypedTransactionRequest",
     "WireType",
+    "assemble_transaction",
+    "build_typed_transaction",
     "cow_upsert_index",
     "crc32c",
     "decode_blob_pages",
@@ -152,15 +170,15 @@ __all__ = [
     "encode_tlv",
     "lookup_index",
     "plan_append",
+    "scan_committed_outbox",
     "validate_append_plan",
     "validate_commit_snapshot",
+    "validate_index_tree",
     "validate_journal_transition",
+    "validate_manifest",
     "validate_outbox_sequence",
     "validate_outbox_commit_reference",
     "validate_outbox_genesis",
-    "scan_committed_outbox",
-    "validate_index_tree",
-    "validate_manifest",
-    "assemble_transaction",
     "validate_transaction_assembly_plan",
+    "validate_typed_transaction_plan",
 ]
