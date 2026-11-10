@@ -991,3 +991,23 @@ The user's second full run reported 497 tests with only two failures remaining.
 Commits: CQE regression test `4671670f15cb067ddb6312e2355fcbff9996db14`; JPVR scanner validation order `d84a033e278c7d515874102f6e82cd3d6bb6d0b1`.
 
 Tests after these edits: NOT RUN. User must pull and rerun focused tests, then full suite. No builds, Gradle, CI or GitHub Actions were run.
+
+
+### 2026-11-10 — JPVR transaction assembly planner (one major stage)
+
+**Objective:** integrate the existing JPVR append-layout, page codecs, MANIFEST, COMMIT and snapshot validators into one deterministic in-memory transaction assembly plan, without beginning physical storage I/O or durability work.
+
+**Implemented:**
+- Added `tools/jpvr_reference/transaction.py` with `TransactionAssemblyPlan`, `assemble_transaction` and `validate_transaction_assembly_plan`.
+- Requires an ordered non-empty staged page sequence, exactly one final staged MANIFEST, and a separately supplied COMMIT as the final append page.
+- Validates page CRC/physical page numbers, contiguous append range, next generation, common nonzero transaction ID, MANIFEST identity, COMMIT identity, durable-tail/commit placement, previous-COMMIT bytes for non-genesis commits, and all MANIFEST roots/high-water references using the existing snapshot validator.
+- Creates the inactive-Superblock candidate through `plan_append` and validates it against the current base. It returns exact ordered page bytes and does not mutate caller inputs.
+- Exports the new public API from `tools/jpvr_reference/__init__.py`.
+- Added `tools/jpvr_reference/test_transaction.py` with 16 focused tests for genesis and second-generation assembly, ordering, missing/duplicate MANIFEST, gaps, generation/transaction mismatches, missing predecessor bytes, invalid catalog/root references, tampered plans, and failure immutability.
+- Added `docs/JPVR_TRANSACTION_ASSEMBLY_V1.md`; updated README and architecture section 3.21.26.
+
+**Verification:** source and test files were reviewed statically after publication. Python tests **NOT RUN** in this environment; the 16 new methods are **AUTHORED, NOT RUN** pending the user's Termux execution. No claim of PASS is made. Builds, Gradle, CI, GitHub Actions, APK/AAB, physical file I/O, fsync/flush, Superblock publication and crash recovery **NOT RUN / OUT OF SCOPE**.
+
+**Limitations:** planner consumes pre-encoded pages and does not itself create DATA/BLOB/INDEX/JOURNAL/OUTBOX content or verify every typed payload's internal semantics beyond the existing MANIFEST/COMMIT snapshot validators. Page allocation is not locked or reserved. A successful plan is not a durable commit and does not establish production readiness.
+
+**Next stage:** after focused and full JPVR tests pass, build a typed transaction builder that consumes DATA/BLOB/COW/JOURNAL/OUTBOX plans and emits the staged page sequence. Physical writer, flush barriers, dual-slot publication and crash recovery remain a separate later design.
