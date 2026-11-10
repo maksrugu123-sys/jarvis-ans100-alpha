@@ -926,3 +926,19 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Проверки, выполненные в этой задаче:** только GitHub source readback и статическая проверка расположения API/tests/docs. Новые Python tests, import checks и весь 242-test suite **NOT RUN**. Builds, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN**.
 
 **Следующий шаг:** пользователь запускает 46 focused OUTBOX tests, затем полный одиннадцатимодульный 242-test suite. Не начинать publisher, acknowledgement cursor или file I/O до подтверждения codec и отдельной спецификации committed-root lookup/recovery.
+
+### 2026-11-10 — OUTBOX genesis sequence anchor validation
+
+**Цель:** закрыть непроверенный край цепочки OUTBOX: adjacent-pair validation гарантировала последовательность между двумя событиями, но не проверяла корректность первой записи в цепочке.
+
+**Аудит и исправление:**
+- tools/jpvr_reference/outbox.py — добавлен validate_outbox_genesis(page). Проверяет decoded OUTBOX envelope, ненулевой transaction_id, sequence ровно 1 и отсутствие previous_event_ref. Docstring явно указывает: вызывающий reader должен закрепить scan за committed MANIFEST root/high-water mark; локальный genesis validator не доказывает отсутствие пропущенных ранее reachable pages.
+- tools/jpvr_reference/test_outbox.py — добавлены четыре теста: корректная genesis запись; sequence gap; запрещённая predecessor reference; нулевой transaction_id.
+- tools/jpvr_reference/__init__.py — новый API экспортирован из публичного пакета.
+- Обновлены docs/JPVR_OUTBOX_V1.md, docs/JARVIS_ARCHITECTURE.md, docs/JPVR_COMMIT_V1.md, docs/JPVR_COW_WRITER_V1.md и README.md: описаны новый инвариант, правильный scan anchor и актуальные test counts.
+
+**Проверки:** пользователь сообщил «Все тесты прошли» после предыдущего batch. Сообщение не включало точную команду, count, duration или environment, поэтому результат записан как user-reported PASS без реконструкции отсутствующих деталей. Предыдущий одиннадцатимодульный JPVR source set содержал 242 test methods; пользовательское сообщение трактуется как подтверждение того набора. Текущая версия содержит 246 методов / 11 JPVR modules; четыре только что добавленных genesis tests — **AUTHORED, NOT RUN**. В этой задаче Python tests, syntax checks и imports не запускались; сделаны GitHub source fetch/review и документальные обновления. Builds, Gradle, APK/AAB, CI и GitHub Actions — **NOT RUN**.
+
+**Ограничения:** валидатор проверяет только genesis descriptor, но не подтверждает, что reader не пропустил более раннюю страницу. Для безопасного чтения всё ещё нужны committed MANIFEST root/high-water anchoring, полный COMMIT chain validation, активный Superblock, reachability, global event/idempotency uniqueness и fail-closed recovery. JPVR остаётся reference codecs/planners, а не durable storage engine.
+
+**Следующий шаг:** выполнить четыре новых focused genesis tests вместе с OUTBOX module, затем полный 246-method JPVR suite. При PASS проектировать read-side OUTBOX chain scanner прежде transaction assembly; не вводить file I/O/durability до утверждения и проверки полного transaction/recovery protocol.
