@@ -80,6 +80,7 @@ from .outbox import (
     validate_outbox_commit_reference,
     validate_outbox_genesis,
 )
+from .outbox_scan import OutboxScanResult, scan_committed_outbox
 
 __all__ = [
     "AppendPlan",
@@ -101,6 +102,7 @@ __all__ = [
     "JournalEntry",
     "OperationStatus",
     "OutboxEvent",
+    "OutboxScanResult",
     "Manifest",
     "NewIndexPage",
     "PageRef",
@@ -150,6 +152,7 @@ __all__ = [
     "validate_outbox_sequence",
     "validate_outbox_commit_reference",
     "validate_outbox_genesis",
+    "scan_committed_outbox",
     "validate_index_tree",
     "validate_manifest",
 ]
