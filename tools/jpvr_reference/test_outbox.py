@@ -12,6 +12,7 @@ from . import (
     encode_outbox_payload as package_encode_outbox_payload,
     validate_outbox_sequence as package_validate_outbox_sequence,
     validate_outbox_commit_reference as package_validate_outbox_commit_reference,
+    validate_outbox_genesis as package_validate_outbox_genesis,
 )
 from .manifest import PageRef
 from .outbox import (
@@ -28,6 +29,7 @@ from .outbox import (
     encode_outbox_payload,
     validate_outbox_sequence,
     validate_outbox_commit_reference,
+    validate_outbox_genesis,
 )
 from .records import TLVField, WireType, encode_tlv
 
@@ -237,6 +239,7 @@ class OutboxCommitBindingTests(unittest.TestCase):
             package_validate_outbox_commit_reference,
             validate_outbox_commit_reference,
         )
+        self.assertIs(package_validate_outbox_genesis, validate_outbox_genesis)
 
     def test_rejects_source_commit_id_mismatch(self):
         page = self.decoded_event_page()
@@ -279,6 +282,27 @@ class OutboxCommitBindingTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(JPVRFormatError, "transaction_id"):
             validate_outbox_commit_reference(forged, self.source_commit())
+
+
+class OutboxGenesisTests(unittest.TestCase):
+    def decoded(self, value, *, transaction_id=TX1, page_no=18, generation=2):
+        return DecodedOutboxPage(page_no, generation, transaction_id, value)
+
+    def test_accepts_first_event_without_predecessor(self):
+        self.assertIsNone(validate_outbox_genesis(self.decoded(event())))
+
+    def test_rejects_first_event_with_sequence_gap(self):
+        with self.assertRaisesRegex(JPVRFormatError, "start at sequence 1"):
+            validate_outbox_genesis(self.decoded(event(sequence=2)))
+
+    def test_rejects_predecessor_reference_on_first_event(self):
+        first = event(previous_event_ref=PageRef(17, 1))
+        with self.assertRaisesRegex(JPVRFormatError, "must not reference a previous"):
+            validate_outbox_genesis(self.decoded(first))
+
+    def test_rejects_zero_transaction_id_on_first_event(self):
+        with self.assertRaisesRegex(JPVRFormatError, "transaction_id must be nonzero"):
+            validate_outbox_genesis(self.decoded(event(), transaction_id=bytes(16)))
 
 
 class OutboxSequenceTests(unittest.TestCase):
