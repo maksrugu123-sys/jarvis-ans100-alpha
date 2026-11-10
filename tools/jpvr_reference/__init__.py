@@ -77,6 +77,7 @@ from .outbox import (
     encode_outbox_page,
     encode_outbox_payload,
     validate_outbox_sequence,
+    validate_outbox_commit_reference,
 )
 
 __all__ = [
@@ -146,6 +147,7 @@ __all__ = [
     "validate_commit_snapshot",
     "validate_journal_transition",
     "validate_outbox_sequence",
+    "validate_outbox_commit_reference",
     "validate_index_tree",
     "validate_manifest",
 ]
