@@ -979,3 +979,15 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 **Коммиты:** scanner 1474fa54a90524ac50a19e2e3aeda569918c9e38; scanner regression fixture 17844da50253d1d0aa4544eb439a3afdca697052; CQE test c2f98928c9853ce1df42f2584dc4576da471eeb3; docs обновлены отдельными последовательными commits после этих исправлений.
 
 **Проверки:** исходный результат — пользовательский, 497 tests / 7 errors / 3 failures. После исправлений Python tests NOT RUN; требуется focused JPVR scanner + CQE tests и затем полный suite. Builds, Gradle, CI, GitHub Actions, APK/AAB NOT RUN.
+
+
+### 2026-11-10 — Final two reported regressions: CQE aging deadline and OUTBOX diagnostic ordering
+
+The user's second full run reported 497 tests with only two failures remaining.
+
+- CQE: the previous deadline-cap edit had landed in the neighboring priority-drain test, not in `test_priority_aging_prevents_starvation`. The starvation test's P3 command therefore retained the default 5-second execution cap and expired at exactly the same instant it reached one aging interval. Applied the 10-second command cap to the correct per-test ModuleSpec and added an explicit COMPLETED assertion. The scheduler's aging algorithm was not weakened or changed.
+- JPVR: `validate_commit_snapshot` calls `validate_manifest` before the scanner's OUTBOX-chain routine, so the generic MANIFEST type validator raised first. The scanner now decodes the active MANIFEST and checks the referenced high-water page type before invoking the generic snapshot validator, producing the scanner-specific `not OUTBOX` diagnostic. The later defensive check remains in the chain scanner.
+
+Commits: CQE regression test `4671670f15cb067ddb6312e2355fcbff9996db14`; JPVR scanner validation order `d84a033e278c7d515874102f6e82cd3d6bb6d0b1`.
+
+Tests after these edits: NOT RUN. User must pull and rerun focused tests, then full suite. No builds, Gradle, CI or GitHub Actions were run.
