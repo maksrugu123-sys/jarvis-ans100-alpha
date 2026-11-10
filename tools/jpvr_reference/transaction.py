@@ -74,10 +74,9 @@ def assemble_transaction(
         if decoded.commit_generation > current_superblock.generation:
             raise JPVRFormatError("page_catalog contains a page newer than the current snapshot")
 
-    staged = tuple(bytes(page) if isinstance(page, (bytes, bytearray, memoryview)) else page
-                   for page in staged_page_bytes)
-    if any(not isinstance(page, bytes) for page in staged):
+    if any(not isinstance(page, (bytes, bytearray, memoryview)) for page in staged_page_bytes):
         raise JPVRFormatError("staged pages must be bytes-like")
+    staged = tuple(bytes(page) for page in staged_page_bytes)
 
     next_generation = current_superblock.generation + 1
     if next_generation > 0xFFFFFFFFFFFFFFFF:
