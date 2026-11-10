@@ -174,7 +174,7 @@ class TransactionAssemblyTests(unittest.TestCase):
 
     def test_rejects_commit_not_at_final_physical_page(self):
         plan, _, commit = first_generation()
-        with self.assertRaisesRegex(JPVRFormatError, "physical page position"):
+        with self.assertRaisesRegex(JPVRFormatError, "not COMMIT"):
             assemble_transaction(
                 genesis_superblock(), plan.ordered_page_bytes[:-1],
                 encode_page(PageType.DATA, 11, 1, TX1, b"not commit"), {},
@@ -226,7 +226,7 @@ class TransactionAssemblyTests(unittest.TestCase):
         cp = encode_commit_page(
             CommitRecord(1, TX1, COMMIT1, OP1, PageRef(9, 1), 10), 10
         )
-        with self.assertRaisesRegex(JPVRFormatError, "missing page"):
+        with self.assertRaisesRegex(JPVRFormatError, "outside durable prefix"):
             assemble_transaction(genesis_superblock(), pages + (mp,), cp, {})
 
     def test_plan_revalidation_accepts_unchanged_plan(self):
@@ -244,10 +244,12 @@ class TransactionAssemblyTests(unittest.TestCase):
     def test_failed_assembly_does_not_mutate_catalog(self):
         plan, catalog, _ = first_generation()
         before = dict(catalog)
-        with self.assertRaises(JPVRFormatError):
+        damaged_commit = bytearray(plan.ordered_page_bytes[-1])
+        damaged_commit[-1] ^= 1
+        with self.assertRaisesRegex(JPVRFormatError, "CRC32C"):
             assemble_transaction(
                 genesis_superblock(), plan.ordered_page_bytes[:-1],
-                plan.ordered_page_bytes[-1], catalog,
+                bytes(damaged_commit), {},
             )
         self.assertEqual(catalog, before)
 
