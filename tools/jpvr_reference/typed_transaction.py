@@ -130,11 +130,12 @@ class TypedTransactionRequest:
     data_records: Sequence[DataRecordInput] = ()
     blob_records: Sequence[BlobRecordInput] = ()
     index_pages: Sequence[IndexPageInput] = ()
-    index_mutations: Sequence[IndexMutationInput] = ()
     journal_entries: Sequence[JournalEntryInput] = ()
     outbox_events: Sequence[OutboxEvent] = ()
     index_roots: Mapping[str, PageRef] | None = None
     checkpoint_page_no: int | None = None
+    # Appended after the original V1 fields to preserve positional-call compatibility.
+    index_mutations: Sequence[IndexMutationInput] = ()
 
 
 @dataclass(frozen=True)
@@ -147,9 +148,10 @@ class TypedTransactionBuildPlan:
     data_page_numbers: tuple[int, ...]
     blob_page_numbers: tuple[int, ...]
     index_page_numbers: tuple[int, ...]
-    index_mutation_plans: tuple[IndexMutationBuildPlan, ...]
     journal_page_numbers: tuple[int, ...]
     outbox_page_numbers: tuple[int, ...]
+    # Appended after the original V1 fields to preserve positional-call compatibility.
+    index_mutation_plans: tuple[IndexMutationBuildPlan, ...]
 
     @property
     def manifest_page_no(self) -> int:
