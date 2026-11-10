@@ -45,3 +45,6 @@ The previous 11-module JPVR set was reported by the user as passing at 242 metho
 A user-run full repository test pass exposed incorrect field access in the scanner (event.event_id instead of event.event.event_id) and a missing early type guard for the MANIFEST high-water page. Both are corrected. The missing-predecessor fixture now preserves a valid generation-2 source COMMIT binding so it reaches the intended durable-coverage assertion.
 
 The first report contained 497 tests with 7 errors and 3 failures. The corrected tests and scanner have been committed, but the focused and full suites must be rerun; no new PASS is claimed yet.
+
+
+The scanner checks the active MANIFEST's OUTBOX high-water page type before generic snapshot validation so callers receive the precise `not OUTBOX` diagnostic for a wrong-type high-water reference. Generic MANIFEST validation remains responsible for the rest of the root and reference checks.
