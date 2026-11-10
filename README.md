@@ -249,10 +249,10 @@ python3 -m unittest tools.jpvr_reference.test_outbox_scan -v
 Complete JPVR reference suite:
 
 ```sh
-python3 -m unittest tools.jpvr_reference.test_codec tools.jpvr_reference.test_records tools.jpvr_reference.test_blob tools.jpvr_reference.test_data tools.jpvr_reference.test_layout tools.jpvr_reference.test_manifest tools.jpvr_reference.test_index tools.jpvr_reference.test_cow tools.jpvr_reference.test_commit tools.jpvr_reference.test_journal tools.jpvr_reference.test_outbox tools.jpvr_reference.test_outbox_scan tools.jpvr_reference.test_transaction -v
+python3 -m unittest tools.jpvr_reference.test_codec tools.jpvr_reference.test_records tools.jpvr_reference.test_blob tools.jpvr_reference.test_data tools.jpvr_reference.test_layout tools.jpvr_reference.test_manifest tools.jpvr_reference.test_index tools.jpvr_reference.test_cow tools.jpvr_reference.test_commit tools.jpvr_reference.test_journal tools.jpvr_reference.test_outbox tools.jpvr_reference.test_outbox_scan tools.jpvr_reference.test_transaction tools.jpvr_reference.test_typed_transaction -v
 ```
 
-The user reported that the prior 11-module JPVR set passed after OUTBOX source-COMMIT validation; the source set at that time contained 242 methods, but the exact command/count/duration were not supplied in the latest message. Since that run, four genesis tests and 16 scanner tests were added. Current source before the transaction planner contained **262 methods across twelve JPVR modules**. The transaction planner adds a thirteenth module with 16 new methods; those 16 tests are **AUTHORED, NOT RUN** until run on Termux. The full command above includes the new module. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md), [OUTBOX contract](docs/JPVR_OUTBOX_V1.md), [OUTBOX scanner contract](docs/JPVR_OUTBOX_SCAN_V1.md) and [transaction assembly contract](docs/JPVR_TRANSACTION_ASSEMBLY_V1.md).
+The source set before transaction assembly contained 262 methods across twelve JPVR modules. Transaction assembly added 16 methods, and the typed builder adds a fourteenth module with 18 focused methods, for a current total of **296 methods across fourteen modules**. The user confirmed that the prior full-suite errors are resolved, but these 34 planner/builder methods were authored afterward and are **AUTHORED, NOT RUN**. The complete command above includes both new modules. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md), [OUTBOX contract](docs/JPVR_OUTBOX_V1.md), [OUTBOX scanner contract](docs/JPVR_OUTBOX_SCAN_V1.md), [transaction assembly contract](docs/JPVR_TRANSACTION_ASSEMBLY_V1.md) and [typed transaction builder contract](docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md).
 
 
 ## JPVR transaction assembly planner
@@ -267,3 +267,14 @@ The in-memory planner assembles encoded staged pages, a final MANIFEST, and a fi
 
 
 The 2026-11-10 CQE priority-aging and JPVR OUTBOX scanner regressions were subsequently corrected; the user has confirmed that no errors remain in their current full-suite run. The transaction assembly tests added afterward are a separate new module and still require a focused run on the user's Termux environment.
+
+
+## JPVR typed transaction builder
+
+Focused typed builder tests:
+
+```sh
+python3 -m unittest tools.jpvr_reference.test_typed_transaction -v
+```
+
+The builder accepts typed JREC, BLOB, INDEX, JOURNAL and OUTBOX inputs; packs DATA records without splitting them, fragments large BLOB records, assigns physical page numbers, resolves JOURNAL/OUTBOX links to the final COMMIT page, inherits unchanged roots/high-water marks from the active snapshot, and emits MANIFEST plus final COMMIT. It revalidates all generated page families and delegates final snapshot validation to the transaction assembly planner. Contract: [JPVR_TYPED_TRANSACTION_BUILDER_V1.md](docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md). This remains in-memory only; INDEX node construction/COW mutations and durable storage writes are not performed by this builder.
