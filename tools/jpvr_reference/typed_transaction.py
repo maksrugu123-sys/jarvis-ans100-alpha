@@ -12,7 +12,13 @@ from types import MappingProxyType
 from typing import Sequence
 
 from .blob import decode_blob_pages, encode_blob_pages
-from .codec import PAGE_PAYLOAD_BYTES, JPVRFormatError, Superblock, encode_superblock
+from .codec import (
+    PAGE_PAYLOAD_BYTES,
+    JPVRFormatError,
+    Superblock,
+    _fixed_bytes,
+    encode_superblock,
+)
 from .commit import (
     CommitRecord,
     decode_commit_page,
@@ -229,9 +235,11 @@ def build_typed_transaction(
     if next_generation > 0xFFFFFFFFFFFFFFFF:
         raise JPVRFormatError("commit generation overflows u64")
     first_page_no = current.durable_tail_page_no + 1
-    transaction_id = request.transaction_id
-    commit_id = request.commit_id
-    operation_id = request.operation_id
+    transaction_id = _fixed_bytes("transaction_id", request.transaction_id, 16)
+    commit_id = _fixed_bytes("commit_id", request.commit_id, 16)
+    operation_id = _fixed_bytes("operation_id", request.operation_id, 16)
+    if transaction_id == bytes(16) or commit_id == bytes(16) or operation_id == bytes(16):
+        raise JPVRFormatError("transaction_id, commit_id and operation_id must be nonzero")
 
     # DATA: encode one JREC per logical input, then greedily pack whole records.
     encoded_records = tuple(
@@ -339,10 +347,15 @@ def build_typed_transaction(
     decoded_journal_by_page: dict[int, DecodedJournalPage] = {}
     for offset, item in enumerate(journal_inputs):
         entry = item.entry
-        if entry.commit_id is not None and bytes(entry.commit_id) == bytes(commit_id):
-            entry = replace(entry, commit_ref=commit_ref)
+        operation_key = _fixed_bytes("JOURNAL operation_id", entry.operation_id, 16)
+        _fixed_bytes("JOURNAL idempotency_key", entry.idempotency_key, 16)
+        _fixed_bytes("JOURNAL owner_module_id", entry.owner_module_id, 16)
+        if entry.commit_id is not None:
+            entry_commit_id = _fixed_bytes("JOURNAL commit_id", entry.commit_id, 16)
+            if entry_commit_id == commit_id:
+                entry = replace(entry, commit_ref=commit_ref)
 
-        previous_decoded = latest_journal_by_operation.get(bytes(entry.operation_id))
+        previous_decoded = latest_journal_by_operation.get(operation_key)
         if previous_decoded is not None:
             expected_previous = PageRef(
                 previous_decoded.page_no, previous_decoded.commit_generation
@@ -380,7 +393,7 @@ def build_typed_transaction(
             )
         journal_numbers.append(page_no)
         staged.append(encoded)
-        latest_journal_by_operation[bytes(entry.operation_id)] = decoded
+        latest_journal_by_operation[operation_key] = decoded
         decoded_journal_by_page[page_no] = decoded
 
     # OUTBOX: anchor the new sequence to the active MANIFEST high-water page.
@@ -402,7 +415,11 @@ def build_typed_transaction(
     staged_event_ids: set[bytes] = set()
     staged_idempotency_keys: set[bytes] = set()
     for offset, original_event in enumerate(outbox_events):
-        if bytes(original_event.commit_id) != bytes(commit_id):
+        event_commit_id = _fixed_bytes("OUTBOX commit_id", original_event.commit_id, 16)
+        _fixed_bytes("OUTBOX event_id", original_event.event_id, 16)
+        _fixed_bytes("OUTBOX idempotency_key", original_event.idempotency_key, 16)
+        _fixed_bytes("OUTBOX operation_id", original_event.operation_id, 16)
+        if event_commit_id != commit_id:
             raise JPVRFormatError("OUTBOX event commit_id must match the new transaction")
         expected_previous = (
             None
@@ -423,8 +440,8 @@ def build_typed_transaction(
             raise JPVRFormatError(
                 "OUTBOX sequence is not contiguous with committed high-water"
             )
-        event_id = bytes(event.event_id)
-        idempotency_key = bytes(event.idempotency_key)
+        event_id = _fixed_bytes("OUTBOX event_id", event.event_id, 16)
+        idempotency_key = _fixed_bytes("OUTBOX idempotency_key", event.idempotency_key, 16)
         if (
             event_id in staged_event_ids
             or idempotency_key in staged_idempotency_keys
