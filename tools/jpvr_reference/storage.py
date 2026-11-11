@@ -9,7 +9,7 @@ import os
 import threading
 import uuid
 
-from .codec import PAGE_SIZE, SUPERBLOCK_SIZE, JPVRFormatError, Superblock, decode_page, decode_superblock, encode_superblock
+from .codec import PAGE_SIZE, SUPERBLOCK_SIZE, JPVRFormatError, Superblock, _fixed_bytes, decode_page, decode_superblock, encode_superblock
 from .commit import decode_commit_page, validate_commit_snapshot
 from .cow import validate_index_tree
 from .index import decode_index_page
@@ -71,9 +71,11 @@ class JPVRStorage:
     ) -> "JPVRStorage":
         """Create a new container without replacing an existing path."""
         target = os.path.abspath(os.fspath(path))
-        identifier = uuid.uuid4().bytes if container_uuid is None else bytes(container_uuid)
-        if len(identifier) != 16:
-            raise JPVRFormatError("container_uuid must contain exactly 16 bytes")
+        identifier = (
+            uuid.uuid4().bytes
+            if container_uuid is None
+            else _fixed_bytes("container_uuid", container_uuid, 16)
+        )
         fd = os.open(target, os.O_RDWR | os.O_CREAT | os.O_EXCL, file_mode)
         locked = False
         try:
