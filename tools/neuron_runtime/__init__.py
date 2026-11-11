@@ -19,3 +19,31 @@ __all__ += [
     "NetworkBackpressureError", "NetworkConnection", "NetworkRunResult",
     "NetworkRuntime", "NetworkRuntimeError", "NetworkSpike",
 ]
+
+from .jpvr_adapter import (
+    DecodedNeuronRuntimeSnapshot,
+    JNVM_RUNTIME_RECORD_TYPE,
+    JNVM_RUNTIME_SCHEMA_ID,
+    JNVM_RUNTIME_SCHEMA_VERSION,
+    NeuronRuntimePersistenceError,
+    append_neuron_runtime_checkpoint,
+    decode_neuron_runtime_record,
+    decode_neuron_runtime_snapshot,
+    encode_neuron_runtime_snapshot,
+    make_neuron_runtime_record_input,
+    neuron_runtime_object_id,
+)
+
+__all__ += [
+    "DecodedNeuronRuntimeSnapshot",
+    "JNVM_RUNTIME_RECORD_TYPE",
+    "JNVM_RUNTIME_SCHEMA_ID",
+    "JNVM_RUNTIME_SCHEMA_VERSION",
+    "NeuronRuntimePersistenceError",
+    "append_neuron_runtime_checkpoint",
+    "decode_neuron_runtime_record",
+    "decode_neuron_runtime_snapshot",
+    "encode_neuron_runtime_snapshot",
+    "make_neuron_runtime_record_input",
+    "neuron_runtime_object_id",
+]

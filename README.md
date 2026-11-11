@@ -6,7 +6,7 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 11 November 2026
 
-- **JPVR reference:** seventeen modules currently contain **362 test methods**. The COW-integrated typed builder feeds a file-backed two-Superblock storage engine. JPVRStorage.scan_history() audits the full COMMIT/MANIFEST history and validates the OUTBOX chain even for the last verified prefix when a later generation is damaged. JPVRStorage.recover_copy(destination, expected_commit_id=...) can publish that verified prefix as a separate file: it rechecks history under a shared lock, requires the exact commit identity, copies and reads back only verified pages, reconstructs both alternating Superblock slots, and publishes atomically without overwriting an existing path. The original file is never truncated or rewritten. The 23 historical-scan tests and 12 recovery-copy tests are AUTHORED, NOT RUN. The reference writer/scanner/copy-recovery are not yet Android-device-verified or production-ready. In-place repair, compaction, free-page reuse, durable CQE delivery and hardware-level power-loss guarantees remain out of scope.
+- **JPVR reference:** seventeen modules currently contain **362 test methods**. The COW-integrated typed builder feeds a file-backed two-Superblock storage engine. JPVRStorage.scan_history() audits the full COMMIT/MANIFEST history and validates the OUTBOX chain even for the last verified prefix when a later generation is damaged. JPVRStorage.recover_copy(destination, expected_commit_id=...) can publish that verified prefix as a separate file: it rechecks history under a shared lock, requires the exact commit identity, copies and reads back only verified pages, reconstructs both alternating Superblock slots, and publishes atomically without overwriting an existing path. The original file is never truncated or rewritten. The 23 historical-scan tests and 12 recovery-copy tests are AUTHORED, NOT RUN. The reference writer/scanner/copy-recovery are not yet Android-device-verified or production-ready. In-place repair, compaction, free-page reuse, durable CQE delivery and hardware-level power-loss guarantees remain out of scope. **Neuron checkpoint adapter:** tools/neuron_runtime/jpvr_adapter.py serializes the full single-neuron state/configuration into a versioned JREC/DATA or BLOB input, carries an explicit clock_epoch_id, and reconstructs a validated NeuronRuntime; its 16 focused tests are AUTHORED, NOT RUN. This adapter creates typed transaction inputs only: checkpoint INDEX lookup/update and a durable save/load façade remain to be implemented.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. Its 15 focused tests were included in the user's full Termux run on 8 November 2026: 216/216 repository tests passed in 19.280 s. This is Python reference verification, not production NCC/runtime or device performance evidence.
 - **Multi-neuron network coordinator:** `tools/neuron_runtime/network.py` adds directed delayed connections, deterministic same-timestamp batching, bounded event/run budgets and in-memory timestamp-level candidate commit. Fourteen focused network tests are authored; they have not yet been run against the repository's real Numerical Oracle. This remains a single-threaded Python reference layer, not production NCC or durable scheduling.
@@ -23,7 +23,7 @@ The repository has entered the first executable Python reference-orchestration s
 - **V4.2 causal-credit audit:** user-run Android Termux verification: **6/6 dedicated tests passed**; smoke (128 episodes) and pilot (2,048 episodes) completed. In pilot, R-STDP produced 1,355 negative, 0 positive and 693 zero updates. Correct FAST episodes had negative eligibility despite positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility magnitude/sign balance but did not change any per-episode eligibility or weight-update signs. This diagnoses a temporal-credit alignment limitation, not a proven fix. Details: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md and docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.
 - **V4.3 decision-boundary temporal credit:** focused tests passed (7/7, 1.636 s), and smoke/pilot completed on Android Termux. In the two-seed pilot, Decision-Latched reached 82.23% held-out accuracy versus 83.01% for frozen V4 R-STDP and 100% for STDP. It processed all sensory inputs and gated exactly 1,024 post-decision plasticity events, but did not improve held-out quality. It remains experimental, not the default. Details: docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md.
 
-- **Not implemented yet:** production neuron/NCC runtime, JNVM integration with JPVR, in-place JPVR repair/rollback, compaction/free-page reuse, durable CQE outbox delivery, full capability scopes/resource budgets, production-grade scheduler guarantees, and Reasoning Engine execution. Non-destructive recovery-copy publication is implemented as a Python reference API, not as automatic restoration or production repair.
+- **Not implemented yet:** production neuron/NCC runtime, complete JNVM integration with JPVR (the single-neuron checkpoint codec/typed-input adapter exists, but indexed lookup/update and durable save/load orchestration do not), in-place JPVR repair/rollback, compaction/free-page reuse, durable CQE outbox delivery, full capability scopes/resource budgets, production-grade scheduler guarantees, and Reasoning Engine execution. Non-destructive recovery-copy publication remains a Python reference API, not automatic restoration or production repair.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
@@ -54,8 +54,9 @@ The repository has entered the first executable Python reference-orchestration s
 | `tools/compact_core_v5/resource_baseline.py` | V5.1 reference-object and process-resource baseline harness |
 | `tools/compact_core_v5/test_resource_baseline.py` | V5.1 baseline harness unit tests |
 | `tools/numerical_oracle/` | Float64 reference equations, sweeps and tests |
-| `tools/neuron_runtime/` | One-neuron coordinator, bounded multi-neuron event loop and tests |
+| `tools/neuron_runtime/` | One-neuron coordinator, bounded multi-neuron event loop, JPVR checkpoint adapter and tests |
 | `docs/JARVIS_NETWORK_RUNTIME_V1.md` | Multi-neuron event-loop reference contract, queue limits and verification scope |
+| `docs/JNVM_NEURON_RUNTIME_JPVR_ADAPTER_V1.md` | Versioned one-neuron checkpoint schema and JPVR DATA/BLOB adapter contract |
 | `tools/task_validation/` | V1–V4.3 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
 | `tools/jpvr_reference/` | JPVR_FORMAT_V1 codecs/planners, batch COW INDEX mutation, transaction builder, and file-backed two-Superblock storage and historical recovery scanner |
@@ -92,6 +93,14 @@ python3 -m unittest tools.neuron_runtime.test_runtime -v
 ```
 
 The first-neuron focused suite is included in the 216/216 full Termux run recorded above. The separate network coordinator test module is tracked below.
+
+## Run the JPVR neuron-runtime checkpoint adapter tests
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_jpvr_adapter -v
+```
+
+The adapter round-trips one complete NeuronRuntime checkpoint into a versioned JPVR DATA/JREC or BLOB record and restores it after validation. It preserves the caller's 128-bit model-clock epoch. These sixteen tests are AUTHORED, NOT RUN. The adapter does not yet maintain the neuron INDEX locator or commit/load files itself.
 
 ## Run bounded multi-neuron network tests
 

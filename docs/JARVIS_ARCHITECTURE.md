@@ -3658,8 +3658,49 @@ ZRAM может выступать дополнительной системно
 - сравнительные архитектуры Intel Loihi/Loihi 2 и SpiNNaker/SpiNNaker2 проанализированы в разделе 3.24; выявленные принципы рассматриваются как исследовательские ориентиры, без смены аппаратной платформы, модели первого нейрона или критериев JPVR-001;
 - методология систематической калибровки и экспериментального сравнения по Google Research Deep Learning Tuning Playbook адаптирована для JARVIS в разделе 3.25; она не заменяет STDP/R-STDP и не означает наличия полноценного training pipeline или завершённой калибровки;
 - описанные в документе подсистемы являются проектными решениями и предложениями;
-- production-реализация нейрона и NCC, JNVM и JPVR ещё не начата; tools/neuron_runtime содержит in-memory reference coordinator одного нейрона и bounded multi-neuron event loop, а tools/cqe_reference — отдельную reference implementation протокола; ни один из пакетов не является production runtime;
+- production-реализация нейрона и NCC, полноценный JNVM service и production JPVR integration ещё не начаты; tools/neuron_runtime содержит in-memory reference coordinator одного нейрона, bounded multi-neuron event loop и частичный JNVM↔JPVR checkpoint adapter (версионированный DATA/BLOB payload с clock epoch), а tools/jpvr_reference — file-backed Python reference storage, history scanner и non-destructive recovery-copy API; ни один из пакетов не является production runtime;
 - специализированные тесты CQE reference (26 методов) ранее прошли на Python 3.13.5; в более свежем полном запуске на Android Termux прошли 64 теста (26 CQE + 29 Numerical Oracle + 9 Round 2), 0 failures и 0 errors за 1.649 секунды; Round 1 sweep на 99 сценариев и Round 2 generator выполнены, но фактические метрики всех 23 сценариев Round 2 проанализированы и записаны в docs/CALIBRATION_ROUND2.md; task-level reference benchmark JARVIS_TEMPORAL_BURST_VS_SPARSE_V1 выполнен 7 ноября 2026 года: FIXED/STDP/R-STDP показали 100% на train и held-out; преимущество обучения не установлено, так как FIXED baseline уже решил выбранную задачу; crash-тесты production JPVR, runtime benchmarks и измерения ресурсов не проводились; сборки и GitHub Actions не запускались.
+
+
+### 3.35. JNVM↔JPVR one-neuron checkpoint adapter V1
+
+**Статус: IMPLEMENTED как Python reference serialization/typed-input adapter; 16 focused tests AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: docs/JNVM_NEURON_RUNTIME_JPVR_ADAPTER_V1.md.
+
+#### 3.35.1. Цель и границы
+
+tools/neuron_runtime/jpvr_adapter.py связывает существующий in-memory NeuronRuntime с typed transaction builder JPVR. Один checkpoint является одной версионированной application record; небольшая запись отправляется как JREC в DATA, большая — как BLOB. Это устраняет необходимость повторной ручной сериализации, но пока не создаёт полного JNVM persistence service.
+
+#### 3.35.2. Содержимое snapshot
+
+Checkpoint включает:
+- logical neuron_id и стабильный 128-bit object ID, полученный из SHA-256 с domain separation;
+- schema/type/version и явно заданный clock_epoch_id;
+- learning_rule и processed_batches;
+- все поля NeuronParams, SynapseParams и RewardParams;
+- полный NeuronState;
+- все SynapseState, отсортированные по synapse ID, включая STDP pre/post traces, R-STDP eligibility, active context и его модельные timestamps.
+
+Payload — canonical UTF-8 JSON: sorted keys, compact separators, strict schema keys, duplicate-key rejection, finite-number validation и предел JPVR logical-record 16 MiB. Outer DATA/JREC или BLOB codec добавляет integrity metadata/CRC.
+
+clock_epoch_id — обязательный ненулевой 128-bit logical clock-domain identifier. Все persisted model times остаются внутри именно этой временной эпохи; нельзя при рестарте незаметно заменить её новым OS monotonic clock origin. Rebase/epoch policy остаётся обязанностью scheduler/caller.
+
+#### 3.35.3. API и порядок интеграции
+
+- make_neuron_runtime_record_input() выбирает DataRecordInput при размере payload до MAX_SMALL_RECORD_PAYLOAD, иначе BlobRecordInput.
+- append_neuron_runtime_checkpoint(request, ...) возвращает новый TypedTransactionRequest, не меняя входной объект, и запрещает два checkpoint одного neuron object в одной транзакции.
+- decode_neuron_runtime_record() проверяет JPVR record type/schema/object identity и связывает object ID с neuron ID до восстановления runtime.
+- NeuronRuntime предоставляет read-only properties для immutable parameter dataclasses; constructor принимает валидируемый processed_batches, чтобы продолжить счётчик после restore. Счётчик ограничен u64.
+
+Адаптер не вызывает JPVRStorage.commit() и не меняет COW индексы автоматически. Caller должен собрать и проверить TypedTransactionBuildPlan, а durable publication делает JPVRStorage.commit(plan).
+
+#### 3.35.4. Что пока не сохраняется
+
+Не входят в snapshot: NetworkRuntime topology/pending event queue, external Reward Baseline Manager state, CQE inbox/outbox/subscriber cursors, task sessions и side effects. Отдельно не реализованы индексный locator для последнего snapshot, automatic record-version allocator и storage-level load/save orchestration. Поэтому наличие record codec не означает, что runtime уже самостоятельно восстанавливается из JPVR файла.
+
+#### 3.35.5. Проверки и статус
+
+tools/neuron_runtime/test_jpvr_adapter.py содержит 16 focused methods: full state/config round-trip, R-STDP context preservation, canonical deterministic bytes, DATA/BLOB branch selection, strict IDs/clock epochs/versions/schema/JSON validation, object-ID binding, typed-builder DATA/BLOB integration, duplicate checkpoint prevention and bounded counter restore. Эти тесты AUTHORED, NOT RUN. No Python import/syntax/runtime checks, performance tests, filesystem/device I/O, Android builds, CI, GitHub Actions or APK/AAB were run.
+
 
 
 ### 12.1. Оценка готовности к JPVR-001 интегрированному прототипу
@@ -3681,7 +3722,7 @@ ZRAM может выступать дополнительной системно
 - логические контракты NeuronStateRecord и SynapseRecord v1, включая версии, временную модель, знаки весов, локальное состояние пластичности, индексы и восстановление (разделы 3.17–3.18);
 - математические правила парного возбуждающего STDP и R-STDP, reward baseline, ограничения и набор будущих проверок (раздел 3.19);
 - единый стартовый числовой профиль Adaptive LIF-DT/STDP/R-STDP, sweep-диапазоны и политика точности вычислений (раздел 3.20); профиль пока не откалиброван;
-- физический бинарный формат JPVR_FORMAT_V1: кодирование, страницы, записи, BLOB, индексы, транзакции, durable outbox, dual-superblock recovery, компактизация и миграции (раздел 3.21); CRC32C/superblock/page/JREC/TLV/BLOB/DATA packing и append-planning reference layers частично реализованы, но 109 тестов AUTHORED, NOT RUN; контейнер и crash recovery не реализованы;
+- физический бинарный формат JPVR_FORMAT_V1: кодирование, страницы, JREC/TLV, BLOB, индексы, транзакции и durable outbox (раздел 3.21); Python reference реализации включают COW-integrated typed builder, file-backed dual-Superblock storage, historical scanner и non-destructive recovery-copy publication (разделы 3.32–3.34); 362 JPVR test methods across seventeen modules are AUTHORED, NOT RUN in the current combined baseline; Android filesystem behavior and hardware crash consistency remain unverified;
 - JARVIS Numerical Oracle v0.1 — отдельный float64 reference module, контрольные тесты, длинные последовательности и генераторы exploratory sweeps/behavioral characterization (раздел 3.22); все 29 Oracle-тестов прошли в составе полного запуска из 64 тестов; это проверка reference tool, а не production/runtime или task-level калибровка;
 - CQE v1 executable contract reference (раздел 3.15.9) — отдельный Python package tools/cqe_reference с маршрутизацией, авторизацией, bounded queues, age-based promotion, idempotency/version checks и volatile commit/event flow; 26 тестов имеют исторический PASS на Python 3.13.5, текущий файл содержит 31 метод, из которых пять добавлены после того запуска и AUTHORED, NOT RUN; persistence/recovery и production runtime отсутствуют;
 - концептуальная архитектура Reasoning Engine v0.1: декомпозиция задач, гипотезы, оценка доказательств, планирование, Safety Gate и проверка результата (раздел 3.23); это последующий слой, не часть первого нейронного прототипа.
@@ -3692,7 +3733,7 @@ ZRAM может выступать дополнительной системно
 
 1. Откалибровать STARTER-профиль Adaptive LIF-DT/STDP/R-STDP с использованием Oracle и выбрать подтверждённую версию параметров.
 2. Проверить устойчивость и качество обучения на длинных контролируемых последовательностях, включая точность будущей float32 runtime-кандидатуры относительно float64 oracle.
-3. Уточнить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter.
+3. Завершить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter; single-neuron checkpoint serialization/typed DATA-BLOB input теперь частично реализованы в разделе 3.35, но индексный locator, durable load/save façade и clock-epoch scheduler policy ещё открыты.
 4. Зафиксировать минимальную архитектуру первого исполняемого прототипа, конфигурацию, границы модулей и диагностические показатели.
 5. Подготовить проверяемый план JPVR-001 и критерии приёмки: корректность сигналов, обучение, сохранение/загрузка, восстановление, RAM, задержка и объём операций записи.
 

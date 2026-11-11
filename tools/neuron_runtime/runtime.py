@@ -17,6 +17,7 @@ from tools.numerical_oracle.jarvis_oracle import (
 )
 
 LearningRule = Literal["none", "stdp", "rstdp"]
+_U64_MAX = (1 << 64) - 1
 
 
 class NeuronRuntimeError(ValueError):
@@ -90,7 +91,14 @@ class NeuronRuntime:
         synapse_params: SynapseParams | None = None,
         reward_params: RewardParams | None = None,
         learning_rule: LearningRule = "none",
+        processed_batches: int = 0,
     ) -> None:
+        if (
+            isinstance(processed_batches, bool)
+            or not isinstance(processed_batches, int)
+            or not 0 <= processed_batches <= _U64_MAX
+        ):
+            raise NeuronRuntimeError("processed_batches must be an unsigned 64-bit integer")
         if learning_rule not in ("none", "stdp", "rstdp"):
             raise NeuronRuntimeError("learning_rule must be none, stdp or rstdp")
         if not isinstance(synapses, Mapping):
@@ -119,7 +127,19 @@ class NeuronRuntime:
             self._synapse_states[synapse_id] = state
 
         self._learning_rule: LearningRule = learning_rule
-        self._processed_batches = 0
+        self._processed_batches = processed_batches
+
+    @property
+    def neuron_params(self) -> NeuronParams:
+        return self._neuron_params
+
+    @property
+    def synapse_params(self) -> SynapseParams:
+        return self._synapse_params
+
+    @property
+    def reward_params(self) -> RewardParams:
+        return self._reward_params
 
     @property
     def neuron_state(self) -> NeuronState:
@@ -144,6 +164,8 @@ class NeuronRuntime:
         *,
         learning_context_id: str | None = None,
     ) -> RuntimeStep:
+        if self._processed_batches >= _U64_MAX:
+            raise NeuronRuntimeError("processed_batches exhausted its unsigned 64-bit range")
         if not isinstance(inputs, (list, tuple)):
             raise NeuronRuntimeError("inputs must be a list or tuple")
         prepared = tuple(inputs)

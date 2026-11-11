@@ -1110,3 +1110,22 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** это не in-place repair; source Superblock, pages и orphan tail остаются нетронутыми. Copy доступна только если OUTBOX цепочка последнего verified prefix подтверждена; неизвестное/повреждённое состояние OUTBOX блокирует публикацию. Destination publication requires same-directory hard-link support. После JPVRRecoveryCopyUncertainError output path должен быть inspected до retry. Нет semantic JNVM/neuron-state reconstruction, автоматического rollback источника, compaction/free-page reuse, Android device verification или hardware-level power-loss guarantee.
 
 **Focused Termux commands:** python3 -m unittest tools.jpvr_reference.test_recovery tools.jpvr_reference.test_recovery_copy -v. Complete seventeen-module JPVR suite command is in README. New tests are AUTHORED, NOT RUN.
+
+
+### 2026-11-11 — JNVM↔JPVR One-Neuron Checkpoint Adapter V1
+
+**Цель:** впервые связать фактическое in-memory состояние NeuronRuntime с typed DATA/BLOB input JPVR, сохраняя параметры, память и traces без потери временного clock-domain контекста.
+
+**Добавлено / изменено:**
+- tools/neuron_runtime/runtime.py: read-only accessors для NeuronParams, SynapseParams, RewardParams; constructor принимает валидируемый processed_batches для точного восстановления; добавлен u64 overflow guard перед следующим batch.
+- tools/neuron_runtime/jpvr_adapter.py: versioned JNVM runtime record (record type 0x0101, schema ID 0x4A4E564D, schema version 1); canonical UTF-8 JSON payload с exact schema, duplicate-key rejection, finite-number validation, 16 MiB limit и stable neuron object ID с SHA-256 domain separation. Snapshot содержит все параметры, NeuronState, все SynapseState/STDP traces/R-STDP eligibility context, learning rule, processed-batch counter и обязательный 128-bit clock_epoch_id.
+- Adapter выбирает DataRecordInput/JREC-DATA для payload до small-record limit и BlobRecordInput/BLOB для большего; append_neuron_runtime_checkpoint() возвращает новый immutable transaction request; decoder проверяет record metadata/object identity и восстанавливает новый валидированный NeuronRuntime.
+- tools/neuron_runtime/test_jpvr_adapter.py: 16 test methods для полной конфигурации/state round-trip, R-STDP context, deterministic encoding, DATA/BLOB selection, invalid ID/epoch/version/schema/JSON/numeric paths, object-ID mismatch, transaction builder round-trip and duplicate checkpoint guard.
+- tools/neuron_runtime/__init__.py: экспортирован adapter API.
+- Добавлен docs/JNVM_NEURON_RUNTIME_JPVR_ADAPTER_V1.md; обновлены docs/JARVIS_ARCHITECTURE.md (section 3.35) и README/test command/status.
+
+**Проверки:** GitHub source readback and static structural/document cross-reference only. All 16 tests are **AUTHORED, NOT RUN**. Python tests, import/syntax checks, numerical runtime replay, physical JPVRStorage.commit()/reopen, full snapshot restore through an INDEX locator, Android/Termux I/O and resource measurement **NOT RUN**. No builds, CI, GitHub Actions, APK/AAB.
+
+**Ограничения:** это one-neuron record codec/typed-input adapter, не полноценный JNVM service. Не реализованы atomic neuron COW INDEX locator, automatic record-version allocator, storage-level load/save orchestration, multi-neuron event queue/topology persistence, external reward baseline persistence, CQE session persistence, or scheduler-owned clock-epoch continuity. A caller must retain and resume the same model clock epoch; a new OS monotonic-clock origin cannot be substituted silently. JPVR durable behavior and Android filesystem semantics remain unverified.
+
+**Следующий этап:** add versioned locator updates to the neuron COW INDEX, atomically connecting logical neuron ID/object ID to checkpoint DATA/BLOB page range and record version. Then implement a bounded storage façade that appends checkpoint plus locator in one JPVR transaction and loads by validating the active commit, index tree, record version and record CRC before restoring NeuronRuntime.
