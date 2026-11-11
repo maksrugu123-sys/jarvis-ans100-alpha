@@ -1231,3 +1231,24 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 
 **Дополнительное ужесточение readback review:** duplicate replay now reconstructs and compares the full RewardBaselineReceipt against the active durable checkpoint, not only feedback ID/time/status. It also requires the caller's expected runtime version to equal the active version. Added regression tests for stale duplicate replay and pending events at the reward timestamp; total focused tests: 10, **AUTHORED, NOT RUN**.
+
+
+### 2026-11-11 — Durable CQE R-STDP Reward Feedback Inbox V1
+
+**Цель:** сохранять входной CQE reward-feedback до применения synapse reward и восстанавливать точно тот же target/context/envelope после прерывания, используя существующий JRCM composite checkpoint.
+
+**Добавлено / изменено:**
+- tools/neuron_runtime/cqe_feedback.py: специализированный CQE EVENT adapter для jarvis.reward.feedback v1; canonical envelope; UUID/message/event identity; bounded target set; policy-version и authorization-receipt provenance; target/context SHA-256; detached preflight targets before acceptance; durable pending save before authoritative reward; recovery/resume pending; exact completed duplicate без повторного применения.
+- tools/neuron_runtime/reward_baseline.py: optional cqe_envelope_json и feedback_context_digest у pending proposal и terminal receipt; strict metadata validation; snapshot decoder принимает старый JRBM V1 field set и расширенный field set; binding envelope к owner task/feedback/sequence/reward/time/clock epoch.
+- tools/neuron_runtime/feedback_transaction.py: metadata передаётся от CQE adapter в baseline proposal и terminal receipt; сохраняется в том же JRCM COMMIT с сетевым состоянием.
+- tools/neuron_runtime/test_cqe_feedback.py: 12 тестов для inbox acceptance, pending recovery, exact duplicate/no-write, target/context conflict, message/event ID reuse, provenance, invalid schema/type, duplicate targets и tampered digest and legacy JRBM pending/receipt field-set compatibility and preflight rejection before inbox acceptance.
+- tools/neuron_runtime/__init__.py: public CQE feedback adapter exports.
+- docs/JNVM_CQE_REWARD_FEEDBACK_INBOX_V1.md, architecture §3.41, README, CQE/atomic-feedback cross references and this log updated.
+
+**Проверки:** GitHub source readback and static cross-reference review only. Twelve tests are **AUTHORED, NOT RUN**. No Python tests, imports/syntax execution, fault injection, Android/Termux I/O, benchmarks, builds, CI or GitHub Actions were run.
+
+**Trust boundary:** the adapter stores upstream policy version and an authorization-receipt UUID but does not authenticate sources, issue/verify capabilities, or execute authorization. The caller must authorize the source in its upstream security/policy layer first; the adapter is not wired to a policy gate and does not register the schema with the general CQE router. The receipt UUID is provenance, not cryptographic proof.
+
+**Ограничения:** this is a reward-feedback-only durable inbox, not a general CQE inbox/outbox or event broker. One pending proposal per reward task, bounded receipt retention, JRCM single-writer CAS, and caller-owned clock epoch remain. No sessions, plans, external side effects, concurrent multi-process writer, exactly-once delivery, Android crash guarantee, production NCC or resource measurements.
+
+**Следующий этап:** durable CQE task/session lifecycle with bounded task registry, authorization snapshot/version checks and explicit retry/terminal states, followed by a user-facing JARVIS task loop. General event outbox/inbox should remain a separate contract rather than being implied by this reward-only path.

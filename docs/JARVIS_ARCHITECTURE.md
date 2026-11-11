@@ -4121,3 +4121,40 @@ After all targets succeed or return an approved terminal no-op, the manager comm
 **Limits:** all selected synapses must have the same configured `RewardParams.beta_b` as the manager. The caller must drain queued events through the reward timestamp first; a pending event at or before feedback time blocks the batch. Feedback identity includes task, feedback ID/sequence, reward and model time in the existing manager history; target-set/context digest is not yet persisted, so callers must keep those fields immutable for a feedback ID. A duplicate replay must also present the current durable runtime version; stale duplicates are rejected. Manager replay history remains bounded. This is single-writer reference code; no concurrent process/NCC guarantees. External side effects, CQE inbox/outbox, authorization, session state, exactly-once delivery and device measurements remain out of scope.
 
 Focused tests: `tools.neuron_runtime.test_feedback_transaction` (10 methods), **AUTHORED, NOT RUN**.
+
+
+### 3.41. Durable CQE R-STDP Reward Feedback Inbox V1
+
+**Статус:** IMPLEMENTED как bounded Python reference adapter поверх JRCM; 12 focused tests AUTHORED, NOT RUN; NOT PRODUCTION NCC / NOT DEVICE-VERIFIED. Контракт: docs/JNVM_CQE_REWARD_FEEDBACK_INBOX_V1.md.
+
+Обычный CQE dispatcher остаётся volatile. Новый process_cqe_reward_feedback() принимает только CQE v1 EVENT schema jarvis.reward.feedback version 1 и ведёт durable inbox только для R-STDP reward feedback. Это adapter-level schema contract; внешнему router требуется отдельная регистрация и authorization до вызова функции, а данный adapter не меняет общий CQE schema registry. Универсальная CQE очередь, произвольные COMMAND/QUERY/EVENT, subscriber inbox/outbox и sessions сюда не входят.
+
+#### 3.41.1. Envelope и trust boundary
+
+Входное сообщение содержит reward task/feedback ID, положительную последовательность, reward [0,1], model_time, активный caller-owned clock epoch, optional learning context и 1..128 уникальных целевых пар (neuron_id, synapse_id). Message ID и event ID проверяются как canonical UUID. Target list канонически сортируется; digest = SHA-256 канонического {learning_context_id, targets}.
+
+Полный CQE envelope сериализуется в canonical JSON вместе с policy_version и authorization_receipt_id. Источник, message/event identity, schema, correlation/causation, idempotency, capability/deadline и commit/state provenance сохраняются для последующего аудита.
+
+**Авторизация выполняется выше по потоку.** Adapter не проверяет подпись/личность источника, не выдаёт и не проверяет capability и не применяет policy. Caller обязан вызвать его только после успешной проверки источника внешним security/policy layer; адаптер не подключён к такому gate. UUID authorization receipt — ссылка на внешний результат проверки, а не криптографическое доказательство.
+
+#### 3.41.2. Durable inbox и восстановление
+
+1. Adapter проверяет envelope, reward payload, clock epoch, target set и provenance, затем создаёт RewardBaselineManager pending proposal с envelope JSON и context digest.
+2. Все targets проходят deterministic preflight на detached NetworkRuntime copy: проверяются neuron/synapse, R-STDP mode, beta agreement, model-time/context и совпадение Oracle baseline_after/modulator с proposal. Ошибка preflight не создаёт durable inbox и не изменяет caller state.
+3. JRCM JPVRRuntimeCheckpointStore.save() публикует pending proposal до применения reward к authoritative runtime. Это durable inbox-accept boundary; network snapshot публикуется в той же транзакции.
+4. Существующая all-or-nothing process_reward_feedback() применяет reward к detached network candidate. После завершения baseline/receipt и новые weight/eligibility сохраняются вторым JRCM COMMIT.
+5. При остановке между inbox и completion caller открывает контейнер, загружает JRCM network+manager и повторяет тот же envelope с последним runtime_version. Совпадающий pending proposal возобновляется без дополнительной inbox записи. Если completion COMMIT уже состоялся, receipt replay возвращает active runtime без повторного reward update.
+
+Новый EVENT обычно создаёт два runtime version: pending acceptance и terminal completion. Recovery уже сохранённого pending требует только completion commit. Завершённый exact duplicate не создаёт запись. CQEFeedbackResult.inbox_runtime_version равен новой версии inbox или None, если pending уже существовал либо запрос — завершённый duplicate.
+
+#### 3.41.3. Сохранение и JRBM совместимость
+
+RewardBaselineProposal и RewardBaselineReceipt получили optional cqe_envelope_json и feedback_context_digest. JRBM schema ID/version остаётся V1; decoder принимает прежний набор полей и расширенный набор, восстанавливая старые snapshots с None metadata. Новые exports содержат оба поля. Restore повторно проверяет canonical JSON, duplicate keys, schema, UUID, target order, digest и совпадение payload с owning proposal/receipt.
+
+Metadata хранится внутри baseline-компонента JRCM; второй MANIFEST checkpoint pointer, отдельный out-of-sync file или новая страница JPVR не добавляются. Это сохраняет atomic publication NetworkRuntime + baseline + CQE receipt.
+
+#### 3.41.4. Ограничения и проверки
+
+Один pending proposal на reward_task_id, bounded task catalog/history и runtime-version CAS остаются действующими. UUID dedupe ограничен retention history; нет unbounded global dedupe, concurrent multi-process writer, общего CQE durable inbox/outbox, session/plan persistence, external side effects или exactly-once guarantee. Uncertain commit требует reopen/load и reconciliation. Android I/O, power-loss safety, production NCC и ресурсные показатели не измерялись.
+
+Добавлены tools/neuron_runtime/cqe_feedback.py и test_cqe_feedback.py (12 тестов), а reward_baseline.py расширен совместимыми optional metadata-полями; feedback_transaction.py передаёт metadata в proposal. GitHub readback/static review only; 12 tests AUTHORED, NOT RUN. Python tests, imports/syntax, fault injection, Android/Termux I/O, benchmarks, builds, CI and GitHub Actions не запускались.

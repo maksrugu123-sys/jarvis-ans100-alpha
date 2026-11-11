@@ -213,6 +213,8 @@ def process_reward_feedback(
     targets: Sequence[RewardSynapseTarget],
     learning_context_id: str | None,
     expected_runtime_version: int,
+    cqe_envelope_json: str | None = None,
+    feedback_context_digest: str | None = None,
     max_pages: int = 4096,
 ) -> RewardFeedbackTransactionResult:
     """Apply a reward to all targets and publish network+baseline in one COMMIT.
@@ -254,6 +256,8 @@ def process_reward_feedback(
             reward_value,
             model_time_ns,
             clock_epoch_id=candidate_manager.clock_epoch_id,
+            cqe_envelope_json=cqe_envelope_json,
+            feedback_context_digest=feedback_context_digest,
         )
     except ValueError as exc:
         raise RewardFeedbackTransactionError(

@@ -211,6 +211,20 @@ __all__ += [
 ]
 
 
+from .cqe_feedback import (
+    CQEFeedbackConflict,
+    CQEFeedbackError,
+    CQEFeedbackResult,
+    process_cqe_reward_feedback,
+)
+
+__all__ += [
+    "CQEFeedbackConflict",
+    "CQEFeedbackError",
+    "CQEFeedbackResult",
+    "process_cqe_reward_feedback",
+]
+
 from .feedback_transaction import (
     AppliedSynapseReward,
     RewardFeedbackTransactionConflict,

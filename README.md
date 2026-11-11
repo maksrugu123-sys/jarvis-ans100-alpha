@@ -392,3 +392,8 @@ python3 -m unittest tools.neuron_runtime.test_feedback_transaction -v
 ```
 
 `process_reward_feedback()` clones the network and baseline manager, applies all selected synapse rewards to candidate state, and commits both snapshots through one composite JRCM JPVR transaction. The function leaves caller objects untouched; replace them with the returned network and manager after success. The runtime version is mandatory for compare-and-swap. See `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`.
+
+
+## Durable CQE reward-feedback inbox
+
+process_cqe_reward_feedback() preflights all targets on a detached network copy, then persists the normalized reward EVENT and its target/context digest as a pending JRCM checkpoint before applying synapse rewards to authoritative state. The completed receipt, baseline advance and network updates are then published together. After interruption, reload the active JRCM checkpoint and retry the exact envelope with its latest runtime version. This adapter handles reward-feedback only; upstream source authorization and external schema registration are required; general CQE events remain volatile. Contract: docs/JNVM_CQE_REWARD_FEEDBACK_INBOX_V1.md. Twelve focused tests are **AUTHORED, NOT RUN**.

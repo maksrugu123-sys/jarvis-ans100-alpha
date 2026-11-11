@@ -81,3 +81,8 @@ reserved and does not yet expose a P0/P1 durable-outbox path.
 
 These are safety-oriented starting limits, not measured throughput or latency
 claims. They remain subject to validation on the target device.
+
+
+## Specialized durable reward-feedback adapter
+
+A separate module, tools/neuron_runtime/cqe_feedback.py, can persist only the adapter-specific JARVIS R-STDP reward-feedback EVENT through the JRCM composite Runtime checkpoint. The adapter does not register the schema in this general dispatcher and does not implement source authorization; an upstream security/policy layer must authorize it first. It preflights targets on a detached copy, persists a pending proposal, then commits the terminal receipt with network/baseline state. It does not make arbitrary CQE EVENT delivery durable. See docs/JNVM_CQE_REWARD_FEEDBACK_INBOX_V1.md.
