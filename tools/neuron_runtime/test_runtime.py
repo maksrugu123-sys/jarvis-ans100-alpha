@@ -96,10 +96,27 @@ class RuntimeBatchTests(unittest.TestCase):
         self.assertEqual(result.synapse_updates[0].n_pre, 2)
         self.assertEqual(runtime.synapses["a"].pre_trace, 2.0)
 
-    def test_synapse_trace_clock_cannot_start_ahead_of_neuron_clock(self):
-        state = SynapseState(weight=0.5, trace_last_update_model_time_ns=1)
-        with self.assertRaises(NeuronRuntimeError):
-            NeuronRuntime({"a": state}, neuron_state=NeuronState())
+    def test_later_reward_can_advance_synapse_clock_past_membrane_clock(self):
+        runtime = NeuronRuntime({"a": 0.5}, learning_rule="rstdp")
+        runtime.process_batch(
+            10 * MS, [SynapticInput("pre", "a", 0.5)],
+            learning_context_id="episode-1",
+        )
+        runtime.apply_reward("a", 20 * MS, 1.0, 0.5, "episode-1")
+        self.assertEqual(runtime.neuron_state.last_update_model_time_ns, 10 * MS)
+        self.assertEqual(runtime.synapses["a"].trace_last_update_model_time_ns, 20 * MS)
+        restored = NeuronRuntime(
+            runtime.synapses,
+            neuron_state=runtime.neuron_state,
+            neuron_params=runtime.neuron_params,
+            synapse_params=runtime.synapse_params,
+            reward_params=runtime.reward_params,
+            learning_rule=runtime.learning_rule,
+            processed_batches=runtime.processed_batches,
+        )
+        self.assertEqual(restored.synapses, runtime.synapses)
+        self.assertEqual(restored.neuron_state, runtime.neuron_state)
+        restored.process_batch(30 * MS, [], learning_context_id="episode-1")
 
     def test_rstdp_requires_context_before_any_state_commit(self):
         runtime = NeuronRuntime({"a": 0.5}, learning_rule="rstdp")

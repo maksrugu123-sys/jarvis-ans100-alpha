@@ -681,11 +681,14 @@ class JPVRStorage:
                 discarded_orphan_tail_bytes=orphan_tail_bytes,
             )
 
-    def load_page_catalog(self, *, max_pages: int = 4096) -> dict[int, bytes]:
-        """Materialize a bounded catalog for the current typed in-memory builder.
+    def load_snapshot(
+        self, *, max_pages: int = 4096
+    ) -> tuple[Superblock, dict[int, bytes]]:
+        """Return one active Superblock and its bounded page catalog under one shared lock.
 
-        The default cap is 4096 pages (16 MiB of encoded page bytes, plus Python
-        mapping overhead). Increase it only after considering available RAM.
+        Unlike calling get_superblock() and load_page_catalog() separately,
+        this method guarantees that both outputs describe the same selected
+        committed snapshot. The catalog remains materialized and bounded.
         """
         if isinstance(max_pages, bool) or not isinstance(max_pages, int) or max_pages < 0:
             raise JPVRFormatError("max_pages must be a non-negative integer")
@@ -695,13 +698,18 @@ class JPVRStorage:
             if page_count > max_pages:
                 raise JPVRFormatError("page catalog exceeds max_pages memory bound")
             size = os.fstat(self._fd).st_size
-            self._superblock = active
-            return {
+            catalog = {
                 page_no: self._read_page_unlocked(
                     page_no, tail=active.durable_tail_page_no, file_size=size
                 )
                 for page_no in range(2, active.durable_tail_page_no + 1)
             }
+            self._superblock = active
+            return active, catalog
+
+    def load_page_catalog(self, *, max_pages: int = 4096) -> dict[int, bytes]:
+        """Materialize a bounded page catalog for the typed in-memory builder."""
+        return self.load_snapshot(max_pages=max_pages)[1]
 
     def close(self) -> None:
         with self._mutex:

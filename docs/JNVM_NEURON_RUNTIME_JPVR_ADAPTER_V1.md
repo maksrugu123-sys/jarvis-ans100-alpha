@@ -43,10 +43,12 @@ Run the focused suite on Termux:
 
     python3 -m unittest tools.neuron_runtime.test_jpvr_adapter -v
 
-Sixteen test methods cover exact runtime/configuration round-trip, active R-STDP eligibility recovery, deterministic serialization, DATA-vs-BLOB selection, identifier/epoch/version validation, duplicate JSON keys, schema mismatch, non-finite state rejection, object-ID binding, typed transaction integration for DATA and BLOB, duplicate checkpoint rejection, and processed-batch counter bounds.
+Seventeen test methods cover exact runtime/configuration round-trip, active R-STDP eligibility recovery, deterministic serialization, DATA-vs-BLOB selection, identifier/epoch/version validation, duplicate JSON keys, schema mismatch, non-finite state rejection, object-ID binding, typed transaction integration for DATA and BLOB, duplicate checkpoint rejection, and processed-batch counter bounds.
 
 All tests are AUTHORED, NOT RUN. No Python tests, imports/syntax checks, runtime benchmarks, builds, CI, GitHub Actions, APK/AAB or Android filesystem measurements were performed.
 
-## Next gate
+## Follow-on indexed persistence layer
 
-Implement a versioned locator in the neuron COW INDEX, atomically connecting logical neuron ID/object ID to the checkpoint's DATA/BLOB page range and record version. Then add a storage-level save/load façade that builds, commits, scans, resolves the locator and reconstructs the runtime without bypassing COMMIT or recovery validation.
+The originally planned locator and storage facade have since been implemented separately in `tools/neuron_runtime/jpvr_store.py`. See [JNVM_NEURON_CHECKPOINT_STORE_V1.md](JNVM_NEURON_CHECKPOINT_STORE_V1.md) for the fixed-size neuron INDEX locator, atomic checkpoint-plus-locator COMMIT, automatic record-version progression and validated load protocol. This adapter remains the lower-level record codec/typed-input layer; it does not itself perform storage I/O.
+
+The implementation also permits a delayed R-STDP reward to advance a synapse's trace timestamps beyond the neuron's last membrane update. Both remain in the same caller-supplied clock epoch, but they are independent state clocks and are restored exactly.

@@ -36,7 +36,7 @@ from .jpvr_adapter import (
     make_neuron_runtime_record_input,
     neuron_runtime_object_id,
 )
-from .runtime import NeuronRuntime
+from .runtime import NeuronRuntime, SynapticInput
 
 
 UUID = bytes.fromhex("00112233445566778899aabbccddeeff")
@@ -265,6 +265,20 @@ class NeuronRuntimeJPVRAdapterTests(unittest.TestCase):
             append_neuron_runtime_checkpoint(
                 request, "n", _runtime(), clock_epoch_id=CLOCK_EPOCH, record_version=2
             )
+
+    def test_round_trip_preserves_later_rstdp_reward_clock(self):
+        runtime = NeuronRuntime({"feedback": SynapseState(weight=0.5)}, learning_rule="rstdp")
+        runtime.process_batch(
+            10, [SynapticInput("pre", "feedback", 0.5)],
+            learning_context_id="episode-late-reward",
+        )
+        runtime.apply_reward("feedback", 20, 1.0, 0.5, "episode-late-reward")
+        restored = decode_neuron_runtime_snapshot(
+            encode_neuron_runtime_snapshot("late-reward", runtime, clock_epoch_id=CLOCK_EPOCH)
+        )
+        self.assertEqual(restored.runtime.neuron_state.last_update_model_time_ns, 10)
+        self.assertEqual(restored.runtime.synapses["feedback"].trace_last_update_model_time_ns, 20)
+        restored.runtime.process_batch(30, [], learning_context_id="episode-late-reward")
 
     def test_processed_batch_counter_is_unsigned_64_bit_and_restorable(self):
         with self.assertRaises(ValueError):

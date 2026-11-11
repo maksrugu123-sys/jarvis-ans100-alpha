@@ -95,3 +95,8 @@ The 23 historical scanner tests and 12 recovery-copy tests are AUTHORED, NOT RUN
 - The writer is currently a POSIX/Android local-file reference. Other platforms/filesystems need separate locking/durability validation.
 
 A successful commit return means the requested OS calls and readback checks completed. It is not a benchmark, a hardware power-failure proof, or production-readiness claim.
+
+
+## Consistent bounded snapshot read
+
+`JPVRStorage.load_snapshot(max_pages=4096)` returns the selected active Superblock and its page catalog while holding one shared file lock. This avoids a race between separately calling `get_superblock()` and `load_page_catalog()`. The catalog is still materialized and bounded; the default limit is 4096 physical pages (16 MiB encoded bytes plus Python mapping overhead). The method reads and validates each page envelope in the selected durable prefix but does not truncate orphan tail bytes. The single-neuron checkpoint-store facade uses this API for a consistent read base; a concurrent writer after the snapshot is read is rejected by the ordinary stale-base validation in `commit()`.

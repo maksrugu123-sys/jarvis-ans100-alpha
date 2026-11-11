@@ -47,3 +47,27 @@ __all__ += [
     "make_neuron_runtime_record_input",
     "neuron_runtime_object_id",
 ]
+
+from .jpvr_store import (
+    JPVRNeuronCheckpointConflict,
+    JPVRNeuronCheckpointError,
+    JPVRNeuronCheckpointNotFound,
+    JPVRNeuronCheckpointStore,
+    LoadedNeuronCheckpoint,
+    NeuronCheckpointLocator,
+    SavedNeuronCheckpoint,
+    decode_neuron_checkpoint_locator,
+    encode_neuron_checkpoint_locator,
+)
+
+__all__ += [
+    "JPVRNeuronCheckpointConflict",
+    "JPVRNeuronCheckpointError",
+    "JPVRNeuronCheckpointNotFound",
+    "JPVRNeuronCheckpointStore",
+    "LoadedNeuronCheckpoint",
+    "NeuronCheckpointLocator",
+    "SavedNeuronCheckpoint",
+    "decode_neuron_checkpoint_locator",
+    "encode_neuron_checkpoint_locator",
+]

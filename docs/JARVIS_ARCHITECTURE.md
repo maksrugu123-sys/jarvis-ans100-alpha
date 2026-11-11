@@ -3362,7 +3362,7 @@ baseline_before поступает в apply_reward из внешнего Reward 
 
 #### 3.31.4. Тесты и следующий gate
 
-`tools/neuron_runtime/test_network.py` содержит 14 контрактных тестов: топология/задержки, проверка endpoints и synapse ownership, дедупликация pending event IDs, пределы очереди и run budget, целостный same-timestamp batch, задержанное распространение через несколько нейронов, fan-out backpressure без partial commit, recurrent budget, timestamp overflow, изоляция входных Runtime и детерминизм порядка входов.
+`tools/neuron_runtime/test_network.py` содержит 15 контрактных тестов: топология/задержки, проверка endpoints и synapse ownership, дедупликация pending event IDs, пределы очереди и run budget, целостный same-timestamp batch, задержанное распространение через несколько нейронов, fan-out backpressure без partial commit, recurrent budget, timestamp overflow, изоляция входных Runtime, детерминизм порядка входов и инициализация scheduler clock по per-synapse reward/trace timestamps.
 
 Статус нового набора: **AUTHORED, NOT RUN** против настоящего Numerical Oracle. Локально выполнены только:
 - `python3 -m py_compile tools/neuron_runtime/network.py tools/neuron_runtime/test_network.py` — **PASS**, синтаксис;
@@ -3664,7 +3664,7 @@ ZRAM может выступать дополнительной системно
 
 ### 3.35. JNVM↔JPVR one-neuron checkpoint adapter V1
 
-**Статус: IMPLEMENTED как Python reference serialization/typed-input adapter; 16 focused tests AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: docs/JNVM_NEURON_RUNTIME_JPVR_ADAPTER_V1.md.
+**Статус: IMPLEMENTED как Python reference serialization/typed-input adapter; 17 focused tests AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: docs/JNVM_NEURON_RUNTIME_JPVR_ADAPTER_V1.md.
 
 #### 3.35.1. Цель и границы
 
@@ -3733,7 +3733,7 @@ tools/neuron_runtime/test_jpvr_adapter.py содержит 16 focused methods: f
 
 1. Откалибровать STARTER-профиль Adaptive LIF-DT/STDP/R-STDP с использованием Oracle и выбрать подтверждённую версию параметров.
 2. Проверить устойчивость и качество обучения на длинных контролируемых последовательностях, включая точность будущей float32 runtime-кандидатуры относительно float64 oracle.
-3. Завершить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter; single-neuron checkpoint serialization/typed DATA-BLOB input теперь частично реализованы в разделе 3.35, но индексный locator, durable load/save façade и clock-epoch scheduler policy ещё открыты.
+3. Завершить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter; single-neuron checkpoint serialization/typed DATA-BLOB input и indexed durable save/load facade реализованы как bounded Python reference APIs в разделах 3.35–3.36. Clock-epoch scheduler policy, NetworkRuntime topology/pending-event persistence и external reward-baseline persistence остаются открытыми.
 4. Зафиксировать минимальную архитектуру первого исполняемого прототипа, конфигурацию, границы модулей и диагностические показатели.
 5. Подготовить проверяемый план JPVR-001 и критерии приёмки: корректность сигналов, обучение, сохранение/загрузка, восстановление, RAM, задержка и объём операций записи.
 
@@ -3965,3 +3965,38 @@ JPVRRecoveryCopyUncertainError означает, что hard link уже опу�
 tools/jpvr_reference/test_recovery.py добавляет проверку, что OUTBOX префикса остаётся independently verified при повреждении следующего поколения. tools/jpvr_reference/test_recovery_copy.py добавляет 12 сценариев: восстановление прошлого verified generation без изменения исходных байтов; корректность двух Superblock slots; копирование полного активного поколения; исключение orphan-tail bytes; отказ перезаписать существующий destination; exact expected commit identity; запрет copy при OUTBOX failure; запрет destination=source; cleanup при отказе no-replace hard link; отказ при обоих повреждённых Superblock slots; malformed commit identity.
 
 **Проверки этого этапа:** GitHub readback/static review only. 13 новых test methods AUTHORED, NOT RUN. JPVR source set = 362 test methods across seventeen modules. Python runtime tests, imports/syntax, fault-injection execution, Android/Termux I/O and filesystem/hard-link behavior NOT RUN. No Gradle/Android build, CI, GitHub Actions, APK/AAB.
+
+
+### 3.36. JNVM↔JPVR Indexed One-Neuron Checkpoint Store V1
+
+**Статус: IMPLEMENTED как bounded Python reference API; 15 store tests и одна дополнительная delayed-R-STDP adapter regression AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: `docs/JNVM_NEURON_CHECKPOINT_STORE_V1.md`.
+
+#### 3.36.1. Цель и границы
+
+Связать существующий one-neuron JNVM record codec с физическим JPVR storage и COW neuron INDEX. Теперь checkpoint можно сохранить по logical neuron ID, а после повторного открытия контейнера загрузить его по актуальной индексной ссылке без ручного управления page numbers или record_version.
+
+#### 3.36.2. Locator и атомарное сохранение
+
+- Ключ neuron INDEX — тот же стабильный 16-byte object_id, который создаёт `neuron_runtime_object_id()`.
+- Значение INDEX — фиксированный 100-byte little-endian `JNLR` V1 locator с storage kind (DATA/BLOB), record/schema identity, object_id, record_version, contiguous page range, record generation, exact COMMIT page/id и transaction_id.
+- На genesis-контейнере первый save создаёт семь пустых MANIFEST INDEX roots в отдельном schema-initialization COMMIT. Сам neuron checkpoint не смешивается с инициализацией схемы.
+- Основная операция планирует JREC/DATA или BLOB, затем COW-upsert neuron locator. Два planning pass вычисляют окончательный COMMIT page number, оставаясь на locator фиксированного размера. Checkpoint record и его locator публикуются одним `JPVRStorage.commit()`.
+- record_version увеличивается от сохранённого locator; optional `expected_record_version` реализует compare-and-swap проверку. Stale concurrent plan отвергается storage commit validator.
+
+#### 3.36.3. Загрузка и целостность
+
+`JPVRStorage.load_snapshot(max_pages=4096)` под одним shared lock возвращает согласованные active Superblock + page catalog. Store находит neuron root в активной MANIFEST, делает B+ tree lookup по object_id, декодирует locator и проходит predecessor chain до source COMMIT. Проверяются COMMIT page/generation/id/transaction ID, принадлежность source COMMIT активной истории, durable page bounds, DATA/BLOB envelope metadata, JREC/BLOB object/schema/version, CRC и inner runtime snapshot identity. Только затем восстанавливается NeuronRuntime. Неизвестный/повреждённый locator не исправляется автоматически.
+
+#### 3.36.4. Независимые временные метки нейрона и синапсов
+
+Удалено ошибочное cross-check правило, запрещавшее synapse STDP/R-STDP trace timestamp быть позже `NeuronState.last_update_model_time_ns`. Delayed reward может обновить синаптическую eligibility/trace в более поздний момент, не вынуждая делать фиктивный membrane integration step. Модельные метки остаются в одном caller-supplied clock_epoch_id, а Oracle продолжает проверять monotonicity каждой synapse отдельно. Автоматическая смена/привязка clock epoch по-прежнему не реализована.
+
+NetworkRuntime initializes its scheduler clock as the maximum of membrane time and all per-synapse trace/eligibility update times, so a restored delayed reward cannot be followed by an earlier network event. A dedicated network-clock regression is included.
+
+#### 3.36.5. Проверки и ограничения
+
+Добавлены `tools/neuron_runtime/jpvr_store.py`, `tools/neuron_runtime/test_jpvr_store.py` (17 методов), `JPVRStorage.load_snapshot()`, exports и документация. Проверяются locator wire contract, genesis indexes, DATA/BLOB save/load, reopen, record-version update, expected-version conflict, object isolation, delayed reward restore, corrupted page, page-catalog memory bound и validation до первого write. В adapter tests добавлен delayed-R-STDP clock regression.
+
+**Проверки этого этапа:** GitHub readback/static source and documentation cross-reference only. 17 store methods, 17 adapter methods and 15 network-runtime methods are **AUTHORED, NOT RUN**. No Python tests, imports/syntax execution, filesystem fault injection, Android/Termux I/O, resource benchmarks, builds, CI, GitHub Actions, APK/AAB were run.
+
+**Ограничения:** catalog materialization is bounded to 4096 pages by default; this is not a streaming or large-container JNVM service. Only one NeuronRuntime is persisted per call. NetworkRuntime connections, pending event queue and network clock, external reward baseline, CQE state, sessions and side effects are not included. Save on genesis publishes empty index schema first, then checkpoint+locator transaction. Hardware crash consistency and Android flash/FUSE behavior remain unverified.

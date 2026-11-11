@@ -158,7 +158,16 @@ class NetworkRuntime:
         self._queue: list[_Event] = []
         self._pending_ids: set[str] = set()
         self._running = False
-        self._current_time_ns = max(n.neuron_state.last_update_model_time_ns for n in self._neurons.values())
+        # A delayed reward can advance a synapse's STDP/R-STDP trace clock
+        # beyond the neuron's last membrane integration. The network scheduler
+        # must not admit events earlier than any persisted state clock.
+        state_times = []
+        for runtime in self._neurons.values():
+            state_times.append(runtime.neuron_state.last_update_model_time_ns)
+            for synapse in runtime.synapses.values():
+                state_times.append(synapse.trace_last_update_model_time_ns)
+                state_times.append(synapse.eligibility_last_update_model_time_ns)
+        self._current_time_ns = max(state_times, default=0)
         self._has_processed = False
 
     @property

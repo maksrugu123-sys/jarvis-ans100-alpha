@@ -7,7 +7,7 @@ from tools.neuron_runtime.network import (
     NetworkBackpressureError, NetworkConnection, NetworkRuntime, NetworkRuntimeError,
 )
 from tools.neuron_runtime.runtime import NeuronRuntime
-from tools.numerical_oracle.jarvis_oracle import NeuronParams
+from tools.numerical_oracle.jarvis_oracle import NeuronParams, NeuronState, SynapseState
 
 
 def make_network(*, max_pending_events=64, max_events_per_run=64):
@@ -53,6 +53,25 @@ class NetworkTests(unittest.TestCase):
         network.schedule_input(0, "source", "external", "one", 0.2)
         with self.assertRaises(NetworkBackpressureError):
             network.schedule_input(1, "source", "external", "two", 0.2)
+
+    def test_network_clock_includes_later_synapse_reward_timestamp(self):
+        runtime = NeuronRuntime(
+            {"in": SynapseState(
+                weight=0.5,
+                trace_last_update_model_time_ns=20,
+                eligibility_last_update_model_time_ns=20,
+            )},
+            neuron_state=NeuronState(last_update_model_time_ns=10),
+            learning_rule="stdp",
+        )
+        network = NetworkRuntime({"n": runtime})
+        self.assertEqual(network.current_time_ns, 20)
+        with self.assertRaises(NetworkRuntimeError):
+            network.schedule_input(19, "n", "in", "too-early", 0.2)
+        network.schedule_input(20, "n", "in", "at-synapse-clock", 0.2)
+        result = network.run()
+        self.assertEqual(result.current_time_ns, 20)
+        self.assertEqual(result.processed_events, 1)
 
     def test_idle_rstdp_network_needs_no_context(self):
         network = NetworkRuntime({"n": NeuronRuntime({"in": 0.5}, learning_rule="rstdp")})

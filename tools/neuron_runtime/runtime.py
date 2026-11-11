@@ -120,10 +120,9 @@ class NeuronRuntime:
                 raise NeuronRuntimeError("synapse IDs must be non-empty strings")
             state = value if isinstance(value, SynapseState) else SynapseState(weight=value)
             state.validate(self._synapse_params, self._reward_params)
-            if state.trace_last_update_model_time_ns > self._neuron_state.last_update_model_time_ns:
-                raise NeuronRuntimeError("synapse trace clock is ahead of neuron model time")
-            if state.eligibility_last_update_model_time_ns > self._neuron_state.last_update_model_time_ns:
-                raise NeuronRuntimeError("synapse eligibility clock is ahead of neuron model time")
+            # Synaptic trace/reward clocks may legitimately advance after the
+            # last membrane update. They share a clock epoch, but are distinct
+            # state clocks and must be validated independently by the Oracle.
             self._synapse_states[synapse_id] = state
 
         self._learning_rule: LearningRule = learning_rule

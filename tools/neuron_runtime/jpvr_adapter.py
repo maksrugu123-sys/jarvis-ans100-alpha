@@ -151,15 +151,9 @@ def encode_neuron_runtime_snapshot(
     for synapse_id, state in sorted(runtime.synapses.items()):
         synapse_name = _identifier("synapse_id", synapse_id)
         state.validate(runtime.synapse_params, runtime.reward_params)
-        if (
-            state.trace_last_update_model_time_ns
-            > runtime.neuron_state.last_update_model_time_ns
-            or state.eligibility_last_update_model_time_ns
-            > runtime.neuron_state.last_update_model_time_ns
-        ):
-            raise NeuronRuntimePersistenceError(
-                f"synapse {synapse_name!r} has a model timestamp ahead of its neuron"
-            )
+        # Per-synapse trace/reward timestamps are independent from the last
+        # membrane update. A delayed R-STDP reward may advance the former
+        # without forcing a synthetic neuron integration step.
         synapse_items.append({"synapse_id": synapse_name, "state": asdict(state)})
 
     payload = {

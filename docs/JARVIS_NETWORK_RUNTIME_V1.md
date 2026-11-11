@@ -1,6 +1,6 @@
 # JARVIS Network Runtime V1 — bounded multi-neuron event loop
 
-**Status:** Python reference coordinator implemented; 14 focused tests authored, not yet run against the repository's real Numerical Oracle. Not production NCC, durable, concurrent, or device-verified.
+**Status:** Python reference coordinator implemented; 15 focused tests authored, not yet run against the repository's real Numerical Oracle. Not production NCC, durable, concurrent, or device-verified.
 
 ## Scope and contracts
 
@@ -24,9 +24,9 @@ This is a single-threaded Python reference event loop, not a production schedule
 
 ## Verification
 
-`tools/neuron_runtime/test_network.py` adds 14 contract tests for topology validation, delayed propagation across multiple neurons, deterministic same-timestamp batching, bounded queue/run behavior, fan-out backpressure, runtime ownership isolation, and bounded recurrent routing.
+`tools/neuron_runtime/test_network.py` now contains 15 contract tests for topology validation, delayed propagation across multiple neurons, deterministic same-timestamp batching, bounded queue/run behavior, fan-out backpressure, runtime ownership isolation, bounded recurrent routing, and scheduler time initialization from per-synapse trace/reward clocks.
 
-The local authoring syntax check passed. An isolated test harness using an API-compatible stand-in for Runtime/Oracle passed 14/14; this is not an integration run against the repository's actual Numerical Oracle. The user's earlier Termux full-suite result of 216/216 predates this module and does not cover it.
+The original 14 contract tests had a historical isolated-harness result of 14/14 using an API-compatible Runtime/Oracle stand-in; this was not an integration run against the repository's actual Numerical Oracle. The fifteenth test (restored per-synapse clock boundary) has been added and is AUTHORED, NOT RUN. The user's earlier Termux full-suite result of 216/216 predates this module and does not cover it.
 
 Run from the repository root:
 
