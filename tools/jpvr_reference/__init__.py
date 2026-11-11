@@ -89,6 +89,7 @@ from .transaction import (
 )
 from .typed_transaction import (
     BlobRecordInput,
+    CheckpointPageInput,
     DataRecordInput,
     IndexPageInput,
     IndexMutationBuildPlan,
@@ -103,6 +104,7 @@ from .typed_transaction import (
 __all__ = [
     "AppendPlan",
     "BlobRecordInput",
+    "CheckpointPageInput",
     "CommitRecord",
     "CowIndexPlan",
     "DataRecordInput",

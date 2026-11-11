@@ -3733,7 +3733,7 @@ tools/neuron_runtime/test_jpvr_adapter.py содержит 16 focused methods: f
 
 1. Откалибровать STARTER-профиль Adaptive LIF-DT/STDP/R-STDP с использованием Oracle и выбрать подтверждённую версию параметров.
 2. Проверить устойчивость и качество обучения на длинных контролируемых последовательностях, включая точность будущей float32 runtime-кандидатуры относительно float64 oracle.
-3. Завершить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter; single-neuron checkpoint serialization/typed DATA-BLOB input и indexed durable save/load facade реализованы как bounded Python reference APIs в разделах 3.35–3.36. Clock-epoch scheduler policy, NetworkRuntime topology/pending-event persistence и external reward-baseline persistence остаются открытыми.
+3. Завершить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter; single-neuron serialization/indexed save-load и bounded NetworkRuntime topology/pending-event/network-clock checkpoint реализованы как Python reference APIs в разделах 3.35–3.37. Scheduler-owned clock-epoch continuity/rebase policy, external reward-baseline persistence и production NCC остаются открытыми.
 4. Зафиксировать минимальную архитектуру первого исполняемого прототипа, конфигурацию, границы модулей и диагностические показатели.
 5. Подготовить проверяемый план JPVR-001 и критерии приёмки: корректность сигналов, обучение, сохранение/загрузка, восстановление, RAM, задержка и объём операций записи.
 
@@ -4000,3 +4000,49 @@ NetworkRuntime initializes its scheduler clock as the maximum of membrane time a
 **Проверки этого этапа:** GitHub readback/static source and documentation cross-reference only. 17 store methods, 17 adapter methods and 15 network-runtime methods are **AUTHORED, NOT RUN**. No Python tests, imports/syntax execution, filesystem fault injection, Android/Termux I/O, resource benchmarks, builds, CI, GitHub Actions, APK/AAB were run.
 
 **Ограничения:** catalog materialization is bounded to 4096 pages by default; this is not a streaming or large-container JNVM service. Only one NeuronRuntime is persisted per call. NetworkRuntime connections, pending event queue and network clock, external reward baseline, CQE state, sessions and side effects are not included. Save on genesis publishes empty index schema first, then checkpoint+locator transaction. Hardware crash consistency and Android flash/FUSE behavior remain unverified.
+
+
+### 3.37. JNVM↔JPVR Multi-Neuron Network Checkpoint V1
+
+**Статус: IMPLEMENTED как bounded Python reference codec/store и typed CHECKPOINT support; 11 codec tests и 14 store tests AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: docs/JNVM_NETWORK_CHECKPOINT_STORE_V1.md.
+
+#### 3.37.1. Цель и границы
+
+Предыдущие разделы 3.35–3.36 сохраняли отдельный NeuronRuntime, но не весь объект NetworkRuntime. После рестарта терялись topology, pending event queue, scheduler clock и его limits. Новый этап добавляет один атомарный снимок всей ограниченной сети, не меняя уравнения Adaptive LIF-DT/STDP/R-STDP.
+
+#### 3.37.2. Содержимое и канонизация
+
+encode_network_runtime_snapshot() сериализует:
+- network_id и domain-separated 128-bit object ID;
+- единый ненулевой caller-supplied clock_epoch_id;
+- каждый NeuronRuntime как вложенный версионированный neuron snapshot;
+- все directed NetworkConnection (connection ID, endpoints, target synapse, delay, strength, attention);
+- точный pending event queue с event IDs, timestamp, target и signal values;
+- max_pending_events, max_events_per_run, current_time_ns и has_processed.
+
+Neurons, connections и events сериализуются в каноническом порядке. Decoder отклоняет duplicate JSON keys, unknown fields/version, non-canonical hex, duplicate IDs, invalid nested schemas/clock epochs, invalid routes, invalid event ownership, events earlier than the scheduler clock and queue overflow. Rehydration creates a new NetworkRuntime; callers' objects are not mutated.
+
+#### 3.37.3. JPVR commit protocol
+
+JPVRNetworkCheckpointStore поддерживает один активный network checkpoint на один JPVR container. Он пишет JNNW V1 record в contiguous BLOB range и маленький JNCP V1 descriptor в PageType.CHECKPOINT. Typed transaction builder публикует эту страницу как Manifest.checkpoint_page_no и включает BLOB+CHECKPOINT+MANIFEST+COMMIT в одну транзакцию. On genesis, seven empty INDEX roots are initialized first in a separate schema COMMIT, matching the existing one-neuron store.
+
+Descriptor фиксирует stable object ID, record_version, BLOB first page/count, generation, payload length and CRC32C. Load verifies:
+- active MANIFEST/Superblock checkpoint pointer and CHECKPOINT page type;
+- exact source generation by traversing COMMIT predecessor history;
+- source COMMIT transaction identity and its own MANIFEST pointer to this CHECKPOINT page;
+- contiguous BLOB bounds, generation/transaction identity, record/schema/object/version metadata and CRC;
+- network ID, nested neuron snapshots and clock epoch before queue reconstruction.
+
+Record versions increment monotonically; optional expected_record_version provides compare-and-swap protection. A regular later neuron checkpoint transaction inherits the network checkpoint pointer unchanged. Old BLOB/CHECKPOINT pages remain immutable history; no page reclamation is introduced.
+
+#### 3.37.4. Safety and non-goals
+
+This is not a per-network INDEX, not a concurrent network scheduler, and not a crash-atomic commit for each in-memory timestamp batch. A JPVR save is one explicit snapshot boundary; callers remain responsible for pausing mutation while exporting and for handling uncertain commit outcomes by inspecting active_commit_id before retry. Only one network ID is stored as the active pointer per container. The store materializes a bounded page catalog (default 4096 pages), with BLOB limit enforced by JPVR. The explicit clock epoch must be resumed by the caller; the adapter does not silently replace model time with a new OS monotonic epoch.
+
+Not persisted: external R-STDP reward-baseline state, CQE inbox/outbox delivery state, session/plan state, side effects, deduplication of already-consumed external event IDs, and cross-process scheduler ownership. No Android filesystem measurements, power-loss certification, resource benchmarks or production NCC guarantees are established.
+
+#### 3.37.5. Проверки и статус
+
+Добавлены network_adapter.py, network_store.py, test_network_adapter.py (11 методов), test_network_store.py (14 методов), NetworkRuntime export/restore checkpoint APIs and typed CheckpointPageInput. Tests cover canonical round-trip, pending delayed route continuation, topology/order, scheduler limits/clock, strict schema/epoch/ID validation, descriptor round-trip/rejection, genesis initialization, reopen, CAS, source-commit ancestry, coexistence with one-neuron checkpoints, BLOB corruption and invalid runtime preflight.
+
+**Проверки этого этапа:** GitHub source readback/static cross-reference only. 11 adapter and 14 storage tests are **AUTHORED, NOT RUN**; existing 15 network scheduler tests remain AUTHORED, NOT RUN. No Python tests/import/syntax commands, fault-injection execution, Android/Termux I/O, performance/resource benchmarks, builds, CI, GitHub Actions, APK or AAB were run.

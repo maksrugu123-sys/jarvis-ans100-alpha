@@ -16,8 +16,11 @@ from .cow import CowIndexPlan, cow_apply_index_mutations
 from .codec import (
     PAGE_PAYLOAD_BYTES,
     JPVRFormatError,
+    PageType,
     Superblock,
     _fixed_bytes,
+    decode_page,
+    encode_page,
     encode_superblock,
 )
 from .commit import (
@@ -84,6 +87,13 @@ class BlobRecordInput:
 
 
 @dataclass(frozen=True)
+class CheckpointPageInput:
+    """Opaque application checkpoint descriptor stored in a CHECKPOINT page."""
+
+    payload: bytes
+
+
+@dataclass(frozen=True)
 class IndexPageInput:
     """One immutable INDEX node; root_name optionally publishes it as a MANIFEST root."""
 
@@ -136,6 +146,8 @@ class TypedTransactionRequest:
     checkpoint_page_no: int | None = None
     # Appended after the original V1 fields to preserve positional-call compatibility.
     index_mutations: Sequence[IndexMutationInput] = ()
+    # Appended to preserve the original positional V1 request API.
+    checkpoint_pages: Sequence[CheckpointPageInput] = ()
 
 
 @dataclass(frozen=True)
@@ -152,6 +164,8 @@ class TypedTransactionBuildPlan:
     outbox_page_numbers: tuple[int, ...]
     # Appended after the original V1 fields to preserve positional-call compatibility.
     index_mutation_plans: tuple[IndexMutationBuildPlan, ...]
+    # Appended so existing field order remains stable.
+    checkpoint_page_numbers: tuple[int, ...]
 
     @property
     def manifest_page_no(self) -> int:
@@ -250,6 +264,18 @@ def build_typed_transaction(
     index_mutations = _sequence(
         "index_mutations", request.index_mutations, IndexMutationInput
     )
+    checkpoint_inputs = _sequence(
+        "checkpoint_pages", request.checkpoint_pages, CheckpointPageInput
+    )
+    if len(checkpoint_inputs) > 1:
+        raise JPVRFormatError("one transaction may publish at most one active CHECKPOINT page")
+    if checkpoint_inputs and request.checkpoint_page_no is not None:
+        raise JPVRFormatError("a new CHECKPOINT page cannot be combined with an explicit checkpoint_page_no")
+    for item in checkpoint_inputs:
+        if not isinstance(item.payload, (bytes, bytearray, memoryview)):
+            raise JPVRFormatError("CHECKPOINT payload must be bytes-like")
+        if not item.payload:
+            raise JPVRFormatError("CHECKPOINT payload must not be empty")
     journal_inputs = _sequence(
         "journal_entries", request.journal_entries, JournalEntryInput
     )
@@ -418,7 +444,8 @@ def build_typed_transaction(
     # Resolve the final COMMIT number before creating JOURNAL/OUTBOX references.
     journal_start = next_page_no
     outbox_start = journal_start + len(journal_inputs)
-    manifest_page_no = outbox_start + len(outbox_events)
+    checkpoint_start = outbox_start + len(outbox_events)
+    manifest_page_no = checkpoint_start + len(checkpoint_inputs)
     commit_page_no = manifest_page_no + 1
     commit_ref = PageRef(commit_page_no, next_generation)
 
@@ -543,6 +570,22 @@ def build_typed_transaction(
         staged_idempotency_keys.add(idempotency_key)
         previous_outbox = decoded
 
+    checkpoint_numbers: list[int] = []
+    for offset, item in enumerate(checkpoint_inputs):
+        page_no = checkpoint_start + offset
+        encoded = encode_page(
+            PageType.CHECKPOINT,
+            page_no,
+            next_generation,
+            transaction_id,
+            bytes(item.payload),
+        )
+        decoded = decode_page(encoded, expected_page_no=page_no)
+        if decoded.page_type is not PageType.CHECKPOINT:
+            raise JPVRFormatError("typed CHECKPOINT encoder produced the wrong page type")
+        checkpoint_numbers.append(page_no)
+        staged.append(encoded)
+
     old_journal_high_water = (
         0 if base_manifest is None else base_manifest.journal_high_water_page_no
     )
@@ -550,9 +593,13 @@ def build_typed_transaction(
         0 if base_manifest is None else base_manifest.outbox_high_water_page_no
     )
     checkpoint_page_no = (
-        current.checkpoint_page_no
-        if request.checkpoint_page_no is None
-        else request.checkpoint_page_no
+        checkpoint_numbers[-1]
+        if checkpoint_numbers
+        else (
+            current.checkpoint_page_no
+            if request.checkpoint_page_no is None
+            else request.checkpoint_page_no
+        )
     )
     manifest = Manifest(
         container_uuid=current.container_uuid,
@@ -604,6 +651,14 @@ def build_typed_transaction(
     for page_no in outbox_numbers:
         decoded = decode_outbox_page(staged_catalog[page_no], expected_page_no=page_no)
         validate_outbox_commit_reference(decoded, commit_bytes)
+    for page_no in checkpoint_numbers:
+        decoded = decode_page(staged_catalog[page_no], expected_page_no=page_no)
+        if (
+            decoded.page_type is not PageType.CHECKPOINT
+            or decoded.commit_generation != next_generation
+            or decoded.transaction_id != transaction_id
+        ):
+            raise JPVRFormatError("CHECKPOINT page metadata does not match its transaction")
 
     assembly = assemble_transaction(
         current,
@@ -624,6 +679,7 @@ def build_typed_transaction(
         index_mutation_plans=tuple(mutation_plans),
         journal_page_numbers=tuple(journal_numbers),
         outbox_page_numbers=tuple(outbox_numbers),
+        checkpoint_page_numbers=tuple(checkpoint_numbers),
     )
 
 

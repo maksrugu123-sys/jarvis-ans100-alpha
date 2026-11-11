@@ -1151,3 +1151,24 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 
 **Дополнение к этапу — scheduler clock consistency:** `tools/neuron_runtime/network.py` теперь инициализирует network clock по максимуму membrane-update и всех per-synapse STDP/R-STDP trace timestamps. Это не позволяет многонейронному scheduler после restore поставить сигнал раньше уже обработанной синаптической награды. `tools/neuron_runtime/test_network.py` содержит новый регрессионный сценарий (15 тестов всего), AUTHORED, NOT RUN. Locator load path дополнительно валидирует полное neuron B+ tree, exact COMMIT durable-tail/page identity и отказывает от нулевого object_id. First save заранее проверяет, что max_pages >= 9, иначе не публикует частичную genesis INDEX initialization; два новых store-теста увеличили suite с 15 до 17. README, architecture, network/store contracts согласованы с этими ограничениями.
+
+
+### 2026-11-11 — JNVM↔JPVR Multi-Neuron Network Checkpoint V1
+
+**Цель:** закрыть следующий разрыв после one-neuron indexed store: сохранить и восстановить весь bounded NetworkRuntime (all neurons, topology, pending event queue, scheduler limits and model clock) одной JPVR checkpoint-публикацией.
+
+**Изменения:**
+- tools/neuron_runtime/network.py: добавлены isolated export и validated restore API для checkpoint state. Restore проверяет clock bounds, pending queue size, event IDs, target neurons/synapses и соответствие internal routed events connection-owned synapses.
+- Новый tools/neuron_runtime/network_adapter.py: canonical versioned JNNW V1 snapshot; вложенные complete neuron snapshots, clock epoch, connections, pending events, scheduler limits and stable network object ID.
+- Новый tools/neuron_runtime/network_store.py: JPVRNetworkCheckpointStore; BLOB payload + JNCP CHECKPOINT descriptor; source COMMIT ancestry check; payload CRC; generation/transaction/schema/object/version checks; expected_record_version CAS; one active network checkpoint pointer per container.
+- tools/jpvr_reference/typed_transaction.py: добавлен CheckpointPageInput; builder stages CHECKPOINT after OUTBOX and before MANIFEST; a new CHECKPOINT pointer is published with the same COMMIT, otherwise existing pointer is inherited.
+- tools/neuron_runtime/test_network_adapter.py (11 methods) and test_network_store.py (14 methods) authored for codec/store contracts and failure paths; public exports updated.
+- Documentation/status: README, architecture §3.37, network runtime contract, typed transaction builder contract, and this log.
+
+**Файлы:** modified tools/neuron_runtime/network.py, tools/jpvr_reference/typed_transaction.py, tools/jpvr_reference/__init__.py, tools/neuron_runtime/__init__.py, docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md, docs/JARVIS_NETWORK_RUNTIME_V1.md, docs/JARVIS_ARCHITECTURE.md, README.md; added tools/neuron_runtime/network_adapter.py, network_store.py, test_network_adapter.py, test_network_store.py, docs/JNVM_NETWORK_CHECKPOINT_STORE_V1.md.
+
+**Проверки:** GitHub source readback and static cross-reference review only. 11 adapter tests and 14 storage tests are **AUTHORED, NOT RUN**. Existing 15 scheduler tests also remain AUTHORED, NOT RUN. No Python tests, imports/syntax checks, benchmark, Android/Termux device I/O, builds, CI, GitHub Actions, APK or AAB were run, per current no-check/no-build constraint.
+
+**Ограничения:** one active network checkpoint per container; bounded materialized catalog (default 4096 pages); clock epoch continuity remains caller-owned; external reward-baseline, CQE/session/side-effect persistence and event deduplication beyond pending queue remain unimplemented. This is not production JNVM/NCC, and crash consistency/device performance are not measured.
+
+**Следующий этап:** persist the external R-STDP Reward Baseline Manager with explicit clock epoch and compare-and-swap/versioning, then join network and baseline checkpoints into one higher-level runtime snapshot before CQE session/event persistence.

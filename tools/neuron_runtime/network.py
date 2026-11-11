@@ -328,3 +328,100 @@ class NetworkRuntime:
         self._current_time_ns = time_ns
         self._has_processed = True
         return result
+
+
+    def export_checkpoint_state(self) -> dict:
+        """Return an isolated, deterministic snapshot of authoritative network state.
+
+        The returned NeuronRuntime instances are deep copies. Pending events are
+        sorted by the scheduler's canonical heap order. A running network cannot
+        be checkpointed between timestamp batches.
+        """
+        if self._running:
+            raise NetworkRuntimeError("cannot checkpoint while run() is active")
+        return {
+            "neurons": {key: deepcopy(value) for key, value in self._neurons.items()},
+            "connections": tuple(self._connections),
+            "pending_events": tuple(sorted(self._queue)),
+            "max_pending_events": self._queue_limit,
+            "max_events_per_run": self._run_limit,
+            "current_time_ns": self._current_time_ns,
+            "has_processed": self._has_processed,
+        }
+
+    @classmethod
+    def restore_checkpoint_state(
+        cls,
+        neurons: Mapping[str, NeuronRuntime],
+        connections: Sequence[NetworkConnection],
+        pending_events: Sequence[tuple],
+        *,
+        max_pending_events: int,
+        max_events_per_run: int,
+        current_time_ns: int,
+        has_processed: bool,
+    ) -> "NetworkRuntime":
+        """Rebuild a network only after validating its complete scheduler state.
+
+        Each pending event tuple is (time_ns, event_id, target_neuron_id,
+        target_synapse_id, strength, attention). Internal routed events must
+        target connection-owned synapses; external events must not.
+        """
+        if not isinstance(pending_events, (tuple, list)):
+            raise NetworkRuntimeError("pending_events must be a tuple or list")
+        if not isinstance(has_processed, bool):
+            raise NetworkRuntimeError("has_processed must be bool")
+        current_time_ns = _time(current_time_ns)
+        result = cls(
+            neurons,
+            connections,
+            max_pending_events=max_pending_events,
+            max_events_per_run=max_events_per_run,
+        )
+        if current_time_ns < result._current_time_ns:
+            raise NetworkRuntimeError("network clock precedes a persisted neuron or synapse clock")
+        if not has_processed and current_time_ns != result._current_time_ns:
+            raise NetworkRuntimeError("unprocessed network clock differs from the initial state clock")
+        if len(pending_events) > result._queue_limit:
+            raise NetworkBackpressureError("restored pending events exceed the configured queue limit")
+
+        prepared = []
+        seen_ids = set()
+        for item in pending_events:
+            if not isinstance(item, (tuple, list)) or len(item) != 6:
+                raise NetworkRuntimeError("pending event must contain exactly six fields")
+            time_ns, event_id, target_neuron_id, target_synapse_id, strength, attention = item
+            time_ns = _time(time_ns)
+            _id("event_id", event_id, 256)
+            _id("target_neuron_id", target_neuron_id)
+            _id("target_synapse_id", target_synapse_id)
+            strength = _unit("strength", strength)
+            attention = _unit("attention", attention)
+            if time_ns < current_time_ns or (has_processed and time_ns <= current_time_ns):
+                raise NetworkRuntimeError("restored event is not later than the persisted network clock")
+            runtime = result._neurons.get(target_neuron_id)
+            if runtime is None or target_synapse_id not in runtime.synapses:
+                raise NetworkRuntimeError("restored event references an unknown neuron or synapse")
+            owned = (target_neuron_id, target_synapse_id) in result._owned_synapses
+            internal = event_id.startswith(_INTERNAL_PREFIX)
+            if internal != owned:
+                raise NetworkRuntimeError("restored event origin does not match synapse ownership")
+            if internal:
+                suffix = event_id[len(_INTERNAL_PREFIX):]
+                if len(suffix) != 64 or any(ch not in "0123456789abcdef" for ch in suffix):
+                    raise NetworkRuntimeError("restored internal event ID is not canonical SHA-256 hex")
+            if event_id in seen_ids:
+                raise NetworkRuntimeError("restored pending event IDs must be unique")
+            seen_ids.add(event_id)
+            prepared.append(_Event(
+                time_ns, event_id, target_neuron_id, target_synapse_id,
+                strength, attention,
+            ))
+
+        result._queue.clear()
+        result._pending_ids.clear()
+        for event in prepared:
+            result._push(event)
+        result._current_time_ns = current_time_ns
+        result._has_processed = has_processed
+        return result

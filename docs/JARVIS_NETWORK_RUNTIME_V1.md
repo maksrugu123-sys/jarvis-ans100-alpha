@@ -1,6 +1,6 @@
 # JARVIS Network Runtime V1 — bounded multi-neuron event loop
 
-**Status:** Python reference coordinator implemented; 15 focused tests authored, not yet run against the repository's real Numerical Oracle. Not production NCC, durable, concurrent, or device-verified.
+**Status:** Python reference coordinator plus a separate bounded JPVR checkpoint adapter/store are implemented; 15 scheduler tests, 11 snapshot-codec tests and 14 storage tests are AUTHORED, NOT RUN. Not production NCC, concurrent, or device-verified.
 
 ## Scope and contracts
 
@@ -20,7 +20,13 @@
 
 The constructor copies supplied `NeuronRuntime` instances. The network then owns its coordinator state; callers inspect neuron and synapse snapshots through read-only/copy-returning accessors.
 
-This is a single-threaded Python reference event loop, not a production scheduler or Neural Core Controller. It has no durable queue, CQE authorization/idempotency, cross-timestamp transaction, crash recovery, persistence, concurrent producers, topology learning, inhibitory synapse type/iSTDP, device integration, or resource measurements. External event IDs are checked for uniqueness while pending, not retained forever as durable idempotency keys. Cyclic topologies are allowed only with positive delays and bounded by queue/run budgets; they are not evidence of stable recurrent dynamics.
+This is a single-threaded Python reference event loop, not a production scheduler or Neural Core Controller. Durable snapshots are provided only when the caller explicitly uses JPVRNetworkCheckpointStore; they do not make individual timestamp batches crash-atomic or introduce concurrent producers. CQE authorization/idempotency, topology learning, inhibitory synapse type/iSTDP, device integration and resource measurements remain absent. External event IDs are checked for uniqueness while pending, not retained forever as durable idempotency keys. Cyclic topologies are allowed only with positive delays and bounded by queue/run budgets; they are not evidence of stable recurrent dynamics.
+
+## JPVR network checkpoint integration
+
+See docs/JNVM_NETWORK_CHECKPOINT_STORE_V1.md. The snapshot includes all neuron runtime state/configuration, directed connections, queue contents, current model time, the processed-state flag, and queue/run limits. It requires one caller-supplied non-zero 128-bit clock epoch shared by all neurons.
+
+A save writes one versioned JNNW BLOB record and one JNCP CHECKPOINT descriptor page in the same JPVR transaction. The active MANIFEST points to that immutable CHECKPOINT page. Load validates the source COMMIT ancestry, BLOB page range, transaction/generation identity, CRC, network ID and nested neuron schemas before reconstructing the queue. This is one active network checkpoint per container; it is not a per-network index or a CQE event log. The external R-STDP reward-baseline manager remains outside the snapshot.
 
 ## Verification
 
