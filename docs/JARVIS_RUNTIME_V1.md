@@ -18,7 +18,7 @@ tools/neuron_runtime adds an in-memory coordinator for one Adaptive LIF-DT outpu
 
 ## Deliberate limitations
 
-This is a reference coordinator around the Oracle, not an independent production neuron engine. It is not a multi-neuron network, language model or reasoning engine. It has no CQE integration, NCC durable commit path, asynchronous queue, topology learning, inhibitory synapse type/iSTDP, serialization, JNVM/JPVR persistence, crash recovery, concurrency, Android UI or device performance measurements. Reward processing is one synapse at a time and does not implement feedback ID/sequence idempotency or an atomic multi-synapse plus baseline transaction. Those remain responsibilities of the future CQE/NCC/JPVR integration.
+This one-neuron coordinator remains a Python reference around the Oracle, not an independent production neuron engine, language model or reasoning engine. Multi-neuron scheduling is provided separately by NetworkRuntime. The project now has JNVM/JPVR composite checkpointing and a candidate-state multi-synapse reward transaction, but it still has no CQE integration, NCC authorization/commit service, durable inbox/outbox/session protocol, concurrent scheduler, topology learning, inhibitory synapse type/iSTDP, Android UI or device performance measurements. The direct NeuronRuntime.apply_reward() method still changes one synapse; use process_reward_feedback() to coordinate a selected multi-synapse batch with baseline advancement and one composite JPVR publication.
 
 ## Verification
 
@@ -36,20 +36,20 @@ Do not describe this module as integrated into JARVIS or JPVR-001 until the focu
 
 `RewardBaselineManager` now provides the external baseline owner used by R-STDP orchestration. A caller prepares feedback against the previously committed task baseline, processes every relevant synapse, then commits the baseline only after terminal success or an approved no-op. The manager enforces per-task feedback sequence, exact replay within a bounded receipt window, pending reservation reuse and a caller-supplied clock epoch.
 
-The manager is a separate reference component; `NeuronRuntime.apply_reward()` still takes `baseline_before` from its caller and changes one synapse in memory. The manager does not automatically coordinate that mutation or persist it atomically. Its JPVR snapshot uses a dedicated container because the active NetworkRuntime checkpoint already owns the one MANIFEST checkpoint pointer. A composite checkpoint/feedback transaction remains required before claiming crash-atomic reward learning.
+The manager remains a separately owned reference component. The direct `NeuronRuntime.apply_reward()` call still takes `baseline_before` from its caller and changes one synapse in memory. The new `process_reward_feedback()` coordinator clones both NetworkRuntime and manager, applies all target rewards, advances the candidate baseline only after terminal outcomes, and saves both through one JRCM commit. Use a dedicated JRCM container; do not mix it with standalone JNCP/JRCP checkpoint pointers.
 
 Contract: `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`. Tests: `tools/neuron_runtime/test_reward_baseline.py` (26) and `tools/neuron_runtime/test_reward_baseline_store.py` (15), **AUTHORED, NOT RUN**.
 
 
 ## Composite persistence boundary
 
-`JPVRRuntimeCheckpointStore` publishes `NetworkRuntime` and `RewardBaselineManager` snapshots through one JRCM V1 CHECKPOINT descriptor and one COMMIT. Both component records must share one clock epoch and source transaction/generation. This prevents a crash from publishing a new network checkpoint while retaining an older baseline checkpoint (or vice versa). It does **not** make `NetworkRuntime.apply_reward()` plus baseline advancement atomic with synapse weight/eligibility updates; that requires a future candidate-state/feedback transaction API. The store is a dedicated-container Python reference implementation, not production NCC.
+`JPVRRuntimeCheckpointStore` publishes `NetworkRuntime` and `RewardBaselineManager` snapshots through one JRCM V1 CHECKPOINT descriptor and one COMMIT. Both component records must share one clock epoch and source transaction/generation. This prevents a crash from publishing a new network checkpoint while retaining an older baseline checkpoint (or vice versa). It does not itself coordinate feedback processing. The separate `process_reward_feedback()` API now provides candidate-state synapse updates plus baseline advancement and one JRCM publication. The store is a dedicated-container Python reference implementation, not production NCC.
 
 
 ## Atomic R-STDP feedback transaction V1
 
 `process_reward_feedback()` combines a prepared per-task reward baseline with candidate synapse updates across one or more NetworkRuntime neurons. All targets are calculated on a detached network copy; an error in any target discards every candidate update. Only terminal Oracle results allow the baseline receipt to advance. A single JRCM save then publishes network and manager state together using a required expected runtime version.
 
-The function returns new network and manager instances. It does not mutate its input references; callers replace both references only after success. Exact committed replay is reconciled against the active JPVR receipt and does not reapply weights. Contract: `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`. Tests: `tools/neuron_runtime.test_feedback_transaction` (7), **AUTHORED, NOT RUN**.
+The function returns new network and manager instances. It does not mutate its input references; callers replace both references only after success. Exact committed replay is reconciled against the active JPVR receipt and does not reapply weights. Contract: `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`. Tests: `tools.neuron_runtime.test_feedback_transaction` (9), **AUTHORED, NOT RUN**.
 
 Remaining limitations: caller-owned clock epoch and event draining; single writer; bounded manager replay history; no persisted target-set digest, CQE inbox/outbox or authorization/session provenance; no external side effects, NCC or Android durability evidence.

@@ -171,9 +171,22 @@ def _reconcile_duplicate(
         raise RewardFeedbackTransactionConflict(
             "manager replay history does not match the active durable runtime"
         )
-    if proposal.duplicate_processing_status != persisted_receipt.processing_status:
+    if proposal.duplicate_processing_status is None:
         raise RewardFeedbackTransactionConflict(
-            "duplicate feedback status differs from its durable receipt"
+            "duplicate proposal has no retained terminal processing status"
+        )
+    try:
+        candidate_receipt = manager.commit_feedback(
+            proposal,
+            processing_status=proposal.duplicate_processing_status,
+        )
+    except ValueError as exc:
+        raise RewardFeedbackTransactionConflict(
+            f"duplicate proposal cannot be reconciled: {exc}"
+        ) from exc
+    if candidate_receipt != persisted_receipt:
+        raise RewardFeedbackTransactionConflict(
+            "duplicate feedback receipt differs from the active durable receipt"
         )
     return RewardFeedbackTransactionResult(
         network=active.snapshot.runtime,

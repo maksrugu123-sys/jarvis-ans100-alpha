@@ -37,9 +37,12 @@ def _eligible_synapse(context=CONTEXT):
 
 
 def _network(*, second_context=None, beta=BETA, queued_event=False):
+    node_a_synapses = {"synapse-a": _eligible_synapse()}
+    if queued_event:
+        node_a_synapses["spare"] = SynapseState(weight=0.5)
     neurons = {
         "node-a": NeuronRuntime(
-            {"synapse-a": _eligible_synapse()},
+            node_a_synapses,
             reward_params=RewardParams(beta_b=beta),
             learning_rule="rstdp",
         ),
@@ -219,6 +222,28 @@ class RewardFeedbackTransactionTests(unittest.TestCase):
         self.assertEqual(network.synapse_states("node-a")["synapse-a"].weight, 0.5)
         self.assertEqual(manager.get_baseline("task-main"), 0.5)
         self.assertEqual(other.runtime_version, version + 1)
+
+    def test_duplicate_replay_requires_the_current_runtime_version(self):
+        network, manager, version = self._bootstrap()
+        first = self._process(network, manager, version)
+        with self.assertRaises(RewardFeedbackTransactionConflict):
+            self._process(
+                first.network,
+                first.reward_baseline_manager,
+                first.runtime_version - 1,
+            )
+
+    def test_pending_event_at_reward_time_blocks_feedback_without_writes(self):
+        network, manager, version = self._bootstrap(
+            _network(queued_event=True), _manager()
+        )
+        generation = self.storage.get_superblock().generation
+        before = network.synapse_states("node-a")["synapse-a"]
+        with self.assertRaises(RewardFeedbackTransactionError):
+            self._process(network, manager, version)
+        self.assertEqual(self.storage.get_superblock().generation, generation)
+        self.assertEqual(network.synapse_states("node-a")["synapse-a"], before)
+        self.assertEqual(manager.get_baseline("task-main"), 0.5)
 
     def test_duplicate_targets_are_rejected(self):
         network, manager, version = self._bootstrap()

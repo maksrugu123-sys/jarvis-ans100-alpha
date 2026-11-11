@@ -1,6 +1,6 @@
 # JNVM Atomic R-STDP Reward Feedback Transaction V1
 
-**Status:** implemented as a bounded Python reference coordinator; 7 focused tests are AUTHORED, NOT RUN. This is not production NCC, CQE integration or Android-device-verified behavior.
+**Status:** implemented as a bounded Python reference coordinator; 9 focused tests are AUTHORED, NOT RUN. This is not production NCC, CQE integration or Android-device-verified behavior.
 
 ## Purpose
 
@@ -45,6 +45,6 @@ This is a single-writer reference API. The required runtime-version CAS prevents
 
 ## Tests
 
-`tools/neuron_runtime/test_feedback_transaction.py`: 7 tests for one-commit success, multi-target rollback, durable duplicate replay, no-eligibility terminal outcome, beta mismatch, stale runtime CAS and duplicate target rejection.
+`tools/neuron_runtime/test_feedback_transaction.py`: 9 tests for one-commit success, multi-target rollback, durable duplicate replay, stale duplicate version rejection, no-eligibility terminal outcome, beta mismatch, stale runtime CAS, queued-event blocking and duplicate target rejection.
 
-All 7 tests are **AUTHORED, NOT RUN**. No Python tests, syntax/import checks, fault-injection tests, builds, CI or Android I/O measurements were run for this increment.
+All 9 tests are **AUTHORED, NOT RUN**. No Python tests, syntax/import checks, fault-injection tests, builds, CI or Android I/O measurements were run for this increment.
