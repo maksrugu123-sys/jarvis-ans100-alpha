@@ -79,3 +79,8 @@ Malformed or missing state is rejected. Load never truncates or rewrites the sou
     python3 -m unittest tools.neuron_runtime.test_network_store -v
 
 The 11 codec tests and 14 store tests are **AUTHORED, NOT RUN**. No tests, import/syntax checks, builds, CI, Android I/O or device benchmarks were executed for V1.
+
+
+## DATA/BLOB sizing note
+
+The JNNW adapter emits `DataRecordInput` when the canonical payload fits `MAX_SMALL_RECORD_PAYLOAD` (3976 bytes), otherwise `BlobRecordInput`. JNCP V1 flag 0 identifies BLOB; flag 1 identifies one DATA page. Existing locator field names remain API-compatible. The store verifies the exact JREC inside DATA, including page transaction/generation, object/schema/version and payload CRC. Both small DATA and larger BLOB cases have tests authored but not run.

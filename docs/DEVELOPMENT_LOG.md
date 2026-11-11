@@ -1192,3 +1192,21 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** manager and store are Python reference code, not production feedback evaluator or NCC. One writer and one pending feedback per task; task catalog and dedup history are bounded. Clock epoch remains caller-owned. V1 uses a dedicated JPVR container because one MANIFEST checkpoint pointer cannot simultaneously publish the network and reward-baseline snapshots. The baseline checkpoint is not crash-atomic with NetworkRuntime neuron weights/eligibility, and no durable RewardProcessingRecord/CQE transaction exists. Caller must not commit the baseline until all related synapse operations are terminal success or approved no-op.
 
 **Следующий этап:** implement a versioned composite Runtime checkpoint and feedback transaction for NetworkRuntime + RewardBaselineManager, then integrate CQE durable inbox/outbox/session persistence without losing replay or idempotency guarantees.
+
+
+### 2026-11-11 — Composite Runtime Checkpoint V1 and DATA/BLOB locator support
+
+**Цель:** объединить NetworkRuntime и RewardBaselineManager snapshot одной JPVR-транзакцией и исправить несоответствие DATA/BLOB sizing контракту JPVR.
+
+**Добавлено / изменено:**
+- `tools/neuron_runtime/runtime_store.py`: JRCM V1 composite descriptor; `JPVRRuntimeCheckpointStore.save()/load()` publishes both logical records and one composite CHECKPOINT in one COMMIT; runtime CAS; source COMMIT ancestry, page/transaction/generation/schema/object/version/CRC/epoch checks.
+- Both adapters select DATA up to 3976 bytes, BLOB above; standalone JNCP/JRCP stores decode both using descriptor flag 0=BLOB, 1=DATA.
+- Added `test_runtime_store.py` (12 tests including mixed DATA+BLOB), one small-network DATA test and reward-baseline DATA descriptor/large-BLOB tests; exports and contracts updated.
+
+**Файлы:** added `tools/neuron_runtime/runtime_store.py`, `tools/neuron_runtime/test_runtime_store.py`, `docs/JNVM_COMPOSITE_RUNTIME_CHECKPOINT_V1.md`; modified network/reward adapters, stores and tests, package exports, README, architecture §3.39, runtime/network/reward contracts and this log.
+
+**Проверки:** GitHub source readback/static review only. Composite tests (12) and new DATA/BLOB regressions are **AUTHORED, NOT RUN**. No Python tests, import/syntax checks, storage fault injection, Android/Termux I/O, benchmarks, builds, CI, GitHub Actions, APK or AAB.
+
+**Ограничения:** one atomic checkpoint publication, not an atomic feedback transaction spanning synapse weights/eligibility and baseline advancement. JRCM requires a dedicated runtime JPVR container because MANIFEST exposes one active checkpoint pointer. Clock epoch continuity remains caller-owned. No concurrent-writer protocol, device durability measurements or production NCC guarantees.
+
+**Следующий этап:** prepare a RewardBaseline proposal and candidate synapse updates together, then publish the runtime state only after all synapse operations reach terminal success/no-op; connect feedback to CQE idempotency next.

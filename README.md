@@ -372,3 +372,14 @@ python3 -m unittest tools.neuron_runtime.test_reward_baseline_store -v
 `JPVRRewardBaselineStore(storage).save(manager)` writes a canonical JRBM BLOB plus a JRCP CHECKPOINT descriptor and publishes both with one MANIFEST/COMMIT. It verifies source COMMIT ancestry, object/schema/version identity, page bounds and CRC, and supports `expected_record_version` compare-and-swap. Use a **dedicated JPVR container** for this V1 store: the MANIFEST has one active checkpoint pointer, so saving the reward manager into the network container would replace its network checkpoint. The manager checkpoint and NetworkRuntime checkpoint are not yet atomically coordinated. Contract: `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`.
 
 The 26 manager/codec tests and 15 JPVR store tests are **AUTHORED, NOT RUN**. This is not yet an atomic reward-to-synapse transaction, a production feedback evaluator, or a combined Runtime checkpoint.
+
+
+## Atomic composite JARVIS Runtime checkpoint
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_runtime_store -v
+```
+
+`JPVRRuntimeCheckpointStore(storage).save(network_id, network, reward_baseline_manager)` stores complete NetworkRuntime and RewardBaselineManager snapshots under one JRCM V1 CHECKPOINT page and one JPVR COMMIT. Both component records share the same commit generation, transaction ID and caller-owned model clock epoch. `load(network_id, manager_id)` validates exact source COMMIT ancestry, both component locators, DATA/BLOB schemas and CRCs, and matching clock epochs before restoring either object. `expected_runtime_version` protects the pair with one compare-and-swap version.
+
+Component adapters choose DATA for payloads up to 3976 bytes and BLOB for larger payloads. Standalone network and reward-baseline stores accept both forms too. Use a dedicated runtime JPVR container for JRCM; do not share it with standalone JNCP/JRCP pointers. This is atomic checkpoint publication only: applying rewards to synapses and committing baseline is not yet one runtime feedback transaction. Twelve composite-store tests are AUTHORED, NOT RUN. Contract: `docs/JNVM_COMPOSITE_RUNTIME_CHECKPOINT_V1.md`.

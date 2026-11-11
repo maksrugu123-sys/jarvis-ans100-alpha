@@ -81,3 +81,8 @@ A saved pending proposal allows the caller to resume the same feedback reservati
 `tools/neuron_runtime/test_reward_baseline_store.py`: 15 methods for descriptor encoding, save/load, pending feedback after reopen, CAS, dedicated pointer isolation, object ID isolation, genesis bounds, corrupted BLOB, source COMMIT identity and catalog bounds.
 
 All 41 tests are **AUTHORED, NOT RUN**. No Python tests, import/syntax checks, fault injection, Android/Termux I/O, builds or CI were executed for this stage.
+
+
+## DATA/BLOB sizing note
+
+The JRBM adapter emits `DataRecordInput` for payloads up to 3976 bytes and `BlobRecordInput` for larger snapshots. JRCP V1 flag 0 identifies BLOB; flag 1 identifies one DATA page. The store validates exact JREC identity inside DATA plus transaction/generation metadata and payload CRC. The dedicated-container rule remains unchanged.

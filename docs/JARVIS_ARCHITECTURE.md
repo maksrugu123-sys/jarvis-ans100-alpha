@@ -4091,3 +4091,18 @@ Added `reward_baseline.py`, `reward_baseline_adapter.py`, `reward_baseline_store
 **Проверки этого этапа:** GitHub source readback and static cross-reference review only. All 41 new tests are **AUTHORED, NOT RUN**. No Python tests, import/syntax execution, storage fault injection, Android/Termux I/O, resource benchmark, build, CI, GitHub Actions, APK or AAB were run.
 
 **Следующий этап:** build a versioned composite Runtime checkpoint/feedback transaction that publishes NetworkRuntime plus RewardBaseline state without competing MANIFEST pointers and makes synapse results, consumed eligibility and baseline advancement recoverable as one coherent operation. Then add CQE durable inbox/outbox/session state.
+
+
+### 3.39. Composite JARVIS Runtime checkpoint V1
+
+**Status:** implemented as a bounded Python reference store; twelve focused tests are AUTHORED, NOT RUN. It is not device-verified or production NCC.
+
+Standalone NetworkRuntime (JNNW/JNCP) and RewardBaselineManager (JRBM/JRCP) stores each used the single MANIFEST `checkpoint_page_no`; separately saving both into one container would replace one pointer. `JPVRRuntimeCheckpointStore` now uses a JRCM V1 composite descriptor embedding fixed-size JNCP and JRCP component descriptors. It appends both component records as DATA or BLOB, then one CHECKPOINT descriptor. The typed transaction builder publishes both records, descriptor, MANIFEST and COMMIT as one JPVR generation.
+
+Both records are validated before planning and share one transaction ID, generation and explicit non-zero 128-bit clock epoch. Each descriptor stores object ID, record version, exact DATA/BLOB locator, payload length and CRC32C; one runtime CAS version protects the pair. Load verifies active Superblock/MANIFEST, exact source COMMIT ancestry, both component page types/record identities/schema/object/version, transaction/generation, CRC and equal clock epochs before returning either restored object. A runtime container refuses to replace a standalone JNCP/JRCP checkpoint.
+
+Both adapters select DATA for payloads up to 3976 bytes and BLOB for larger payloads. JNCP/JRCP descriptor flag 0 retains V1 BLOB behavior; flag 1 identifies one DATA page. Locator field names remain unchanged for API compatibility.
+
+**Not included:** atomic feedback processing over synapse weight/eligibility updates plus baseline advancement and durable publication; CQE inbox/outbox/session persistence; scheduler-owned clock epoch rebasing; concurrent writers; Android I/O measurements; fault-injection proof; production NCC. Pending proposals survive checkpoints, but JRCM cannot infer whether an operation was partially applied in RAM before a crash. The manager must not advance baseline until related synapse operations are terminal success or approved no-op.
+
+Focused tests: `tools.neuron_runtime.test_runtime_store` plus network/reward checkpoint adapter and store tests. All tests in this stage are AUTHORED, NOT RUN.

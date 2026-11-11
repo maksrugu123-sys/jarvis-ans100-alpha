@@ -42,6 +42,18 @@ class RewardBaselineCheckpointDescriptorTests(unittest.TestCase):
             descriptor,
         )
 
+    def test_data_descriptor_round_trip(self):
+        descriptor = RewardBaselineCheckpointDescriptor(
+            bytes.fromhex("22222222222222222222222222222222"),
+            1, 12, 1, 2, 200, 0x12345678, "DATA",
+        )
+        self.assertEqual(
+            decode_reward_baseline_checkpoint_descriptor(
+                encode_reward_baseline_checkpoint_descriptor(descriptor)
+            ),
+            descriptor,
+        )
+
     def test_unknown_version_is_rejected(self):
         descriptor = RewardBaselineCheckpointDescriptor(
             bytes.fromhex("11111111111111111111111111111111"),
@@ -153,7 +165,21 @@ class JPVRRewardBaselineStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.load("test-manager")
 
-    def test_source_commit_and_blob_metadata_match_descriptor(self):
+    def test_large_manager_uses_blob_pages(self):
+        manager = _manager()
+        for index in range(40):
+            proposal = manager.prepare_feedback(
+                f"task-{index}", f"feedback-{index}", 1, 0.75,
+                index + 1, clock_epoch_id=EPOCH,
+            )
+            manager.commit_feedback(proposal, processing_status="NO_ELIGIBILITY")
+        saved = self.store.save(manager)
+        loaded = self.store.load(manager.manager_id)
+        self.assertEqual(loaded.descriptor.storage_kind, "BLOB")
+        self.assertEqual(loaded.manager.export_checkpoint_state(), manager.export_checkpoint_state())
+        self.assertGreater(saved.blob_page_count, 0)
+
+    def test_source_commit_and_record_metadata_match_descriptor(self):
         saved = self.store.save(_manager())
         loaded = self.store.load("test-manager")
         self.assertEqual(loaded.descriptor.record_generation, saved.generation)

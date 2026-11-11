@@ -39,3 +39,8 @@ Do not describe this module as integrated into JARVIS or JPVR-001 until the focu
 The manager is a separate reference component; `NeuronRuntime.apply_reward()` still takes `baseline_before` from its caller and changes one synapse in memory. The manager does not automatically coordinate that mutation or persist it atomically. Its JPVR snapshot uses a dedicated container because the active NetworkRuntime checkpoint already owns the one MANIFEST checkpoint pointer. A composite checkpoint/feedback transaction remains required before claiming crash-atomic reward learning.
 
 Contract: `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`. Tests: `tools/neuron_runtime/test_reward_baseline.py` (26) and `tools/neuron_runtime/test_reward_baseline_store.py` (15), **AUTHORED, NOT RUN**.
+
+
+## Composite persistence boundary
+
+`JPVRRuntimeCheckpointStore` publishes `NetworkRuntime` and `RewardBaselineManager` snapshots through one JRCM V1 CHECKPOINT descriptor and one COMMIT. Both component records must share one clock epoch and source transaction/generation. This prevents a crash from publishing a new network checkpoint while retaining an older baseline checkpoint (or vice versa). It does **not** make `NetworkRuntime.apply_reward()` plus baseline advancement atomic with synapse weight/eligibility updates; that requires a future candidate-state/feedback transaction API. The store is a dedicated-container Python reference implementation, not production NCC.

@@ -86,6 +86,14 @@ class JPVRNetworkCheckpointStoreTests(unittest.TestCase):
         self.assertEqual(loaded.snapshot.runtime.current_time_ns, network.current_time_ns)
         self.assertEqual(loaded.source_commit_page_no, saved.commit_page_no)
 
+    def test_small_network_snapshot_uses_a_data_page(self):
+        network = NetworkRuntime({"small": NeuronRuntime({})}, [])
+        saved = self.store.save("small-network", network, clock_epoch_id=CLOCK_EPOCH)
+        loaded = self.store.load("small-network")
+        self.assertEqual(loaded.descriptor.storage_kind, "DATA")
+        self.assertEqual(loaded.snapshot.runtime.neuron_ids, ("small",))
+        self.assertEqual(saved.record_version, loaded.descriptor.record_version)
+
     def test_checkpoint_survives_file_reopen(self):
         self.store.save("restartable", _network(), clock_epoch_id=CLOCK_EPOCH)
         self.storage.close()

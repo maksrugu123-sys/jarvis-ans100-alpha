@@ -7,8 +7,8 @@ import json
 import math
 
 from tools.jpvr_reference.blob import MAX_BLOB_PAGES
-from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES
-from tools.jpvr_reference.typed_transaction import BlobRecordInput
+from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES, MAX_SMALL_RECORD_PAYLOAD
+from tools.jpvr_reference.typed_transaction import BlobRecordInput, DataRecordInput
 
 from .reward_baseline import RewardBaselineError, RewardBaselineManager
 
@@ -133,11 +133,12 @@ def make_reward_baseline_record_input(
     manager: RewardBaselineManager,
     *,
     record_version: int,
-) -> BlobRecordInput:
+) -> DataRecordInput | BlobRecordInput:
     if isinstance(record_version, bool) or not isinstance(record_version, int) or not 1 <= record_version <= _U64_MAX:
         raise RewardBaselinePersistenceError("record_version must be a non-zero unsigned 64-bit integer")
     payload = encode_reward_baseline_snapshot(manager)
-    return BlobRecordInput(
+    record_type = DataRecordInput if len(payload) <= MAX_SMALL_RECORD_PAYLOAD else BlobRecordInput
+    return record_type(
         REWARD_BASELINE_RECORD_TYPE,
         REWARD_BASELINE_SCHEMA_ID,
         REWARD_BASELINE_SCHEMA_VERSION,

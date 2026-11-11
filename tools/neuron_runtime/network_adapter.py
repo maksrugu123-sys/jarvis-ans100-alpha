@@ -6,8 +6,8 @@ import hashlib
 import json
 from typing import Any
 
-from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES
-from tools.jpvr_reference.typed_transaction import BlobRecordInput
+from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES, MAX_SMALL_RECORD_PAYLOAD
+from tools.jpvr_reference.typed_transaction import BlobRecordInput, DataRecordInput
 
 from .jpvr_adapter import (
     NeuronRuntimePersistenceError,
@@ -336,14 +336,15 @@ def make_network_runtime_record_input(
     *,
     clock_epoch_id: bytes,
     record_version: int = 1,
-) -> BlobRecordInput:
-    """Create the bounded JNNW BLOB record persisted by the network checkpoint store."""
+) -> DataRecordInput | BlobRecordInput:
+    """Create a JNNW DATA or BLOB record according to the JPVR payload bound."""
     identifier = _identifier("network_id", network_id)
     version = _u64("record_version", record_version, minimum=1)
     payload = encode_network_runtime_snapshot(
         identifier, runtime, clock_epoch_id=clock_epoch_id
     )
-    return BlobRecordInput(
+    record_type = DataRecordInput if len(payload) <= MAX_SMALL_RECORD_PAYLOAD else BlobRecordInput
+    return record_type(
         NETWORK_RUNTIME_RECORD_TYPE,
         NETWORK_RUNTIME_SCHEMA_ID,
         NETWORK_RUNTIME_SCHEMA_VERSION,

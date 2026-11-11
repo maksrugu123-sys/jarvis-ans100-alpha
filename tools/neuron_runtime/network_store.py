@@ -6,6 +6,7 @@ import struct
 import uuid
 
 from tools.jpvr_reference.blob import MAX_BLOB_PAGES, decode_blob_pages
+from tools.jpvr_reference.data import decode_data_page
 from tools.jpvr_reference.codec import (
     JPVRFormatError,
     PageType,
@@ -18,7 +19,9 @@ from tools.jpvr_reference.manifest import decode_manifest_page
 from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES
 from tools.jpvr_reference.storage import JPVRStorage
 from tools.jpvr_reference.typed_transaction import (
+    BlobRecordInput,
     CheckpointPageInput,
+    DataRecordInput,
     TypedTransactionRequest,
     build_typed_transaction,
 )
@@ -65,6 +68,7 @@ class NetworkCheckpointDescriptor:
     record_generation: int
     payload_length: int
     payload_crc32c: int
+    storage_kind: str = "BLOB"
 
 
 @dataclass(frozen=True)
@@ -113,10 +117,13 @@ def _validate_descriptor(value: NetworkCheckpointDescriptor) -> None:
     ):
         if isinstance(item, bool) or not isinstance(item, int) or not 0 <= item <= maximum:
             raise JPVRNetworkCheckpointError(f"{name} is outside its allowed range")
+    if value.storage_kind not in ("BLOB", "DATA"):
+        raise JPVRNetworkCheckpointError("network checkpoint storage_kind must be BLOB or DATA")
     if (
         value.record_version == 0
         or value.first_blob_page_no < 2
         or value.blob_page_count == 0
+        or (value.storage_kind == "DATA" and value.blob_page_count != 1)
         or value.record_generation == 0
         or value.payload_length == 0
     ):
@@ -129,7 +136,7 @@ def encode_network_checkpoint_descriptor(value: NetworkCheckpointDescriptor) -> 
     return _NETWORK_CHECKPOINT.pack(
         NETWORK_CHECKPOINT_MAGIC,
         NETWORK_CHECKPOINT_VERSION,
-        0,
+        0 if value.storage_kind == "BLOB" else 1,
         NETWORK_RUNTIME_RECORD_TYPE,
         NETWORK_RUNTIME_SCHEMA_VERSION,
         NETWORK_RUNTIME_SCHEMA_ID,
@@ -155,7 +162,7 @@ def decode_network_checkpoint_descriptor(payload: bytes | bytearray | memoryview
     if (
         magic != NETWORK_CHECKPOINT_MAGIC
         or version != NETWORK_CHECKPOINT_VERSION
-        or flags != 0
+        or flags not in (0, 1)
         or record_type != NETWORK_RUNTIME_RECORD_TYPE
         or schema_version != NETWORK_RUNTIME_SCHEMA_VERSION
         or schema_id != NETWORK_RUNTIME_SCHEMA_ID
@@ -169,6 +176,7 @@ def decode_network_checkpoint_descriptor(payload: bytes | bytearray | memoryview
         record_generation=generation,
         payload_length=payload_length,
         payload_crc32c=payload_crc,
+        storage_kind="BLOB" if flags == 0 else "DATA",
     )
     _validate_descriptor(result)
     return result
@@ -277,30 +285,57 @@ class JPVRNetworkCheckpointStore:
         source_commit = self._source_commit(
             active, catalog, checkpoint_page_no, checkpoint_page, descriptor
         )
-        blob_pages = []
-        for page_no in range(descriptor.first_blob_page_no, blob_last + 1):
-            encoded = catalog.get(page_no)
+        if descriptor.storage_kind == "BLOB":
+            blob_pages = []
+            for page_no in range(descriptor.first_blob_page_no, blob_last + 1):
+                encoded = catalog.get(page_no)
+                if encoded is None:
+                    raise JPVRNetworkCheckpointError(f"network BLOB page {page_no} is missing")
+                blob_pages.append(encoded)
+            blob = decode_blob_pages(
+                tuple(blob_pages), expected_first_page_no=descriptor.first_blob_page_no
+            )
+            if (
+                blob.page_count != descriptor.blob_page_count
+                or blob.first_page_no != descriptor.first_blob_page_no
+                or blob.commit_generation != descriptor.record_generation
+                or blob.transaction_id != checkpoint_page.transaction_id
+                or blob.record_type != NETWORK_RUNTIME_RECORD_TYPE
+                or blob.schema_id != NETWORK_RUNTIME_SCHEMA_ID
+                or blob.schema_version != NETWORK_RUNTIME_SCHEMA_VERSION
+                or blob.object_id != descriptor.object_id
+                or blob.record_version != descriptor.record_version
+            ):
+                raise JPVRNetworkCheckpointError("network BLOB metadata differs from CHECKPOINT descriptor")
+            record_payload = blob.payload
+        else:
+            if descriptor.blob_page_count != 1:
+                raise JPVRNetworkCheckpointError("network DATA record must occupy one DATA page")
+            encoded = catalog.get(descriptor.first_blob_page_no)
             if encoded is None:
-                raise JPVRNetworkCheckpointError(f"network BLOB page {page_no} is missing")
-            blob_pages.append(encoded)
-        blob = decode_blob_pages(
-            tuple(blob_pages), expected_first_page_no=descriptor.first_blob_page_no
-        )
+                raise JPVRNetworkCheckpointError("network DATA page is missing")
+            data_page = decode_data_page(encoded, expected_page_no=descriptor.first_blob_page_no)
+            matches = [
+                item for item in data_page.records
+                if item.record_type == NETWORK_RUNTIME_RECORD_TYPE
+                and item.schema_id == NETWORK_RUNTIME_SCHEMA_ID
+                and item.schema_version == NETWORK_RUNTIME_SCHEMA_VERSION
+                and item.object_id == descriptor.object_id
+                and item.record_version == descriptor.record_version
+            ]
+            if (
+                data_page.commit_generation != descriptor.record_generation
+                or data_page.transaction_id != checkpoint_page.transaction_id
+                or len(matches) != 1
+            ):
+                raise JPVRNetworkCheckpointError("network DATA metadata differs from CHECKPOINT descriptor")
+            record_payload = matches[0].payload
         if (
-            blob.page_count != descriptor.blob_page_count
-            or blob.first_page_no != descriptor.first_blob_page_no
-            or blob.commit_generation != descriptor.record_generation
-            or blob.transaction_id != checkpoint_page.transaction_id
-            or blob.record_type != NETWORK_RUNTIME_RECORD_TYPE
-            or blob.schema_id != NETWORK_RUNTIME_SCHEMA_ID
-            or blob.schema_version != NETWORK_RUNTIME_SCHEMA_VERSION
-            or blob.object_id != descriptor.object_id
-            or blob.record_version != descriptor.record_version
-            or len(blob.payload) != descriptor.payload_length
-            or crc32c(blob.payload) != descriptor.payload_crc32c
+            len(record_payload) != descriptor.payload_length
+            or crc32c(record_payload) != descriptor.payload_crc32c
         ):
-            raise JPVRNetworkCheckpointError("network BLOB metadata or payload CRC differs from CHECKPOINT descriptor")
-        snapshot = decode_network_runtime_snapshot(blob.payload)
+            raise JPVRNetworkCheckpointError("network record length or CRC differs from CHECKPOINT descriptor")
+        snapshot = decode_network_runtime_snapshot(record_payload)
         if snapshot.network_id != network_id or network_runtime_object_id(snapshot.network_id) != descriptor.object_id:
             raise JPVRNetworkCheckpointError("network snapshot identity differs from its CHECKPOINT descriptor")
         return LoadedNetworkCheckpoint(
@@ -378,18 +413,30 @@ class JPVRNetworkCheckpointStore:
             record_version=next_version,
         )
 
+        record_fields = (
+            {"data_records": (record_input,)}
+            if isinstance(record_input, DataRecordInput)
+            else {"blob_records": (record_input,)}
+        )
         base_request = TypedTransactionRequest(
             current_superblock=active,
             page_catalog=catalog,
             transaction_id=_new_id(),
             commit_id=_new_id(),
             operation_id=_new_id(),
-            blob_records=(record_input,),
+            **record_fields,
         )
         record_plan = build_typed_transaction(base_request)
-        numbers = record_plan.blob_page_numbers
-        if not numbers or numbers != tuple(range(numbers[0], numbers[0] + len(numbers))):
-            raise JPVRNetworkCheckpointError("network snapshot BLOB pages are not one contiguous range")
+        if isinstance(record_input, DataRecordInput):
+            numbers = record_plan.data_page_numbers
+            if len(numbers) != 1:
+                raise JPVRNetworkCheckpointError("one network DATA record must resolve to one page")
+            storage_kind = "DATA"
+        else:
+            numbers = record_plan.blob_page_numbers
+            if not numbers or numbers != tuple(range(numbers[0], numbers[0] + len(numbers))):
+                raise JPVRNetworkCheckpointError("network snapshot BLOB pages are not contiguous")
+            storage_kind = "BLOB"
         descriptor = NetworkCheckpointDescriptor(
             object_id=object_id,
             record_version=next_version,
@@ -398,6 +445,7 @@ class JPVRNetworkCheckpointStore:
             record_generation=active.generation + 1,
             payload_length=len(record_input.payload),
             payload_crc32c=crc32c(record_input.payload),
+            storage_kind=storage_kind,
         )
         final_request = replace(
             base_request,
@@ -405,7 +453,11 @@ class JPVRNetworkCheckpointStore:
         )
         final_plan = build_typed_transaction(final_request)
         if (
-            final_plan.blob_page_numbers != numbers
+            (
+                final_plan.data_page_numbers != numbers
+                if storage_kind == "DATA"
+                else final_plan.blob_page_numbers != numbers
+            )
             or len(final_plan.checkpoint_page_numbers) != 1
             or final_plan.manifest.checkpoint_page_no != final_plan.checkpoint_page_numbers[0]
             or final_plan.commit_page_no <= final_plan.checkpoint_page_numbers[0]
