@@ -6,7 +6,7 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 11 November 2026
 
-- **JPVR reference:** fifteen modules currently contain **327 test methods**. The COW-integrated typed builder now feeds a file-backed reference storage engine. It creates/reopens a two-slot container, validates active COMMIT/MANIFEST references, serializes writers with process and in-process locks, writes append pages before publishing the inactive Superblock, uses `fsync` barriers, and falls back to the previous valid Superblock after a torn/invalid newer slot. Open removes unpublished tail bytes. Nineteen new storage/recovery tests are **AUTHORED, NOT RUN**; the previous 308-method set included planner/builder tests that were also not yet rerun together. This is a reference implementation, not yet device-verified or production-ready. Full historical COMMIT-chain scanning, compaction, free-space reuse, durable CQE delivery and hardware-level power-loss guarantees remain out of scope.
+- **JPVR reference:** sixteen modules currently contain **349 test methods**. The COW-integrated typed builder feeds a file-backed two-Superblock storage engine. JPVRStorage.scan_history() now performs a read-only historical audit: it checks every physical page envelope, contiguous page ranges and transaction identity for each generation, all historical COMMIT/MANIFEST snapshots, and the complete OUTBOX chain. It reports the last verified commit boundary and any orphan file tail without modifying storage; full historical INDEX-tree traversal is optional. Twenty-two new recovery tests are AUTHORED, NOT RUN. The reference writer/scanner are not yet Android-device-verified or production-ready. Automatic rollback to an older prefix, compaction, free-page reuse, durable CQE delivery and hardware-level power-loss guarantees remain out of scope.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
 - **Neuron runtime coordinator:** tools/neuron_runtime contains an in-memory Python reference coordinator for one Adaptive LIF-DT neuron and multiple incoming excitatory synapses. It delegates neuron/STDP/R-STDP equations to the Numerical Oracle. Its 15 focused tests were included in the user's full Termux run on 8 November 2026: 216/216 repository tests passed in 19.280 s. This is Python reference verification, not production NCC/runtime or device performance evidence.
 - **Multi-neuron network coordinator:** `tools/neuron_runtime/network.py` adds directed delayed connections, deterministic same-timestamp batching, bounded event/run budgets and in-memory timestamp-level candidate commit. Fourteen focused network tests are authored; they have not yet been run against the repository's real Numerical Oracle. This remains a single-threaded Python reference layer, not production NCC or durable scheduling.
@@ -23,7 +23,7 @@ The repository has entered the first executable Python reference-orchestration s
 - **V4.2 causal-credit audit:** user-run Android Termux verification: **6/6 dedicated tests passed**; smoke (128 episodes) and pilot (2,048 episodes) completed. In pilot, R-STDP produced 1,355 negative, 0 positive and 693 zero updates. Correct FAST episodes had negative eligibility despite positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility magnitude/sign balance but did not change any per-episode eligibility or weight-update signs. This diagnoses a temporal-credit alignment limitation, not a proven fix. Details: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md and docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.
 - **V4.3 decision-boundary temporal credit:** focused tests passed (7/7, 1.636 s), and smoke/pilot completed on Android Termux. In the two-seed pilot, Decision-Latched reached 82.23% held-out accuracy versus 83.01% for frozen V4 R-STDP and 100% for STDP. It processed all sensory inputs and gated exactly 1,024 post-decision plasticity events, but did not improve held-out quality. It remains experimental, not the default. Details: docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md.
 
-- **Not implemented yet:** production neuron/NCC runtime, JNVM integration with the new JPVR file store, full historical COMMIT-chain audit, compaction/free-space reuse, durable CQE outbox delivery, full capability scopes/resource budgets, production-grade scheduler guarantees, and Reasoning Engine execution. Age-based promotion exists only in the CQE Python reference and is not yet re-verified after the latest changes.
+- **Not implemented yet:** production neuron/NCC runtime, JNVM integration with JPVR, automatic restoration to an older verified snapshot, compaction/free-page reuse, durable CQE outbox delivery, full capability scopes/resource budgets, production-grade scheduler guarantees, and Reasoning Engine execution. Historical commit/MANIFEST verification is implemented as a read-only reference scanner, not an automatic repair mechanism.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
@@ -58,9 +58,11 @@ The repository has entered the first executable Python reference-orchestration s
 | `docs/JARVIS_NETWORK_RUNTIME_V1.md` | Multi-neuron event-loop reference contract, queue limits and verification scope |
 | `tools/task_validation/` | V1–V4.3 deterministic task benchmarks, audits and tests |
 | `tools/cqe_reference/` | Partial executable reference for CQE envelopes, authorization, queues, commits and events |
-| `tools/jpvr_reference/` | JPVR_FORMAT_V1 codecs/planners, batch COW INDEX mutation, transaction builder, and file-backed two-Superblock storage/recovery reference |
+| `tools/jpvr_reference/` | JPVR_FORMAT_V1 codecs/planners, batch COW INDEX mutation, transaction builder, and file-backed two-Superblock storage and historical recovery scanner |
 | `docs/JPVR_COW_WRITER_V1.md` | COW upsert planner contract, validation invariants, test command and explicit non-goals |
-| `docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md` | Typed transaction builder and integrated COW mutation pipeline contract |\n| `docs/JPVR_STORAGE_ENGINE_V1.md` | Physical file layout, ordered page writes, Superblock publication, reopen and orphan-tail recovery |
+| `docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md` | Typed transaction builder and integrated COW mutation pipeline contract |
+| `docs/JPVR_STORAGE_ENGINE_V1.md` | Physical file layout, ordered page writes, Superblock publication, reopen and orphan-tail recovery |
+| `docs/JPVR_HISTORICAL_RECOVERY_V1.md` | Streaming page/transaction audit, historical MANIFEST validation and safe-prefix diagnostics |
 | `docs/JPVR_COMMIT_V1.md` | JCOM v1 fixed COMMIT payload, snapshot checks and non-goals |
 | `docs/JPVR_JOURNAL_V1.md` | JNRL v1 operation-state entries, immutable history links and lifecycle rules |
 | `docs/JPVR_OUTBOX_V1.md` | JOUT v1 immutable event/page and sequence contract |\n| `docs/JPVR_OUTBOX_SCAN_V1.md` | Read-only validation of active snapshot, COMMIT chain and committed OUTBOX history |
@@ -250,10 +252,10 @@ python3 -m unittest tools.jpvr_reference.test_outbox_scan -v
 Complete JPVR reference suite:
 
 ```sh
-python3 -m unittest tools.jpvr_reference.test_codec tools.jpvr_reference.test_records tools.jpvr_reference.test_blob tools.jpvr_reference.test_data tools.jpvr_reference.test_layout tools.jpvr_reference.test_manifest tools.jpvr_reference.test_index tools.jpvr_reference.test_cow tools.jpvr_reference.test_commit tools.jpvr_reference.test_journal tools.jpvr_reference.test_outbox tools.jpvr_reference.test_outbox_scan tools.jpvr_reference.test_transaction tools.jpvr_reference.test_typed_transaction tools.jpvr_reference.test_storage -v
+python3 -m unittest tools.jpvr_reference.test_codec tools.jpvr_reference.test_records tools.jpvr_reference.test_blob tools.jpvr_reference.test_data tools.jpvr_reference.test_layout tools.jpvr_reference.test_manifest tools.jpvr_reference.test_index tools.jpvr_reference.test_cow tools.jpvr_reference.test_commit tools.jpvr_reference.test_journal tools.jpvr_reference.test_outbox tools.jpvr_reference.test_outbox_scan tools.jpvr_reference.test_transaction tools.jpvr_reference.test_typed_transaction tools.jpvr_reference.test_storage tools.jpvr_reference.test_recovery -v
 ```
 
-The prior JPVR set contained 308 methods across fourteen modules. The new file-backed storage module adds 19 recovery/publication tests, for **327 methods across fifteen modules**. Those 19 storage tests are **AUTHORED, NOT RUN**; the previous 308-method set included planner/builder tests not yet rerun together as one suite. The complete command above includes all fifteen modules. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md), [OUTBOX contract](docs/JPVR_OUTBOX_V1.md), [OUTBOX scanner contract](docs/JPVR_OUTBOX_SCAN_V1.md), [transaction assembly contract](docs/JPVR_TRANSACTION_ASSEMBLY_V1.md) and [typed transaction builder contract](docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md).
+The previously documented baseline contained 262 methods across twelve modules. Since then, 16 transaction-assembly, 19 typed-builder, 11 integrated COW, 19 storage, and 22 historical-recovery test methods were added, for **349 methods across sixteen modules**. These 87 newer methods are **AUTHORED, NOT RUN** as a combined post-change suite; the complete command above includes all sixteen modules. See the [COW contract](docs/JPVR_COW_WRITER_V1.md), [JCOM contract](docs/JPVR_COMMIT_V1.md), [JOURNAL contract](docs/JPVR_JOURNAL_V1.md), [OUTBOX contract](docs/JPVR_OUTBOX_V1.md), [OUTBOX scanner contract](docs/JPVR_OUTBOX_SCAN_V1.md), [transaction assembly contract](docs/JPVR_TRANSACTION_ASSEMBLY_V1.md) and [typed transaction builder contract](docs/JPVR_TYPED_TRANSACTION_BUILDER_V1.md).
 
 
 ## JPVR transaction assembly planner
@@ -267,7 +269,7 @@ python3 -m unittest tools.jpvr_reference.test_transaction -v
 The in-memory planner assembles encoded staged pages, a final MANIFEST, and a final COMMIT into one validated append plan. It checks page numbering/generation/transaction identity, COMMIT and previous-COMMIT linkage, all MANIFEST roots/high-water references, and the candidate inactive Superblock. Contract: [JPVR_TRANSACTION_ASSEMBLY_V1.md](docs/JPVR_TRANSACTION_ASSEMBLY_V1.md). This is a reference planner only: no physical writes, flush/sync, Superblock publication, locking, or crash recovery.
 
 
-The 2026-11-10 CQE priority-aging and JPVR OUTBOX scanner regressions were subsequently corrected; the user has confirmed that no errors remain in their current full-suite run. The 16 transaction-assembly tests, 19 typed-builder tests, 11 integrated COW tests and 19 storage/recovery tests remain AUTHORED, NOT RUN; they require focused execution on Termux.
+The 2026-11-10 CQE priority-aging and JPVR OUTBOX scanner regressions were subsequently corrected; the user has confirmed that no errors remain in their current full-suite run. The 16 transaction-assembly tests, 19 typed-builder tests, 11 integrated COW tests, 19 storage tests and 22 historical-recovery tests remain AUTHORED, NOT RUN; they require focused execution on Termux.
 
 
 ## JPVR typed transaction builder
@@ -291,4 +293,17 @@ python3 -m unittest tools.jpvr_reference.test_storage -v
 
 Create or reopen a container with `JPVRStorage.create(path)` / `JPVRStorage.open(path)`. Use `load_page_catalog(max_pages=4096)` to materialize a bounded catalog for the current in-memory typed builder, then submit its `TypedTransactionBuildPlan` to `store.commit(plan)`. The default catalog cap is 4096 pages (16 MiB encoded bytes plus Python mapping overhead); increase it only after considering available RAM.
 
-Storage commits append every immutable transaction page and call `fsync` before writing the inactive Superblock slot. The new slot is synced and re-read before success is returned. A `JPVRCommitUncertainError` means publication began but its final outcome could not be confirmed: reopen the file and inspect `active_commit_id` before retrying. Contract and failure model: [JPVR_STORAGE_ENGINE_V1.md](docs/JPVR_STORAGE_ENGINE_V1.md). This is a POSIX/Android reference implementation; it does not provide compaction, full commit-history scanning, CQE event delivery, or a guarantee against hardware that falsely reports completed flushes.
+Storage commits append every immutable transaction page and call `fsync` before writing the inactive Superblock slot. The new slot is synced and re-read before success is returned. A `JPVRCommitUncertainError` means publication began but its final outcome could not be confirmed: reopen the file and inspect `active_commit_id` before retrying. Contract and failure model: [JPVR_STORAGE_ENGINE_V1.md](docs/JPVR_STORAGE_ENGINE_V1.md). This is a POSIX/Android reference implementation; it does not provide automatic prefix rollback, compaction, CQE event delivery, or a guarantee against hardware that falsely reports completed flushes.
+
+
+## JPVR historical recovery scanner
+
+Focused tests:
+
+```sh
+python3 -m unittest tools.jpvr_reference.test_recovery -v
+```
+
+JPVRStorage.scan_history() uses a lazy file-backed page catalog rather than load_page_catalog(). It reads the durable prefix in physical order, verifies every page envelope, each generation's contiguous append range and transaction identity, final MANIFEST/COMMIT ordering, every historical MANIFEST's roots and high-water references, and the committed OUTBOX chain. It returns one JPVRHistoricalSnapshot per verified generation and verified_durable_tail_page_no as the last safe commit boundary.
+
+A damaged later generation does not erase earlier verified snapshots from the report. issue describes the first detected fault. Bytes beyond the active durable tail are reported as orphan_tail_bytes; scanning is read-only and does not truncate, rewrite a Superblock, or claim to have restored that prefix. Set verify_index_trees=True to traverse all seven B+ trees in every historical snapshot; this may be expensive. Contract: docs/JPVR_HISTORICAL_RECOVERY_V1.md.

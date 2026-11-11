@@ -48,3 +48,8 @@ The first report contained 497 tests with 7 errors and 3 failures. The corrected
 
 
 The scanner checks the active MANIFEST's OUTBOX high-water page type before generic snapshot validation so callers receive the precise `not OUTBOX` diagnostic for a wrong-type high-water reference. Generic MANIFEST validation remains responsible for the rest of the root and reference checks.
+
+
+## Integration with the file-backed historical recovery scanner
+
+The standalone scan_committed_outbox API above still requires a complete caller-materialized page catalog and validates COMMIT descriptors plus OUTBOX history; it does not replay each historical MANIFEST's roots. For file-backed full-history audits, use JPVRStorage.scan_history() from docs/JPVR_HISTORICAL_RECOVERY_V1.md. That scanner reads page bytes lazily, validates every generation-specific transaction range and every historical MANIFEST against its own durable tail, then reuses the OUTBOX-chain validator here. Its report preserves the last verified commit prefix and separates OUTBOX failure from commit-history verification.

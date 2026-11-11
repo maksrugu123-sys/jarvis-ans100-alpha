@@ -3858,3 +3858,40 @@ The source snapshot remains immutable. A request can update multiple keys in one
 **Проверки этого этапа:** Python tests, import/syntax checks, fault-injection execution и Android Termux measurement **NOT RUN** по согласованному режиму работы. Все 19 новых storage tests — **AUTHORED, NOT RUN**; суммарный JPVR source set теперь содержит 327 методов в 15 модулях. Gradle/Android builds, CI, GitHub Actions и APK/AAB не запускались.
 
 **Явные ограничения:** обычный open не сканирует всю физическую историю и не доказывает целостность всех неактивных/неиспользуемых страниц; он проверяет текущий snapshot и immediate previous COMMIT. Полный обход B+ trees опционален. Нет полной истории/индексации recovery, compaction, free-page reuse, allocator reclamation, file-format upgrades, CQE OUTBOX worker/ACK, JNVM integration, multi-process transaction coordinator, или гарантии аппаратного поведения флеш-контроллера/накопителя при внезапном питании. `fsync` — требуемый системный barrier, но не доказательство того, что конкретное устройство правдиво выполняет flush.
+
+
+### 3.33. JPVR Historical Recovery Scanner V1 — read-only history audit
+
+**Статус: IMPLEMENTED как streaming/lazy Python reference scanner; 22 tests AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: docs/JPVR_HISTORICAL_RECOVERY_V1.md.
+
+#### 3.33.1. Назначение и API
+
+JPVRStorage.scan_history(verify_index_trees=None) выбирает активный Superblock под shared file lock и передаёт сканеру lazy _DiskPageCatalog. Публичный pure reference API — scan_jpvr_history(superblock, page_catalog, verify_index_trees=False). Сканер не вызывает load_page_catalog(), не удерживает все encoded page bytes и не изменяет файл.
+
+#### 3.33.2. Проверки исторической цепочки
+
+1. Последовательно читает страницы 2..durable_tail, проверяет page number, header/payload CRC и сохраняет только compact page-header metadata.
+2. Находит COMMIT страницы в физическом порядке и восстанавливает generation ranges от genesis до активного COMMIT.
+3. Для каждой транзакции требует contiguous диапазон, один generation/transaction_id на все страницы, отсутствие промежуточного COMMIT и ровно один MANIFEST в последней staged позиции непосредственно перед COMMIT.
+4. Проверяет уникальность commit_id/transaction_id, последовательность generation и точную ссылку на физический предыдущий COMMIT.
+5. Для каждого поколения декодирует исторический MANIFEST и запускает validate_commit_snapshot с Superblock соответствующей исторической версии и ограниченным page catalog до её durable tail. Проверяются UUID, все семь INDEX root PageRefs, checkpoint/JOURNAL/OUTBOX high-water types, поколения и COMMIT identity.
+6. В конце проверяет, что последний исторический COMMIT совпадает с активным Superblock по generation, commit page/id, checkpoint, durable tail и ожидаемому alternating slot.
+7. Повторно использует OUTBOX chain validator для проверки event predecessor links, source COMMIT membership, sequence и global ID/idempotency uniqueness.
+
+#### 3.33.3. Отчёт и граница восстановления
+
+JPVRHistoryScanResult.snapshots содержит только полностью проверенные исторические поколения. verified_generation и verified_durable_tail_page_no указывают самую дальнюю безопасную append boundary. При повреждении страницы или historical MANIFEST scan сохраняет более ранние snapshots и возвращает first JPVRRecoveryIssue(code, message, page_no, generation). OUTBOX ошибка отдельно отмечает outbox_history_complete=False, не удаляя информацию о проверенной commit history.
+
+JPVRStorage.scan_history() дополнительно сообщает orphan_tail_bytes для байтов после активного durable prefix. Orphan tail не считается committed state; scanner не обрезает его. Открытие с recover_tail=True в отдельной операции может удалить tail, но scanner никогда сам не делает такой mutation. Отчёт о последней verified boundary — recovery candidate/диагностика, а не автоматическое восстановление Superblock или запись старого состояния обратно.
+
+#### 3.33.4. Полная проверка INDEX
+
+По умолчанию проверяются корневые PageRef каждого исторического MANIFEST через validate_commit_snapshot. При verify_index_trees=True каждый из семи B+ trees каждого поколения полностью обходится через validate_index_tree; это может быть O(sum of reachable index pages across all snapshots) и потому выключено по умолчанию. В отчёт включаются IndexTreeStats каждого проверенного дерева.
+
+#### 3.33.5. Тесты и ограничения
+
+Добавлены tools/jpvr_reference/recovery.py, tools/jpvr_reference/test_recovery.py (22 test methods), JPVRStorage.scan_history и public exports JPVRHistoryScanResult, JPVRHistoricalSnapshot, JPVRRecoveryIssue, scan_jpvr_history. Регрессии охватывают empty/genesis, 1/3 generation, broken/missing page, failed read, historical invalid root, wrong generation/transaction IDs, manifest order, duplicate identities, generation gap, active Superblock/checkpoint mismatch, uncommitted/orphan tail, optional index-tree scan, OUTBOX history and file-backed lazy scan.
+
+**Проверки этого этапа:** source readback и static API/doc cross-reference only. Python tests, imports/syntax checks, fault injection and device measurement NOT RUN. 22 новых теста AUTHORED, NOT RUN; JPVR total = 349 methods across sixteen modules. Build/CI/GitHub Actions/APK/AAB не запускались.
+
+**Ограничения:** scanner сохраняет O(page count) компактных headers и O(generation count) snapshot records; raw encoded pages читаются лениво. Он не сохраняет/перезаписывает старый Superblock, не делает rollback, truncate, compaction или free-page reuse; full tree scan опционален. Flush/power-loss свойства конкретной Android flash storage не подтверждены. При ошибке ниже verified prefix автоматическое решение о rollback остаётся за отдельной recovery/repair операцией с явным контролем.

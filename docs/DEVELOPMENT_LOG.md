@@ -1072,3 +1072,23 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** normal open checks the active snapshot, direct MANIFEST references and immediate previous COMMIT, not the entire historical COMMIT chain or every unreferenced page. Full B+ tree traversal is optional at open; modified typed-COW trees are validated before commit. No compaction, free-page reuse, full recovery history, CQE delivery/ACK, JNVM adapter, or hardware-level flush guarantee is implemented. `fsync` calls are present but need device testing and cannot prove the specific flash controller's power-loss behavior.
 
 **Focused Termux command:** `python3 -m unittest tools.jpvr_reference.test_storage -v`. The combined 15-module JPVR suite command is in README. All new tests remain **AUTHORED, NOT RUN** until the user executes them.
+
+
+### 2026-11-11 — JPVR Historical Recovery Scanner V1
+
+**Цель:** проверять всю физическую историю JPVR от genesis до активного Superblock, проверять каждый исторический MANIFEST отдельно и сообщать последнюю полностью подтверждённую transaction boundary без автоматического изменения файла.
+
+**Добавлено / изменено:**
+- tools/jpvr_reference/recovery.py: публичный scan_jpvr_history(superblock, page_catalog, verify_index_trees=False); модели JPVRRecoveryIssue, JPVRHistoricalSnapshot, JPVRHistoryScanResult. Сканер последовательно читает страницу за страницей, сохраняет compact page headers, проверяет generation-specific contiguous append ranges, единый transaction_id/generation, финальное положение MANIFEST/COMMIT, уникальность commit/transaction IDs, exact predecessor PageRef, и каждую historical COMMIT↔MANIFEST snapshot ссылку.
+- Каждая историческая MANIFEST проверяется через validate_commit_snapshot с synthetic historical Superblock и prefix-limited page catalog, чтобы future pages нельзя было использовать в старом snapshot. Проверяются все семь INDEX roots и CHECKPOINT/JOURNAL/OUTBOX high-water references.
+- Существующий OUTBOX linked-history helper повторно используется для event predecessor, source COMMIT chain membership, sequence и identity validation.
+- При первом повреждении отчёт сохраняет предыдущие полностью verified generations, issue code/message/page/generation и verified_durable_tail_page_no. Сканирование не выполняет автоматический rollback или truncate.
+- tools/jpvr_reference/storage.py: добавлен JPVRStorage.scan_history(), работающий под shared lock с lazy _DiskPageCatalog, без load_page_catalog(). Он сообщает orphan_tail_bytes, но не удаляет orphan tail.
+- tools/jpvr_reference/test_recovery.py: 22 теста на genesis/1/3 поколений, повреждённую или отсутствующую страницу, I/O failure, неправильный historical root, page generation/transaction identity, неверный порядок MANIFEST, дубли commit/transaction IDs, разрыв поколений, несовпадение active Superblock/checkpoint, uncommitted/orphan tail, optional B+ tree verification, OUTBOX chain и lazy file-backed scan.
+- Экспортированы JPVRHistoryScanResult, JPVRHistoricalSnapshot, JPVRRecoveryIssue, scan_jpvr_history. Добавлена docs/JPVR_HISTORICAL_RECOVERY_V1.md; обновлены README, architecture (3.33), JPVR_STORAGE_ENGINE_V1 и JPVR_OUTBOX_SCAN_V1.
+
+**Проверки:** GitHub source readback/static API and documentation consistency review only. Python tests, import/syntax checks, injected filesystem failure execution and Android Termux I/O measurement NOT RUN. Все 22 новых test methods AUTHORED, NOT RUN. JPVR suite source total = 349 methods across sixteen modules. No Android/Gradle build, CI, GitHub Actions, APK/AAB or device I/O/resource measurement was run.
+
+**Ограничения:** scanner сохраняет O(page count) компактных headers, raw page bytes читает лениво; optional full-tree audit может быть затратным. Scanner только формирует safe-prefix report; автоматическое восстановление старого Superblock/состояния, truncate/rollback, compaction и free-page reuse не реализованы. Orphan-tail bytes only reported. Hardware-level power-loss guarantees and actual Android flash behavior remain unverified.
+
+**Focused Termux command:** python3 -m unittest tools.jpvr_reference.test_recovery -v. Full JPVR suite command is in README; the historical scanner module is included there.

@@ -435,6 +435,39 @@ class JPVRStorage:
                     "reopen and inspect active_commit_id before retrying",
                 ) from exc
 
+
+    def scan_history(self, *, verify_index_trees: bool | None = None):
+        """Audit every committed generation without materializing the page catalog.
+
+        The scan is read-only. It reports the last fully validated commit
+        boundary and the number of bytes beyond the selected durable prefix.
+        Those tail bytes are not automatically truncated by this method.
+        """
+        from .recovery import scan_jpvr_history
+
+        if verify_index_trees is None:
+            verify_trees = self.verify_index_trees
+        elif isinstance(verify_index_trees, bool):
+            verify_trees = verify_index_trees
+        else:
+            raise JPVRFormatError("verify_index_trees must be bool or None")
+
+        with self._locked(fcntl.LOCK_SH):
+            active = self._select_active_unlocked()
+            file_size = os.fstat(self._fd).st_size
+            catalog = _DiskPageCatalog(
+                self, active.durable_tail_page_no, file_size
+            )
+            result = scan_jpvr_history(
+                active, catalog, verify_index_trees=verify_trees
+            )
+            committed_size = (active.durable_tail_page_no + 1) * PAGE_SIZE
+            orphan_tail_bytes = max(0, file_size - committed_size)
+            self._superblock = active
+            if orphan_tail_bytes:
+                result = replace(result, orphan_tail_bytes=orphan_tail_bytes)
+            return result
+
     def load_page_catalog(self, *, max_pages: int = 4096) -> dict[int, bytes]:
         """Materialize a bounded catalog for the current typed in-memory builder.
 

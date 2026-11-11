@@ -39,6 +39,7 @@ with JPVRStorage.open("jarvis.jpvr") as store:
 - `get_superblock()`: refreshes and returns the selected active snapshot.
 - `read_page(page_no)`: reads one page within the current durable prefix and checks its page envelope/CRCs.
 - `load_page_catalog(max_pages=4096)`: materializes a mapping for the typed in-memory builder. The default cap is 4096 pages (16 MiB raw page bytes plus Python mapping/object overhead).
+- `scan_history(verify_index_trees=None)`: runs the read-only historical audit over a lazy file catalog; returns verified snapshots and reports orphan tail bytes without truncation.
 - `commit(TransactionAssemblyPlan | TypedTransactionBuildPlan)`: revalidates the plan under the exclusive writer lock, appends it, and publishes the inactive slot.
 - `close()`: closes the file; the class is also a context manager.
 
@@ -68,11 +69,25 @@ The 19 authored tests cover dual genesis slots, create-no-overwrite, truncated c
 
 These tests are **AUTHORED, NOT RUN** in the implementation turn. No Python tests, syntax/import checks, Android/Termux measurements, Gradle/Android builds, CI or GitHub Actions have been run for this stage.
 
+## Historical scan
+
+JPVRStorage.open() still validates the selected active snapshot and immediate previous COMMIT for fast open. It does not automatically walk every earlier generation. Call store.scan_history() when a full audit is required. The scanner checks all historical transaction page ranges and each historical MANIFEST separately, and returns the last verified commit boundary in JPVRHistoryScanResult. It reuses the committed OUTBOX chain validator. Set verify_index_trees=True for a full B+ tree traversal for each historical generation.
+
+The scan is read-only. Bytes after the active durable tail are reported in orphan_tail_bytes; they are not included in committed history and are not deleted by scan_history(). If a later generation is corrupt, earlier fully validated snapshots remain in the result as recovery candidates. The scanner does not publish an older Superblock or rewrite/truncate any pages.
+
+Focused tests:
+
+```sh
+python3 -m unittest tools.jpvr_reference.test_recovery -v
+```
+
+The 22 recovery tests are AUTHORED, NOT RUN in this implementation turn. Current JPVR source count is 349 methods across sixteen modules; previous transaction/COW/storage tests have not all been rerun as one combined post-change suite.
+
 ## Explicit limits
 
-- Normal open validates the active snapshot and its immediate predecessor COMMIT; it does not scan the entire historical COMMIT chain.
+- Normal open validates the active snapshot and its immediate predecessor COMMIT. Full historical scanning is an explicit scan_history() operation, not an automatic open-time step.
 - Normal open validates direct MANIFEST references. Full active B+ tree validation is opt-in; trees modified by an attached typed COW plan are validated before commit.
-- No free-page reuse, compaction, file-format upgrades, snapshot retention policy, full-page integrity sweep, CQE OUTBOX delivery/ACK, or JNVM adapter exists.
+- No automatic repair/rollback to an older historical snapshot, free-page reuse, compaction, file-format upgrades, snapshot retention policy, full-page integrity sweep, CQE OUTBOX delivery/ACK, or JNVM adapter exists.
 - The software calls `fsync` at the specified barriers, but cannot prove that a particular device/controller truthfully flushes volatile caches or survives sudden power loss.
 - The writer is currently a POSIX/Android local-file reference. Other platforms/filesystems need separate locking/durability validation.
 
