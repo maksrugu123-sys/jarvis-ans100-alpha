@@ -66,7 +66,8 @@ The repository has entered the first executable Python reference-orchestration s
 | `docs/JPVR_RECOVERY_REPAIR_V1.md` | Explicit, non-destructive recovery-copy publication and failure model |
 | `docs/JPVR_COMMIT_V1.md` | JCOM v1 fixed COMMIT payload, snapshot checks and non-goals |
 | `docs/JPVR_JOURNAL_V1.md` | JNRL v1 operation-state entries, immutable history links and lifecycle rules |
-| `docs/JPVR_OUTBOX_V1.md` | JOUT v1 immutable event/page and sequence contract |\n| `docs/JPVR_OUTBOX_SCAN_V1.md` | Read-only validation of active snapshot, COMMIT chain and committed OUTBOX history |
+| `docs/JPVR_OUTBOX_V1.md` | JOUT v1 immutable event/page and sequence contract |
+| `docs/JPVR_OUTBOX_SCAN_V1.md` | Read-only validation of active snapshot, COMMIT chain and committed OUTBOX history |
 | `AGENTS.md` | Mandatory contributor/agent instructions and project constraints |
 
 ## Run the comprehensive one-neuron exam
