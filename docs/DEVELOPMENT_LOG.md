@@ -1172,3 +1172,23 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** one active network checkpoint per container; bounded materialized catalog (default 4096 pages); clock epoch continuity remains caller-owned; external reward-baseline, CQE/session/side-effect persistence and event deduplication beyond pending queue remain unimplemented. This is not production JNVM/NCC, and crash consistency/device performance are not measured.
 
 **Следующий этап:** persist the external R-STDP Reward Baseline Manager with explicit clock epoch and compare-and-swap/versioning, then join network and baseline checkpoints into one higher-level runtime snapshot before CQE session/event persistence.
+
+
+### 2026-11-11 — R-STDP Reward Baseline Manager and JPVR Checkpoint V1
+
+**Цель:** перейти от Oracle-функции `apply_reward()`, принимающей baseline извне, к самостоятельному владельцу baseline для задач: безопасный порядок feedback, replay/idempotency, сохранение pending обработки и восстановление.
+
+**Изменения:**
+- `tools/neuron_runtime/reward_baseline.py`: bounded RewardBaselineManager; отдельный baseline на reward_task_id; immutable prepare/commit flow; sequence-gap DEFERRED; conflicting replay/version detection; bounded receipt history; explicit clock epoch and monotonic model time; persisted pending proposal; strict state restore.
+- `tools/neuron_runtime/reward_baseline_adapter.py`: canonical JRBM V1 snapshot and stable domain-separated manager object ID; strict JSON duplicate-key, non-finite, schema and identity checks; BLOB record input.
+- `tools/neuron_runtime/reward_baseline_store.py`: JRCP V1 descriptor and JPVRRewardBaselineStore; BLOB+CHECKPOINT+MANIFEST+COMMIT save; source COMMIT ancestry, transaction/generation/container checks, BLOB metadata/CRC, page catalog bound and expected_record_version CAS.
+- `tools/neuron_runtime/test_reward_baseline.py` (26 methods) and `tools/neuron_runtime/test_reward_baseline_store.py` (15 methods): manager/codec/order/replay/epoch/restart/descriptor/storage/CAS/corruption/ancestry tests.
+- `tools/neuron_runtime/__init__.py`: public exports. README, architecture §3.38 and dedicated contract updated.
+
+**Файлы:** added `tools/neuron_runtime/reward_baseline.py`, `reward_baseline_adapter.py`, `reward_baseline_store.py`, `test_reward_baseline.py`, `test_reward_baseline_store.py`, `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`; modified `tools/neuron_runtime/__init__.py`, `README.md`, `docs/JARVIS_ARCHITECTURE.md`, this log and `docs/JARVIS_RUNTIME_V1.md`.
+
+**Проверки:** GitHub source readback and static contract review only. 26 manager/codec tests and 15 JPVR store tests are **AUTHORED, NOT RUN**. No Python tests, import/syntax command, fault-injection run, Android/Termux storage I/O, resource benchmark, Gradle/Android build, CI, GitHub Actions, APK or AAB.
+
+**Ограничения:** manager and store are Python reference code, not production feedback evaluator or NCC. One writer and one pending feedback per task; task catalog and dedup history are bounded. Clock epoch remains caller-owned. V1 uses a dedicated JPVR container because one MANIFEST checkpoint pointer cannot simultaneously publish the network and reward-baseline snapshots. The baseline checkpoint is not crash-atomic with NetworkRuntime neuron weights/eligibility, and no durable RewardProcessingRecord/CQE transaction exists. Caller must not commit the baseline until all related synapse operations are terminal success or approved no-op.
+
+**Следующий этап:** implement a versioned composite Runtime checkpoint and feedback transaction for NetworkRuntime + RewardBaselineManager, then integrate CQE durable inbox/outbox/session persistence without losing replay or idempotency guarantees.

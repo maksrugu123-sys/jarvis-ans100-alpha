@@ -3733,7 +3733,7 @@ tools/neuron_runtime/test_jpvr_adapter.py содержит 16 focused methods: f
 
 1. Откалибровать STARTER-профиль Adaptive LIF-DT/STDP/R-STDP с использованием Oracle и выбрать подтверждённую версию параметров.
 2. Проверить устойчивость и качество обучения на длинных контролируемых последовательностях, включая точность будущей float32 runtime-кандидатуры относительно float64 oracle.
-3. Завершить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter; single-neuron serialization/indexed save-load и bounded NetworkRuntime topology/pending-event/network-clock checkpoint реализованы как Python reference APIs в разделах 3.35–3.37. Scheduler-owned clock-epoch continuity/rebase policy, external reward-baseline persistence и production NCC остаются открытыми.
+3. Завершить исполняемые интерфейсы нейрона, синапсов, Learning Manager, Prediction Manager, Feedback Evaluator, NCC и JPVR Adapter; single-neuron serialization/indexed save-load и bounded NetworkRuntime topology/pending-event/network-clock checkpoint реализованы как Python reference APIs в разделах 3.35–3.37. Scheduler-owned clock-epoch continuity/rebase policy, atomic combined NetworkRuntime+RewardBaseline checkpoint/feedback transaction и production NCC остаются открытыми; отдельный RewardBaselineManager и его dedicated-container checkpoint реализованы в разделе 3.38.
 4. Зафиксировать минимальную архитектуру первого исполняемого прототипа, конфигурацию, границы модулей и диагностические показатели.
 5. Подготовить проверяемый план JPVR-001 и критерии приёмки: корректность сигналов, обучение, сохранение/загрузка, восстановление, RAM, задержка и объём операций записи.
 
@@ -4046,3 +4046,48 @@ Not persisted: external R-STDP reward-baseline state, CQE inbox/outbox delivery 
 Добавлены network_adapter.py, network_store.py, test_network_adapter.py (11 методов), test_network_store.py (14 методов), NetworkRuntime export/restore checkpoint APIs and typed CheckpointPageInput. Tests cover canonical round-trip, pending delayed route continuation, topology/order, scheduler limits/clock, strict schema/epoch/ID validation, descriptor round-trip/rejection, genesis initialization, reopen, CAS, source-commit ancestry, coexistence with one-neuron checkpoints, BLOB corruption and invalid runtime preflight.
 
 **Проверки этого этапа:** GitHub source readback/static cross-reference only. 11 adapter and 14 storage tests are **AUTHORED, NOT RUN**; existing 15 network scheduler tests remain AUTHORED, NOT RUN. No Python tests/import/syntax commands, fault-injection execution, Android/Termux I/O, performance/resource benchmarks, builds, CI, GitHub Actions, APK or AAB were run.
+
+
+### 3.38. R-STDP Reward Baseline Manager and JPVR Checkpoint V1
+
+**Статус: IMPLEMENTED как bounded Python reference manager, canonical snapshot codec и dedicated-container JPVR checkpoint store; 26 manager/codec tests и 15 store tests AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`.
+
+#### 3.38.1. Владение baseline и feedback ordering
+
+`RewardBaselineManager` владеет отдельным ожидаемым reward для каждого `reward_task_id`. Начальное значение явно задаётся конфигурацией (default 0.5 в reference API); `beta_b` передаётся отдельно, STARTER/Oracle параметры не изменяются.
+
+`prepare_feedback(task, feedback_id, sequence, reward, model_time, clock_epoch_id=...)` проверяет:
+- ненулевой 128-bit clock epoch, точно совпадающий с epoch менеджера;
+- непустые стабильные task/feedback IDs, reward в [0,1], sequence как положительный u64;
+- монотонность model_time отдельно для каждой reward_task_id;
+- строго следующую feedback sequence. Пропуск возвращает `RewardBaselineDeferred`, конфликтующий или устаревший replay — `RewardBaselineConflict`;
+- единственный pending proposal на задачу. Точная повторная доставка pending feedback возвращает ту же reservation.
+
+Proposal привязан к `manager_id` и `clock_epoch_id`; `feedback_id` нельзя повторно использовать под другим sequence внутри сохранённой истории. Proposal привязан к `manager_id` и `clock_epoch_id`; `feedback_id` нельзя повторно использовать под другим sequence внутри сохранённой истории. Proposal фиксирует старый `baseline_before`, вычисленные `M=clip(r-b,-1,+1)` и `baseline_after=clip(b+beta_b(r-b),0,1)`. Подготовка не меняет committed baseline. `commit_feedback()` продвигает baseline/version только после явно переданного терминального результата: APPLIED, APPLIED_NO_CHANGE, NO_ELIGIBILITY, EXPIRED или DISABLED_NO_OP. RETRY_REQUIRED/FAILED и прочие неуспешные статусы не продвигают baseline; pending proposal остаётся для восстановления.
+
+Committed receipt history ограничена (default 16 на задачу). Повтор идентичного feedback внутри окна возвращает исходный receipt; та же sequence с другим ID/содержимым конфликтует. Более старый replay за пределами retention безопасно отвергается, а не исполняется снова. Каталог задач также bounded (default 1024). Один pending feedback на задачу и один writer — текущий reference contract; параллельная конкурентная обработка не реализована.
+
+#### 3.38.2. JRBM snapshot и JPVR persistence
+
+- Record type 0x0103, schema ID 0x4A52424D (JRBM), schema version 1.
+- Object ID — первые 16 байт SHA-256 от domain-separated `JARVIS:JNVM:REWARD-BASELINE:V1\\0` и strict UTF-8 manager_id.
+- Payload — canonical UTF-8 JSON: exact field sets, deterministic task order, duplicate-key/non-finite JSON rejection, bounded task/history arrays. Persisted fields include epoch, manager policy, each baseline/version, last committed sequence/ID/time, bounded receipts and pending proposal.
+- One JRCP V1 fixed-size CHECKPOINT descriptor points to the contiguous BLOB range and binds record version, schema/object identity, source generation, payload length and CRC32C.
+- Save publishes BLOB + CHECKPOINT + MANIFEST + COMMIT in one `JPVRStorage.commit()`; load verifies active Superblock/MANIFEST pointer, exact historical source COMMIT ancestry, transaction/generation/container identity, BLOB metadata/range and payload CRC before strict manager restoration.
+- Optional `expected_record_version` is a compare-and-swap guard. Genesis initializes required empty INDEX roots in a separate schema COMMIT, matching existing stores.
+
+**Отдельный контейнер обязателен для V1.** JPVR MANIFEST currently exposes one `checkpoint_page_no`; the active NetworkRuntime checkpoint already owns that pointer. Saving reward state into the same container would replace the network pointer. A future composite Runtime checkpoint must introduce an explicit versioned descriptor for both objects and atomically publish both references; this stage does not alter JNCP V1 or silently share the pointer.
+
+#### 3.38.3. Часы, recovery и ограничения
+
+Caller supplies the same explicit 16-byte clock_epoch_id for manager and related model state. The manager enforces per-task nondecreasing model time within that epoch; it does not infer a new epoch after process restart or rebase timestamps. Pending feedback is included in snapshots so a retry can resume after restore, but this checkpoint alone cannot establish whether external synapse work already committed.
+
+The manager is not wired into `NeuronRuntime.apply_reward()` or `NetworkRuntime` as an atomic feedback operation. The caller must persist the pending reservation before external side effects and call `commit_feedback()` only after all relevant synapses have reached terminal success or an approved no-op. The separate manager and network stores cannot yet guarantee crash-atomic agreement between weights/eligibility and baseline. There is no durable RewardProcessingRecord, cross-domain outbox, critic/source authorization registry, concurrent lock protocol, or exact-once guarantee. These belong to the next composite Runtime/CQE integration.
+
+#### 3.38.4. Проверки и статус
+
+Added `reward_baseline.py`, `reward_baseline_adapter.py`, `reward_baseline_store.py`, `test_reward_baseline.py` (26 methods), `test_reward_baseline_store.py` (15 methods), public exports and `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`. Tests cover old-baseline modulation, ordered sequences, duplicate/pending retry, conflicts/gaps, epoch/time bounds, task/history bounds, terminal status gate, strict restore/codec, pending restart, descriptor, JPVR genesis/reopen, CAS, pointer isolation, ancestry, BLOB CRC and catalog bound.
+
+**Проверки этого этапа:** GitHub source readback and static cross-reference review only. All 41 new tests are **AUTHORED, NOT RUN**. No Python tests, import/syntax execution, storage fault injection, Android/Termux I/O, resource benchmark, build, CI, GitHub Actions, APK or AAB were run.
+
+**Следующий этап:** build a versioned composite Runtime checkpoint/feedback transaction that publishes NetworkRuntime plus RewardBaseline state without competing MANIFEST pointers and makes synapse results, consumed eligibility and baseline advancement recoverable as one coherent operation. Then add CQE durable inbox/outbox/session state.

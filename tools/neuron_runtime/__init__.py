@@ -119,3 +119,68 @@ __all__ += [
     "decode_network_checkpoint_descriptor",
     "encode_network_checkpoint_descriptor",
 ]
+
+
+from .reward_baseline import (
+    RewardBaselineConflict, RewardBaselineDeferred, RewardBaselineError,
+    RewardBaselineManager, RewardBaselineProposal, RewardBaselineReceipt,
+    RewardBaselineRecord,
+)
+
+__all__ += [
+    "RewardBaselineConflict",
+    "RewardBaselineDeferred",
+    "RewardBaselineError",
+    "RewardBaselineManager",
+    "RewardBaselineProposal",
+    "RewardBaselineReceipt",
+    "RewardBaselineRecord",
+]
+
+from .reward_baseline_adapter import (
+    DecodedRewardBaselineSnapshot,
+    REWARD_BASELINE_RECORD_TYPE,
+    REWARD_BASELINE_SCHEMA_ID,
+    REWARD_BASELINE_SCHEMA_VERSION,
+    RewardBaselinePersistenceError,
+    decode_reward_baseline_snapshot,
+    encode_reward_baseline_snapshot,
+    make_reward_baseline_record_input,
+    reward_baseline_object_id,
+)
+
+__all__ += [
+    "DecodedRewardBaselineSnapshot",
+    "REWARD_BASELINE_RECORD_TYPE",
+    "REWARD_BASELINE_SCHEMA_ID",
+    "REWARD_BASELINE_SCHEMA_VERSION",
+    "RewardBaselinePersistenceError",
+    "decode_reward_baseline_snapshot",
+    "encode_reward_baseline_snapshot",
+    "make_reward_baseline_record_input",
+    "reward_baseline_object_id",
+]
+
+from .reward_baseline_store import (
+    JPVRRewardBaselineConflict,
+    JPVRRewardBaselineError,
+    JPVRRewardBaselineNotFound,
+    JPVRRewardBaselineStore,
+    LoadedRewardBaselineCheckpoint,
+    RewardBaselineCheckpointDescriptor,
+    SavedRewardBaselineCheckpoint,
+    decode_reward_baseline_checkpoint_descriptor,
+    encode_reward_baseline_checkpoint_descriptor,
+)
+
+__all__ += [
+    "JPVRRewardBaselineConflict",
+    "JPVRRewardBaselineError",
+    "JPVRRewardBaselineNotFound",
+    "JPVRRewardBaselineStore",
+    "LoadedRewardBaselineCheckpoint",
+    "RewardBaselineCheckpointDescriptor",
+    "SavedRewardBaselineCheckpoint",
+    "decode_reward_baseline_checkpoint_descriptor",
+    "encode_reward_baseline_checkpoint_descriptor",
+]

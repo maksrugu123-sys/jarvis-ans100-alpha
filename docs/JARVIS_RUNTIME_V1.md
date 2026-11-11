@@ -30,3 +30,12 @@ The authoring check ran Python syntax compilation and an isolated test harness w
     python3 -m unittest discover -s tools -t . -v
 
 Do not describe this module as integrated into JARVIS or JPVR-001 until the focused and full repository suites pass against the real Oracle and the remaining state ownership/persistence interfaces are implemented.
+
+
+## Reward Baseline Manager V1
+
+`RewardBaselineManager` now provides the external baseline owner used by R-STDP orchestration. A caller prepares feedback against the previously committed task baseline, processes every relevant synapse, then commits the baseline only after terminal success or an approved no-op. The manager enforces per-task feedback sequence, exact replay within a bounded receipt window, pending reservation reuse and a caller-supplied clock epoch.
+
+The manager is a separate reference component; `NeuronRuntime.apply_reward()` still takes `baseline_before` from its caller and changes one synapse in memory. The manager does not automatically coordinate that mutation or persist it atomically. Its JPVR snapshot uses a dedicated container because the active NetworkRuntime checkpoint already owns the one MANIFEST checkpoint pointer. A composite checkpoint/feedback transaction remains required before claiming crash-atomic reward learning.
+
+Contract: `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`. Tests: `tools/neuron_runtime/test_reward_baseline.py` (26) and `tools/neuron_runtime/test_reward_baseline_store.py` (15), **AUTHORED, NOT RUN**.
