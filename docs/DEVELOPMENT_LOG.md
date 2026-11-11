@@ -1218,16 +1218,16 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 **Добавлено / изменено:**
 - `tools/neuron_runtime/feedback_transaction.py`: candidate-state coordinator; strict unique target validation; R-STDP-only targets; exact `beta_b` agreement; cloned network/manager; all-target Oracle reward application; baseline-after/modulator cross-check; terminal-status aggregation; composite JRCM save under required runtime-version CAS; durable duplicate receipt reconciliation without reapplying.
-- `tools/neuron_runtime/test_feedback_transaction.py`: 7 focused tests for one-commit success, multi-target rollback, duplicate replay, terminal no-eligibility, beta mismatch, stale CAS and duplicate-target rejection.
+- `tools/neuron_runtime/test_feedback_transaction.py`: 10 focused tests for one-commit success, multi-target rollback, duplicate replay, terminal no-eligibility, beta mismatch, stale CAS and duplicate-target rejection.
 - Public package exports, README, architecture §3.40, Runtime V1 contract and new atomic feedback contract updated.
 
 **Файлы:** added `tools/neuron_runtime/feedback_transaction.py`, `tools/neuron_runtime/test_feedback_transaction.py`, `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`; modified `tools/neuron_runtime/__init__.py`, `README.md`, `docs/JARVIS_ARCHITECTURE.md`, `docs/JARVIS_RUNTIME_V1.md` and this log.
 
-**Проверки:** GitHub source readback and static cross-reference review only. Nine tests are **AUTHORED, NOT RUN**. No Python test execution, import/syntax checks, storage fault injection, concurrent-writer tests, Android/Termux I/O, benchmarks, Gradle/Android builds, CI or GitHub Actions.
+**Проверки:** GitHub source readback and static cross-reference review only. Ten tests are **AUTHORED, NOT RUN**. No Python test execution, import/syntax checks, storage fault injection, concurrent-writer tests, Android/Termux I/O, benchmarks, Gradle/Android builds, CI or GitHub Actions.
 
 **Ограничения:** only the bounded local R-STDP calculation plus composite state publication is coordinated. The manager replay identity does not persist a digest of target IDs/learning context; callers must keep the complete target set immutable for each feedback ID. The coordinator is single-writer reference code; commit-uncertain outcomes require reopen/load and retry; no CQE authorization/inbox/outbox/session state, external side effects, exactly-once delivery, NCC or Android durability guarantees.
 
 **Следующий этап:** add a durable CQE inbox/feedback envelope and processing receipt so feedback identity, source/policy provenance, target set and committed runtime version can be recovered and deduplicated as one protocol; then integrate bounded CQE task/session orchestration.
 
 
-**Дополнительное ужесточение readback review:** duplicate replay now reconstructs and compares the full RewardBaselineReceipt against the active durable checkpoint, not only feedback ID/time/status. It also requires the caller's expected runtime version to equal the active version. Added regression tests for stale duplicate replay and pending events at the reward timestamp; total focused tests: 9, **AUTHORED, NOT RUN**.
+**Дополнительное ужесточение readback review:** duplicate replay now reconstructs and compares the full RewardBaselineReceipt against the active durable checkpoint, not only feedback ID/time/status. It also requires the caller's expected runtime version to equal the active version. Added regression tests for stale duplicate replay and pending events at the reward timestamp; total focused tests: 10, **AUTHORED, NOT RUN**.

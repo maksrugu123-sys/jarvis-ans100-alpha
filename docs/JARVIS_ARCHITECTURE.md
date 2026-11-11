@@ -4110,7 +4110,7 @@ Focused tests: `tools.neuron_runtime.test_runtime_store` plus network/reward che
 
 ### 3.40. Atomic R-STDP feedback transaction V1
 
-**Status:** implemented as a bounded Python reference coordinator; nine focused tests are AUTHORED, NOT RUN. Not production NCC, CQE-integrated or Android-device-verified.
+**Status:** implemented as a bounded Python reference coordinator; ten focused tests are AUTHORED, NOT RUN. Not production NCC, CQE-integrated or Android-device-verified.
 
 `process_reward_feedback()` joins the existing R-STDP Oracle, `RewardBaselineManager` and JRCM composite JPVR store. It creates detached candidate copies of the network and manager, prepares one ordered task feedback, validates a unique target-synapse set, and applies the same reward/time/baseline to every selected R-STDP synapse. Each Oracle result must agree with the prepared manager's baseline-after/modulator, and each target must reach an accepted terminal status. A failure on any target discards all candidate state.
 
@@ -4120,4 +4120,4 @@ After all targets succeed or return an approved terminal no-op, the manager comm
 
 **Limits:** all selected synapses must have the same configured `RewardParams.beta_b` as the manager. The caller must drain queued events through the reward timestamp first; a pending event at or before feedback time blocks the batch. Feedback identity includes task, feedback ID/sequence, reward and model time in the existing manager history; target-set/context digest is not yet persisted, so callers must keep those fields immutable for a feedback ID. A duplicate replay must also present the current durable runtime version; stale duplicates are rejected. Manager replay history remains bounded. This is single-writer reference code; no concurrent process/NCC guarantees. External side effects, CQE inbox/outbox, authorization, session state, exactly-once delivery and device measurements remain out of scope.
 
-Focused tests: `tools.neuron_runtime.test_feedback_transaction` (9 methods), **AUTHORED, NOT RUN**.
+Focused tests: `tools.neuron_runtime.test_feedback_transaction` (10 methods), **AUTHORED, NOT RUN**.
