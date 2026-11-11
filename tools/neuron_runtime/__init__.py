@@ -209,3 +209,22 @@ __all__ += [
     "decode_runtime_checkpoint_descriptor",
     "encode_runtime_checkpoint_descriptor",
 ]
+
+
+from .feedback_transaction import (
+    AppliedSynapseReward,
+    RewardFeedbackTransactionConflict,
+    RewardFeedbackTransactionError,
+    RewardFeedbackTransactionResult,
+    RewardSynapseTarget,
+    process_reward_feedback,
+)
+
+__all__ += [
+    "AppliedSynapseReward",
+    "RewardFeedbackTransactionConflict",
+    "RewardFeedbackTransactionError",
+    "RewardFeedbackTransactionResult",
+    "RewardSynapseTarget",
+    "process_reward_feedback",
+]

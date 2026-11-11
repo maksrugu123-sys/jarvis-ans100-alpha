@@ -1,4 +1,4 @@
-# JARVIS ANS-100 Alpha
+| `tools/neuron_runtime/feedback_transaction.py` | Candidate-state multi-synapse R-STDP feedback + one composite JPVR commit |\n| `tools/neuron_runtime/test_feedback_transaction.py` | Atomic feedback rollback, CAS, replay and terminal no-op tests |\n# JARVIS ANS-100 Alpha
 
 **JARVIS ANS-100 Alpha** is a research project for a compact adaptive neural system. Development is staged: begin with one artificial neuron and a small number of synapses, validate behavior and resource cost, and scale only when each previous step is supported by evidence.
 
@@ -383,3 +383,12 @@ python3 -m unittest tools.neuron_runtime.test_runtime_store -v
 `JPVRRuntimeCheckpointStore(storage).save(network_id, network, reward_baseline_manager)` stores complete NetworkRuntime and RewardBaselineManager snapshots under one JRCM V1 CHECKPOINT page and one JPVR COMMIT. Both component records share the same commit generation, transaction ID and caller-owned model clock epoch. `load(network_id, manager_id)` validates exact source COMMIT ancestry, both component locators, DATA/BLOB schemas and CRCs, and matching clock epochs before restoring either object. `expected_runtime_version` protects the pair with one compare-and-swap version.
 
 Component adapters choose DATA for payloads up to 3976 bytes and BLOB for larger payloads. Standalone network and reward-baseline stores accept both forms too. Use a dedicated runtime JPVR container for JRCM; do not share it with standalone JNCP/JRCP pointers. This is atomic checkpoint publication only: applying rewards to synapses and committing baseline is not yet one runtime feedback transaction. Twelve composite-store tests are AUTHORED, NOT RUN. Contract: `docs/JNVM_COMPOSITE_RUNTIME_CHECKPOINT_V1.md`.
+
+
+## Run the atomic R-STDP feedback transaction tests
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_feedback_transaction -v
+```
+
+`process_reward_feedback()` clones the network and baseline manager, applies all selected synapse rewards to candidate state, and commits both snapshots through one composite JRCM JPVR transaction. The function leaves caller objects untouched; replace them with the returned network and manager after success. The runtime version is mandatory for compare-and-swap. See `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`.

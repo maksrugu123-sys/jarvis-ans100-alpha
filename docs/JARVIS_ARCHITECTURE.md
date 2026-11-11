@@ -4106,3 +4106,18 @@ Both adapters select DATA for payloads up to 3976 bytes and BLOB for larger payl
 **Not included:** atomic feedback processing over synapse weight/eligibility updates plus baseline advancement and durable publication; CQE inbox/outbox/session persistence; scheduler-owned clock epoch rebasing; concurrent writers; Android I/O measurements; fault-injection proof; production NCC. Pending proposals survive checkpoints, but JRCM cannot infer whether an operation was partially applied in RAM before a crash. The manager must not advance baseline until related synapse operations are terminal success or approved no-op.
 
 Focused tests: `tools.neuron_runtime.test_runtime_store` plus network/reward checkpoint adapter and store tests. All tests in this stage are AUTHORED, NOT RUN.
+
+
+### 3.40. Atomic R-STDP feedback transaction V1
+
+**Status:** implemented as a bounded Python reference coordinator; seven focused tests are AUTHORED, NOT RUN. Not production NCC, CQE-integrated or Android-device-verified.
+
+`process_reward_feedback()` joins the existing R-STDP Oracle, `RewardBaselineManager` and JRCM composite JPVR store. It creates detached candidate copies of the network and manager, prepares one ordered task feedback, validates a unique target-synapse set, and applies the same reward/time/baseline to every selected R-STDP synapse. Each Oracle result must agree with the prepared manager's baseline-after/modulator, and each target must reach an accepted terminal status. A failure on any target discards all candidate state.
+
+After all targets succeed or return an approved terminal no-op, the manager commits its receipt on the candidate copy and `JPVRRuntimeCheckpointStore.save()` publishes candidate network weights/eligibility and manager baseline/receipt under one JRCM descriptor and one JPVR COMMIT. The required `expected_runtime_version` CAS rejects stale callers. On an exact retained duplicate, the coordinator verifies the active durable receipt/runtime version and returns the active checkpoint without reapplying rewards.
+
+**Input immutability:** the function never mutates supplied NetworkRuntime or RewardBaselineManager objects. On success the caller replaces both with the returned instances. Failed validation, target errors and stale CAS preserve original objects. Uncertain storage commit outcomes require reopen/load and retry of the same feedback identity.
+
+**Limits:** all selected synapses must have the same configured `RewardParams.beta_b` as the manager. The caller must drain queued events through the reward timestamp first. Feedback identity includes task, feedback ID/sequence, reward and model time in the existing manager history; target-set/context digest is not yet persisted, so callers must keep those fields immutable for a feedback ID. Manager replay history remains bounded. This is single-writer reference code; no concurrent process/NCC guarantees. External side effects, CQE inbox/outbox, authorization, session state, exactly-once delivery and device measurements remain out of scope.
+
+Focused tests: `tools.neuron_runtime.test_feedback_transaction` (7 methods), **AUTHORED, NOT RUN**.

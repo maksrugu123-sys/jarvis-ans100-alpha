@@ -1210,3 +1210,21 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** one atomic checkpoint publication, not an atomic feedback transaction spanning synapse weights/eligibility and baseline advancement. JRCM requires a dedicated runtime JPVR container because MANIFEST exposes one active checkpoint pointer. Clock epoch continuity remains caller-owned. No concurrent-writer protocol, device durability measurements or production NCC guarantees.
 
 **Следующий этап:** prepare a RewardBaseline proposal and candidate synapse updates together, then publish the runtime state only after all synapse operations reach terminal success/no-op; connect feedback to CQE idempotency next.
+
+
+### 2026-11-11 — Atomic R-STDP Reward Feedback Transaction V1
+
+**Цель:** связать reward baseline с фактическими R-STDP изменениями одного или нескольких синапсов так, чтобы ошибка одного target не оставляла частично обновлённую сеть, а baseline и synaptic state публиковались одним JPVR COMMIT.
+
+**Добавлено / изменено:**
+- `tools/neuron_runtime/feedback_transaction.py`: candidate-state coordinator; strict unique target validation; R-STDP-only targets; exact `beta_b` agreement; cloned network/manager; all-target Oracle reward application; baseline-after/modulator cross-check; terminal-status aggregation; composite JRCM save under required runtime-version CAS; durable duplicate receipt reconciliation without reapplying.
+- `tools/neuron_runtime/test_feedback_transaction.py`: 7 focused tests for one-commit success, multi-target rollback, duplicate replay, terminal no-eligibility, beta mismatch, stale CAS and duplicate-target rejection.
+- Public package exports, README, architecture §3.40, Runtime V1 contract and new atomic feedback contract updated.
+
+**Файлы:** added `tools/neuron_runtime/feedback_transaction.py`, `tools/neuron_runtime/test_feedback_transaction.py`, `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`; modified `tools/neuron_runtime/__init__.py`, `README.md`, `docs/JARVIS_ARCHITECTURE.md`, `docs/JARVIS_RUNTIME_V1.md` and this log.
+
+**Проверки:** GitHub source readback and static cross-reference review only. Seven tests are **AUTHORED, NOT RUN**. No Python test execution, import/syntax checks, storage fault injection, concurrent-writer tests, Android/Termux I/O, benchmarks, Gradle/Android builds, CI or GitHub Actions.
+
+**Ограничения:** only the bounded local R-STDP calculation plus composite state publication is coordinated. The manager replay identity does not persist a digest of target IDs/learning context; callers must keep the complete target set immutable for each feedback ID. The coordinator is single-writer reference code; commit-uncertain outcomes require reopen/load and retry; no CQE authorization/inbox/outbox/session state, external side effects, exactly-once delivery, NCC or Android durability guarantees.
+
+**Следующий этап:** add a durable CQE inbox/feedback envelope and processing receipt so feedback identity, source/policy provenance, target set and committed runtime version can be recovered and deduplicated as one protocol; then integrate bounded CQE task/session orchestration.

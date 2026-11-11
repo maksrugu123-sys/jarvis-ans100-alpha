@@ -44,3 +44,12 @@ Contract: `docs/JNVM_REWARD_BASELINE_CHECKPOINT_STORE_V1.md`. Tests: `tools/neur
 ## Composite persistence boundary
 
 `JPVRRuntimeCheckpointStore` publishes `NetworkRuntime` and `RewardBaselineManager` snapshots through one JRCM V1 CHECKPOINT descriptor and one COMMIT. Both component records must share one clock epoch and source transaction/generation. This prevents a crash from publishing a new network checkpoint while retaining an older baseline checkpoint (or vice versa). It does **not** make `NetworkRuntime.apply_reward()` plus baseline advancement atomic with synapse weight/eligibility updates; that requires a future candidate-state/feedback transaction API. The store is a dedicated-container Python reference implementation, not production NCC.
+
+
+## Atomic R-STDP feedback transaction V1
+
+`process_reward_feedback()` combines a prepared per-task reward baseline with candidate synapse updates across one or more NetworkRuntime neurons. All targets are calculated on a detached network copy; an error in any target discards every candidate update. Only terminal Oracle results allow the baseline receipt to advance. A single JRCM save then publishes network and manager state together using a required expected runtime version.
+
+The function returns new network and manager instances. It does not mutate its input references; callers replace both references only after success. Exact committed replay is reconciled against the active JPVR receipt and does not reapply weights. Contract: `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`. Tests: `tools/neuron_runtime.test_feedback_transaction` (7), **AUTHORED, NOT RUN**.
+
+Remaining limitations: caller-owned clock epoch and event draining; single writer; bounded manager replay history; no persisted target-set digest, CQE inbox/outbox or authorization/session provenance; no external side effects, NCC or Android durability evidence.
