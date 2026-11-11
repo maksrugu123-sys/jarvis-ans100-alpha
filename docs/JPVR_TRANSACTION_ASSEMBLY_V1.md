@@ -4,7 +4,7 @@
 
 This document describes a pure in-memory reference planner. It assembles already encoded JPVR pages into one ordered append plan and validates the proposed COMMIT/MANIFEST snapshot against a caller-supplied current Superblock and page catalog.
 
-It does **not** open or write a container, reserve physical pages under a lock, flush or sync bytes, publish a Superblock slot, arbitrate two physical Superblock copies, recover after a crash, or provide durable idempotency. A successful plan is not a durable transaction.
+It does **not** itself open/write a container or publish a Superblock. The separate file-backed writer in [JPVR_STORAGE_ENGINE_V1.md](JPVR_STORAGE_ENGINE_V1.md) now consumes its plan, provides file locking and fsync ordering, and selects the newest valid Superblock on reopen. A successful in-memory plan alone is not a durable transaction.
 
 ## API
 
@@ -43,6 +43,6 @@ Until the user runs these tests, the new tests are **AUTHORED, NOT RUN**. No bui
 
 ## Remaining gates
 
-1. Validate integration with COW-generated INDEX pages and real DATA/BLOB/JOURNAL/OUTBOX payloads.
-2. Add a higher-level transaction builder that generates the ordered staged pages from typed inputs rather than accepting pre-encoded pages.
-3. Design physical page reservation, writer locking, write ordering, durable flush, dual-Superblock publication, reopen scanning, and crash/fault-injection recovery as a separate stage.
+1. Execute the COW-integrated builder and file-backed storage tests on Android Termux.
+2. Add full historical COMMIT-chain scanning, richer crash/fault-injection coverage and recovery diagnostics.
+3. Design compaction/free-page reuse and durable CQE OUTBOX delivery only after the append/recovery layer is verified.

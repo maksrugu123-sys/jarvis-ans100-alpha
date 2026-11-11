@@ -1,7 +1,7 @@
 # JARVIS ANS-100 Alpha — архитектура и журнал решений
 
 **Статус документа:** рабочая спецификация и журнал согласованных проектных решений  
-**Дата последнего обновления:** 9 ноября 2026 года  
+**Дата последнего обновления:** 11 ноября 2026 года  
 **Репозиторий:** `maksrugu123-sys/jarvis-ans100-alpha` (Private)  
 **Основная ветка:** `main`
 
@@ -3816,3 +3816,45 @@ The source snapshot remains immutable. A request can update multiple keys in one
 **Verification status:** five direct batch-COW regression methods and six typed-builder integration methods were added. They are **AUTHORED, NOT RUN** in this implementation turn. No Python tests, imports, syntax checks, Gradle/Android builds, CI, GitHub Actions, APK/AAB, file I/O, flush/fsync or crash-recovery tests were run. Focused Termux commands are listed in README and the builder contract.
 
 **Limits:** this is still a pure in-memory planner. It does not reserve or lock physical page ranges, persist pages, atomically publish dual Superblock slots, arbitrate torn writes, recover after interruption, or prove storage durability. Only trees modified by this mutation path receive full B+ tree traversal validation; untouched roots retain the existing snapshot validator's root-reference checks.
+
+
+### 3.32. JPVR Real Storage Engine V1 — file-backed reference
+
+**Статус: IMPLEMENTED как file-backed Python reference; AUTHORED, NOT RUN tests; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: [JPVR_STORAGE_ENGINE_V1.md](JPVR_STORAGE_ENGINE_V1.md).
+
+#### 3.32.1. Физическая разметка
+
+- Superblock slot 0: bytes `[0, 4096)`.
+- Superblock slot 1: bytes `[4096, 8192)`.
+- Physical page N: offset `N * 4096`; первая data page имеет номер 2 и offset 8192.
+- Файл создаётся с двумя одинаковыми genesis Superblock (кроме `slot_id`); существующий путь никогда не перезаписывается.
+
+#### 3.32.2. Открытие и выбор durable snapshot
+
+`JPVRStorage.open(path)` читает оба физических слота с проверкой CRC, версии и соответствия slot_id. Для каждого кандидата проверяется, что COMMIT, MANIFEST и все прямые MANIFEST references находятся внутри файла и durable prefix; проверяется текущий COMMIT и непосредственный predecessor COMMIT. Выбирается кандидат с наибольшим валидным generation. Если равные поколения описывают разные состояния, открытие завершается отказом. Повреждённый/неполный новый слот не заслоняет предыдущую корректную версию.
+
+После выбора active Superblock файл усекается до `(durable_tail_page_no + 1) * 4096`, удаляя orphan pages/частичный хвост от транзакции, которая не опубликовала новый Superblock. `verify_index_trees=True` дополнительно обходит все семь текущих B+ trees; обычный open проверяет прямые root/high-water references без полного обхода каждого дерева.
+
+#### 3.32.3. Протокол публикации транзакции
+
+`JPVRStorage.commit(TransactionAssemblyPlan | TypedTransactionBuildPlan)` выполняет действия под эксклюзивным `fcntl.flock` и внутрипроцессным `RLock`:
+
+1. заново выбирает active Superblock и проверяет, что план не stale;
+2. читает нужные старые MANIFEST references и повторно валидирует TransactionAssemblyPlan;
+3. для typed COW plan проверяет соответствие старого/нового root, точные bytes новых INDEX pages, старые statistics и полный modified tree;
+4. пишет contiguous append pages в физическом порядке, включая final COMMIT;
+5. вызывает `fsync` для всех страниц;
+6. записывает только неактивный Superblock slot и снова вызывает `fsync`;
+7. перечитывает слоты и подтверждает, что новый Superblock стал выбранным active snapshot.
+
+Старый Superblock slot не перезаписывается во время append. Если исключение происходит после начала публикации нового слота, метод выдаёт `JPVRCommitUncertainError` с commit_id/generation. Клиент обязан переоткрыть контейнер и проверить active commit identity; повторять side effect вслепую нельзя.
+
+`load_page_catalog(max_pages=4096)` даёт bounded materialization для существующего typed builder. Ограничение относится к числу страниц/encoded bytes и не включает overhead Python dict/bytes objects; пользователь может увеличить cap только после оценки RAM.
+
+#### 3.32.4. Тесты и границы
+
+Добавлены `tools/jpvr_reference/storage.py`, `tools/jpvr_reference/test_storage.py` с 19 focused tests и public exports `JPVRStorage` / `JPVRCommitUncertainError`. Сценарии включают создание обоих слотов, create без overwrite, truncation, genesis/second-generation commit, stale plan, orphan tail, corrupt Superblock/COMMIT/root fallback, conflicting slots, bounded catalog load, typed COW integration и injected partial Superblock publication.
+
+**Проверки этого этапа:** Python tests, import/syntax checks, fault-injection execution и Android Termux measurement **NOT RUN** по согласованному режиму работы. Все 19 новых storage tests — **AUTHORED, NOT RUN**; суммарный JPVR source set теперь содержит 327 методов в 15 модулях. Gradle/Android builds, CI, GitHub Actions и APK/AAB не запускались.
+
+**Явные ограничения:** обычный open не сканирует всю физическую историю и не доказывает целостность всех неактивных/неиспользуемых страниц; он проверяет текущий snapshot и immediate previous COMMIT. Полный обход B+ trees опционален. Нет полной истории/индексации recovery, compaction, free-page reuse, allocator reclamation, file-format upgrades, CQE OUTBOX worker/ACK, JNVM integration, multi-process transaction coordinator, или гарантии аппаратного поведения флеш-контроллера/накопителя при внезапном питании. `fsync` — требуемый системный barrier, но не доказательство того, что конкретное устройство правдиво выполняет flush.

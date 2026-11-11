@@ -1052,3 +1052,23 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Проверки:** source readback и API cross-reference review выполнялись до публикации; Python tests, import/syntax checks **NOT RUN** в этом ходе. Все 11 новых методов — **AUTHORED, NOT RUN**. Нельзя считать их PASS до focused и полного JPVR запуска в Termux. Android/Gradle builds, CI, GitHub Actions, APK/AAB, физический file I/O, flush/fsync и crash recovery — **NOT RUN**.
 
 **Ограничения:** batch planner допускает несколько ключей одного дерева и несколько корней за транзакцию, но не удаление ключей/ребалансировку после удаления. Root tree_id предоставляется caller, поскольку MANIFEST хранит PageRef, а не tree_id. Новый generation root нельзя мутацировать повторно в той же транзакции. Все операции in-memory; durable writer, locking/page reservation, dual-Superblock publication/arbitration и crash recovery остаются отдельным следующим этапом.
+
+
+### 2026-11-11 — JPVR Real Storage Engine V1 (file-backed reference)
+
+**Цель:** реализовать физическое открытие/создание JPVR контейнера, ordered append, двухслотовую публикацию Superblock и безопасный выбор durable snapshot после сбоя.
+
+**Добавлено / изменено:**
+- `tools/jpvr_reference/storage.py`: `JPVRStorage.create/open/get_superblock/read_page/load_page_catalog/commit/close`; physical offsets Superblock slot 0/1 = 0/4096, pages N = N*4096. Создание использует O_EXCL, пишет обе genesis copies, fsync файла и родительского каталога.
+- Opening проверяет обе копии Superblock с expected slot id, COMMIT, MANIFEST, previous COMMIT и MANIFEST direct references; выбирает newest valid generation, rejects conflicting equal-generation roots, truncates bytes beyond selected durable tail. Full active B+ tree traversal включается через `verify_index_trees=True`.
+- Commit takes cross-process `flock` plus in-process `RLock`, revalidates assembly/stale base and typed COW mutation plan, appends all pages, fsyncs page bytes, writes inactive Superblock and fsyncs it, then re-reads selected snapshot. Failures after publication begins are surfaced as `JPVRCommitUncertainError(commit_id, generation)`.
+- `load_page_catalog(max_pages=4096)` exposes bounded materialization for the existing typed transaction builder; the default maximum is 4096 pages (16 MiB raw page bytes plus Python object overhead).
+- `tools/jpvr_reference/test_storage.py`: 19 focused tests authored for both genesis slots, no-overwrite creation, truncated containers, genesis/second-generation commits, alternating slots, stale plans, orphan/partial tail cleanup, damaged Superblock/COMMIT/root fallback, both-slot corruption, equal-generation conflict, page bounds, bounded catalog reads, typed COW publication, metadata mismatch and injected partial Superblock publication.
+- `tools/jpvr_reference/__init__.py`: exported storage API.
+- Added `docs/JPVR_STORAGE_ENGINE_V1.md`; updated `docs/JARVIS_ARCHITECTURE.md`, README, COW and transaction-planner contracts.
+
+**Проверки:** GitHub source readback and static source/API review only. Python tests, import/syntax checks and actual fault-injection execution **NOT RUN**. The 19 new storage tests are **AUTHORED, NOT RUN**. Current JPVR source count is 327 test methods across fifteen modules (308 prior + 19 new). No Android/Gradle build, CI, GitHub Actions, APK/AAB or device I/O/resource measurement was run.
+
+**Ограничения:** normal open checks the active snapshot, direct MANIFEST references and immediate previous COMMIT, not the entire historical COMMIT chain or every unreferenced page. Full B+ tree traversal is optional at open; modified typed-COW trees are validated before commit. No compaction, free-page reuse, full recovery history, CQE delivery/ACK, JNVM adapter, or hardware-level flush guarantee is implemented. `fsync` calls are present but need device testing and cannot prove the specific flash controller's power-loss behavior.
+
+**Focused Termux command:** `python3 -m unittest tools.jpvr_reference.test_storage -v`. The combined 15-module JPVR suite command is in README. All new tests remain **AUTHORED, NOT RUN** until the user executes them.

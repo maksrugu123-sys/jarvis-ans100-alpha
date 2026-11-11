@@ -188,3 +188,8 @@ __all__ = [
     "validate_transaction_assembly_plan",
     "validate_typed_transaction_plan",
 ]
+
+
+from .storage import JPVRCommitUncertainError, JPVRStorage
+
+__all__ += ["JPVRCommitUncertainError", "JPVRStorage"]
