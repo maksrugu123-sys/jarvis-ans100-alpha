@@ -362,6 +362,22 @@ class JPVRHistoricalRecoveryTests(unittest.TestCase):
                 self.assertEqual(result.verified_generation, 1)
                 self.assertEqual(result.verified_durable_tail_page_no, 10)
 
+    def test_validates_outbox_of_last_verified_prefix_when_later_page_is_damaged(self):
+        from .test_outbox_scan import make_snapshot
+
+        superblock, catalog = make_snapshot()
+        damaged = bytearray(catalog[12])
+        damaged[-1] ^= 0x01
+        catalog[12] = bytes(damaged)
+
+        result = scan_jpvr_history(superblock, catalog)
+        self.assertFalse(result.commit_history_complete)
+        self.assertTrue(result.outbox_history_complete)
+        self.assertEqual(result.verified_generation, 1)
+        self.assertEqual([event.event.sequence for event in result.outbox_events], [1])
+        self.assertEqual(result.issue.code, "page-unreadable")
+        self.assertEqual(result.issue.page_no, 12)
+
     def test_storage_history_scan_reports_orphan_tail_without_truncating(self):
         from .test_storage import build_genesis_plan
         with tempfile.TemporaryDirectory() as directory:

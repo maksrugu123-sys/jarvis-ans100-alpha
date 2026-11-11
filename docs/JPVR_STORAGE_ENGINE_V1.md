@@ -40,6 +40,7 @@ with JPVRStorage.open("jarvis.jpvr") as store:
 - `read_page(page_no)`: reads one page within the current durable prefix and checks its page envelope/CRCs.
 - `load_page_catalog(max_pages=4096)`: materializes a mapping for the typed in-memory builder. The default cap is 4096 pages (16 MiB raw page bytes plus Python mapping/object overhead).
 - `scan_history(verify_index_trees=None)`: runs the read-only historical audit over a lazy file catalog; returns verified snapshots and reports orphan tail bytes without truncation.
+- `recover_copy(destination, expected_commit_id, verify_index_trees=None)`: re-scans under a shared lock and publishes the last fully verified prefix to a new, non-existing destination. It validates the prefix OUTBOX chain, writes both Superblock slots and never modifies the source.
 - `commit(TransactionAssemblyPlan | TypedTransactionBuildPlan)`: revalidates the plan under the exclusive writer lock, appends it, and publishes the inactive slot.
 - `close()`: closes the file; the class is also a context manager.
 
@@ -73,7 +74,9 @@ These tests are **AUTHORED, NOT RUN** in the implementation turn. No Python test
 
 JPVRStorage.open() still validates the selected active snapshot and immediate previous COMMIT for fast open. It does not automatically walk every earlier generation. Call store.scan_history() when a full audit is required. The scanner checks all historical transaction page ranges and each historical MANIFEST separately, and returns the last verified commit boundary in JPVRHistoryScanResult. It reuses the committed OUTBOX chain validator. Set verify_index_trees=True for a full B+ tree traversal for each historical generation.
 
-The scan is read-only. Bytes after the active durable tail are reported in orphan_tail_bytes; they are not included in committed history and are not deleted by scan_history(). If a later generation is corrupt, earlier fully validated snapshots remain in the result as recovery candidates. The scanner does not publish an older Superblock or rewrite/truncate any pages.
+The scan is read-only. Bytes after the active durable tail are reported in orphan_tail_bytes; they are not included in committed history and are not deleted by scan_history(). If a later generation is corrupt, earlier fully validated snapshots remain in the result as recovery candidates. The scanner validates the OUTBOX chain for that verified prefix even when a later generation failed.
+
+An explicit recover_copy(destination, expected_commit_id=...) operation can publish the verified prefix as a separate file. It re-scans under a shared lock, requires the exact 16-byte COMMIT identity and a valid OUTBOX chain, copies only pages through the verified COMMIT boundary, reconstructs both alternating Superblock slots, fsyncs and reads back the new file, and publishes it through a same-directory hard link that refuses an existing path. The source is never changed. A JPVRRecoveryCopyUncertainError requires inspection of the destination before retrying. This is not in-place rollback or repair. See docs/JPVR_RECOVERY_REPAIR_V1.md.
 
 Focused tests:
 
@@ -81,7 +84,7 @@ Focused tests:
 python3 -m unittest tools.jpvr_reference.test_recovery -v
 ```
 
-The 22 recovery tests are AUTHORED, NOT RUN in this implementation turn. Current JPVR source count is 349 methods across sixteen modules; previous transaction/COW/storage tests have not all been rerun as one combined post-change suite.
+The 23 historical scanner tests and 12 recovery-copy tests are AUTHORED, NOT RUN in this implementation turn. Current JPVR source count is 362 methods across seventeen modules; previous transaction/COW/storage tests have not all been rerun as one combined post-change suite.
 
 ## Explicit limits
 

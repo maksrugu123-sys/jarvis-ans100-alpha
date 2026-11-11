@@ -1092,3 +1092,21 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** scanner сохраняет O(page count) компактных headers, raw page bytes читает лениво; optional full-tree audit может быть затратным. Scanner только формирует safe-prefix report; автоматическое восстановление старого Superblock/состояния, truncate/rollback, compaction и free-page reuse не реализованы. Orphan-tail bytes only reported. Hardware-level power-loss guarantees and actual Android flash behavior remain unverified.
 
 **Focused Termux command:** python3 -m unittest tools.jpvr_reference.test_recovery -v. Full JPVR suite command is in README; the historical scanner module is included there.
+
+### 2026-11-11 — JPVR Recovery Copy V1 (non-destructive verified-prefix publication)
+
+**Цель:** добавить явную безопасную операцию восстановления, которая превращает исторически проверенный JPVR prefix в отдельный валидный файл, не изменяя повреждённый источник.
+
+**Добавлено / изменено:**
+- tools/jpvr_reference/recovery.py: JPVRRecoveryCopyResult с destination path, восстановленным Superblock, source/recovered generations, исходной recovery issue, orphan-tail count и признаком rollback.
+- tools/jpvr_reference/recovery.py: historical scanner теперь проверяет OUTBOX цепочку последнего полностью verified snapshot даже если более поздняя страница/транзакция повреждена. Ранее такая цепочка не проверялась, что блокировало безопасное решение о копировании prefix. Добавлен один тест на сохранённый verified OUTBOX prefix.
+- tools/jpvr_reference/storage.py: JPVRStorage.recover_copy(destination, expected_commit_id=..., verify_index_trees=None); операция под shared flock пересканирует источник, требует exact 16-byte commit identity и valid OUTBOX chain, пишет only verified physical page prefix во временный файл, восстанавливает active + immediate previous Superblock slots, fsync/readback-checks страницы и обе копии Superblock, затем публикует новым same-directory hard link без overwrite. Исходный файл и его Superblock не меняются.
+- Добавлен JPVRRecoveryCopyUncertainError: если destination уже опубликован, но финальный directory fsync/cleanup не подтверждён, caller обязан проверить destination перед retry.
+- tools/jpvr_reference/test_recovery_copy.py: 12 тестов на recover-to-copy без мутации source, active/previous slots, сохранение текущего generation, orphan tail trim в копии, existing destination refusal, exact/malformed commit IDs, OUTBOX refusal, source=destination, no-replace publication failure и отсутствие валидных Superblock slots.
+- Экспортированы JPVRRecoveryCopyResult и JPVRRecoveryCopyUncertainError; добавлен docs/JPVR_RECOVERY_REPAIR_V1.md; обновлены README, architecture (3.34), historical recovery и storage contracts.
+
+**Проверки:** GitHub readback/static source and documentation consistency review only. Python tests, import/syntax checks, hard-link/fsync failure injection, Android Termux filesystem behavior and device I/O NOT RUN. Все 13 новых test methods AUTHORED, NOT RUN. JPVR reference set = 362 methods across seventeen modules. No Gradle/Android build, CI, GitHub Actions, APK/AAB.
+
+**Ограничения:** это не in-place repair; source Superblock, pages и orphan tail остаются нетронутыми. Copy доступна только если OUTBOX цепочка последнего verified prefix подтверждена; неизвестное/повреждённое состояние OUTBOX блокирует публикацию. Destination publication requires same-directory hard-link support. После JPVRRecoveryCopyUncertainError output path должен быть inspected до retry. Нет semantic JNVM/neuron-state reconstruction, автоматического rollback источника, compaction/free-page reuse, Android device verification или hardware-level power-loss guarantee.
+
+**Focused Termux commands:** python3 -m unittest tools.jpvr_reference.test_recovery tools.jpvr_reference.test_recovery_copy -v. Complete seventeen-module JPVR suite command is in README. New tests are AUTHORED, NOT RUN.

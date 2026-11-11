@@ -83,6 +83,23 @@ class JPVRHistoryScanResult:
 
 
 @dataclass(frozen=True)
+class JPVRRecoveryCopyResult:
+    """Read-back-verified non-destructive recovery-copy publication result."""
+
+    destination_path: str
+    recovered_superblock: Superblock
+    source_active_generation: int
+    source_verified_generation: int
+    source_issue: JPVRRecoveryIssue | None
+    discarded_orphan_tail_bytes: int
+
+    @property
+    def rolled_back(self) -> bool:
+        """Whether the copy intentionally stops before the selected source generation."""
+        return self.source_verified_generation < self.source_active_generation
+
+
+@dataclass(frozen=True)
 class _PageHeader:
     page_type: PageType
     commit_generation: int
@@ -391,27 +408,28 @@ def scan_jpvr_history(
     outbox_events: tuple[DecodedOutboxPage, ...] = ()
     outbox_history_complete = False
 
-    if commit_history_complete:
-        if not snapshots:
+    if snapshots:
+        # Validate the OUTBOX chain for the last fully verified snapshot even
+        # when a later generation failed. A recovery-copy writer must never
+        # publish a prefix whose event chain was not independently checked.
+        try:
+            outbox_events = _scan_outbox_chain(
+                snapshots[-1].manifest,
+                snapshots[-1].commit,
+                tuple(commits),
+                page_catalog,
+                headers,
+            )
             outbox_history_complete = True
-        else:
-            try:
-                from .outbox_scan import _scan_outbox_chain
-
-                outbox_events = _scan_outbox_chain(
-                    snapshots[-1].manifest,
-                    snapshots[-1].commit,
-                    tuple(commits),
-                    page_catalog,
-                    headers,
-                )
-                outbox_history_complete = True
-            except Exception as exc:
+        except Exception as exc:
+            if first_issue is None:
                 first_issue = _issue(
                     "outbox-history-invalid",
                     exc,
-                    generation=superblock.generation,
+                    generation=snapshots[-1].commit.commit_generation,
                 )
+    else:
+        outbox_history_complete = commit_history_complete
 
     verified_tail = (
         snapshots[-1].last_page_no if snapshots else 1

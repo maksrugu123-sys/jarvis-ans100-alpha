@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-Implemented as a read-only Python reference scanner in tools/jpvr_reference/recovery.py, exposed through JPVRStorage.scan_history(). The 22 focused tests are AUTHORED, NOT RUN for this implementation turn. No Android device verification or production recovery claim is made.
+Implemented as a read-only Python reference scanner in tools/jpvr_reference/recovery.py, exposed through JPVRStorage.scan_history(). The 23 historical-scanner tests are AUTHORED, NOT RUN for this implementation turn. No Android device verification or production recovery claim is made.
 
 The existing standalone scan_committed_outbox() walks the COMMIT predecessor chain and OUTBOX event links, but it requires a complete caller-materialized catalog and does not validate every historical MANIFEST's roots as a historical snapshot. This scanner adds that missing full-history audit for the file-backed storage engine.
 
@@ -46,7 +46,7 @@ A corruption/missing page/I/O failure or invalid historical transaction produces
 
 When called through JPVRStorage.scan_history(), file bytes beyond the active durable prefix are reported as orphan_tail_bytes and has_orphan_tail. Such bytes are not committed state. The scan never truncates them.
 
-A verified prefix is a recovery candidate, not an automatic rollback. This stage does not write an older Superblock, alter the active generation, delete pages, or claim the file has been repaired. A future explicit repair operation must independently verify user intent and safely publish a recovered state.
+A verified prefix is a recovery candidate, not an automatic rollback. The scanner validates the OUTBOX chain for the last fully verified snapshot even when a later generation failed. A later explicit copy operation can publish that prefix as a separate file, but must independently re-scan and require the exact expected commit identity. The source remains unchanged.
 
 ## Memory and cost
 
@@ -58,9 +58,9 @@ The scanner reads raw page bytes lazily and retains a compact header record per 
 python3 -m unittest tools.jpvr_reference.test_recovery -v
 ```
 
-The 22 test methods cover empty/genesis and one-/three-generation histories; corrupted, missing and unreadable pages; invalid historical roots; generation/transaction identity mismatch; incorrect MANIFEST placement; duplicate IDs; generation gaps; active Superblock/checkpoint mismatch; uncommitted/orphan tail; extra catalog pages; optional full-tree traversal; valid and broken OUTBOX history; and the file-backed lazy scanner.
+The 23 test methods cover empty/genesis and one-/three-generation histories; corrupted, missing and unreadable pages; invalid historical roots; generation/transaction identity mismatch; incorrect MANIFEST placement; duplicate IDs; generation gaps; active Superblock/checkpoint mismatch; uncommitted/orphan tail; extra catalog pages; optional full-tree traversal; valid and broken OUTBOX history; and the file-backed lazy scanner.
 
-These tests are AUTHORED, NOT RUN in the implementation turn. Current JPVR source suite has 349 test methods across sixteen modules. No builds, CI, GitHub Actions or device measurements were run.
+These tests are AUTHORED, NOT RUN in the implementation turn. Current JPVR source suite has 362 test methods across seventeen modules. No builds, CI, GitHub Actions or device measurements were run.
 
 ## Limits
 
@@ -68,3 +68,8 @@ These tests are AUTHORED, NOT RUN in the implementation turn. Current JPVR sourc
 - It validates historical MANIFEST references and optionally traverses historical indexes; it does not reconstruct the semantic neuron/JNVM state from arbitrary application-level records.
 - OUTBOX validation confirms committed event history and identity/sequence consistency; it does not deliver events, acknowledge subscribers or guarantee exactly-once side effects.
 - It can identify a verified prefix but does not establish that the device's flash controller or filesystem survived actual power loss. The two fsync barriers remain a software protocol requirement, not hardware-level proof.
+
+
+## Recovery-copy boundary
+
+When a later page or generation is damaged, the scanner still validates the OUTBOX chain for the final fully verified snapshot. Therefore outbox_history_complete refers to the recoverable prefix in a partial-history report. If that prefix OUTBOX chain is invalid or unreadable, recovery-copy publication is refused. See docs/JPVR_RECOVERY_REPAIR_V1.md for the explicit no-overwrite, source-preserving copy operation.

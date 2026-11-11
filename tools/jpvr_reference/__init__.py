@@ -198,6 +198,7 @@ __all__ += ["JPVRCommitUncertainError", "JPVRStorage"]
 from .recovery import (
     JPVRHistoricalSnapshot,
     JPVRHistoryScanResult,
+    JPVRRecoveryCopyResult,
     JPVRRecoveryIssue,
     scan_jpvr_history,
 )
@@ -205,6 +206,11 @@ from .recovery import (
 __all__ += [
     "JPVRHistoricalSnapshot",
     "JPVRHistoryScanResult",
+    "JPVRRecoveryCopyResult",
     "JPVRRecoveryIssue",
     "scan_jpvr_history",
 ]
+
+from .storage import JPVRRecoveryCopyUncertainError
+
+__all__ += ["JPVRRecoveryCopyUncertainError"]

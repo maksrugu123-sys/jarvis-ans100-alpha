@@ -3895,3 +3895,32 @@ JPVRStorage.scan_history() дополнительно сообщает orphan_ta
 **Проверки этого этапа:** source readback и static API/doc cross-reference only. Python tests, imports/syntax checks, fault injection and device measurement NOT RUN. 22 новых теста AUTHORED, NOT RUN; JPVR total = 349 methods across sixteen modules. Build/CI/GitHub Actions/APK/AAB не запускались.
 
 **Ограничения:** scanner сохраняет O(page count) компактных headers и O(generation count) snapshot records; raw encoded pages читаются лениво. Он не сохраняет/перезаписывает старый Superblock, не делает rollback, truncate, compaction или free-page reuse; full tree scan опционален. Flush/power-loss свойства конкретной Android flash storage не подтверждены. При ошибке ниже verified prefix автоматическое решение о rollback остаётся за отдельной recovery/repair операцией с явным контролем.
+
+### 3.34. JPVR Recovery Copy V1 — non-destructive publication of a verified prefix
+
+**Статус: IMPLEMENTED как Python POSIX reference API; 12 recovery-copy tests и 1 regression scanner test AUTHORED, NOT RUN; NOT DEVICE-VERIFIED / NOT PRODUCTION.** Контракт: docs/JPVR_RECOVERY_REPAIR_V1.md.
+
+#### 3.34.1. Цель и явное подтверждение точки восстановления
+
+JPVRStorage.recover_copy(destination, expected_commit_id=..., verify_index_trees=None) публикует отдельную копию контейнера по последнему полностью проверенному COMMIT-префиксу. expected_commit_id обязателен (ровно 16 bytes) и должен совпадать с commit_id последнего проверенного снимка. Операция выполняет собственный повторный scan под shared file lock; ранее полученный report не используется как доверенная инструкция записи и не может стать stale-планом.
+
+#### 3.34.2. Проверки и порядок записи
+
+1. Под shared lock заново выбирается активный Superblock, физическая история перечитывается через lazy catalog и строится recovery report.
+2. Последний verified snapshot выбирается только после проверки всех исторических COMMIT/MANIFEST и OUTBOX цепочки именно этого snapshot. Если позднее поколение повреждено, scanner всё равно проверяет OUTBOX до предыдущей полной границы; невалидная/неполная OUTBOX цепочка блокирует копирование.
+3. Для recovery snapshot восстанавливаются два alternating Superblock slots: текущий verified generation G и его непосредственный predecessor G−1 (для G=1 — genesis). Оба физические slot_id и parity сохраняются. Для genesis slots создаются две корректные genesis copies.
+4. В том же каталоге создаётся временный файл. Копируются только physical pages 2..verified_durable_tail_page_no; исходные байты Superblock не копируются.
+5. Page bytes синхронизируются и читаются обратно; затем записываются оба Superblock, синхронизируются и декодируются повторно. Лишь после readback временный файл публикуется атомарным hard link, который отказывает при уже существующем destination. Родительский каталог синхронизируется.
+6. Исходный descriptor удерживается под shared lock до завершения публикации. Источник не усекается, не переписывается и не меняет Superblock slots. Orphan tail и неподтверждённые поколения остаются в оригинале и отсутствуют в копии.
+
+#### 3.34.3. Ошибки и ограничения
+
+JPVRRecoveryCopyUncertainError означает, что hard link уже опубликован, но последующая финализация/каталоговый fsync не подтверждены; destination нужно проверить до повторной попытки. Ошибка до публикации оставляет исходник нетронутым и удаляет временный файл по возможности. Existing path никогда не заменяется. Публикация требует same-directory hard-link support; неподдерживаемая файловая система отклонит операцию безопаснее, чем fallback к overwrite-capable rename.
+
+Это recovery-copy, не in-place repair. Нет автоматического rollback исходника, физического truncate, изменения исходных Superblock, semantic reconstruction JNVM/neuron objects, compaction или reclaim. Python reference filesystem protocol не подтверждён на Android flash/SD/FUSE и не доказывает сохранность при аппаратном сбое питания.
+
+#### 3.34.4. Тесты и статус
+
+tools/jpvr_reference/test_recovery.py добавляет проверку, что OUTBOX префикса остаётся independently verified при повреждении следующего поколения. tools/jpvr_reference/test_recovery_copy.py добавляет 12 сценариев: восстановление прошлого verified generation без изменения исходных байтов; корректность двух Superblock slots; копирование полного активного поколения; исключение orphan-tail bytes; отказ перезаписать существующий destination; exact expected commit identity; запрет copy при OUTBOX failure; запрет destination=source; cleanup при отказе no-replace hard link; отказ при обоих повреждённых Superblock slots; malformed commit identity.
+
+**Проверки этого этапа:** GitHub readback/static review only. 13 новых test methods AUTHORED, NOT RUN. JPVR source set = 362 test methods across seventeen modules. Python runtime tests, imports/syntax, fault-injection execution, Android/Termux I/O and filesystem/hard-link behavior NOT RUN. No Gradle/Android build, CI, GitHub Actions, APK/AAB.

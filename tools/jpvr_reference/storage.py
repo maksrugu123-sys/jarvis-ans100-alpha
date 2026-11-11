@@ -7,6 +7,7 @@ from dataclasses import replace
 import fcntl
 import os
 import threading
+import tempfile
 import uuid
 
 from .codec import PAGE_SIZE, SUPERBLOCK_SIZE, JPVRFormatError, Superblock, _fixed_bytes, decode_page, decode_superblock, encode_superblock
@@ -29,6 +30,16 @@ class JPVRCommitUncertainError(OSError):
         super().__init__(message)
         self.commit_id = bytes(commit_id)
         self.generation = generation
+
+
+class JPVRRecoveryCopyUncertainError(OSError):
+    """A complete recovery copy was linked, but its directory sync was not confirmed."""
+
+    def __init__(self, path: str, generation: int, commit_id: bytes, message: str):
+        super().__init__(message)
+        self.path = path
+        self.generation = generation
+        self.commit_id = bytes(commit_id)
 
 
 class _DiskPageCatalog(Mapping[int, bytes]):
@@ -467,6 +478,208 @@ class JPVRStorage:
             if orphan_tail_bytes:
                 result = replace(result, orphan_tail_bytes=orphan_tail_bytes)
             return result
+
+
+    def recover_copy(
+        self,
+        destination: str | os.PathLike[str],
+        *,
+        expected_commit_id: bytes,
+        verify_index_trees: bool | None = None,
+    ):
+        """Publish a verified historical prefix as a new, never-overwritten file.
+
+        The source is held under a shared lock and is never modified. The
+        expected commit ID is mandatory so callers explicitly pin the recovery
+        point. Only a prefix whose OUTBOX chain also validates can be copied.
+
+        A same-directory temporary file is fully written, synced and read back
+        before an atomic hard-link publication. The final hard link refuses an
+        existing destination. Filesystems without hard-link support cannot use
+        this publication method.
+        """
+        from .recovery import JPVRRecoveryCopyResult, scan_jpvr_history
+
+        expected_id = _fixed_bytes("expected_commit_id", expected_commit_id, 16)
+        target = os.path.abspath(os.fspath(destination))
+        if target == self.path:
+            raise JPVRFormatError("recovery destination must differ from the source path")
+        if os.path.lexists(target):
+            raise FileExistsError(target)
+
+        parent = os.path.dirname(target) or "."
+        basename = os.path.basename(target)
+        if not basename:
+            raise JPVRFormatError("recovery destination must name a file")
+
+        with self._locked(fcntl.LOCK_SH):
+            active = self._select_active_unlocked()
+            source_size = os.fstat(self._fd).st_size
+            catalog = _DiskPageCatalog(
+                self, active.durable_tail_page_no, source_size
+            )
+            report = scan_jpvr_history(
+                active,
+                catalog,
+                verify_index_trees=(
+                    self.verify_index_trees
+                    if verify_index_trees is None
+                    else verify_index_trees
+                ),
+            )
+
+            # OUTBOX is part of the authoritative committed history. A commit
+            # prefix is not eligible for publication while its event chain is
+            # unknown or invalid.
+            if not report.outbox_history_complete:
+                raise JPVRFormatError(
+                    "recovery copy refused: the verified prefix OUTBOX chain is incomplete or invalid"
+                )
+
+            if report.snapshots:
+                latest = report.snapshots[-1]
+                recovered = latest.superblock
+                if latest.commit.record.commit_id != expected_id:
+                    raise JPVRFormatError(
+                        "expected_commit_id does not match the last verified snapshot"
+                    )
+                if latest.last_page_no != report.verified_durable_tail_page_no:
+                    raise JPVRFormatError("verified recovery boundary is inconsistent")
+                if recovered.generation > active.generation:
+                    raise JPVRFormatError("verified recovery generation exceeds source generation")
+
+                if recovered.generation == 1:
+                    previous = Superblock(
+                        active.container_uuid, 0, 0, 0, 1, bytes(16), 0
+                    )
+                else:
+                    if len(report.snapshots) < 2:
+                        raise JPVRFormatError(
+                            "previous verified Superblock is missing from recovery history"
+                        )
+                    previous = report.snapshots[-2].superblock
+                slot_blocks = {previous.slot_id: previous, recovered.slot_id: recovered}
+                if set(slot_blocks) != {0, 1}:
+                    raise JPVRFormatError("recovery Superblock slots are not complementary")
+                if previous.generation + 1 != recovered.generation:
+                    raise JPVRFormatError("recovery Superblock generations are not adjacent")
+                if previous.container_uuid != recovered.container_uuid:
+                    raise JPVRFormatError("recovery Superblocks have different container UUIDs")
+                tail = report.verified_durable_tail_page_no
+            else:
+                if active.generation != 0 or not report.commit_history_complete:
+                    raise JPVRFormatError(
+                        "recovery copy refused: no complete verified genesis snapshot is available"
+                    )
+                if expected_id != bytes(16):
+                    raise JPVRFormatError(
+                        "empty-container recovery requires the all-zero commit ID"
+                    )
+                recovered = Superblock(
+                    active.container_uuid, 0, 0, 0, 1, bytes(16), 0
+                )
+                previous = replace(recovered, slot_id=1)
+                slot_blocks = {0: recovered, 1: previous}
+                tail = 1
+
+            committed_size = (active.durable_tail_page_no + 1) * PAGE_SIZE
+            if source_size < committed_size:
+                raise JPVRFormatError("source is shorter than its selected durable prefix")
+            orphan_tail_bytes = max(0, source_size - committed_size)
+            target_size = (tail + 1) * PAGE_SIZE
+
+            temp_fd = -1
+            temp_path: str | None = None
+            published = False
+            try:
+                temp_fd, temp_path = tempfile.mkstemp(
+                    prefix=f".{basename}.jpvr-recovery-",
+                    suffix=".tmp",
+                    dir=parent,
+                )
+                os.ftruncate(temp_fd, target_size)
+
+                # Copy only pages through the last verified COMMIT boundary.
+                for page_no in range(2, tail + 1):
+                    raw = self._pread_exact(self._offset(page_no), PAGE_SIZE)
+                    decode_page(raw, expected_page_no=page_no)
+                    self._pwrite_all(temp_fd, raw, self._offset(page_no))
+
+                # Persist immutable page bytes before publishing either slot.
+                os.fsync(temp_fd)
+
+                # Read back every copied page before making the new path visible.
+                for page_no in range(2, tail + 1):
+                    offset = self._offset(page_no)
+                    expected = self._pread_exact(offset, PAGE_SIZE)
+                    actual = os.pread(temp_fd, PAGE_SIZE, offset)
+                    if len(actual) != PAGE_SIZE or actual != expected:
+                        raise OSError(f"recovery-copy page {page_no} readback mismatch")
+                    decode_page(actual, expected_page_no=page_no)
+
+                for slot in (0, 1):
+                    block = slot_blocks[slot]
+                    self._pwrite_all(
+                        temp_fd,
+                        encode_superblock(block),
+                        slot * SUPERBLOCK_SIZE,
+                    )
+                os.fsync(temp_fd)
+
+                for slot in (0, 1):
+                    encoded = os.pread(temp_fd, SUPERBLOCK_SIZE, slot * SUPERBLOCK_SIZE)
+                    decoded = decode_superblock(encoded, expected_slot_id=slot)
+                    if decoded != slot_blocks[slot]:
+                        raise OSError(f"recovery-copy Superblock slot {slot} readback mismatch")
+
+                os.close(temp_fd)
+                temp_fd = -1
+
+                # Same-directory hard link is atomic and, unlike os.replace(),
+                # cannot overwrite a path created by another process meanwhile.
+                os.link(temp_path, target)
+                published = True
+                os.unlink(temp_path)
+                temp_path = None
+                try:
+                    self._fsync_parent(target)
+                except OSError as exc:
+                    raise JPVRRecoveryCopyUncertainError(
+                        target,
+                        recovered.generation,
+                        recovered.active_commit_id,
+                        "recovery copy is present, but parent-directory fsync failed; "
+                        "verify the destination before relying on it",
+                    ) from exc
+            except JPVRRecoveryCopyUncertainError:
+                raise
+            except Exception as exc:
+                if published:
+                    raise JPVRRecoveryCopyUncertainError(
+                        target,
+                        recovered.generation,
+                        recovered.active_commit_id,
+                        "recovery copy was published, but finalization is uncertain; "
+                        "inspect the destination before retrying",
+                    ) from exc
+                raise
+            finally:
+                if temp_fd >= 0:
+                    os.close(temp_fd)
+                if temp_path is not None:
+                    try:
+                        os.unlink(temp_path)
+                    except FileNotFoundError:
+                        pass
+
+            return JPVRRecoveryCopyResult(
+                destination_path=target,
+                recovered_superblock=recovered,
+                source_active_generation=active.generation,
+                source_verified_generation=recovered.generation,
+                source_issue=report.issue,
+                discarded_orphan_tail_bytes=orphan_tail_bytes,
+            )
 
     def load_page_catalog(self, *, max_pages: int = 4096) -> dict[int, bytes]:
         """Materialize a bounded catalog for the current typed in-memory builder.
