@@ -46,7 +46,7 @@ Decode path проверяет точный набор полей, дублир�
 
 ## 4. API и CAS
 
-Основные типы:
+Основные типы экспортируются также из `tools.neuron_runtime` (`__init__.py`):
 
 - `PersistentSafetyPolicyRegistry(path)`
 - `SafetyPolicyRegistrySnapshot`
