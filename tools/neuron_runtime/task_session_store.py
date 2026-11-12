@@ -30,7 +30,7 @@ from .task_session_adapter import (
 
 _MAGIC = b"JTSC"
 _VERSION = 1
-_DESC = struct.Struct("<4sHHQ16sB7xQQIQQ")
+_DESC = struct.Struct("<4sHHQ16sB7xQQQQI")
 _U64_MAX = (1 << 64) - 1
 
 
