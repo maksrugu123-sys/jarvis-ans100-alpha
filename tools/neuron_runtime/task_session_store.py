@@ -129,7 +129,11 @@ def _record_location(item, plan):
         for number in plan.data_page_numbers:
             page = decode_data_page(by_no[number], expected_page_no=number)
             matches = [r for r in page.records if r.record_type == item.record_type and r.schema_id == item.schema_id and r.schema_version == item.schema_version and r.object_id == bytes(item.object_id) and r.record_version == item.record_version and r.payload == bytes(item.payload)]
-            if len(matches) == 1:
+            if (
+                page.commit_generation == plan.commit_record.generation
+                and page.transaction_id == plan.assembly.transaction_id
+                and len(matches) == 1
+            ):
                 found.append(number)
         if len(found) != 1:
             raise JPVRTaskSessionCheckpointError("task/session DATA record did not resolve to one page")
@@ -230,7 +234,15 @@ class JPVRTaskSessionCheckpointStore:
                 if manifest_raw is None:
                     raise JPVRTaskSessionCheckpointError("source MANIFEST is missing")
                 source_manifest = decode_manifest_page(manifest_raw, expected_page_no=commit.record.manifest_ref.page_no)
-                if commit.transaction_id != checkpoint.transaction_id or source_manifest.manifest.checkpoint_page_no != checkpoint_no or commit.record.durable_tail_page_no < checkpoint_no:
+                if (
+                    commit.transaction_id != checkpoint.transaction_id
+                    or source_manifest.transaction_id != commit.transaction_id
+                    or source_manifest.manifest.generation != generation
+                    or source_manifest.manifest.container_uuid != active.container_uuid
+                    or source_manifest.manifest.checkpoint_page_no != checkpoint_no
+                    or commit.record.durable_tail_page_no < checkpoint_no
+                    or commit.record.durable_tail_page_no != source_page_no
+                ):
                     raise JPVRTaskSessionCheckpointError("checkpoint is not published by its exact source COMMIT")
                 source = commit
                 break
