@@ -154,6 +154,21 @@ class DurableIdempotencyExecutorTests(unittest.TestCase):
         self.assertIsNone(record.result)
         self.assertIsNone(record.result_digest)
 
+    def test_unresolved_key_survives_reopen_without_redispatch(self):
+        first_delegate = CountingExecutor(error=RuntimeError("response was lost"))
+        first_ledger = self._executor(first_delegate)
+        first = first_ledger.execute(self.action, self.request)
+        self.assertEqual(first.outcome, ExecutionOutcome.UNKNOWN)
+
+        replacement_delegate = CountingExecutor()
+        reopened = self._executor(replacement_delegate)
+        replay = reopened.execute(self.action, self.request)
+
+        self.assertEqual(replay.outcome, ExecutionOutcome.UNKNOWN)
+        self.assertEqual(first_delegate.calls, 1)
+        self.assertEqual(replacement_delegate.calls, 0)
+        self.assertEqual(reopened.lookup("idem-1").state, "unknown")
+
     def test_unknown_result_can_be_completed_by_explicit_reconciliation(self):
         delegate = CountingExecutor(error=RuntimeError("provider response was lost"))
         ledger = self._executor(delegate)
