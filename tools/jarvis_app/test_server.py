@@ -113,6 +113,14 @@ class LocalConsoleHttpTests(unittest.TestCase):
             created["revision"] + 1,
         )
 
+    def test_health_advertises_versioned_android_bridge_contract(self):
+        with urlopen(self.base_url + "/api/health", timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["storage"], "jpvr")
+        self.assertEqual(payload["api_schema"], "jarvis.local-console")
+        self.assertEqual(payload["api_version"], 1)
+
     def test_foreign_origin_is_rejected(self):
         created = self.service.create_session("Origin check")
         request = Request(
