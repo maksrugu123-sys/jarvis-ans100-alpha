@@ -83,12 +83,24 @@ class RuntimeBridgeException(message: String) : IllegalStateException(message)
  * task/session administration and never submits an ActionExecutor request.
  */
 class LocalRuntimeBridgeClient {
+    @Volatile
+    private var accessToken: String? = null
+
+    fun setAccessToken(token: String?) {
+        if (token != null && !ACCESS_TOKEN_PATTERN.matches(token)) {
+            throw RuntimeBridgeException("Формат токена доступа JARVIS некорректен.")
+        }
+        accessToken = token
+    }
+
     fun connect(): RuntimeBridgeSnapshot {
         val health = request("GET", "/api/health")
         if (requiredString(health, "status") != "ok" ||
             requiredString(health, "storage") != "jpvr" ||
             requiredString(health, "api_schema") != "jarvis.local-console" ||
-            requiredInt(health, "api_version") != 1
+            requiredInt(health, "api_version") != 2 ||
+            !health.optBoolean("auth_required", false) ||
+            requiredString(health, "auth_scheme") != "Bearer"
         ) {
             throw RuntimeBridgeException("Локальный сервис не подтвердил готовность JPVR.")
         }
@@ -205,6 +217,7 @@ class LocalRuntimeBridgeClient {
             connection.instanceFollowRedirects = false
             connection.useCaches = false
             connection.setRequestProperty("Accept", "application/json")
+            accessToken?.let { token -> connection.setRequestProperty("Authorization", "Bearer $token") }
             connection.setRequestProperty("Connection", "close")
 
             if (body != null) {
@@ -445,6 +458,7 @@ class LocalRuntimeBridgeClient {
 
     private companion object {
         const val BASE_URL = "http://127.0.0.1:8765"
+        val ACCESS_TOKEN_PATTERN = Regex("^[A-Za-z0-9_-]{43}$")
         const val CONNECT_TIMEOUT_MS = 1_800
         const val READ_TIMEOUT_MS = 2_500
         const val MAX_REQUEST_BYTES = 64 * 1024
