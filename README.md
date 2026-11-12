@@ -47,8 +47,15 @@ A separate Android Compose application now exists under `app/` with application 
 | `tools/neuron_runtime/task_loop.py` | Bounded sequential reasoning-authorized task orchestration with injected executor |
 | `tools/neuron_runtime/test_task_loop.py` | Task Loop execution, approval, retry, durable child-step ledger, persistence and failure tests (20 authored, not run) |
 | `docs/JARVIS_TASK_LOOP_V0_1.md` | Task Loop V0.1 flow, durable child-step ledger, idempotency and recovery limits |
-| `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` | Initial Russian Compose UI shell for local task drafts; no runtime connection |
-| `docs/JARVIS_ANDROID_APP_V0_1.md` | Android app shell contract, limitations and next integration boundary |
+| `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` | Russian Compose dashboard for local sessions and persistent task drafts; no runtime execution |
+| `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` | StateFlow UI model for local sessions and drafts |
+| `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDraftRepository.kt` | Bounded versioned Android-only draft/session codec and repository |
+| `app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesDraftStorage.kt` | App-private durable storage adapter for the local draft repository |
+| `app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt` | Nine repository/codec contract tests (authored, not run) |
+| `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.2 local draft shell contract and runtime bridge boundary |
+| `tools/jarvis_app/server.py` | Loopback-only Python local console backed by JPVR; separate from the native app |
+| `tools/jarvis_app/test_server.py` | Session lifecycle and loopback API tests (authored, not run) |
+| `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
 
 | Path | Purpose |
 |---|---|
@@ -469,3 +476,29 @@ python3 -m unittest tools.neuron_runtime.test_task_loop -v
 ```
 
 The sequential Task Loop connects the structured Reasoning Engine to TaskSessionManager and the Permission & Safety Gate. Every step is re-authorized immediately before an injected executor is called, then checked against observed postconditions and final goal facts. Each plan step now has a deterministic child TaskRecord: its RUNNING intent is committed to the same JPVR task/session checkpoint before the executor is called, and a known result is recorded with a digest. On recovery, the same action idempotency key is replayed; completed-step responses are checked against the stored digest. The executor still needs its own durable idempotency ledger because JPVR and an external service do not share one atomic transaction. Non-read-only actions require a dedicated task/session JPVR checkpoint store and CAS version. WAITING retains the parent RUNNING revision while approval or outcome reconciliation is pending. Twenty focused tests are AUTHORED, NOT RUN. Contract: [JARVIS Task Loop V0.1](docs/JARVIS_TASK_LOOP_V0_1.md).
+
+
+
+## Native Android application V0.2
+
+The native Compose application now provides local sessions and task drafts. Sessions can be paused, resumed or closed with revision checks; draft tasks can be created, searched, inspected and deleted. Local state is persisted in app-private SharedPreferences using the versioned `JARVIS_ANDROID_DRAFTS V1` format (32 sessions, 500 drafts, 240 characters/title, 512 KiB maximum encoded state).
+
+This is **not** the JPVR TaskSessionManager store and is not connected to the Python runtime. Every Android item is explicitly a local draft; Reasoning Engine, Permission & Safety Gate and Task Loop are not invoked by this UI. A separate, versioned, authenticated local runtime bridge is still required before the Android app can display authoritative JARVIS task statuses or request execution approval.
+
+Android repository tests:
+
+```text
+app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
+```
+
+Nine unit tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contract: [JARVIS Android App V0.2](docs/JARVIS_ANDROID_APP_V0_1.md).
+
+## Separate local PWA console
+
+The Python local console can be started from the repository root:
+
+```sh
+python3 -m tools.jarvis_app --port 8765
+```
+
+Open `http://127.0.0.1:8765/` on the same device. It binds only to loopback and persists TaskSessionManager through its dedicated JPVR checkpoint file. The PWA is independent from the native Compose app and does not share state with Android SharedPreferences. Its session controls and task filters are documented in [JARVIS Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md). The five console tests are **AUTHORED, NOT RUN**.
