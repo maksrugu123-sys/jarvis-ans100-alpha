@@ -4158,3 +4158,42 @@ Metadata хранится внутри baseline-компонента JRCM; вт�
 Один pending proposal на reward_task_id, bounded task catalog/history и runtime-version CAS остаются действующими. UUID dedupe ограничен retention history; нет unbounded global dedupe, concurrent multi-process writer, общего CQE durable inbox/outbox, session/plan persistence, external side effects или exactly-once guarantee. Uncertain commit требует reopen/load и reconciliation. Android I/O, power-loss safety, production NCC и ресурсные показатели не измерялись.
 
 Добавлены tools/neuron_runtime/cqe_feedback.py и test_cqe_feedback.py (12 тестов), а reward_baseline.py расширен совместимыми optional metadata-полями; feedback_transaction.py передаёт metadata в proposal. GitHub readback/static review only; 12 tests AUTHORED, NOT RUN. Python tests, imports/syntax, fault injection, Android/Termux I/O, benchmarks, builds, CI and GitHub Actions не запускались.
+
+
+### 3.42. Task & Session Lifecycle V1
+
+**Статус:** IMPLEMENTED как bounded single-writer Python reference manager и canonical snapshot codec; 15 focused tests AUTHORED, NOT RUN. Не JPVR-persistent, не scheduler, не Reasoning Engine и не production NCC. Контракт: docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md.
+
+#### 3.42.1. Назначение и границы
+
+TaskSessionManager создаёт первый исполняемый lifecycle registry для будущего JARVIS task loop. Он владеет стабильными task/session IDs, состояниями, revision/CAS, bounded каталогами задач/сессий/событий, idempotent task creation и детерминированной историей переходов.
+
+Менеджер не интерпретирует естественный язык, не декомпозирует задачи, не строит/исполняет планы, не авторизует capabilities, не вызывает внешние инструменты и не выполняет side effects. Вызовы исполнения должны проходить через будущий Permission & Safety Gate и CQE/NCC.
+
+#### 3.42.2. Session lifecycle
+
+Session status: OPEN, PAUSED, CLOSED. Создание задач разрешено только в OPEN. PAUSED блокирует создание и перевод queued/waiting task в RUNNING. CLOSED допускается только когда все задачи сессии terminal; CLOSED нельзя повторно открыть. Каждая смена состояния требует точного expected_revision.
+
+#### 3.42.3. Task lifecycle
+
+Task status: QUEUED, RUNNING, WAITING, COMPLETED, FAILED, CANCELLED.
+
+- QUEUED -> RUNNING | CANCELLED
+- RUNNING -> WAITING | COMPLETED | FAILED | CANCELLED
+- WAITING -> RUNNING | FAILED | CANCELLED
+
+Terminal states immutable. Каждая смена статуса требует точного expected_revision. Повторное создание с тем же idempotency_key и идентичным task/session/title/input refs возвращает существующую задачу; конфликтующее повторное использование отклоняется. Deduplication ограничена временем жизни bounded task catalog и не является глобальной.
+
+#### 3.42.4. Boundedness, журнал и snapshot
+
+Defaults: 128 sessions, 1,024 tasks, 4,096 lifecycle events, 32 input refs/task, 4 KiB metadata/result JSON/object, 4 MiB encoded snapshot. Лимиты конфигурируются в hard maxima. Logical order вместо wall-clock timestamp избегает ложной сопоставимости времени между процессами.
+
+Каждый успешный create/transition добавляет упорядоченное событие. При заполнении event log операция отклоняется до изменения состояния; терминальные записи не вытесняются автоматически. Snapshot schema jarvis.task-session V1 использует canonical UTF-8 JSON; restore отвергает duplicate keys, non-finite JSON, неизвестную схему/поля, повторяющиеся identities, отсутствующие session refs, некорректные revisions/terminal data и превышение лимитов.
+
+**Критическое ограничение:** codec сериализует состояние, но сам не делает его durable. JPVR task/session store, crash recovery, authorization snapshot/version binding, retry scheduler, CQE inbox/outbox и cross-process ownership пока не реализованы. Нельзя утверждать, что сессия переживает перезапуск, пока snapshot не публикуется через versioned JPVR transaction.
+
+#### 3.42.5. Проверки и следующий шаг
+
+Добавлены task_session.py и test_task_session.py (15 тестов) для lifecycle transitions, terminal immutability, CAS, idempotency, paused/closed rules, capacity atomicity, canonical round-trip, duplicate JSON key/schema/size rejection и invalid metadata. GitHub readback/static review only; tests AUTHORED, NOT RUN. Python execution/import/syntax checks, JPVR integration, device I/O, benchmarks, builds, CI and GitHub Actions не запускались.
+
+**Следующий этап:** versioned JPVR Task/Session checkpoint adapter/store с CAS, commit ancestry, bounded journal restore и interrupted-write recovery. После этого — authorization snapshot/version contract и первый ограниченный JARVIS task loop.
