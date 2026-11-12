@@ -63,4 +63,4 @@ python3 -m unittest tools.neuron_runtime.test_task_loop -v
 python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
 ```
 
-20 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS и reopen of terminal state. Gate имеет 26 focused tests; persistent policy registry — 17; DurableIdempotencyExecutor — 18 focused tests. Все группы AUTHORED, NOT RUN.
+21 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS, reopen of terminal state и восстановление UNKNOWN через DurableIdempotencyExecutor reconciliation. Gate имеет 26 focused tests; persistent policy registry — 17; DurableIdempotencyExecutor — 18 focused tests. Все группы AUTHORED, NOT RUN.
