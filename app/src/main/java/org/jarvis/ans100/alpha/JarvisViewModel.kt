@@ -13,6 +13,7 @@ import org.jarvis.ans100.alpha.data.LocalDraftState
 import org.jarvis.ans100.alpha.data.LocalRuntimeBridgeClient
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.RuntimeBridgeSnapshot
+import org.jarvis.ans100.alpha.data.RuntimeAccessTokenStore
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
@@ -25,6 +26,7 @@ data class RuntimeBridgeUiState(
     val error: String? = null,
     val message: String? = null,
     val reasoningPreview: RuntimeReasoningPreviewResult? = null,
+    val hasAccessToken: Boolean = false,
 )
 
 data class JarvisUiState(
@@ -40,13 +42,77 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         SharedPreferencesDraftStorage(application.applicationContext),
     )
     private val runtimeClient = LocalRuntimeBridgeClient()
+    private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
     private val runtimeExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mutableState = MutableStateFlow(JarvisUiState())
     val state: StateFlow<JarvisUiState> = mutableState.asStateFlow()
 
     init {
+        try {
+            val token = runtimeTokenStore.load()
+            runtimeClient.setAccessToken(token)
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(hasAccessToken = token != null),
+            )
+        } catch (error: Exception) {
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(
+                    error = error.message ?: "Не удалось восстановить токен доступа.",
+                ),
+            )
+        }
         reload()
+    }
+
+    fun saveRuntimeAccessToken(value: String) {
+        val token = value.trim()
+        if (!Regex("^[A-Za-z0-9_-]{43}$").matches(token)) {
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(
+                    error = "Вставьте полный 43-символьный токен из Termux.",
+                    message = null,
+                ),
+            )
+            return
+        }
+        try {
+            runtimeTokenStore.save(token)
+            runtimeClient.setAccessToken(token)
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(
+                    hasAccessToken = true,
+                    isConnected = false,
+                    snapshot = null,
+                    error = null,
+                    message = "Токен сохранён в Android Keystore.",
+                ),
+            )
+            connectRuntime()
+        } catch (error: Exception) {
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(
+                    error = error.message ?: "Не удалось сохранить токен доступа.",
+                    message = null,
+                ),
+            )
+        }
+    }
+
+    fun forgetRuntimeAccessToken() {
+        try {
+            runtimeTokenStore.clear()
+            runtimeClient.setAccessToken(null)
+            mutableState.value = mutableState.value.copy(
+                runtime = RuntimeBridgeUiState(message = "Токен доступа удалён."),
+            )
+        } catch (error: Exception) {
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(
+                    error = error.message ?: "Не удалось удалить токен доступа.",
+                ),
+            )
+        }
     }
 
     fun reload() {
@@ -113,6 +179,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun previewRuntimeReasoning(request: RuntimeReasoningPreviewRequest) {
         val before = mutableState.value.runtime
         if (before.isBusy) return
+        if (!before.hasAccessToken) {
+            mutableState.value = mutableState.value.copy(
+                runtime = before.copy(error = "Сначала сохраните токен доступа из Termux."),
+            )
+            return
+        }
         mutableState.value = mutableState.value.copy(
             runtime = before.copy(
                 isBusy = true,
@@ -233,6 +305,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val before = mutableState.value.runtime
         if (before.isBusy) return
+        if (!before.hasAccessToken) {
+            mutableState.value = mutableState.value.copy(
+                runtime = before.copy(error = "Сначала сохраните токен доступа из Termux."),
+            )
+            return
+        }
         mutableState.value = mutableState.value.copy(
             runtime = before.copy(isBusy = true, error = null, message = null),
         )
