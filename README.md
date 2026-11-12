@@ -23,13 +23,13 @@ The repository has entered the first executable Python reference-orchestration s
 - **V4.2 causal-credit audit:** user-run Android Termux verification: **6/6 dedicated tests passed**; smoke (128 episodes) and pilot (2,048 episodes) completed. In pilot, R-STDP produced 1,355 negative, 0 positive and 693 zero updates. Correct FAST episodes had negative eligibility despite positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility magnitude/sign balance but did not change any per-episode eligibility or weight-update signs. This diagnoses a temporal-credit alignment limitation, not a proven fix. Details: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md and docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.
 - **V4.3 decision-boundary temporal credit:** focused tests passed (7/7, 1.636 s), and smoke/pilot completed on Android Termux. In the two-seed pilot, Decision-Latched reached 82.23% held-out accuracy versus 83.01% for frozen V4 R-STDP and 100% for STDP. It processed all sensory inputs and gated exactly 1,024 post-decision plasticity events, but did not improve held-out quality. It remains experimental, not the default. Details: docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md.
 
-- **Not implemented yet:** production neuron/NCC runtime, scheduler-owned clock-epoch continuity/rebase policy, general CQE inbox/outbox delivery, in-place JPVR repair/rollback, compaction/free-page reuse, signed/authenticated approval and identity service, persistent policy/revocation store, runtime resource enforcement, production-grade scheduler guarantees, natural-language task parsing/decomposition, automatic safe-action generation and built-in tool execution. The bounded Task Loop has a durable child-task intent/result ledger, but external effects still require an executor-owned durable idempotency ledger. Android Compose V0.3 now connects to the on-device loopback Python console for JPVR task/session administration; it still does not invoke Reasoning Engine, Task Loop or external execution. Reasoning Engine V0.1, Permission & Safety Gate V1 and Task Loop V0.1 remain bounded Python reference components, not production autonomous-agent infrastructure. One-neuron, network, and task/session stores remain bounded Python reference APIs, not production JNVM services. Non-destructive recovery-copy publication remains a Python reference API, not automatic restoration or production repair.
+- **Not implemented yet:** production neuron/NCC runtime, scheduler-owned clock-epoch continuity/rebase policy, general CQE inbox/outbox delivery, in-place JPVR repair/rollback, compaction/free-page reuse, signed/authenticated approval and identity service, persistent policy/revocation store, runtime resource enforcement, production-grade scheduler guarantees, natural-language task parsing/decomposition, automatic safe-action generation and built-in tool execution. The bounded Task Loop has a durable child-task intent/result ledger, but external effects still require an executor-owned durable idempotency ledger. Android Compose V0.4 now connects to the on-device loopback Python console, administers JPVR task/session records and requests a bounded symbolic Reasoning Engine preview; it still does not invoke Task Loop, Permission & Safety Gate approvals, ActionExecutor or external execution. Reasoning Engine V0.1, Permission & Safety Gate V1 and Task Loop V0.1 remain bounded Python reference components, not production autonomous-agent infrastructure. One-neuron, network, and task/session stores remain bounded Python reference APIs, not production JNVM services. Non-destructive recovery-copy publication remains a Python reference API, not automatic restoration or production repair.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
-## Android application V0.3
+## Android application V0.4
 
-The native Kotlin/Compose app at `app/` now has two deliberately separate views of state. Android-only drafts remain in bounded app-private SharedPreferences (32 sessions, 500 drafts, 240 characters/title). A new loopback bridge can connect to the Python Termux console at `127.0.0.1:8765`, read the authoritative TaskSessionManager/JPVR snapshot, create backend sessions/tasks, pause/resume/close backend sessions, and cancel queued backend tasks. The bridge requires local-console API schema `jarvis.local-console` version 1. It does not run Reasoning Engine, Task Loop, ActionExecutor or external tools; a created QUEUED task is not an executing task. The separate structured reasoning-preview API is not yet exposed in the native UI. Android build/install/device verification has **NOT RUN**. Contract: [JARVIS Android App V0.3](docs/JARVIS_ANDROID_APP_V0_1.md) and [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md).
+The native Kotlin/Compose app at `app/` keeps two deliberately separate views of state. Android-only drafts remain in bounded app-private SharedPreferences (32 sessions, 500 drafts, 240 characters/title). The loopback bridge connects to the Python Termux console at `127.0.0.1:8765`, reads the authoritative TaskSessionManager/JPVR snapshot, creates backend sessions/tasks, changes session status, and cancels queued tasks. Android V0.4 also exposes the existing `POST /api/reasoning/preview` route: callers provide bounded symbolic facts/actions and receive a step-by-step plan. The preview does not change the queue or JPVR checkpoint and does not execute actions. The app still does not invoke Task Loop, the Permission & Safety Gate approval flow, ActionExecutor or external tools; a created QUEUED task is not an executing task. Android build/install/device verification has **NOT RUN**. Contract: [JARVIS Android App V0.4](docs/JARVIS_ANDROID_APP_V0_1.md) and [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md).
 
 ## Repository map
 | `tools/neuron_runtime/task_session.py` | Bounded task/session lifecycle registry and canonical snapshot codec (not durable JPVR storage) |
@@ -47,17 +47,17 @@ The native Kotlin/Compose app at `app/` now has two deliberately separate views 
 | `tools/neuron_runtime/task_loop.py` | Bounded sequential reasoning-authorized task orchestration with injected executor |
 | `tools/neuron_runtime/test_task_loop.py` | Task Loop execution, approval, retry, durable child-step ledger, persistence and failure tests (20 authored, not run) |
 | `docs/JARVIS_TASK_LOOP_V0_1.md` | Task Loop V0.1 flow, durable child-step ledger, idempotency and recovery limits |
-| `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` | Russian Compose dashboard for local drafts plus loopback JPVR session/task administration; no Task Loop execution |
+| `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` | Russian Compose dashboard for local drafts, JPVR task/session administration and non-executing symbolic-plan preview |
 | `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` | StateFlow UI model for local drafts and asynchronous loopback runtime requests |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDraftRepository.kt` | Bounded versioned Android-only draft/session codec and repository |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesDraftStorage.kt` | App-private durable storage adapter for the local draft repository |
-| `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` | Bounded, version-checked HTTP client for the on-device loopback JPVR console |
+| `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` | Bounded version-checked loopback client for JPVR lifecycle APIs and symbolic reasoning preview |
 | `app/src/main/res/xml/network_security_config.xml` | Deny cleartext by default; allow only loopback for the local runtime bridge |
 | `app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt` | Nine repository/codec contract tests (authored, not run) |
-| `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.3 local-draft and loopback bridge contract |
+| `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.4 local-draft, loopback bridge and symbolic-preview contract |
 | `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` | Android-to-Termux JPVR task/session bridge, API version, bounds and trust boundary |
 | `tools/jarvis_app/server.py` | Loopback-only Python local console backed by JPVR; separate from the native app |
-| `tools/jarvis_app/test_server.py` | Session lifecycle, versioned health and loopback API tests (six authored, not run) |
+| `tools/jarvis_app/test_server.py` | Session lifecycle, versioned health, reasoning-preview and loopback API tests (nine authored, not run) |
 | `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
 
 | Path | Purpose |
@@ -482,7 +482,7 @@ The sequential Task Loop connects the structured Reasoning Engine to TaskSession
 
 
 
-## Native Android application V0.3
+## Native Android application V0.4
 
 The native Compose application provides app-private local drafts and a separate JPVR runtime panel. The runtime panel connects to the local Python console at 127.0.0.1:8765 and can read/create backend sessions/tasks, pause/resume/close sessions with revision checks, and cancel QUEUED tasks. The local draft store remains independent and is persisted in SharedPreferences using JARVIS_ANDROID_DRAFTS V1 (32 sessions, 500 drafts, 240 characters/title, 512 KiB maximum encoded state).
 
@@ -494,7 +494,7 @@ Android repository tests:
 app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
 ```
 
-Nine Android local-repository tests and six Python console API tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.3](docs/JARVIS_ANDROID_APP_V0_1.md) and [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md).
+Nine Android local-repository tests and nine Python console API tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.3](docs/JARVIS_ANDROID_APP_V0_1.md) and [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md).
 
 ## Separate local PWA console
 
@@ -504,4 +504,4 @@ The Python local console can be started from the repository root:
 python3 -m tools.jarvis_app --port 8765
 ```
 
-Open `http://127.0.0.1:8765/` on the same device. The same running console serves the PWA and the native Compose bridge; both operate on the JPVR-backed TaskSessionManager. Android SharedPreferences drafts remain separate. The service binds only to loopback. Its API and safety boundary are documented in [JARVIS Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md). The six console tests are **AUTHORED, NOT RUN**.
+Open `http://127.0.0.1:8765/` on the same device. The same running console serves the PWA and the native Compose bridge; both operate on the JPVR-backed TaskSessionManager. Android SharedPreferences drafts remain separate. The service binds only to loopback. Its API and safety boundary are documented in [JARVIS Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md). The nine console tests are **AUTHORED, NOT RUN**.
