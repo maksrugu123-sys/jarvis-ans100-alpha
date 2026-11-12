@@ -21,6 +21,7 @@ from tools.neuron_runtime.task_loop import (
     ActionExecutionResult,
     ExecutionOutcome,
     JARVISTaskLoop,
+    TaskLoopConflict,
     TaskLoopError,
     TaskLoopPersistenceError,
     TaskLoopStatus,
@@ -414,6 +415,26 @@ class TaskLoopJPVRTests(unittest.TestCase):
         self.assertIs(
             self.store.load("loop-manager").manager.get_task("task-1").status,
             TaskStatus.FAILED,
+        )
+
+    def test_step_ledger_capacity_exhaustion_blocks_executor(self):
+        manager = TaskSessionManager(manager_id="loop-manager", max_tasks=1)
+        manager.create_session("session-1")
+        manager.create_task("task-1", "session-1", "task-key", "Run a bounded plan")
+        self.store.save(manager)
+        executor = MemoryExecutor()
+        with self.assertRaises(TaskLoopConflict):
+            JARVISTaskLoop().run(
+                manager, "task-1", _problem(),
+                _bindings(EffectClass.REVERSIBLE),
+                _policy(EffectClass.REVERSIBLE), executor,
+                now_ns=100, checkpoint_store=self.store,
+                expected_checkpoint_version=1,
+            )
+        self.assertEqual(executor.keys, [])
+        self.assertIs(
+            self.store.load("loop-manager").manager.get_task("task-1").status,
+            TaskStatus.RUNNING,
         )
 
     def test_external_effect_without_approval_waits_and_persists(self):
