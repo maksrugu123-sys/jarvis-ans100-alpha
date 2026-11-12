@@ -1418,3 +1418,27 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** исполнителю необходим durable idempotency ledger, который переживает его собственный restart. JPVR step digest не является внешним receipt, не аутентифицирует исполнителя и не координирует внешнюю транзакцию. Scheduler leases, durable approval registry/provider, concurrent workers, Android sandbox and production NCC остаются за пределами V0.1.
 
 **Следующий этап:** тонкая локальная Android app shell поверх Task Loop: интерфейс задач/сессий, статусов, плана и pending approval. Не подключать произвольные системные действия до trusted approval provider и отдельной проверки Android capabilities.
+
+
+## 2026-11-12 — Initial JARVIS Android UI shell
+
+**Objective:** begin the fifth roadmap stage with a minimal Android application entry point while keeping the Python reference runtime isolated and avoiding any false claim of task execution.
+
+**Added:**
+- `settings.gradle.kts`, root `build.gradle.kts`, and `app/build.gradle.kts` — standalone Android application configuration using AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, minSdk 29 and compile/target SDK 35.
+- `app/src/main/AndroidManifest.xml` — launcher activity declaration.
+- `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` — Russian Compose screen with a bounded local draft list, input length limit and explicit disconnected-runtime status.
+- `docs/JARVIS_ANDROID_APP_V0_1.md` — UI contract, trust boundary, limitations and next step.
+
+**Changed:**
+- `docs/JARVIS_ARCHITECTURE.md` — added §3.47 and documented the Android/runtime boundary.
+- `README.md` — added app status and repository map entries; corrected stale Task Loop test count and removed the false claim that its child-step intent/result ledger is not implemented.
+
+**Behavior:** users can add up to 100 task drafts in the current UI process. Drafts are not durable, do not survive process death, and are not executed or sent to the Python Reasoning Engine/Task Loop. No tools, network, shell or device actions are exposed.
+
+**Tests / verification:**
+- GitHub file readback: to be completed after publication.
+- Kotlin/Gradle compilation, Gradle sync, APK/AAB, emulator/device install and UI tests: **NOT RUN** by project restriction. No build or workflow was triggered.
+- The Python test suites were not run; this batch changes only the Android UI/configuration and documentation.
+
+**Limitations / next step:** create versioned Android-facing task/session DTOs and a repository boundary, then design a safe local runtime bridge. Persistent task drafts, process-death recovery, UI-bound approval grants and actual engine execution are not implemented. This UI shell is not a working AI assistant.
