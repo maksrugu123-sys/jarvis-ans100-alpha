@@ -127,6 +127,6 @@ SQLite обеспечивает локальную сериализацию ко
 python3 -m unittest tools.neuron_runtime.test_executor_idempotency -v
 ```
 
-Методы покрывают persistence/reopen, SUCCEEDED и FAILED_NO_EFFECT replay, exact key binding, exception/UNKNOWN handling, caller reconciliation, contradictory result rejection, concurrent duplicate calls, private file modes, symlink/unsafe-directory rejection, schema/result-digest corruption, action ID validation и capacity fail-closed.
+19 методов покрывают persistence/reopen, SUCCEEDED и FAILED_NO_EFFECT replay, exact key binding, exception/UNKNOWN handling, сохранение unresolved UNKNOWN через reopen, caller reconciliation, contradictory result rejection, concurrent duplicate calls, private file modes, symlink/unsafe-directory rejection, schema/result-digest corruption, action ID validation и capacity fail-closed.
 
 Статус: **AUTHORED, NOT RUN**. GitHub source readback/static inspection only. Python execution/import checks, multi-process race tests, SQLite fault injection, Android/Termux measurements, security audit, Gradle/Android builds, APK/AAB, CI and GitHub Actions **NOT RUN**.
