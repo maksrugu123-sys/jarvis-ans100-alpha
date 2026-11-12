@@ -1,6 +1,6 @@
 # JARVIS Android Runtime Bridge V1
 
-**Status:** implemented in the native Android client and Python local-console health contract; end-to-end tests, Android build and device verification NOT RUN. This is a loopback-only task/session registry bridge, not tool execution.
+**Status:** Android V0.4 includes JPVR task/session administration and a bounded symbolic Reasoning Engine preview over the loopback Python API. End-to-end tests, Android build and device verification NOT RUN. This remains a registry/preview bridge, not tool execution.
 
 ## Ownership
 
@@ -35,8 +35,15 @@ The Android app does not launch Termux or manage this process lifecycle.
 | Create task | POST /api/tasks | Create QUEUED task in an OPEN session and publish checkpoint |
 | Pause/resume/close | POST /api/sessions/{id}/status | Transition session with expected revision and JPVR publication |
 | Cancel queued task | POST /api/tasks/{id}/cancel | Cancel only a QUEUED task with expected revision and JPVR publication |
+| Reasoning preview | POST /api/reasoning/preview | Compute a caller-supplied bounded symbolic plan; no queue/JPVR mutation and no action execution |
 
 Successful mutation responses include the updated state snapshot. The ViewModel makes requests on a dedicated single-thread executor and publishes results to UI state on the main thread.
+
+## Symbolic reasoning preview
+
+Android V0.4 exposes the existing Python `ReasoningEngine` preview route. The request contains a task label, goal description, initial/goal fact identifiers and caller-authored pure state-transition actions. The client bounds requests to 16 actions, 32 input facts per list and a 64-fact resulting universe. The response is strictly decoded and displayed as a sequence of proposed symbolic steps. A preview identifier is not a TaskSessionManager task ID, and a preview does not change the durable task/session registry.
+
+The planner searches a bounded symbolic state space. Its output is not natural-language interpretation, authenticated evidence, a permission grant, an executable command or proof that an external world state changed. No preview result is forwarded to TaskLoop or ActionExecutor.
 
 ## Failure and reconciliation
 
@@ -53,11 +60,11 @@ This service has no credentials, authentication, approval provider, ActionExecut
 
 Loopback, Host and Origin checks are not authentication. Other apps/processes on the same Android device may be able to reach the loopback service. This interface is suitable only for local, non-secret task/session administration. Do not bind it to LAN/Internet or add side-effecting capabilities to API V1.
 
-The native Android screen does not yet call the structured /api/reasoning/preview route. It does not invoke Reasoning Engine, PermissionSafetyGate, Task Loop, approvals or neural NetworkRuntime. Creating a QUEUED task does not mean that the task is running or completed.
+The native Android screen can request a non-mutating Reasoning Engine preview, but it does not invoke PermissionSafetyGate, Task Loop, approval workflows or neural NetworkRuntime. It has no ActionExecutor. Creating a QUEUED task does not mean that the task is running or completed.
 
 ## Verification status
 
 - Android local repository tests: 9 methods, AUTHORED, NOT RUN.
-- Python local-console tests: 6 methods, AUTHORED, NOT RUN.
+- Python local-console tests: 9 methods, AUTHORED, NOT RUN.
 - GitHub source readback/static inspection only.
 - Kotlin compilation, Gradle sync/build, APK/AAB, Android install/UI tests, Android-to-Termux end-to-end I/O, Python tests, performance and security testing: NOT RUN.
