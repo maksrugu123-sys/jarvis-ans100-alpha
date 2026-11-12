@@ -13,6 +13,8 @@ import org.jarvis.ans100.alpha.data.LocalDraftState
 import org.jarvis.ans100.alpha.data.LocalRuntimeBridgeClient
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.RuntimeBridgeSnapshot
+import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
+import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import java.util.concurrent.Executors
 
@@ -22,6 +24,7 @@ data class RuntimeBridgeUiState(
     val snapshot: RuntimeBridgeSnapshot? = null,
     val error: String? = null,
     val message: String? = null,
+    val reasoningPreview: RuntimeReasoningPreviewResult? = null,
 )
 
 data class JarvisUiState(
@@ -104,6 +107,48 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun cancelRuntimeTask(taskId: String, revision: Int) {
         runtimeRequest("Ожидающая задача JARVIS отменена.") {
             runtimeClient.cancelQueuedTask(taskId, revision)
+        }
+    }
+
+    fun previewRuntimeReasoning(request: RuntimeReasoningPreviewRequest) {
+        val before = mutableState.value.runtime
+        if (before.isBusy) return
+        mutableState.value = mutableState.value.copy(
+            runtime = before.copy(
+                isBusy = true,
+                error = null,
+                message = null,
+                reasoningPreview = null,
+            ),
+        )
+        runtimeExecutor.execute {
+            try {
+                val preview = runtimeClient.previewReasoning(request)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        runtime = current.runtime.copy(
+                            isBusy = false,
+                            isConnected = true,
+                            error = null,
+                            message = preview.notice,
+                            reasoningPreview = preview,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        runtime = current.runtime.copy(
+                            isBusy = false,
+                            isConnected = false,
+                            error = error.message ?: "Символьный preview не выполнен.",
+                            message = null,
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -197,10 +242,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
-                        runtime = RuntimeBridgeUiState(
+                        runtime = current.runtime.copy(
                             isBusy = false,
                             isConnected = true,
                             snapshot = snapshot,
+                            error = null,
                             message = successMessage,
                         ),
                     )
