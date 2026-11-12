@@ -28,7 +28,9 @@ from .task_loop import ActionExecutionResult, ActionExecutor, ExecutionOutcome
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _SCHEMA_VERSION = 1
-_MAX_RESULT_BYTES = 512 * 1024
+_MAX_RESULT_BYTES = 128 * 1024
+_MAX_LEDGER_RECORDS = 256
+_MAX_DATABASE_PAGES = 16_384
 _DOMAIN = b"JARVIS:EXECUTOR-IDEMPOTENCY:V1\x00"
 _FINAL_STATES = frozenset({"succeeded", "failed_no_effect"})
 
@@ -43,6 +45,10 @@ class DurableExecutorLedgerConflict(DurableExecutorLedgerError):
 
 class DurableExecutorLedgerCorrupt(DurableExecutorLedgerError):
     """The ledger schema or a persisted result failed validation."""
+
+
+class DurableExecutorLedgerCapacity(DurableExecutorLedgerError):
+    """The bounded ledger has no remaining record capacity."""
 
 
 class _Executor(Protocol):
@@ -120,7 +126,10 @@ def _decode_result(raw: str, expected_digest: str) -> ActionExecutionResult:
         raise DurableExecutorLedgerCorrupt("stored executor result exceeds its size limit")
     if not isinstance(expected_digest, str) or not _DIGEST_PATTERN.fullmatch(expected_digest):
         raise DurableExecutorLedgerCorrupt("stored result digest has an invalid format")
-    encoded = raw.encode("ascii", errors="strict")
+    try:
+        encoded = raw.encode("ascii", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise DurableExecutorLedgerCorrupt("stored executor result is not ASCII") from exc
     actual = hashlib.sha256(b"JARVIS:EXECUTOR-RESULT:V1\x00" + encoded).hexdigest()
     if not hmac.compare_digest(actual, expected_digest):
         raise DurableExecutorLedgerCorrupt("stored executor result digest mismatch")
@@ -157,14 +166,24 @@ class DurableIdempotencyExecutor:
         delegate: _Executor,
         *,
         busy_timeout_ms: int = 5000,
+        max_records: int = _MAX_LEDGER_RECORDS,
     ) -> None:
         self.path = Path(path)
         if not hasattr(delegate, "execute") or not callable(delegate.execute):
             raise DurableExecutorLedgerError("delegate must implement execute(action, request)")
         if isinstance(busy_timeout_ms, bool) or not isinstance(busy_timeout_ms, int) or not 1 <= busy_timeout_ms <= 60_000:
             raise DurableExecutorLedgerError("busy_timeout_ms must be in 1..60000")
+        if (
+            isinstance(max_records, bool)
+            or not isinstance(max_records, int)
+            or not 1 <= max_records <= _MAX_LEDGER_RECORDS
+        ):
+            raise DurableExecutorLedgerError(
+                f"max_records must be in 1..{_MAX_LEDGER_RECORDS}"
+            )
         self.delegate = delegate
         self.busy_timeout_ms = busy_timeout_ms
+        self.max_records = max_records
         try:
             parent_existed = self.path.parent.exists()
             self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -212,6 +231,7 @@ class DurableIdempotencyExecutor:
             connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
             connection.execute("PRAGMA foreign_keys=ON")
             connection.execute("PRAGMA synchronous=FULL")
+            connection.execute(f"PRAGMA max_page_count={_MAX_DATABASE_PAGES}")
             os.chmod(self.path, 0o600)
             return connection
         except (OSError, sqlite3.Error) as exc:
@@ -400,6 +420,13 @@ class DurableIdempotencyExecutor:
                             "idempotency key is already bound to a different action intent"
                         )
                     return existing.result if existing.result is not None else self._unknown()
+                record_count = connection.execute(
+                    "SELECT COUNT(*) FROM action_results"
+                ).fetchone()[0]
+                if record_count >= self.max_records:
+                    raise DurableExecutorLedgerCapacity(
+                        "executor idempotency ledger capacity is exhausted; do not prune unresolved keys"
+                    )
                 connection.execute(
                     """
                     INSERT INTO action_results (
