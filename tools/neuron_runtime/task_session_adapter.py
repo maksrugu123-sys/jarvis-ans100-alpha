@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import json
+import re
 
 from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES, MAX_SMALL_RECORD_PAYLOAD
 from tools.jpvr_reference.typed_transaction import BlobRecordInput, DataRecordInput
@@ -27,9 +27,9 @@ class DecodedTaskSessionSnapshot:
 
 
 def task_session_object_id(manager_id: str) -> bytes:
-    if not isinstance(manager_id, str) or not manager_id or len(manager_id.encode("utf-8")) > 128:
-        raise TaskSessionPersistenceError("manager_id must be 1..128 UTF-8 bytes")
-    return hashlib.sha256(_DOMAIN + manager_id.encode("utf-8")).digest()[:16]
+    if not isinstance(manager_id, str) or not _MANAGER_ID.fullmatch(manager_id):
+        raise TaskSessionPersistenceError("manager_id must match the stable 1..128 character task/session ID contract")
+    return hashlib.sha256(_DOMAIN + manager_id.encode("ascii")).digest()[:16]
 
 
 def encode_task_session_snapshot(manager: TaskSessionManager) -> bytes:
