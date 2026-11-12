@@ -1,6 +1,6 @@
 # JARVIS Reasoning Engine V0.1
 
-**Status:** implemented as a bounded deterministic Python reference planner and evidence assessor. Twenty-nine focused tests are authored, not run. This is not a natural-language model, autonomous agent, tool executor, or production NCC component.
+**Status:** implemented as a bounded deterministic Python reference planner and evidence assessor. Thirty-one focused tests are authored, not run. This is not a natural-language model, autonomous agent, tool executor, or production NCC component.
 
 ## Purpose
 
@@ -19,7 +19,7 @@ Evidence records identify a hypothesis, source reference, polarity (supports/ref
 - `verification_status`: `pending` by default, `verified`, or `rejected`;
 - `verification_ref`: a stable reviewer/verification record reference required for a terminal review status.
 
-Only records explicitly marked `verified` and whose quality is not `unverified` contribute to the hypothesis assessment. Pending, rejected, and unverified-quality records remain excluded. The resulting states are:
+Only records explicitly marked `verified` and whose quality is not `unverified` contribute to the hypothesis assessment. Pending, rejected, and unverified-quality records remain excluded. The verifier itself is outside this V0.1 engine: a caller supplies the review state and reference. The engine validates their shape but cannot authenticate the reviewer, prove that a review happened, or verify source contents. The resulting states are:
 - `insufficient` — no eligible evidence;
 - `support_only` — eligible supporting entries and no eligible refuting entries;
 - `refute_only` — eligible refuting entries and no eligible supporting entries;
@@ -55,4 +55,4 @@ Focused tests:
 python3 -m unittest tools.neuron_runtime.test_reasoning_engine -v
 ```
 
-The test module has 29 methods covering deterministic shortest-plan search, already-satisfied and unreachable goals, depth/state/fact limits, action preconditions and effects, input bounds/identity validation, pending/verified/rejected evidence semantics, conflicting evidence, bounded observed-fact iteration, and observed-result verification. Tests are AUTHORED, NOT RUN. No Python execution/import/syntax check, Android/Termux measurement, benchmark, build, CI or GitHub Actions run was performed for this implementation.
+The test module has 31 methods covering deterministic shortest-plan search, already-satisfied and unreachable goals, depth/state/fact limits, cycle handling, action preconditions and effects, input bounds/identity validation, pending/verified/rejected evidence semantics, unverified-quality exclusion, required review references, conflicting evidence, bounded observed-fact iteration, and rejection of inconsistent caller-constructed plan results. Tests are AUTHORED, NOT RUN. No Python execution/import/syntax check, Android/Termux measurement, benchmark, build, CI or GitHub Actions run was performed for this implementation.
