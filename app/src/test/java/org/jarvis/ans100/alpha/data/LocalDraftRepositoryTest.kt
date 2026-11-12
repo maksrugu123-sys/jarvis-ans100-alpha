@@ -1,7 +1,6 @@
 package org.jarvis.ans100.alpha.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,9 +21,13 @@ private class MemoryDraftStorage : DraftStorage {
     }
 }
 
-private class SequentialIds : (String) -> String {
-    private var next = 1
-    override fun invoke(prefix: String): String = "$prefix-${next++.toString().padStart(4, '0')}"
+private fun sequentialIds(): (String) -> String {
+    var next = 1
+    return { prefix ->
+        val id = "$prefix-${next.toString().padStart(4, '0')}"
+        next += 1
+        id
+    }
 }
 
 class LocalDraftRepositoryTest {
@@ -34,7 +37,7 @@ class LocalDraftRepositoryTest {
     ) = LocalDraftRepository(
         storage = storage,
         nowMillis = { now },
-        newId = SequentialIds(),
+        newId = sequentialIds(),
     )
 
     @Test
@@ -172,11 +175,10 @@ class LocalDraftRepositoryTest {
     @Test
     fun sessionCapacityIsBounded() {
         val storage = MemoryDraftStorage()
-        val ids = SequentialIds()
         val repository = LocalDraftRepository(
             storage = storage,
             nowMillis = { 1_700_000_000_000L },
-            newId = ids,
+            newId = sequentialIds(),
         )
         repeat(LocalDraftRepository.MAX_SESSIONS) { index ->
             repository.createSession("Сессия ${index + 1}")
