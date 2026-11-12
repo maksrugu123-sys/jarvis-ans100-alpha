@@ -411,7 +411,7 @@ class JARVISTaskLoop:
                 return self._finish_waiting(
                     task_manager, task_id, running_task_revision,
                     "invalid_executor_result_outcome_unknown", plan_id, reasoning,
-                    executed, step_id, observed_facts, decisions, persist_lifecycle,
+                    executed, step_id, observed_facts, decisions, persist_lifecycle, request,
                 )
             if execution.outcome is ExecutionOutcome.UNKNOWN:
                 return self._finish_waiting(
