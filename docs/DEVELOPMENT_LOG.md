@@ -1568,3 +1568,18 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 - Android application metadata advanced to `versionCode = 2`, `versionName = "0.5.0"`.
 - PWA now provides an explicit sign-out control; logout removes the bearer token from tab sessionStorage and stops its periodic state refresh. Its service-worker shell cache was advanced to v4.
 - Static source readback confirmed the new version metadata, Android Keystore token store, API v2 bearer header, PWA login/logout controls and cache version. This is not a runtime or device test; all build/test prohibitions remain in force.
+
+
+## 2026-11-12 — Persistent Safety Policy Registry V1 reference
+
+**Цель:** устранить отсутствие постоянного снимка SafetyPolicy и записи отозванных approval IDs, не выдавая caller-supplied approvals за доверенную identity.
+
+**Добавлено:**
+- tools/neuron_runtime/policy_registry.py — canonical JSON policy snapshot, schema validation, policy/state digests, private-directory/file requirements, POSIX process lock, temp-write + fsync + atomic replace, registry record CAS, monotonic policy versioning and bounded approval-ID revocation list.
+- PersistentPolicySafetyGate — subclass PermissionSafetyGate; требует exact match переданной policy с durable snapshot, fail-closed при missing/corrupt/mismatch и блокирует revoked approval IDs. Compatible with the current JARVISTaskLoop constructor's PermissionSafetyGate type check.
+- tools/neuron_runtime/test_policy_registry.py — 17 focused tests for persistence, permissions, CAS, policy version monotonicity, revocation, integrity/schema/path rejection, fail-closed decisions and Task Loop injection. AUTHORED / NOT RUN.
+- docs/JARVIS_PERSISTENT_POLICY_REGISTRY_V1.md, Gate/Task Loop contracts, architecture §3.50 and README repository map.
+
+**Граница доверия:** это local POSIX file reference store, не JPVR service. SHA-256 state digest защищает от случайного повреждения, но не от владельца файла, способного переписать JSON и пересчитать digest. ApprovalGrant остаётся caller-supplied; подписи grant и identity approver не проверяются. Не подключать к внешнему executor как production authorization.
+
+**Проверки:** GitHub readback/static review only. 17 test methods AUTHORED, NOT RUN. No Python imports/tests, filesystem fault injection, multi-process race testing, Termux runtime check, Android build, APK/AAB, CI or GitHub Actions were run.
