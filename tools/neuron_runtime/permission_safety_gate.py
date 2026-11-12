@@ -290,6 +290,7 @@ def authorization_intent_digest(request: AuthorizationRequest) -> str:
             "memory_bytes": request.budget.memory_bytes,
             "timeout_ms": request.budget.timeout_ms,
             "output_bytes": request.budget.output_bytes,
+            "retry_index": request.budget.retry_index,
         },
     }
     encoded = json.dumps(
