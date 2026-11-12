@@ -4272,7 +4272,7 @@ EXTERNAL и IRREVERSIBLE требуют ApprovalGrant всегда; REVERSIBLE �
 
 ### 3.46. Bounded JARVIS Task Loop V0.1
 
-**Статус:** IMPLEMENTED как ограниченный последовательный Python reference coordinator с durable child-task intent/result ledger; 20 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_LOOP_V0_1.md`.
+**Статус:** IMPLEMENTED как ограниченный последовательный Python reference coordinator с durable child-task intent/result ledger; 21 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_LOOP_V0_1.md`.
 
 `JARVISTaskLoop` объединяет TaskSessionManager, bounded ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Caller передаёт структурированный ReasoningProblem, полный набор PlanningAction и ровно одну ActionBinding на каждое действие; свободный текст не декомпозируется, инструменты не генерируются автоматически.
 
@@ -4418,7 +4418,7 @@ SHA-256 checksum обнаруживает случайное поврежден�
 
 ### 3.51. Durable Executor Idempotency Ledger V1 — local SQLite reference
 
-**Статус:** IMPLEMENTED как bounded SQLite wrapper для caller-supplied ActionExecutor; 18 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_EXECUTOR_IDEMPOTENCY_LEDGER_V1.md`. Публичные exports добавлены в `tools.neuron_runtime`.
+**Статус:** IMPLEMENTED как bounded SQLite wrapper для caller-supplied ActionExecutor; 19 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_EXECUTOR_IDEMPOTENCY_LEDGER_V1.md`. Публичные exports добавлены в `tools.neuron_runtime`.
 
 `DurableIdempotencyExecutor` связывает idempotency key с domain-separated digest полного AuthorizationRequest intent и PlanningAction. Для нового key он сначала фиксирует состояние `in_progress` в SQLite транзакции `BEGIN IMMEDIATE`, и только после commit вызывает delegate. Известные SUCCEEDED/FAILED_NO_EFFECT results сериализуются, digest-ируются и сохраняются; повтор того же ключа возвращает прежний полный результат без повторного вызова delegate. Ключ, повторно использованный для другого scope/budget/revision/action payload, отклоняется.
 
@@ -4430,4 +4430,4 @@ SQLite использует `BEGIN IMMEDIATE`, busy timeout и `synchronous=FULL
 
 `DurableIdempotencyExecutor` можно передать в существующий `JARVISTaskLoop.run(..., executor=wrapper)`; это не обходит Gate и не добавляет actions в Android. Side-effecting calls всё ещё запрещены без trusted signed approvals and verified reconciler.
 
-**Тесты:** `tools/neuron_runtime/test_executor_idempotency.py` содержит 18 методов для replay после reopen, FAILED_NO_EFFECT, exact key binding, unknown/exception, reconciliation, contradictory result, concurrent same-key calls, file permissions, symlink/unsafe-directory rejection, schema/result-digest corruption и capacity fail-closed. AUTHORED / NOT RUN. Runtime, multiprocess fault injection, Termux, Android, builds, CI and security audit NOT RUN.
+**Тесты:** `tools/neuron_runtime/test_executor_idempotency.py` содержит 19 методов для replay после reopen, FAILED_NO_EFFECT, exact key binding, unknown/exception, сохранения UNKNOWN между reopen, reconciliation, contradictory result, concurrent same-key calls, file permissions, symlink/unsafe-directory rejection, schema/result-digest corruption и capacity fail-closed. AUTHORED / NOT RUN. Runtime, multiprocess fault injection, Termux, Android, builds, CI and security audit NOT RUN.
