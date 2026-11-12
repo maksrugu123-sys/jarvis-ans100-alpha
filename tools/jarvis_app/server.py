@@ -15,6 +15,8 @@ import threading
 import uuid
 from urllib.parse import urlsplit
 
+from .auth import LocalConsoleAuth, LocalConsoleAuthError
+
 from tools.jpvr_reference.storage import JPVRStorage
 from tools.neuron_runtime.reasoning_engine import (
     PlanningAction,
@@ -111,9 +113,19 @@ def _task_view(record) -> dict[str, object]:
 class LocalConsoleService:
     """Single-writer state facade backed by a dedicated task/session JPVR file."""
 
-    def __init__(self, data_path: str | os.PathLike[str] | None = None) -> None:
+    def __init__(
+        self,
+        data_path: str | os.PathLike[str] | None = None,
+        auth_path: str | os.PathLike[str] | None = None,
+        *,
+        rotate_token: bool = False,
+    ) -> None:
         default_path = Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr"
         self.data_path = Path(data_path) if data_path is not None else default_path
+        self.auth_path = (
+            Path(auth_path) if auth_path is not None
+            else self.data_path.with_name(self.data_path.name + ".access-token")
+        )
         self._lock = threading.RLock()
         self.data_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 
@@ -142,6 +154,16 @@ class LocalConsoleService:
         else:
             self.manager = loaded.manager
             self.checkpoint_version = loaded.descriptor.record_version
+
+        try:
+            self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
+        except LocalConsoleAuthError as exc:
+            self.storage.close()
+            raise LocalConsoleError("cannot initialize local-console authentication") from exc
+        self.bootstrap_token = self.auth.bootstrap_token
+
+    def authenticate(self, token: str | None) -> bool:
+        return self.auth.verify(token)
 
     def close(self) -> None:
         with self._lock:
@@ -378,6 +400,17 @@ def create_http_server(
                 return False
             return True
 
+        def _require_auth(self) -> bool:
+            values = self.headers.get_all("Authorization", [])
+            if len(values) != 1 or not values[0].startswith("Bearer "):
+                self._error(401, "Требуется токен доступа JARVIS")
+                return False
+            token = values[0][7:]
+            if not service.authenticate(token):
+                self._error(401, "Токен доступа недействителен")
+                return False
+            return True
+
         def _read_json(self) -> dict[str, object] | None:
             if self.headers.get_content_type() != "application/json":
                 self._error(415, "Ожидался Content-Type: application/json")
@@ -411,9 +444,11 @@ def create_http_server(
                 return
             path = urlsplit(self.path).path
             if path == "/api/health":
-                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 1})
+                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "auth_required": True, "auth_scheme": "Bearer"})
                 return
             if path == "/api/state":
+                if not self._require_auth():
+                    return
                 self._send(200, service.state())
                 return
             filename = _STATIC_FILES.get(path)
@@ -436,10 +471,12 @@ def create_http_server(
         def do_POST(self) -> None:
             if not self._check_local_origin():
                 return
+            path = urlsplit(self.path).path
+            if not self._require_auth():
+                return
             payload = self._read_json()
             if payload is None:
                 return
-            path = urlsplit(self.path).path
             try:
                 if path == "/api/sessions":
                     if set(payload) != {"title"}:
@@ -493,11 +530,28 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr",
     )
+    parser.add_argument(
+        "--auth-file",
+        type=Path,
+        default=None,
+        help="path for the private SHA-256 access-token digest",
+    )
+    parser.add_argument(
+        "--rotate-token",
+        action="store_true",
+        help="revoke the previous token and print a new one-time token",
+    )
     args = parser.parse_args(argv)
-    service = LocalConsoleService(args.data)
+    service = LocalConsoleService(args.data, args.auth_file, rotate_token=args.rotate_token)
     server = create_http_server(service, port=args.port)
     print(f"JARVIS Local Console: http://127.0.0.1:{server.server_port}/")
     print(f"JPVR data: {service.data_path}")
+    print(f"Access-token digest: {service.auth_path}")
+    if service.bootstrap_token:
+        print("ANDROID / PWA ACCESS TOKEN (shown only once; save it in the client):")
+        print(service.bootstrap_token)
+    else:
+        print("Access token already provisioned. Use --rotate-token to issue a replacement if it was lost.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
