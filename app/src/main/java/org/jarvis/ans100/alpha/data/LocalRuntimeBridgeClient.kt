@@ -135,6 +135,7 @@ class LocalRuntimeBridgeClient {
         }
         val actionIds = HashSet<String>()
         val actionsJson = JSONArray()
+        val possibleFacts = preview.initialFacts.toMutableSet()
         preview.actions.forEach { action ->
             validateIdentifier(action.actionId, "action_id")
             if (!actionIds.add(action.actionId)) {
@@ -150,6 +151,10 @@ class LocalRuntimeBridgeClient {
             }
             if (action.addFacts.toSet().intersect(action.deleteFacts.toSet()).isNotEmpty()) {
                 throw RuntimeBridgeException("Действие не может одновременно добавлять и удалять один факт.")
+            }
+            possibleFacts.addAll(action.addFacts)
+            if (possibleFacts.size > MAX_PREVIEW_RESULT_FACTS) {
+                throw RuntimeBridgeException("Android preview ограничивает итоговую модель 64 фактами.")
             }
             actionsJson.put(JSONObject()
                 .put("action_id", action.actionId)
@@ -332,7 +337,12 @@ class LocalRuntimeBridgeClient {
     private fun decodeFacts(json: JSONObject, key: String): List<String> {
         val values = json.optJSONArray(key)
             ?: throw RuntimeBridgeException("В ответе reasoning preview отсутствует список $key.")
-        if (values.length() > MAX_PREVIEW_FACTS) {
+        val limit = if (key == "facts_after_step" || key == "predicted_final_facts") {
+            MAX_PREVIEW_RESULT_FACTS
+        } else {
+            MAX_PREVIEW_FACTS
+        }
+        if (values.length() > limit) {
             throw RuntimeBridgeException("Список $key превышает лимит Android-клиента.")
         }
         val facts = ArrayList<String>(values.length())
@@ -376,7 +386,7 @@ class LocalRuntimeBridgeClient {
     }
 
     private fun toJsonArray(values: List<String>): JSONArray =
-        JSONArray().apply { values.forEach(::put) }
+        JSONArray().apply { values.forEach { put(it) } }
 
     private fun readBounded(input: java.io.InputStream): ByteArray {
         val output = ByteArrayOutputStream()
@@ -446,6 +456,7 @@ class LocalRuntimeBridgeClient {
         const val MAX_EVENTS = 65536
         const val MAX_PREVIEW_ACTIONS = 16
         const val MAX_PREVIEW_FACTS = 32
+        const val MAX_PREVIEW_RESULT_FACTS = 64
         const val MAX_RATIONALE_CHARS = 512
         val ID_PATTERN = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     }
