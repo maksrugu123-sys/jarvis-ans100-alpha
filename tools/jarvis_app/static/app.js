@@ -1,19 +1,38 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
+let accessToken = sessionStorage.getItem("jarvis.console.access.v2") || "";
+let refreshTimer = null;
+
+function lockConsole(message) {
+  accessToken = "";
+  sessionStorage.removeItem("jarvis.console.access.v2");
+  document.body.classList.add("auth-required");
+  $("#auth-panel").hidden = false;
+  if (message) setNotice(message, "error");
+}
+
+function unlockConsole() {
+  document.body.classList.remove("auth-required");
+  $("#auth-panel").hidden = true;
+}
+
 async function api(path, body) {
-  const response = await fetch(path, body === undefined ? {
-    headers: { "Accept": "application/json" },
-    cache: "no-store",
-  } : {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify(body),
+  const headers = { "Accept": "application/json" };
+  if (accessToken) headers.Authorization = "Bearer " + accessToken;
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const response = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
   let payload;
   try { payload = await response.json(); }
   catch { throw new Error("Сервер вернул некорректный ответ."); }
+  if (response.status === 401 && path !== "/api/health") {
+    lockConsole(payload.error || "Токен доступа отклонён. Вставьте актуальный токен.");
+  }
   if (!response.ok) throw new Error(payload.error || "Локальный запрос не выполнен.");
   return payload;
 }
@@ -366,18 +385,60 @@ $("#reasoning-form").addEventListener("submit", async event => {
   }
 });
 
-async function boot() {
+async function enterConsole(token) {
+  accessToken = token.trim();
   try {
     const health = await api("/api/health");
+    if (health.api_schema !== "jarvis.local-console" ||
+        health.api_version !== 2 || health.auth_required !== true ||
+        health.auth_scheme !== "Bearer") {
+      throw new Error("Версия локальной консоли не поддерживается.");
+    }
     await refresh();
-    setNotice("Ядро подключено · " + health.storage.toUpperCase() + " · режим только для локальных задач", "success");
+    sessionStorage.setItem("jarvis.console.access.v2", accessToken);
+    unlockConsole();
+    setNotice("Ядро подключено · " + health.storage.toUpperCase() + " · защищённый локальный режим", "success");
+    if (refreshTimer !== null) window.clearInterval(refreshTimer);
+    refreshTimer = window.setInterval(() => {
+      refresh().catch(error => setNotice(error.message, "error"));
+    }, 5000);
   } catch (error) {
-    setNotice(error.message, "error");
+    lockConsole(error.message || "Не удалось проверить токен доступа.");
+  }
+}
+
+$("#auth-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const value = $("#access-token").value.trim();
+  if (!/^[A-Za-z0-9_-]{43}$/.test(value)) {
+    setNotice("Токен должен состоять ровно из 43 символов Base64URL.", "error");
+    return;
+  }
+  $("#access-token").value = "";
+  enterConsole(value);
+});
+
+async function boot() {
+  document.body.classList.add("auth-required");
+  $("#auth-panel").hidden = false;
+  try {
+    const health = await api("/api/health");
+    if (health.api_schema !== "jarvis.local-console" ||
+        health.api_version !== 2 || health.auth_required !== true ||
+        health.auth_scheme !== "Bearer") {
+      throw new Error("Сервер не поддерживает защищённый API v2.");
+    }
+    if (accessToken) {
+      await enterConsole(accessToken);
+    } else {
+      setNotice("Вставьте токен доступа, показанный при запуске консоли в Termux.", "info");
+    }
+  } catch (error) {
+    lockConsole(error.message);
   }
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }
-  window.setInterval(() => refresh().catch(error => setNotice(error.message, "error")), 5000);
 }
 
 boot();
