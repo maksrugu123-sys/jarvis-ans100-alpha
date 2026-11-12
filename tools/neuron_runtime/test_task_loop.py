@@ -175,7 +175,7 @@ class TaskLoopExecutionTests(unittest.TestCase):
         )
         self.assertIs(first.status, TaskLoopStatus.WAITING)
         self.assertEqual(first.reason_code, "execution_outcome_unknown")
-        self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.WAITING)
+        self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.RUNNING)
 
         second = self.loop.run(
             self.manager, "task-1", self.problem, self.bindings,
