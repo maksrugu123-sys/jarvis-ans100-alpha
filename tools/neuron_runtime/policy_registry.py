@@ -169,7 +169,7 @@ class PersistentSafetyPolicyRegistry:
             self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             if not parent_existed:
                 os.chmod(self.path.parent, 0o700)
-            parent_metadata = self.path.parent.stat()
+            parent_metadata = self.path.parent.lstat()
         except OSError as exc:
             raise SafetyPolicyRegistryError("cannot secure policy-registry directory") from exc
         if not stat.S_ISDIR(parent_metadata.st_mode):
