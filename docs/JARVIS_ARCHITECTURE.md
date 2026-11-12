@@ -4214,3 +4214,42 @@ Save публикует logical record и CHECKPOINT descriptor одним typed
 Добавлены `task_session_adapter.py`, `task_session_store.py`, `test_task_session_store.py` (14 методов после последующего hardening review), public exports и отдельный контракт. GitHub readback/static review only; все 14 тестов AUTHORED, NOT RUN. Python tests/imports/syntax, fault injection, Android I/O, benchmarks, builds, CI and GitHub Actions не запускались.
 
 **Следующий этап:** authorization snapshot/version binding and a constrained task-loop coordinator. Before any real tool side effect, the loop must revalidate authorization and durable task revision; external execution must be represented as a recoverable intent/result protocol rather than inferred from task status.
+
+
+### 3.44. Reasoning Engine V0.1
+
+**Статус:** реализован bounded deterministic Python reference engine; 26 focused tests AUTHORED, NOT RUN. Это первый исполняемый символьный планировщик, не natural-language model, не production agent и не tool executor. Контракт: `docs/JARVIS_REASONING_ENGINE_V0_1.md`.
+
+#### 3.44.1. Структурная постановка и декомпозиция
+
+ReasoningProblem связывает task_id и goal description с initial facts, goal facts и caller-supplied PlanningAction records. Каждое действие объявляет:
+- preconditions — факты, обязательные до шага;
+- add_facts — факты, добавляемые после шага;
+- delete_facts — факты, удаляемые после шага;
+- summary/rationale — краткое объяснение предполагаемого шага.
+
+ReasoningEngine использует breadth-first search по неизменяемым наборам фактов. Все действия рассматриваются в стабильном action_id порядке. При одинаковой стоимости одного шага первый найденный план имеет минимальное количество действий; одинаковые входы дают детерминированный результат. PlanStep сохраняет prerequisites, declared effects и predicted facts after step. Планирование не вызывает Python callbacks и не исполняет side effects.
+
+#### 3.44.2. Гипотезы и evidence review
+
+Hypothesis содержит стабильный ID и формулировку. EvidenceRecord явно связывает evidence_id с hypothesis_id, polarity SUPPORTS/REFUTES, source_ref, quality label и summary. Результат — INSUFFICIENT, SUPPORT_ONLY, REFUTE_ONLY или MIXED; dangling/duplicate IDs и неизвестные enum значения отвергаются.
+
+Это покрытие предоставленного набора записей, не проверка истинности. Quality labels не являются весами и не влияют на verdict. Engine не аутентифицирует источник, не получает его содержимое, не оценивает независимость и не выводит вероятность. SUPPORT_ONLY нельзя трактовать как доказанный факт.
+
+#### 3.44.3. Bounded search
+
+Defaults: 2,048 visited fact states, depth 32, 256 actions, 2,048 facts, 128 hypotheses и 1,024 evidence records. Hard maxima задаются конструктором. Outcomes: SOLVED, NO_PLAN, DEPTH_LIMIT или SEARCH_LIMIT; ограничение глубины, числа состояний или фактов не маскируется под успешный план.
+
+#### 3.44.4. Проверка результата и границы доверия
+
+После внешнего исполнения вызывающая сторона передаёт observed facts в verify_result(). Engine сообщает, все ли goal facts присутствуют, какие predicted facts отсутствуют и какие неожиданные факты появились. Он не может удостоверить происхождение наблюдений, проверить реальный внешний side effect или самостоятельно определить, кто имеет право выполнять шаг.
+
+ReasoningResult пока не сохраняется в TaskSessionManager/JPVR. Интеграция должна будет связать plan с конкретной task revision и durable intent/result; Permission & Safety Gate должен повторно проверять разрешение непосредственно перед каждым side effect.
+
+#### 3.44.5. Ограничения и проверки
+
+Добавлены `reasoning_engine.py`, `test_reasoning_engine.py` (26 тестов), public exports, README и отдельный контракт. Тесты покрывают deterministic shortest plan, already-satisfied/unreachable goals, preconditions/effects, deletion, depth/state/fact bounds, cycle detection, hypothesis/evidence grouping, duplicate/dangling IDs и observed-result comparison.
+
+GitHub readback/source review only. Все 26 тестов AUTHORED, NOT RUN. Python execution/import/syntax checks, Android/Termux measurements, benchmarks, builds, CI and GitHub Actions — NOT RUN.
+
+**Следующий этап по дорожной карте:** Permission & Safety Gate — capability scopes, explicit approvals, authorization version binding, task/revision binding, resource/time budgets and deny-by-default behavior. После этого Reasoning Engine и TaskSessionManager можно объединить в JARVIS Task Loop, не разрешая planner напрямую вызывать внешние инструменты.
