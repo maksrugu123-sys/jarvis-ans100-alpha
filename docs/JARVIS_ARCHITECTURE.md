@@ -4218,7 +4218,7 @@ Save публикует logical record и CHECKPOINT descriptor одним typed
 
 ### 3.44. Reasoning Engine V0.1
 
-**Статус:** реализован bounded deterministic Python reference engine; 29 focused tests AUTHORED, NOT RUN. Это первый исполняемый символьный планировщик, не natural-language model, не production agent и не tool executor. Контракт: `docs/JARVIS_REASONING_ENGINE_V0_1.md`.
+**Статус:** реализован bounded deterministic Python reference engine; 31 focused tests AUTHORED, NOT RUN. Это первый исполняемый символьный планировщик, не natural-language model, не production agent и не tool executor. Контракт: `docs/JARVIS_REASONING_ENGINE_V0_1.md`.
 
 #### 3.44.1. Структурная постановка и декомпозиция
 
@@ -4248,8 +4248,8 @@ ReasoningResult пока не сохраняется в TaskSessionManager/JPVR.
 
 #### 3.44.5. Ограничения и проверки
 
-Добавлены `reasoning_engine.py`, `test_reasoning_engine.py` (29 тестов), public exports, README и отдельный контракт. Тесты покрывают deterministic shortest plan, already-satisfied/unreachable goals, preconditions/effects, deletion, depth/state/fact bounds, cycle detection, pending/verified/rejected evidence policy, quality filtering, duplicate/dangling IDs, bounded observed-fact iteration и observed-result comparison.
+Добавлены `reasoning_engine.py`, `test_reasoning_engine.py` (31 тест), public exports, README и отдельный контракт. Тесты покрывают deterministic shortest plan, already-satisfied/unreachable goals, preconditions/effects, deletion, depth/state/fact bounds, cycle detection, pending/verified/rejected evidence policy, quality filtering, duplicate/dangling IDs, bounded observed-fact iteration и observed-result comparison.
 
-GitHub readback/source review only. Все 29 тестов AUTHORED, NOT RUN. Python execution/import/syntax checks, Android/Termux measurements, benchmarks, builds, CI and GitHub Actions — NOT RUN.
+GitHub readback/source review only. Все 31 тест AUTHORED, NOT RUN. Python execution/import/syntax checks, Android/Termux measurements, benchmarks, builds, CI and GitHub Actions — NOT RUN.
 
 **Следующий этап по дорожной карте:** Permission & Safety Gate — capability scopes, explicit approvals, authorization version binding, task/revision binding, resource/time budgets and deny-by-default behavior. После этого Reasoning Engine и TaskSessionManager можно объединить в JARVIS Task Loop, не разрешая planner напрямую вызывать внешние инструменты.
