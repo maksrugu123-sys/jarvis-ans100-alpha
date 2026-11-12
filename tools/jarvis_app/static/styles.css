@@ -146,3 +146,18 @@ footer p { margin:4px 0; }
   .event-row { grid-template-columns:35px minmax(0,1fr); }
   .event-transition { grid-column:2; }
 }
+
+[hidden] { display: none !important; }
+body.auth-required .stats,
+body.auth-required .columns,
+body.auth-required .shell > footer { display: none; }
+body.auth-required .intro { margin-bottom: 18px; }
+.auth-panel { max-width: 620px; }
+.auth-panel .panel-copy { margin-bottom: 14px; }
+.auth-panel .wide-button { width: 100%; }
+.auth-panel code {
+  color: #d5e9ff;
+  background: #18283a;
+  border-radius: 5px;
+  padding: 2px 5px;
+}
