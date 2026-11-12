@@ -39,6 +39,20 @@
 
     <div id="notice" class="notice" role="status" aria-live="polite">Подключение к локальному ядру…</div>
 
+    <section class="panel auth-panel" id="auth-panel" hidden>
+      <div class="panel-heading">
+        <div><div class="eyebrow">ЗАЩИЩЁННЫЙ ДОСТУП</div><h2>Подключение к JARVIS</h2></div>
+        <span class="tag">API V2</span>
+      </div>
+      <p class="panel-copy">Скопируйте одноразово показанный токен из Termux и вставьте его сюда. Токен действует только на этом устройстве и хранится в памяти вкладки до её закрытия.</p>
+      <form id="auth-form" class="stack-form">
+        <label for="access-token">Локальный токен доступа</label>
+        <input id="access-token" type="password" maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="43 символа Base64URL" required>
+        <button class="wide-button" type="submit">Подключить защищённую консоль</button>
+      </form>
+      <p class="muted">Если токен потерян, остановите консоль и запустите её с параметром <code>--rotate-token</code>. Старый токен после ротации перестанет работать.</p>
+    </section>
+
     <div class="columns">
       <section class="panel">
         <div class="panel-heading">
