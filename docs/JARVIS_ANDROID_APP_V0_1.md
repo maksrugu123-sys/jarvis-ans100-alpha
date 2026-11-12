@@ -1,6 +1,6 @@
-# JARVIS Android App V0.4 — JPVR bridge and symbolic reasoning preview
+# JARVIS Android App V0.5 — authenticated JPVR bridge and symbolic preview
 
-**Статус:** Android Compose V0.4 adds a bounded symbolic Reasoning Engine preview to the existing loopback JPVR task/session bridge. It still has no task executor or approval flow. Nine Android local-repository tests and nine Python console tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
+**Статус:** Android Compose V0.5 adds local bearer-token pairing to the bounded JPVR task/session bridge and symbolic Reasoning Engine preview. It still has no task executor or trusted approval flow. Nine Android local-repository tests and eleven Python console tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
 
 ## Project and compatibility
 
@@ -44,7 +44,7 @@ Implementation:
 - MainActivity.kt — native runtime panel and lifecycle/task controls.
 - AndroidManifest.xml and res/xml/network_security_config.xml — INTERNET permission and cleartext allowance scoped to 127.0.0.1 / localhost; other cleartext destinations remain disallowed.
 
-The fixed endpoint is http://127.0.0.1:8765. It connects only to a Python console running on the same Android device. The client rejects an unexpected API schema/version, bounds request/response bodies, and sets connect/read timeouts. Redirects are disabled.
+The fixed endpoint is http://127.0.0.1:8765. It connects only to a Python console running on the same Android device. The health check requires schema `jarvis.local-console`, API version 2 and `auth_scheme=Bearer`. State reads and all POSTs use the access token. On first start, Termux prints a random 43-character token once; paste it into the app. The Android app stores it encrypted using an AES-GCM key held by Android Keystore. The client rejects an unexpected API schema/version/auth mode, bounds request/response bodies, and sets connect/read timeouts. Redirects are disabled. If a token is lost, stop Termux and restart with `--rotate-token` to revoke the old token and issue a replacement.
 
 ### Start the backend on the phone
 
@@ -60,7 +60,9 @@ The client requires GET /api/health to return:
 - status: "ok";
 - storage: "jpvr";
 - api_schema: "jarvis.local-console";
-- api_version: 1.
+- api_version: 2;
+- auth_required: true;
+- auth_scheme: "Bearer".
 
 It then uses:
 - GET /api/state;
@@ -70,19 +72,19 @@ It then uses:
 - POST /api/tasks/{task_id}/cancel;
 - POST /api/reasoning/preview (bounded, non-mutating symbolic planning request).
 
-Every successful mutation returns the committed backend state snapshot. Session status and task cancellation requests include expected revision. The server serializes state mutations and publishes them through JPVR compare-and-swap before returning the updated snapshot.
+Every state read and POST route except the public health check requires `Authorization: Bearer <token>`. Every successful mutation returns the committed backend state snapshot. Session status and task cancellation requests include expected revision. The server serializes state mutations and publishes them through JPVR compare-and-swap before returning the updated snapshot.
 
 ## Trust and capability boundary
 
 The native bridge has no endpoint or code path for shell, filesystem browsing, remote network, tool execution, approval grants or ActionExecutor. The backend capability flags remain false for external_actions, tool_execution and remote_access. Creating a task only creates a QUEUED lifecycle record; it does not execute it.
 
-The loopback check and Host/Origin validation are not identity authentication. Other software on the same device may be able to reach a loopback HTTP service. Therefore the console must remain bound to 127.0.0.1, must not be exposed on LAN/Internet, and must not accept secrets or side-effecting action requests. No external action is authorized by this bridge.
+The bearer token protects state and mutations, but token possession is not a trusted human identity or an exact-action approval. Host/Origin checks alone are not authentication. Other software on the same device may reach the port, so keep the token secret. The console must remain bound to 127.0.0.1 and must not be exposed on LAN/Internet. No external action is authorized by this bridge.
 
 The native UI calls the structured `/api/reasoning/preview` endpoint, but does not invoke PermissionSafetyGate, Task Loop or ActionExecutor. Preview results are informational only and are not approvals. Trusted identity, authenticated approval, durable approval/revocation storage, executor-owned idempotency and recovery remain future work.
 
 ## Verification
 
 - Android local repository tests: nine methods, AUTHORED, NOT RUN.
-- Python local-console API tests: nine methods, AUTHORED, NOT RUN.
+- Python local-console API tests: eleven methods, AUTHORED, NOT RUN.
 - GitHub readback/static source review only for this bridge batch.
 - Kotlin compilation, Gradle sync/build, APK/AAB, device installation, Compose UI tests, Python tests, Android/Termux end-to-end I/O and performance measurements: NOT RUN.
