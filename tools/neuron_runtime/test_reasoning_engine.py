@@ -104,6 +104,25 @@ class ReasoningPlanningTests(unittest.TestCase):
         ))
         self.assertIs(result.status, PlanStatus.SEARCH_LIMIT)
 
+    def test_fact_bound_is_reported(self):
+        engine = ReasoningEngine(max_facts=1)
+        result = engine.reason(ReasoningProblem(
+            "task-1", "Bounded facts", ("start",), ("goal",),
+            (_action("one", ("start",), ("goal",)),),
+        ))
+        self.assertIs(result.status, PlanStatus.SEARCH_LIMIT)
+
+    def test_cycle_does_not_masquerade_as_depth_limit(self):
+        engine = ReasoningEngine(max_depth=1)
+        result = engine.reason(ReasoningProblem(
+            "task-1", "Finite cycle", ("a",), ("unreachable",),
+            (
+                _action("a-to-b", ("a",), ("b",)),
+                _action("b-to-a", ("b",), ("a",), ("b",)),
+            ),
+        ))
+        self.assertIs(result.status, PlanStatus.NO_PLAN)
+
     def test_delete_effect_is_applied_and_recorded(self):
         problem = ReasoningProblem(
             "task-1", "Replace state", ("unsafe",), ("safe",),
