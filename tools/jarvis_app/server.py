@@ -1,7 +1,7 @@
 """Loopback-only local JARVIS task console.
 
-This is a thin UI for the bounded Python reference APIs. It has no tool executor,
-network connector, shell access, credentials, or side-effecting capabilities.
+This is a thin UI for bounded Python reference APIs. It has bearer-token authentication
+but no tool executor, external credentials, shell access, or side-effecting capabilities.
 """
 from __future__ import annotations
 
