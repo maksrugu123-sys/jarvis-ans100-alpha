@@ -1323,3 +1323,29 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** V0.1 does not parse natural language, generate actions from text, retrieve/authenticate external evidence, execute tools, enforce permissions, persist plans or coordinate concurrent work. It is a structured symbolic reference component, not a general intelligence or autonomous assistant.
 
 **Следующий этап:** Permission & Safety Gate with deny-by-default capabilities, approval and policy-version binding, task/revision binding, and explicit resource/time budgets. Then connect lifecycle + reasoner + gate through a bounded JARVIS Task Loop.
+
+
+## 2026-11-12 — Reasoning Engine V0.1 evidence and resource-bound hardening
+
+**Цель:** закрыть два важных trust/resource-boundary gap в уже существующем Reasoning Engine, синхронизировать публичный API и обновить контракт.
+
+**Изменено:**
+- `tools/neuron_runtime/reasoning_engine.py`:
+  - добавлен `EvidenceVerificationStatus` (`PENDING`, `VERIFIED`, `REJECTED`) и `verification_ref` к EvidenceRecord;
+  - по умолчанию evidence имеет статус PENDING; в hypothesis assessment попадают только caller-marked VERIFIED записи с quality, отличным от UNVERIFIED;
+  - verification_ref проверяется как текст и stable ID для terminal review states; malformed enum types приводят к ReasoningError;
+  - action rationale теперь явно проверяется как текст;
+  - verify_result потребляет не больше max_facts + 1 значений из observed_facts iterator и отклоняет превышение до неограниченного materialization.
+- `tools/neuron_runtime/test_reasoning_engine.py`: добавлены/изменены проверки pending evidence, verified support/refute, unverified quality filtering и bounded iterator; модуль теперь содержит 29 test methods.
+- `tools/neuron_runtime/__init__.py`: EvidenceVerificationStatus добавлен в public exports.
+- `docs/JARVIS_REASONING_ENGINE_V0_1.md`, `docs/JARVIS_ARCHITECTURE.md` §3.23/§3.44 и `README.md`: описаны review-status semantics, limits и актуальное число тестов.
+
+**Архитектурное ограничение:** verification_status и verification_ref поступают от вызывающей стороны. Сам Reasoning Engine не аутентифицирует reviewer или источник и не проверяет криптографическую подлинность ссылки. Это fail-closed фильтр по статусу, предоставленному caller, а не полноценный независимый trust service; такой механизм должен предоставлять будущий Permission & Safety Gate / evidence-verification boundary.
+
+**Тесты:** 29 методов в `tools.neuron_runtime.test_reasoning_engine` — **AUTHORED, NOT RUN**. Исполняемые тесты не запускались по согласованному ограничению.
+
+**Фактическая проверка:** GitHub fetch/readback и статическая сверка обновлённых источников, exports, README и архитектурного контракта. Python execution, import/syntax checks, Android/Termux execution, benchmark, JPVR fault injection, builds, CI и GitHub Actions — **NOT RUN**.
+
+**Ограничения:** V0.1 по-прежнему принимает только структурированные факты и готовые actions от caller; не декомпозирует свободный естественный язык, не извлекает внешние источники, не выполняет actions, не запрашивает одобрение и не вызывает инструменты. План не связан с TaskSessionManager durable revision и не сохраняется в JPVR.
+
+**Следующий этап:** Permission & Safety Gate V1: deny-by-default capability scopes, явные approvals для значимых side effects, policy-version и task/revision binding, ограниченные resource/time/retry budgets. После этого — bounded JARVIS Task Loop.
