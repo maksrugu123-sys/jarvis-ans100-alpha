@@ -1611,3 +1611,10 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 - Added `test_unresolved_key_survives_reopen_without_redispatch`: a fresh DurableIdempotencyExecutor sees the persisted UNKNOWN key and returns UNKNOWN without invoking its new delegate.
 - Executor ledger suite: 19 methods; AUTHORED, NOT RUN.
+
+
+### Executor ledger bounded diagnostics
+
+- Added `DurableIdempotencyExecutor.list_unresolved(limit=50)` for ordered bounded metadata inspection of IN_PROGRESS/UNKNOWN records, and `state_counts()` for state totals/capacity.
+- Added two focused tests for state counts, unresolved ordering, invalid limits and non-disclosure of action payloads.
+- Executor ledger test inventory: 21 methods, AUTHORED / NOT RUN.
