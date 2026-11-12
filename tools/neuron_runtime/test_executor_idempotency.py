@@ -273,6 +273,54 @@ class DurableIdempotencyExecutorTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(self.path.parent.stat().st_mode), 0o700)
         self.assertEqual(ledger.lookup("idem-1").state, "succeeded")
 
+    def test_state_counts_and_unresolved_listing_are_bounded_and_ordered(self):
+        success_delegate = CountingExecutor()
+        success_ledger = self._executor(success_delegate)
+        success_ledger.execute(self.action, self.request)
+
+        failed_result = ActionExecutionResult(
+            outcome=ExecutionOutcome.FAILED_NO_EFFECT,
+            failure_code="rejected",
+        )
+        failed_ledger = self._executor(CountingExecutor(result=failed_result))
+        failed_ledger.execute(
+            self.action,
+            replace(self.request, idempotency_key="idem-2"),
+        )
+
+        unknown_ledger = self._executor(CountingExecutor(error=RuntimeError("lost")))
+        unknown_ledger.execute(
+            self.action,
+            replace(self.request, idempotency_key="idem-3"),
+        )
+        unknown_ledger.execute(
+            self.action,
+            replace(self.request, idempotency_key="idem-4"),
+        )
+
+        counts = unknown_ledger.state_counts()
+        self.assertEqual(counts, {
+            "in_progress": 0,
+            "unknown": 2,
+            "succeeded": 1,
+            "failed_no_effect": 1,
+            "total": 4,
+            "capacity": 256,
+        })
+        pending = unknown_ledger.list_unresolved(limit=2)
+        self.assertEqual(
+            tuple(item.idempotency_key for item in pending),
+            ("idem-3", "idem-4"),
+        )
+        self.assertTrue(all(item.result is None for item in pending))
+
+    def test_unresolved_listing_rejects_invalid_limits(self):
+        ledger = self._executor(CountingExecutor())
+        for invalid in (0, -1, True, 257):
+            with self.subTest(limit=invalid):
+                with self.assertRaises(DurableExecutorLedgerError):
+                    ledger.list_unresolved(limit=invalid)
+
     def test_symlink_database_path_is_rejected(self):
         target = Path(self.temp.name) / "target.sqlite3"
         target.write_bytes(b"not-a-database")
