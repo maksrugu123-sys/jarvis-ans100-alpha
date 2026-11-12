@@ -37,7 +37,7 @@ body {
 .intro { max-width: 760px; margin-bottom: 26px; }
 h1 { margin: 7px 0 9px; font-size: clamp(27px, 5vw, 42px); line-height:1.14; letter-spacing:-.035em; }
 .intro p, .panel-copy { color: var(--muted); max-width: 680px; margin: 0; }
-.stats { display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-bottom:16px; }
+.stats { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
 .stat-card, .panel {
   background: linear-gradient(155deg, rgba(20,34,49,.96), rgba(14,24,36,.98));
   border:1px solid var(--line); border-radius:18px;
@@ -72,6 +72,14 @@ button:disabled { opacity:.5; cursor:wait; }
 .inline-form, .stack-form { margin-bottom:17px; }
 .inline-form label:first-child { margin-top:0; }
 .record-list { display:grid; gap:8px; }
+.session-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:7px; }
+.session-actions .text-button { margin-top:0; }
+.task-filters { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(130px,.8fr); gap:8px; margin:12px 0 6px; }
+.task-counts { color:var(--muted); font-size:11px; margin:0 0 10px; font-variant-numeric:tabular-nums; }
+.task-details { margin-top:8px; color:#c5d4e4; font-size:12px; }
+.task-details summary { cursor:pointer; color:#b6d0df; }
+.result-json { max-width:100%; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; color:#b6f2e6; font:11px/1.5 ui-monospace,monospace; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .record-card { padding:12px; border-radius:12px; background:var(--panel-soft); border:1px solid #283a4e; min-width:0; }
 .record-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
 .record-heading strong { font-size:14px; overflow-wrap:anywhere; }
@@ -121,6 +129,7 @@ footer p { margin:4px 0; }
   .local-state { font-size:0; }
   .shell { padding:25px 14px 52px; }
   .columns { grid-template-columns:1fr; gap:0; }
+  .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .panel { padding:16px; border-radius:15px; }
   .action-grid { grid-template-columns:1fr 1fr; }
   .action-grid > div:nth-child(2) { grid-column:span 2; }
@@ -128,6 +137,7 @@ footer p { margin:4px 0; }
 }
 @media (max-width: 390px) {
   .stats { gap:7px; }
+  .task-filters { grid-template-columns:1fr; }
   .stat-card { padding:11px; }
   .stat-card strong { font-size:21px; }
   .input-row { align-items:stretch; flex-direction:column; }
