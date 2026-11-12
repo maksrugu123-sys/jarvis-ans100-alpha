@@ -1599,3 +1599,9 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Гарантия и границы:** wrapper returns cached known results and never redispatches an existing IN_PROGRESS/UNKNOWN key. It does not guarantee exactly-once behavior at a downstream service. A crash can leave an unresolved claim before the side effect; an independent trusted reconciliation provider is needed. A caller-supplied reconciliation_ref is an audit string, not proof. No ActionExecutor was connected to an external system and no Android execution route was added.
 
 **Проверки:** GitHub source readback/static review only. 18 tests AUTHORED, NOT RUN. No Python import/test run, multiprocess/fault-injection test, downstream integration, Termux runtime, Android build, APK/AAB, CI or GitHub Actions.
+
+
+### Durable executor integration follow-up
+
+- Added an integration scenario to `tools/neuron_runtime/test_task_loop.py`: delegate applies the first step but loses its reply; SQLite wrapper returns UNKNOWN without a second delegate call; after recording an independently verified result, Task Loop resumes and executes the next step.
+- Task Loop focused test count is now 21 (AUTHORED / NOT RUN). This is an authored integration regression, not evidence of a passing runtime test.
