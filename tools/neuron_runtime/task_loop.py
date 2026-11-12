@@ -1,0 +1,494 @@
+"""Bounded JARVIS task orchestration V0.1.
+
+The loop composes TaskSessionManager, ReasoningEngine, PermissionSafetyGate and
+an injected idempotent executor. It does not interpret natural language or own
+external credentials/tools.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+import hashlib
+import json
+import re
+from typing import Callable, Mapping, Protocol
+
+from .permission_safety_gate import (
+    ApprovalGrant,
+    AuthorizationDecision,
+    AuthorizationRequest,
+    AuthorizationStatus,
+    EffectClass,
+    PermissionSafetyError,
+    PermissionSafetyGate,
+    RequestedBudget,
+    SafetyPolicy,
+)
+from .reasoning_engine import (
+    PlanStatus,
+    PlanningAction,
+    ReasoningEngine,
+    ReasoningError,
+    ReasoningProblem,
+    ReasoningResult,
+    VerificationStatus,
+)
+from .task_session import (
+    SessionStatus,
+    TaskConflict,
+    TaskSessionError,
+    TaskSessionManager,
+    TaskStatus,
+)
+from .task_session_store import (
+    JPVRTaskSessionCheckpointError,
+    JPVRTaskSessionCheckpointStore,
+)
+
+
+_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_U64_MAX = (1 << 64) - 1
+
+
+class TaskLoopError(ValueError):
+    """Invalid Task Loop input or illegal orchestration state."""
+
+
+class TaskLoopPersistenceError(TaskLoopError):
+    """A required JPVR task checkpoint could not be committed."""
+
+
+class TaskLoopConflict(TaskLoopError):
+    """The task/session lifecycle changed while the plan was being executed."""
+
+
+class TaskLoopStatus(str, Enum):
+    COMPLETED = "completed"
+    WAITING = "waiting"
+    FAILED = "failed"
+
+
+class ExecutionOutcome(str, Enum):
+    SUCCEEDED = "succeeded"
+    FAILED_NO_EFFECT = "failed_no_effect"
+    UNKNOWN = "unknown"
+
+
+def _identifier(name: str, value: object) -> str:
+    if not isinstance(value, str) or not _ID.fullmatch(value):
+        raise TaskLoopError(f"{name} must be a stable 1..128 character identifier")
+    return value
+
+
+@dataclass(frozen=True)
+class ActionBinding:
+    """Security/resource declaration that binds a pure planner action to a capability."""
+
+    capability: str
+    scope: str
+    effect: EffectClass
+    budget: RequestedBudget
+
+    def __post_init__(self) -> None:
+        _identifier("capability", self.capability)
+        if not isinstance(self.scope, str) or not self.scope.strip() or len(self.scope.strip()) > 512 or "\x00" in self.scope:
+            raise TaskLoopError("scope must contain 1..512 characters without NUL")
+        object.__setattr__(self, "scope", self.scope.strip())
+        try:
+            object.__setattr__(self, "effect", EffectClass(self.effect))
+        except (TypeError, ValueError) as exc:
+            raise TaskLoopError("unsupported action effect class") from exc
+        if not isinstance(self.budget, RequestedBudget):
+            raise TaskLoopError("budget must be a RequestedBudget")
+
+
+@dataclass(frozen=True)
+class ActionExecutionResult:
+    """Executor's full observed fact snapshot after one action attempt."""
+
+    outcome: ExecutionOutcome
+    observed_facts: tuple[str, ...] = ()
+    failure_code: str | None = None
+
+    def __post_init__(self) -> None:
+        try:
+            outcome = ExecutionOutcome(self.outcome)
+        except (TypeError, ValueError) as exc:
+            raise TaskLoopError("unsupported executor outcome") from exc
+        object.__setattr__(self, "outcome", outcome)
+        if not isinstance(self.observed_facts, (tuple, list)):
+            raise TaskLoopError("observed_facts must be a tuple or list")
+        facts = tuple(self.observed_facts)
+        if len(facts) > 2048 or any(not isinstance(item, str) or not _ID.fullmatch(item) for item in facts):
+            raise TaskLoopError("observed_facts contains invalid or excessive fact identifiers")
+        if len(set(facts)) != len(facts):
+            raise TaskLoopError("observed_facts must be unique")
+        object.__setattr__(self, "observed_facts", tuple(sorted(facts)))
+        if outcome is ExecutionOutcome.FAILED_NO_EFFECT:
+            object.__setattr__(self, "failure_code", _identifier("failure_code", self.failure_code))
+        elif self.failure_code is not None:
+            raise TaskLoopError("failure_code is only valid for FAILED_NO_EFFECT")
+
+
+class ActionExecutor(Protocol):
+    """Executor contract.
+
+    Repeating the same request.idempotency_key must return the previously
+    committed result without applying the external effect again. If the
+    executor cannot determine the outcome, it must raise or return UNKNOWN.
+    """
+
+    def execute(
+        self,
+        action: PlanningAction,
+        request: AuthorizationRequest,
+    ) -> ActionExecutionResult:
+        ...
+
+
+@dataclass(frozen=True)
+class TaskLoopResult:
+    task_id: str
+    status: TaskLoopStatus
+    plan_id: str
+    reasoning: ReasoningResult
+    executed_step_ids: tuple[str, ...]
+    pending_step_id: str | None
+    observed_facts: tuple[str, ...]
+    reason_code: str
+    task_revision: int
+    authorization_decisions: tuple[AuthorizationDecision, ...]
+
+
+class JARVISTaskLoop:
+    """Bounded, sequential reference task loop with a deny-by-default gate."""
+
+    def __init__(
+        self,
+        *,
+        reasoning_engine: ReasoningEngine | None = None,
+        permission_gate: PermissionSafetyGate | None = None,
+    ) -> None:
+        self.reasoning_engine = reasoning_engine or ReasoningEngine()
+        self.permission_gate = permission_gate or PermissionSafetyGate()
+        if not isinstance(self.reasoning_engine, ReasoningEngine):
+            raise TaskLoopError("reasoning_engine must be a ReasoningEngine")
+        if not isinstance(self.permission_gate, PermissionSafetyGate):
+            raise TaskLoopError("permission_gate must be a PermissionSafetyGate")
+
+    @staticmethod
+    def _plan_id(problem: ReasoningProblem, bindings: Mapping[str, ActionBinding]) -> str:
+        # Retry counters and resource ceilings are intentionally excluded:
+        # they change authorization, not the logical action/idempotency identity.
+        actions = []
+        for action in sorted(problem.actions, key=lambda item: item.action_id):
+            binding = bindings[action.action_id]
+            actions.append({
+                "action_id": action.action_id,
+                "summary": action.summary,
+                "rationale": action.rationale,
+                "preconditions": list(action.preconditions),
+                "add_facts": list(action.add_facts),
+                "delete_facts": list(action.delete_facts),
+                "capability": binding.capability,
+                "scope": binding.scope,
+                "effect": binding.effect.value,
+            })
+        document = {
+            "task_id": problem.task_id,
+            "goal_description": problem.goal_description,
+            "initial_facts": sorted(problem.initial_facts),
+            "goal_facts": sorted(problem.goal_facts),
+            "actions": actions,
+        }
+        canonical = json.dumps(
+            document, sort_keys=True, ensure_ascii=True, separators=(",", ":")
+        ).encode("ascii")
+        return "plan-" + hashlib.sha256(b"JARVIS:TASK-LOOP:PLAN:V1\x00" + canonical).hexdigest()[:48]
+
+    @staticmethod
+    def _step_id(index: int) -> str:
+        return f"step-{index:06d}"
+
+    @staticmethod
+    def _action_idempotency_key(
+        manager_id: str, task_id: str, task_idempotency_key: str,
+        plan_id: str, step_id: str, action_id: str,
+    ) -> str:
+        material = "\x00".join((
+            manager_id, task_id, task_idempotency_key, plan_id, step_id, action_id,
+        )).encode("ascii")
+        return "act-" + hashlib.sha256(b"JARVIS:TASK-LOOP:ACTION:V1\x00" + material).hexdigest()
+
+    def run(
+        self,
+        task_manager: TaskSessionManager,
+        task_id: str,
+        problem: ReasoningProblem,
+        action_bindings: Mapping[str, ActionBinding],
+        policy: SafetyPolicy,
+        executor: ActionExecutor,
+        *,
+        now_ns: int | Callable[[], int],
+        approvals: Mapping[str, ApprovalGrant] | None = None,
+        checkpoint_store: JPVRTaskSessionCheckpointStore | None = None,
+        expected_checkpoint_version: int | None = None,
+    ) -> TaskLoopResult:
+        """Plan and execute one bounded task.
+
+        Side-effecting actions require a dedicated JPVR task/session store. On
+        restart, callers must replay the same structured problem and bindings;
+        the executor's idempotency ledger is responsible for deduplicating an
+        action whose external result was committed before a crash.
+        """
+        if not isinstance(task_manager, TaskSessionManager):
+            raise TaskLoopError("task_manager must be a TaskSessionManager")
+        _identifier("task_id", task_id)
+        if not isinstance(problem, ReasoningProblem) or problem.task_id != task_id:
+            raise TaskLoopError("problem must be a ReasoningProblem for the requested task")
+        if not isinstance(policy, SafetyPolicy):
+            raise TaskLoopError("policy must be a SafetyPolicy")
+        if not callable(getattr(executor, "execute", None)):
+            raise TaskLoopError("executor must provide execute(action, request)")
+        if not isinstance(action_bindings, Mapping):
+            raise TaskLoopError("action_bindings must be a mapping")
+        if not isinstance(problem.actions, (tuple, list)):
+            raise TaskLoopError("problem.actions must be a tuple or list")
+        action_ids = {item.action_id for item in problem.actions if isinstance(item, PlanningAction)}
+        if len(action_ids) != len(problem.actions):
+            raise TaskLoopError("problem contains an invalid or duplicate planning action")
+        if set(action_bindings) != action_ids or any(
+            not isinstance(value, ActionBinding) for value in action_bindings.values()
+        ):
+            raise TaskLoopError("action_bindings must exactly cover every planning action")
+        if approvals is not None and not isinstance(approvals, Mapping):
+            raise TaskLoopError("approvals must map step IDs to ApprovalGrant objects")
+        if checkpoint_store is not None:
+            if not isinstance(checkpoint_store, JPVRTaskSessionCheckpointStore):
+                raise TaskLoopError("checkpoint_store must be a JPVRTaskSessionCheckpointStore")
+            if (
+                isinstance(expected_checkpoint_version, bool)
+                or not isinstance(expected_checkpoint_version, int)
+                or not 0 <= expected_checkpoint_version <= _U64_MAX
+            ):
+                raise TaskLoopError("expected_checkpoint_version is required when a checkpoint store is supplied")
+        elif expected_checkpoint_version is not None:
+            raise TaskLoopError("expected_checkpoint_version requires checkpoint_store")
+        if any(
+            binding.effect is not EffectClass.READ_ONLY
+            for binding in action_bindings.values()
+        ) and checkpoint_store is None:
+            raise TaskLoopError("side-effecting actions require a durable JPVR task checkpoint store")
+        if not isinstance(now_ns, int) and not callable(now_ns):
+            raise TaskLoopError("now_ns must be an integer or a zero-argument clock callable")
+
+        try:
+            task = task_manager.get_task(task_id)
+            session = task_manager.get_session(task.session_id)
+        except TaskSessionError as exc:
+            raise TaskLoopError("task or owning session was not found") from exc
+        if session.status is not SessionStatus.OPEN:
+            raise TaskLoopError("task session must be open before the task loop starts")
+        if task.status not in (TaskStatus.QUEUED, TaskStatus.RUNNING, TaskStatus.WAITING):
+            raise TaskLoopError("task must be queued, running, or waiting")
+
+        checkpoint_version = expected_checkpoint_version
+
+        def persist_lifecycle() -> None:
+            nonlocal checkpoint_version
+            if checkpoint_store is None:
+                return
+            try:
+                saved = checkpoint_store.save(
+                    task_manager, expected_record_version=checkpoint_version
+                )
+            except (JPVRTaskSessionCheckpointError, OSError, ValueError) as exc:
+                raise TaskLoopPersistenceError(
+                    "task lifecycle changed in memory but its JPVR checkpoint was not confirmed"
+                ) from exc
+            checkpoint_version = saved.record_version
+
+        if task.status in (TaskStatus.QUEUED, TaskStatus.WAITING):
+            try:
+                task = task_manager.transition_task(
+                    task_id, TaskStatus.RUNNING, expected_revision=task.revision
+                )
+            except TaskSessionError as exc:
+                raise TaskLoopConflict("task could not enter RUNNING") from exc
+            persist_lifecycle()
+        running_task_revision = task.revision
+        session_revision = session.revision
+
+        try:
+            reasoning = self.reasoning_engine.reason(problem)
+        except ReasoningError:
+            return self._finish_failed(
+                task_manager, task_id, running_task_revision, "reasoning_invalid_request",
+                "reasoning_invalid_request", "plan-invalid", None, (), (),
+                persist_lifecycle,
+            )
+        plan_id = self._plan_id(problem, action_bindings)
+        if reasoning.status is not PlanStatus.SOLVED:
+            reason_code = "reasoning_" + reasoning.status.value
+            return self._finish_failed(
+                task_manager, task_id, running_task_revision, reason_code,
+                plan_id, reasoning, (), problem.initial_facts, (),
+                persist_lifecycle,
+            )
+
+        executed: list[str] = []
+        decisions: list[AuthorizationDecision] = []
+        observed_facts = tuple(sorted(problem.initial_facts))
+
+        for step in reasoning.plan:
+            step_id = self._step_id(step.index)
+            action = next((item for item in problem.actions if item.action_id == step.action_id), None)
+            if action is None:
+                return self._finish_failed(
+                    task_manager, task_id, running_task_revision, "plan_action_missing",
+                    plan_id, reasoning, executed, observed_facts, decisions, persist_lifecycle,
+                )
+            if not set(step.required_facts).issubset(observed_facts):
+                return self._finish_failed(
+                    task_manager, task_id, running_task_revision, "plan_precondition_mismatch",
+                    plan_id, reasoning, executed, observed_facts, decisions, persist_lifecycle,
+                )
+            binding = action_bindings[step.action_id]
+            idempotency_key = self._action_idempotency_key(
+                task_manager.manager_id, task_id, task.idempotency_key,
+                plan_id, step_id, step.action_id,
+            )
+            request = AuthorizationRequest(
+                manager_id=task_manager.manager_id,
+                task_id=task_id,
+                expected_task_revision=running_task_revision,
+                expected_session_revision=session_revision,
+                session_id=task.session_id,
+                plan_id=plan_id,
+                step_id=step_id,
+                action_id=step.action_id,
+                capability=binding.capability,
+                scope=binding.scope,
+                idempotency_key=idempotency_key,
+                effect=binding.effect,
+                budget=binding.budget,
+            )
+            approval = None if approvals is None else approvals.get(step_id)
+            current_time = now_ns() if callable(now_ns) else now_ns
+            try:
+                decision = self.permission_gate.authorize(
+                    task_manager, policy, request, now_ns=current_time, approval=approval
+                )
+            except PermissionSafetyError as exc:
+                raise TaskLoopError("permission gate rejected malformed authorization input") from exc
+            decisions.append(decision)
+            if decision.status is not AuthorizationStatus.ALLOWED:
+                return self._finish_waiting(
+                    task_manager, task_id, running_task_revision,
+                    decision.reason_code, plan_id, reasoning, executed,
+                    step_id, observed_facts, decisions, persist_lifecycle,
+                )
+
+            try:
+                execution = executor.execute(action, request)
+            except Exception:
+                # The executor may have committed the effect before losing its reply.
+                # Never mark this as a known failure or silently generate a new key.
+                return self._finish_waiting(
+                    task_manager, task_id, running_task_revision,
+                    "execution_outcome_unknown", plan_id, reasoning, executed,
+                    step_id, observed_facts, decisions, persist_lifecycle,
+                )
+            if not isinstance(execution, ActionExecutionResult):
+                return self._finish_waiting(
+                    task_manager, task_id, running_task_revision,
+                    "invalid_executor_result_outcome_unknown", plan_id, reasoning,
+                    executed, step_id, observed_facts, decisions, persist_lifecycle,
+                )
+            if execution.outcome is ExecutionOutcome.UNKNOWN:
+                return self._finish_waiting(
+                    task_manager, task_id, running_task_revision,
+                    "execution_outcome_unknown", plan_id, reasoning, executed,
+                    step_id, observed_facts, decisions, persist_lifecycle,
+                )
+            if execution.outcome is ExecutionOutcome.FAILED_NO_EFFECT:
+                return self._finish_failed(
+                    task_manager, task_id, running_task_revision, execution.failure_code,
+                    plan_id, reasoning, executed, observed_facts, decisions,
+                    persist_lifecycle,
+                )
+            observed_facts = execution.observed_facts
+            if not set(step.facts_after_step).issubset(observed_facts):
+                return self._finish_failed(
+                    task_manager, task_id, running_task_revision, "postcondition_not_met",
+                    plan_id, reasoning, executed + [step_id], observed_facts, decisions,
+                    persist_lifecycle,
+                )
+            executed.append(step_id)
+
+        try:
+            verification = self.reasoning_engine.verify_result(reasoning, observed_facts)
+        except ReasoningError:
+            return self._finish_failed(
+                task_manager, task_id, running_task_revision, "result_verification_invalid",
+                plan_id, reasoning, executed, observed_facts, decisions, persist_lifecycle,
+            )
+        if verification.status is not VerificationStatus.GOAL_SATISFIED:
+            return self._finish_failed(
+                task_manager, task_id, running_task_revision, "goal_not_satisfied",
+                plan_id, reasoning, executed, observed_facts, decisions, persist_lifecycle,
+            )
+        try:
+            completed = task_manager.transition_task(
+                task_id, TaskStatus.COMPLETED,
+                expected_revision=running_task_revision,
+                result={
+                    "plan_id": plan_id,
+                    "steps_executed": len(executed),
+                    "verification": VerificationStatus.GOAL_SATISFIED.value,
+                },
+            )
+        except TaskSessionError as exc:
+            raise TaskLoopConflict("task lifecycle changed before completion could be committed") from exc
+        persist_lifecycle()
+        return TaskLoopResult(
+            task_id, TaskLoopStatus.COMPLETED, plan_id, reasoning,
+            tuple(executed), None, observed_facts, "goal_satisfied",
+            completed.revision, tuple(decisions),
+        )
+
+    def _finish_waiting(
+        self, manager, task_id, expected_revision, reason_code, plan_id,
+        reasoning, executed, pending_step_id, observed_facts, decisions, persist,
+    ) -> TaskLoopResult:
+        try:
+            waiting = manager.transition_task(
+                task_id, TaskStatus.WAITING, expected_revision=expected_revision
+            )
+        except TaskSessionError as exc:
+            raise TaskLoopConflict("task lifecycle changed before WAITING could be committed") from exc
+        persist()
+        return TaskLoopResult(
+            task_id, TaskLoopStatus.WAITING, plan_id, reasoning,
+            tuple(executed), pending_step_id, tuple(observed_facts), reason_code,
+            waiting.revision, tuple(decisions),
+        )
+
+    def _finish_failed(
+        self, manager, task_id, expected_revision, failure_code, plan_id,
+        reasoning, executed, observed_facts, decisions, persist,
+    ) -> TaskLoopResult:
+        code = _identifier("failure_code", failure_code)
+        try:
+            failed = manager.transition_task(
+                task_id, TaskStatus.FAILED,
+                expected_revision=expected_revision, failure_code=code,
+            )
+        except TaskSessionError as exc:
+            raise TaskLoopConflict("task lifecycle changed before FAILED could be committed") from exc
+        persist()
+        return TaskLoopResult(
+            task_id, TaskLoopStatus.FAILED, plan_id, reasoning,
+            tuple(executed), None, tuple(observed_facts), code,
+            failed.revision, tuple(decisions),
+        )
