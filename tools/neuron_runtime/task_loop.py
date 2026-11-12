@@ -221,6 +221,45 @@ class JARVISTaskLoop:
         )).encode("ascii")
         return "act-" + hashlib.sha256(b"JARVIS:TASK-LOOP:ACTION:V1\x00" + material).hexdigest()
 
+    @staticmethod
+    def _step_task_identity(
+        manager_id: str, task_id: str, plan_id: str, step_id: str,
+    ) -> tuple[str, str]:
+        material = "\\x00".join((manager_id, task_id, plan_id, step_id)).encode("ascii")
+        digest = hashlib.sha256(
+            b"JARVIS:TASK-LOOP:STEP-LEDGER:V1\\x00" + material
+        ).hexdigest()
+        return "step-" + digest[:48], "step-idem-" + digest
+
+    @staticmethod
+    def _step_result_digest(execution: ActionExecutionResult) -> str:
+        document = {
+            "outcome": execution.outcome.value,
+            "observed_facts": list(execution.observed_facts),
+        }
+        payload = json.dumps(
+            document, sort_keys=True, ensure_ascii=True, separators=(",", ":")
+        ).encode("ascii")
+        return hashlib.sha256(
+            b"JARVIS:TASK-LOOP:STEP-RESULT:V1\\x00" + payload
+        ).hexdigest()
+
+    @staticmethod
+    def _step_result_record(
+        *, task_id: str, plan_id: str, step_id: str, action_id: str,
+        action_idempotency_key: str, result_digest: str,
+    ) -> dict[str, object]:
+        return {
+            "schema": "jarvis.task-loop-step",
+            "version": 1,
+            "parent_task_id": task_id,
+            "plan_id": plan_id,
+            "step_id": step_id,
+            "action_id": action_id,
+            "idempotency_key": action_idempotency_key,
+            "result_digest": result_digest,
+        }
+
     def run(
         self,
         task_manager: TaskSessionManager,
@@ -427,6 +466,43 @@ class JARVISTaskLoop:
                     step_id, observed_facts, decisions, persist_lifecycle, request,
                 )
 
+            # A deterministic child task is the durable per-step intent/result
+            # ledger. The child shares the parent's TaskSessionManager snapshot,
+            # so the intent and lifecycle state are committed in one JPVR record.
+            step_task_id, step_task_key = self._step_task_identity(
+                task_manager.manager_id, task_id, plan_id, step_id
+            )
+            step_inputs = (
+                f"parent:{task_id}", f"plan:{plan_id}",
+                f"step:{step_id}", f"action:{action.action_id}",
+            )
+            try:
+                step_task = task_manager.create_task(
+                    step_task_id, task.session_id, step_task_key,
+                    action.summary, input_refs=step_inputs,
+                )
+                if step_task.status is TaskStatus.QUEUED:
+                    step_task = task_manager.transition_task(
+                        step_task_id, TaskStatus.RUNNING,
+                        expected_revision=step_task.revision,
+                    )
+                    # This commit must finish before the external executor is called.
+                    persist_lifecycle()
+                elif step_task.status not in (
+                    TaskStatus.RUNNING, TaskStatus.COMPLETED,
+                    TaskStatus.FAILED, TaskStatus.CANCELLED,
+                ):
+                    raise TaskLoopConflict("step ledger has an unsupported lifecycle state")
+            except TaskSessionError as exc:
+                raise TaskLoopConflict("cannot create or validate the durable step intent") from exc
+
+            if step_task.status in (TaskStatus.FAILED, TaskStatus.CANCELLED):
+                return self._finish_failed(
+                    task_manager, task_id, running_task_revision,
+                    "step_ledger_terminal_failure", plan_id, reasoning,
+                    executed, observed_facts, decisions, persist_lifecycle,
+                )
+
             try:
                 execution = executor.execute(action, request)
             except Exception:
@@ -450,11 +526,50 @@ class JARVISTaskLoop:
                     step_id, observed_facts, decisions, persist_lifecycle, request,
                 )
             if execution.outcome is ExecutionOutcome.FAILED_NO_EFFECT:
+                if step_task.status is TaskStatus.COMPLETED:
+                    return self._finish_failed(
+                        task_manager, task_id, running_task_revision,
+                        "step_replay_outcome_mismatch", plan_id, reasoning,
+                        executed, observed_facts, decisions, persist_lifecycle,
+                    )
+                try:
+                    task_manager.transition_task(
+                        step_task_id, TaskStatus.FAILED,
+                        expected_revision=step_task.revision,
+                        failure_code=execution.failure_code,
+                    )
+                except TaskSessionError as exc:
+                    raise TaskLoopConflict("cannot persist the known no-effect step failure") from exc
+                persist_lifecycle()
                 return self._finish_failed(
                     task_manager, task_id, running_task_revision, execution.failure_code,
                     plan_id, reasoning, executed, observed_facts, decisions,
                     persist_lifecycle,
                 )
+            result_digest = self._step_result_digest(execution)
+            expected_step_record = self._step_result_record(
+                task_id=task_id, plan_id=plan_id, step_id=step_id,
+                action_id=action.action_id,
+                action_idempotency_key=idempotency_key,
+                result_digest=result_digest,
+            )
+            if step_task.status is TaskStatus.COMPLETED:
+                if step_task.result != expected_step_record:
+                    return self._finish_failed(
+                        task_manager, task_id, running_task_revision,
+                        "step_replay_result_mismatch", plan_id, reasoning,
+                        executed, execution.observed_facts, decisions, persist_lifecycle,
+                    )
+            else:
+                try:
+                    task_manager.transition_task(
+                        step_task_id, TaskStatus.COMPLETED,
+                        expected_revision=step_task.revision,
+                        result=expected_step_record,
+                    )
+                except TaskSessionError as exc:
+                    raise TaskLoopConflict("cannot persist the confirmed step result") from exc
+                persist_lifecycle()
             observed_facts = execution.observed_facts
             if not set(step.facts_after_step).issubset(observed_facts):
                 return self._finish_failed(
