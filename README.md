@@ -411,7 +411,7 @@ Run the focused structured-reasoning contract tests (authored, not run):
 python3 -m unittest tools.neuron_runtime.test_reasoning_engine -v
 ```
 
-`ReasoningEngine` performs bounded deterministic breadth-first planning over caller-supplied symbolic facts and pure actions, groups supplied supporting/refuting evidence by hypothesis, and compares caller-supplied observed facts with a plan's goal. It returns a shortest action-count plan when one is found. It does **not** execute actions, interpret natural language, retrieve/authenticate evidence, or authorize tools. Twenty-six focused tests are AUTHORED, NOT RUN. Contract: [JARVIS_REASONING_ENGINE_V0_1](docs/JARVIS_REASONING_ENGINE_V0_1.md).
+`ReasoningEngine` performs bounded deterministic breadth-first planning over caller-supplied symbolic facts and pure actions, groups only explicitly reviewed evidence by hypothesis, and compares caller-supplied observed facts with a plan's goal. Pending, rejected, or unverified-quality evidence does not affect a hypothesis assessment. It returns a shortest action-count plan when one is found. It does **not** execute actions, interpret natural language, retrieve/authenticate evidence, or authorize tools. Twenty-nine focused tests are AUTHORED, NOT RUN. Contract: [JARVIS_REASONING_ENGINE_V0_1](docs/JARVIS_REASONING_ENGINE_V0_1.md).
 
 ## Durable CQE reward-feedback inbox
 
