@@ -320,6 +320,7 @@ __all__ += [
 
 from .reasoning_engine import (
     EvidencePolarity,
+    EvidenceVerificationStatus,
     EvidenceQuality,
     EvidenceRecord,
     EvidenceVerificationStatus,
@@ -339,6 +340,7 @@ from .reasoning_engine import (
 
 __all__ += [
     "EvidencePolarity",
+    "EvidenceVerificationStatus",
     "EvidenceQuality",
     "EvidenceRecord",
     "EvidenceVerificationStatus",
