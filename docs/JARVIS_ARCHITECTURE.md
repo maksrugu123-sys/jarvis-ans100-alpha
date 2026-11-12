@@ -4328,7 +4328,7 @@ Android-local records remain explicitly labelled as drafts; they do not create T
 
 ### 3.48. Android ↔ Python Runtime Bridge V1 — loopback task/session administration
 
-**Статус Android V0.4:** source changes for registry bridge and structured symbolic preview are present. GitHub readback/static inspection only; Android runtime behavior and end-to-end bridge NOT TESTED. Contract: `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`.
+**Статус Android V0.5:** source changes for registry bridge, structured symbolic preview and local bearer-token authentication are present. GitHub readback/static inspection only; Android runtime behavior and end-to-end bridge NOT TESTED. Contract: `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`.
 
 #### 3.48.1. Purpose and explicit scope
 
@@ -4344,7 +4344,9 @@ No task/status copy or implicit migration occurs between them. A local Android d
 
 The local console health response declares:
 - `api_schema = "jarvis.local-console"`;
-- `api_version = 1`;
+- `api_version = 2`;
+- `auth_required = true`;
+- `auth_scheme = "Bearer"`;
 - `status = "ok"`;
 - `storage = "jpvr"`.
 
@@ -4355,7 +4357,7 @@ The Android client checks all four values before accepting its initial connectio
 - `POST /api/tasks/{task_id}/cancel`;
 - `POST /api/reasoning/preview` with bounded caller-supplied facts and pure planning actions.
 
-Android V0.4 sends the structured preview request, decodes the bounded plan response and displays the proposed steps. Preview does not modify the task/session registry or JPVR checkpoint.
+Android V0.5 sends the structured preview request, decodes the bounded plan response and displays the proposed steps. Preview does not modify the task/session registry or JPVR checkpoint.
 
 The client has fixed loopback origin, no redirect following, bounded request/response bodies (64 KiB / 256 KiB), bounded connect/read timeouts (1.8 / 2.5 seconds), ID validation and strict required-field parsing. Network requests run on a single background executor; UI state is published on the Android main thread.
 
@@ -4371,12 +4373,27 @@ The native panel supports create/read operations for backend sessions and tasks,
 
 #### 3.48.4. Security and capability boundary
 
-Loopback, exact Host and Origin validation are not identity authentication. Other software on the same Android device may reach a loopback service. This V1 API is only for local non-secret task/session administration. Do not bind to LAN/Internet or accept credentials/secrets.
+API v2 now requires a random local Bearer token for task/session state and every POST operation. Termux stores only the SHA-256 token digest in an owner-only file; Android encrypts the token with Android Keystore and the PWA retains it only in the current tab's sessionStorage. The health route remains public and exposes no task/session data. Bearer-token possession protects this local API but is not a trusted human identity or an exact-action approval. Other local apps can still reach the loopback port, so keep the token secret and never bind the service to LAN/Internet.
 
 The server reports `external_actions=false`, `tool_execution=false`, `remote_access=false`. Android can invoke only the non-mutating Reasoning Engine preview; it does not invoke PermissionSafetyGate, Task Loop or ActionExecutor. Creating a QUEUED record or displaying a symbolic plan is not evidence of execution or authorization. Approval UI/provider, signed/authenticated grants, executor-side durable idempotency and recovery remain separate future stages.
 
 #### 3.48.5. Verification and next work
 
-Nine Python console test methods and nine Android local repository test methods are AUTHORED, NOT RUN. GitHub readback/static source inspection only. Kotlin compile, Gradle sync/build, APK/AAB, device install, Android↔Termux I/O, Python tests, UI tests, performance and security checks are NOT RUN.
+Eleven Python console test methods and nine Android local repository test methods are AUTHORED, NOT RUN. GitHub readback/static source inspection only. Kotlin compile, Gradle sync/build, APK/AAB, device install, Android↔Termux I/O, Python tests, UI tests, performance and security checks are NOT RUN.
 
-Next: define authenticated local client pairing and trusted approval, persistent policy/revocation, and executor-side idempotency/reconciliation. Keep all external actions disabled until those independent contracts are implemented and verified.
+Next: implement a trusted identity and exact-request approval provider, persistent policy/revocation, and executor-side durable idempotency/reconciliation. The local Bearer token is transport access control only. Keep all external actions disabled until those independent contracts are implemented and verified.
+
+
+### 3.49. Local-console bearer authentication V1
+
+**Статус:** IMPLEMENTED in the Python local console and native Android/PWA clients as API v2 source code. Static GitHub readback only; authentication, cryptography, HTTP rejection, Android Keystore behavior and device integration have NOT been runtime-tested. Contract: `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` and `docs/JARVIS_LOCAL_CONSOLE_V1.md`.
+
+The local console now protects `GET /api/state` and every `POST /api/*` route with a single `Authorization: Bearer <token>` credential. `GET /api/health` remains public and returns the API schema/version and required authentication mode without exposing session/task state. The service still binds exclusively to `127.0.0.1`; this is not remote authentication.
+
+On first start, the console generates a 256-bit random token encoded as 43 Base64URL characters and prints it once. The token digest is stored as SHA-256 in a separate owner-only file with mode 0600; its parent directory is restricted to 0700. The original token is not persisted by the Python service. `--rotate-token` creates a replacement and invalidates the digest accepted by a newly started service process. The Android client encrypts the token using AES-GCM with a non-exportable Android Keystore key and persists only the encrypted envelope in app-private preferences. The PWA stores the token only in the active tab's sessionStorage and removes it after a 401 response.
+
+This mechanism proves possession of a local API secret, not the identity of a human approver. It has no user accounts, device enrollment/allowlist, trusted approval signatures, expiry/revocation policy store, rate limiting or production threat model. Anyone who obtains the bearer token can access the permitted local registry APIs until the token is rotated. The local API remains non-secret registry administration plus a non-mutating symbolic preview; capability flags for external actions, tool execution and remote access remain false.
+
+**Tests authored:** `tools/jarvis_app/test_server.py` contains 11 methods, including token persistence, restrictive file mode, rotation/revocation and HTTP deny/allow checks. Status: AUTHORED / NOT RUN. Android local token-store/UI tests have not yet been authored. No Python tests, cryptographic runtime checks, Android tests, builds, APK/AAB, CI or GitHub Actions were run.
+
+**Next gate:** author focused tests for auth-file corruption/permissions, API access and Android token-store behavior; run them on an authorized device before adding a trusted user-approval provider. Do not route preview plans to Task Loop or ActionExecutor yet.
