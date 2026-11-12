@@ -5,7 +5,7 @@ The snapshot record and descriptor are published by one JPVR COMMIT.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import struct
 import uuid
 
@@ -15,6 +15,7 @@ from tools.jpvr_reference.commit import decode_commit_page
 from tools.jpvr_reference.data import decode_data_page
 from tools.jpvr_reference.manifest import decode_manifest_page
 from tools.jpvr_reference.storage import JPVRStorage
+from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES, MAX_SMALL_RECORD_PAYLOAD
 from tools.jpvr_reference.typed_transaction import (
     BlobRecordInput, CheckpointPageInput, DataRecordInput,
     TypedTransactionRequest, build_typed_transaction,
@@ -95,12 +96,24 @@ def encode_task_session_checkpoint_descriptor(value: TaskSessionCheckpointDescri
     nums = (value.first_page_no, value.page_count, value.record_generation, value.payload_length, value.payload_crc32c)
     if any(isinstance(x, bool) or not isinstance(x, int) or x < 0 or x > _U64_MAX for x in nums):
         raise JPVRTaskSessionCheckpointError("descriptor counters must be unsigned integers")
-    if value.first_page_no < 2 or value.page_count < 1 or value.record_generation < 1 or value.payload_length < 1 or value.payload_crc32c > 0xFFFFFFFF:
+    if (
+        value.first_page_no < 2 or value.page_count < 1
+        or value.record_generation < 1 or value.payload_length < 1
+        or value.payload_length > MAX_LOGICAL_RECORD_BYTES
+        or value.payload_crc32c > 0xFFFFFFFF
+        or value.first_page_no + value.page_count - 1 > _U64_MAX
+    ):
         raise JPVRTaskSessionCheckpointError("descriptor counters are invalid")
-    if kind == 1 and value.page_count != 1:
-        raise JPVRTaskSessionCheckpointError("DATA descriptor must reference one page")
-    if kind == 2 and value.page_count > MAX_BLOB_PAGES:
-        raise JPVRTaskSessionCheckpointError("BLOB descriptor exceeds page limit")
+    if kind == 1 and (
+        value.page_count != 1 or value.payload_length > MAX_SMALL_RECORD_PAYLOAD
+    ):
+        raise JPVRTaskSessionCheckpointError("DATA descriptor has an invalid page count or payload length")
+    if kind == 2:
+        if value.page_count > MAX_BLOB_PAGES or value.payload_length <= MAX_SMALL_RECORD_PAYLOAD:
+            raise JPVRTaskSessionCheckpointError("BLOB descriptor has an invalid page count or payload length")
+        expected_pages = (value.payload_length + BLOB_FRAGMENT_DATA_BYTES - 1) // BLOB_FRAGMENT_DATA_BYTES
+        if value.page_count != expected_pages:
+            raise JPVRTaskSessionCheckpointError("BLOB descriptor page count does not match payload length")
     return _DESC.pack(_MAGIC, _VERSION, 0, value.record_version, value.object_id, kind,
                       value.first_page_no, value.page_count, value.record_generation,
                       value.payload_length, value.payload_crc32c)
@@ -109,9 +122,12 @@ def encode_task_session_checkpoint_descriptor(value: TaskSessionCheckpointDescri
 def decode_task_session_checkpoint_descriptor(payload: bytes | bytearray | memoryview) -> TaskSessionCheckpointDescriptor:
     if not isinstance(payload, (bytes, bytearray, memoryview)) or len(payload) != _DESC.size:
         raise JPVRTaskSessionCheckpointError("task/session descriptor has invalid size")
-    magic, version, flags, record_version, object_id, kind, first, count, generation, length, checksum = _DESC.unpack(bytes(payload))
+    raw = bytes(payload)
+    magic, version, flags, record_version, object_id, kind, first, count, generation, length, checksum = _DESC.unpack(raw)
     if magic != _MAGIC or version != _VERSION or flags != 0:
         raise JPVRTaskSessionCheckpointError("unsupported task/session descriptor")
+    if any(raw[33:40]):
+        raise JPVRTaskSessionCheckpointError("task/session descriptor reserved bytes must be zero")
     value = TaskSessionCheckpointDescriptor(record_version, object_id, {1: "DATA", 2: "BLOB"}.get(kind, ""), first, count, generation, length, checksum)
     encode_task_session_checkpoint_descriptor(value)
     return value
@@ -146,8 +162,19 @@ def _record_location(item, plan):
         raise JPVRTaskSessionCheckpointError("task/session BLOB pages are not contiguous")
     pages = tuple(dict(zip(plan.assembly.ordered_page_numbers, plan.assembly.ordered_page_bytes))[n] for n in numbers)
     blob = decode_blob_pages(pages, expected_first_page_no=numbers[0])
-    if blob.payload != bytes(item.payload) or blob.object_id != bytes(item.object_id) or blob.record_version != item.record_version:
-        raise JPVRTaskSessionCheckpointError("task/session BLOB does not match its record input")
+    if (
+        blob.payload != bytes(item.payload)
+        or blob.record_type != item.record_type
+        or blob.schema_id != item.schema_id
+        or blob.schema_version != item.schema_version
+        or blob.object_id != bytes(item.object_id)
+        or blob.record_version != item.record_version
+        or blob.first_page_no != numbers[0]
+        or blob.page_count != count
+        or blob.commit_generation != plan.commit_record.generation
+        or blob.transaction_id != plan.assembly.transaction_id
+    ):
+        raise JPVRTaskSessionCheckpointError("task/session BLOB metadata does not match its record input")
     return "BLOB", numbers[0], count
 
 
@@ -274,6 +301,10 @@ class JPVRTaskSessionCheckpointStore:
         if expected_record_version is not None and (isinstance(expected_record_version, bool) or not isinstance(expected_record_version, int) or not 0 <= expected_record_version <= _U64_MAX):
             raise JPVRTaskSessionCheckpointError("expected_record_version must be an unsigned 64-bit integer")
         manager_id = manager.manager_id
+        try:
+            item_template = make_task_session_record_input(manager, record_version=1)
+        except TaskSessionPersistenceError as exc:
+            raise JPVRTaskSessionCheckpointError(str(exc)) from exc
         active, catalog, manifest = self._read(max_pages)
         initialized = False
         if manifest is None:
@@ -298,10 +329,7 @@ class JPVRTaskSessionCheckpointStore:
         if previous_version >= _U64_MAX:
             raise JPVRTaskSessionCheckpointError("task/session record version space is exhausted")
         record_version = previous_version + 1
-        try:
-            item = make_task_session_record_input(manager, record_version=record_version)
-        except TaskSessionPersistenceError as exc:
-            raise JPVRTaskSessionCheckpointError(str(exc)) from exc
+        item = replace(item_template, record_version=record_version)
         base_request = TypedTransactionRequest(
             current_superblock=active, page_catalog=catalog,
             transaction_id=_new_id(), commit_id=_new_id(), operation_id=_new_id(),
