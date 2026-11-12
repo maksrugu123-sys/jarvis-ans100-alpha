@@ -25,6 +25,44 @@ data class RuntimeTaskSnapshot(
     val resultJson: String?,
 )
 
+data class RuntimePlanningAction(
+    val actionId: String,
+    val summary: String,
+    val preconditions: List<String>,
+    val addFacts: List<String>,
+    val deleteFacts: List<String> = emptyList(),
+    val rationale: String = "",
+)
+
+data class RuntimeReasoningPreviewRequest(
+    val taskId: String,
+    val goalDescription: String,
+    val initialFacts: List<String>,
+    val goalFacts: List<String>,
+    val actions: List<RuntimePlanningAction>,
+)
+
+data class RuntimeReasoningPreviewStep(
+    val index: Int,
+    val actionId: String,
+    val summary: String,
+    val rationale: String,
+    val requiredFacts: List<String>,
+    val addedFacts: List<String>,
+    val deletedFacts: List<String>,
+    val factsAfterStep: List<String>,
+)
+
+data class RuntimeReasoningPreviewResult(
+    val taskId: String,
+    val status: String,
+    val expandedStates: Int,
+    val goalFacts: List<String>,
+    val predictedFinalFacts: List<String>,
+    val plan: List<RuntimeReasoningPreviewStep>,
+    val notice: String,
+)
+
 data class RuntimeBridgeSnapshot(
     val managerId: String,
     val checkpointVersion: Long,
@@ -80,6 +118,54 @@ class LocalRuntimeBridgeClient {
             JSONObject().put("status", status)
                 .put("expected_revision", expectedRevision),
         )
+    }
+
+    fun previewReasoning(
+        preview: RuntimeReasoningPreviewRequest,
+    ): RuntimeReasoningPreviewResult {
+        validateIdentifier(preview.taskId, "task_id")
+        validateText(preview.goalDescription, "goal_description", 512)
+        validateFacts(preview.initialFacts, "initial_facts")
+        validateFacts(preview.goalFacts, "goal_facts")
+        if (preview.goalFacts.isEmpty()) {
+            throw RuntimeBridgeException("Укажите хотя бы один целевой факт.")
+        }
+        if (preview.actions.size > MAX_PREVIEW_ACTIONS) {
+            throw RuntimeBridgeException("Для Android preview доступно не более 16 действий.")
+        }
+        val actionIds = HashSet<String>()
+        val actionsJson = JSONArray()
+        preview.actions.forEach { action ->
+            validateIdentifier(action.actionId, "action_id")
+            if (!actionIds.add(action.actionId)) {
+                throw RuntimeBridgeException("Идентификаторы действий должны быть уникальными.")
+            }
+            validateText(action.summary, "action summary", 256)
+            validateText(action.rationale, "action rationale", 512, allowBlank = true)
+            validateFacts(action.preconditions, "preconditions")
+            validateFacts(action.addFacts, "add_facts")
+            validateFacts(action.deleteFacts, "delete_facts")
+            if (action.addFacts.isEmpty() && action.deleteFacts.isEmpty()) {
+                throw RuntimeBridgeException("Каждое действие должно менять хотя бы один факт.")
+            }
+            if (action.addFacts.toSet().intersect(action.deleteFacts.toSet()).isNotEmpty()) {
+                throw RuntimeBridgeException("Действие не может одновременно добавлять и удалять один факт.")
+            }
+            actionsJson.put(JSONObject()
+                .put("action_id", action.actionId)
+                .put("summary", action.summary.trim())
+                .put("preconditions", toJsonArray(action.preconditions))
+                .put("add_facts", toJsonArray(action.addFacts))
+                .put("delete_facts", toJsonArray(action.deleteFacts))
+                .put("rationale", action.rationale.trim()))
+        }
+        val payload = JSONObject()
+            .put("task_id", preview.taskId)
+            .put("goal_description", preview.goalDescription.trim())
+            .put("initial_facts", toJsonArray(preview.initialFacts))
+            .put("goal_facts", toJsonArray(preview.goalFacts))
+            .put("actions", actionsJson)
+        return decodeReasoningPreview(request("POST", "/api/reasoning/preview", payload))
     }
 
     fun cancelQueuedTask(taskId: String, expectedRevision: Int): RuntimeBridgeSnapshot =
@@ -207,6 +293,91 @@ class LocalRuntimeBridgeClient {
         )
     }
 
+    private fun decodeReasoningPreview(json: JSONObject): RuntimeReasoningPreviewResult {
+        val status = requiredString(json, "status")
+        if (status !in setOf("solved", "no_plan", "depth_limit", "search_limit")) {
+            throw RuntimeBridgeException("Неизвестный статус символьного планирования.")
+        }
+        val planJson = json.optJSONArray("plan")
+            ?: throw RuntimeBridgeException("В ответе reasoning preview отсутствует план.")
+        if (planJson.length() > MAX_PREVIEW_ACTIONS) {
+            throw RuntimeBridgeException("План превышает лимит Android-клиента.")
+        }
+        val plan = ArrayList<RuntimeReasoningPreviewStep>(planJson.length())
+        for (index in 0 until planJson.length()) {
+            val item = planJson.optJSONObject(index)
+                ?: throw RuntimeBridgeException("Некорректный шаг reasoning preview.")
+            plan += RuntimeReasoningPreviewStep(
+                index = requiredInt(item, "index"),
+                actionId = requiredString(item, "action_id"),
+                summary = requiredString(item, "summary"),
+                rationale = item.optString("rationale").take(MAX_RATIONALE_CHARS),
+                requiredFacts = decodeFacts(item, "required_facts"),
+                addedFacts = decodeFacts(item, "added_facts"),
+                deletedFacts = decodeFacts(item, "deleted_facts"),
+                factsAfterStep = decodeFacts(item, "facts_after_step"),
+            )
+        }
+        return RuntimeReasoningPreviewResult(
+            taskId = requiredString(json, "task_id"),
+            status = status,
+            expandedStates = requiredInt(json, "expanded_states"),
+            goalFacts = decodeFacts(json, "goal_facts"),
+            predictedFinalFacts = decodeFacts(json, "predicted_final_facts"),
+            plan = plan,
+            notice = requiredString(json, "notice"),
+        )
+    }
+
+    private fun decodeFacts(json: JSONObject, key: String): List<String> {
+        val values = json.optJSONArray(key)
+            ?: throw RuntimeBridgeException("В ответе reasoning preview отсутствует список $key.")
+        if (values.length() > MAX_PREVIEW_FACTS) {
+            throw RuntimeBridgeException("Список $key превышает лимит Android-клиента.")
+        }
+        val facts = ArrayList<String>(values.length())
+        for (index in 0 until values.length()) {
+            val value = values.opt(index)
+            if (value !is String || !ID_PATTERN.matches(value)) {
+                throw RuntimeBridgeException("В ответе reasoning preview найден некорректный факт.")
+            }
+            facts += value
+        }
+        if (facts.distinct().size != facts.size) {
+            throw RuntimeBridgeException("В ответе reasoning preview есть повторяющиеся факты.")
+        }
+        return facts
+    }
+
+    private fun validateIdentifier(value: String, field: String) {
+        if (!ID_PATTERN.matches(value)) {
+            throw RuntimeBridgeException("Поле $field должно быть идентификатором из 1–128 символов.")
+        }
+    }
+
+    private fun validateText(
+        value: String,
+        field: String,
+        maximum: Int,
+        allowBlank: Boolean = false,
+    ) {
+        val clean = value.trim()
+        if ((!allowBlank && clean.isEmpty()) || clean.length > maximum || clean.any { it == '\u0000' }) {
+            throw RuntimeBridgeException("Поле $field должно содержать не более $maximum символов.")
+        }
+    }
+
+    private fun validateFacts(values: List<String>, field: String) {
+        if (values.size > MAX_PREVIEW_FACTS || values.distinct().size != values.size ||
+            values.any { !ID_PATTERN.matches(it) }
+        ) {
+            throw RuntimeBridgeException("Список $field должен содержать до 32 уникальных идентификаторов.")
+        }
+    }
+
+    private fun toJsonArray(values: List<String>): JSONArray =
+        JSONArray().apply { values.forEach(::put) }
+
     private fun readBounded(input: java.io.InputStream): ByteArray {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(4096)
@@ -273,6 +444,9 @@ class LocalRuntimeBridgeClient {
         const val MAX_SESSIONS = 4096
         const val MAX_TASKS = 16384
         const val MAX_EVENTS = 65536
+        const val MAX_PREVIEW_ACTIONS = 16
+        const val MAX_PREVIEW_FACTS = 32
+        const val MAX_RATIONALE_CHARS = 512
         val ID_PATTERN = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     }
 }
