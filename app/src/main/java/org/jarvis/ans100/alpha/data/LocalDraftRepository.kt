@@ -252,6 +252,7 @@ internal object LocalDraftCodec {
                     if (task.id.isBlank() || !idPattern.matches(task.id) ||
                         task.sessionId.isBlank() || !idPattern.matches(task.sessionId) ||
                         task.title.isBlank() || task.title.length > LocalDraftRepository.MAX_TITLE_CHARS ||
+                        task.title != task.title.trim() || task.title.any { it == '\u0000' } ||
                         task.createdAtMillis <= 0L
                     ) {
                         throw LocalDraftException("Черновик содержит некорректные поля.")
@@ -274,6 +275,7 @@ internal object LocalDraftCodec {
     private fun validateSession(session: LocalSession) {
         if (!idPattern.matches(session.id) || session.title.isBlank() ||
             session.title.length > LocalDraftRepository.MAX_TITLE_CHARS ||
+            session.title != session.title.trim() || session.title.any { it == '\u0000' } ||
             session.createdAtMillis <= 0L || session.revision < 1
         ) {
             throw LocalDraftException("Сессия содержит некорректные поля.")
@@ -284,6 +286,7 @@ internal object LocalDraftCodec {
         if (!idPattern.matches(task.id) || !idPattern.matches(task.sessionId) ||
             task.sessionId !in sessionIds || task.title.isBlank() ||
             task.title.length > LocalDraftRepository.MAX_TITLE_CHARS ||
+            task.title != task.title.trim() || task.title.any { it == '\u0000' } ||
             task.createdAtMillis <= 0L
         ) {
             throw LocalDraftException("Черновик содержит некорректные поля.")
