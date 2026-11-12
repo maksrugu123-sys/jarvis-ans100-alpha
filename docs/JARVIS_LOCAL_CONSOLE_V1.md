@@ -8,7 +8,7 @@ From the repository root:
 
     python3 -m tools.jarvis_app --port 8765
 
-On first launch, copy the one-time 43-character token printed by Termux. Enter it in the Android app or the PWA sign-in screen. The Termux process stores only its SHA-256 digest in `~/.jarvis-ans100-alpha/local-console.jpvr.access-token` with mode 0600. Android stores the token encrypted with Android Keystore; PWA stores it only in the current tab's `sessionStorage`. If the token is lost, restart with `--rotate-token`; the old token is revoked and a replacement is printed once.
+On first launch, copy the one-time 43-character token printed by Termux. Enter it in the Android app or the PWA sign-in screen. The Termux process stores only its SHA-256 digest in `~/.jarvis-ans100-alpha/local-console.jpvr.access-token` with mode 0600. Android stores the token encrypted with Android Keystore; PWA stores it only in the current tab's `sessionStorage` and provides an explicit **Выйти** control that clears the tab token and stops background refresh. If the token is lost, restart with `--rotate-token`; the old token is revoked and a replacement is printed once.
 
 Open the web UI on the same device at:
 
