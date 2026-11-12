@@ -45,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jarvis.ans100.alpha.data.LocalSession
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.LocalTaskDraft
+import org.jarvis.ans100.alpha.data.RuntimeBridgeUiState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,6 +84,15 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             ) {
                 Header()
                 SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
+                RuntimeBridgePanel(
+                    state = ui.runtime,
+                    onConnect = viewModel::connectRuntime,
+                    onRefresh = viewModel::refreshRuntime,
+                    onCreateSession = viewModel::createRuntimeSession,
+                    onCreateTask = viewModel::createRuntimeTask,
+                    onSetSessionStatus = viewModel::setRuntimeSessionStatus,
+                    onCancelTask = viewModel::cancelRuntimeTask,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -306,7 +316,7 @@ private fun Header() {
             color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
             Text(
-                "V0.2",
+                "V0.3",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -333,7 +343,7 @@ private fun SystemStatusCard(storageReady: Boolean, notice: String?) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                "Reasoning Engine и Task Loop пока не подключены к Android.",
+                "Android подключается к реестру задач и JPVR через локальный Termux-сервис. Выполнение действий пока отключено.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -469,4 +479,270 @@ private fun TaskDetailsDialog(
             TextButton(onClick = onDismiss) { Text("Закрыть") }
         },
     )
+}
+
+
+@Composable
+private fun RuntimeBridgePanel(
+    state: RuntimeBridgeUiState,
+    onConnect: () -> Unit,
+    onRefresh: () -> Unit,
+    onCreateSession: (String) -> Unit,
+    onCreateTask: (String, String) -> Unit,
+    onSetSessionStatus: (String, String, Int) -> Unit,
+    onCancelTask: (String, Int) -> Unit,
+) {
+    var sessionTitle by rememberSaveable { mutableStateOf("") }
+    var taskTitle by rememberSaveable { mutableStateOf("") }
+    var selectedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    val snapshot = state.snapshot
+    val selectedSession = snapshot?.sessions?.firstOrNull {
+        it.sessionId == selectedSessionId
+    } ?: snapshot?.sessions?.firstOrNull { it.status == "open" }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            SectionHeading("Подключение к ядру", "локальная JPVR-консоль в Termux")
+            Text(
+                when {
+                    state.isBusy -> "Связь с JARVIS проверяется…"
+                    state.isConnected && snapshot != null ->
+                        "Подключено · JPVR checkpoint ${snapshot.checkpointVersion}"
+                    else -> "Не подключено · локальные черновики Android остаются отдельно"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (state.isConnected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    enabled = !state.isBusy,
+                    onClick = if (state.isConnected) onRefresh else onConnect,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        when {
+                            state.isBusy -> "Подключение…"
+                            state.isConnected -> "Обновить состояние"
+                            else -> "Подключить JARVIS"
+                        }
+                    )
+                }
+                if (state.isConnected) {
+                    OutlinedButton(enabled = !state.isBusy, onClick = onConnect) {
+                        Text("Проверить")
+                    }
+                }
+            }
+            if (!state.error.isNullOrBlank()) {
+                Text(
+                    state.error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (!state.message.isNullOrBlank()) {
+                Text(state.message, style = MaterialTheme.typography.labelSmall)
+            }
+
+            if (state.isConnected && snapshot != null) {
+                Text(
+                    "Manager: ${snapshot.managerId} · Событий: ${snapshot.eventCount}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Инструменты: отключены · Внешние действия: отключены · Удалённый доступ: отключён",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                OutlinedTextField(
+                    value = sessionTitle,
+                    onValueChange = { sessionTitle = it.take(80) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Новая сессия JARVIS") },
+                    singleLine = true,
+                    enabled = !state.isBusy,
+                )
+                Button(
+                    onClick = {
+                        onCreateSession(sessionTitle.trim())
+                        sessionTitle = ""
+                    },
+                    enabled = !state.isBusy && sessionTitle.isNotBlank() &&
+                        snapshot.sessions.size < 128,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Создать сессию в JPVR") }
+
+                if (snapshot.sessions.isNotEmpty()) {
+                    Text("Сессии ядра", style = MaterialTheme.typography.labelMedium)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(snapshot.sessions, key = { it.sessionId }) { session ->
+                            FilterChip(
+                                selected = session.sessionId == selectedSession?.sessionId,
+                                onClick = { selectedSessionId = session.sessionId },
+                                enabled = !state.isBusy,
+                                label = {
+                                    Text("${session.title} · ${runtimeStatusLabel(session.status)}")
+                                },
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        "В реестре пока нет сессий.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                if (selectedSession != null) {
+                    Text(
+                        "Выбрана: ${selectedSession.title} · revision ${selectedSession.revision}",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        when (selectedSession.status) {
+                            "open" -> {
+                                OutlinedButton(
+                                    enabled = !state.isBusy,
+                                    onClick = {
+                                        onSetSessionStatus(
+                                            selectedSession.sessionId, "paused", selectedSession.revision,
+                                        )
+                                    },
+                                ) { Text("Пауза") }
+                                TextButton(
+                                    enabled = !state.isBusy,
+                                    onClick = {
+                                        onSetSessionStatus(
+                                            selectedSession.sessionId, "closed", selectedSession.revision,
+                                        )
+                                    },
+                                ) { Text("Закрыть") }
+                            }
+                            "paused" -> {
+                                Button(
+                                    enabled = !state.isBusy,
+                                    onClick = {
+                                        onSetSessionStatus(
+                                            selectedSession.sessionId, "open", selectedSession.revision,
+                                        )
+                                    },
+                                ) { Text("Продолжить") }
+                                TextButton(
+                                    enabled = !state.isBusy,
+                                    onClick = {
+                                        onSetSessionStatus(
+                                            selectedSession.sessionId, "closed", selectedSession.revision,
+                                        )
+                                    },
+                                ) { Text("Закрыть") }
+                            }
+                            else -> Text(
+                                "Сессия закрыта · только просмотр",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = taskTitle,
+                        onValueChange = { taskTitle = it.take(512) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Новая задача ядра") },
+                        placeholder = { Text("Задача попадёт в очередь, но не будет исполнена") },
+                        minLines = 2,
+                        maxLines = 3,
+                        enabled = !state.isBusy && selectedSession.status == "open",
+                    )
+                    Button(
+                        onClick = {
+                            onCreateTask(selectedSession.sessionId, taskTitle.trim())
+                            taskTitle = ""
+                        },
+                        enabled = !state.isBusy && selectedSession.status == "open" &&
+                            taskTitle.isNotBlank() && snapshot.tasks.size < 1024,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Создать задачу в JARVIS") }
+                }
+
+                Text("Задачи реестра", style = MaterialTheme.typography.labelMedium)
+                if (snapshot.tasks.isEmpty()) {
+                    Text("Задач пока нет.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        items(snapshot.tasks.asReversed(), key = { it.taskId }) { task ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Text(task.title, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            "${runtimeStatusLabel(task.status)} · revision ${task.revision}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        if (!task.failureCode.isNullOrBlank()) {
+                                            Text(
+                                                "Ошибка: ${task.failureCode}",
+                                                color = MaterialTheme.colorScheme.error,
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    }
+                                    if (task.status == "queued") {
+                                        TextButton(
+                                            enabled = !state.isBusy,
+                                            onClick = { onCancelTask(task.taskId, task.revision) },
+                                        ) { Text("Отменить") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    "В Termux запустите: python3 -m tools.jarvis_app --port 8765. " +
+                        "После запуска нажмите «Подключить JARVIS».",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun runtimeStatusLabel(status: String): String = when (status) {
+    "open" -> "открыта"
+    "paused" -> "пауза"
+    "closed" -> "закрыта"
+    "queued" -> "в очереди"
+    "running" -> "в работе"
+    "waiting" -> "ожидает"
+    "completed" -> "завершена"
+    "failed" -> "ошибка"
+    "cancelled" -> "отменена"
+    else -> status
 }
