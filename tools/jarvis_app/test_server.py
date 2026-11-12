@@ -69,6 +69,27 @@ class LocalConsoleServiceTests(unittest.TestCase):
         self.assertEqual(unchanged["revision"], session["revision"])
         self.assertEqual(self.service.checkpoint_version, version)
 
+    def test_access_token_persists_and_rotation_revokes_previous_token(self):
+        auth_path = os.path.join(self.temp.name, "console.auth")
+        self.service.close()
+        first = LocalConsoleService(self.data_path, auth_path)
+        first_token = first.bootstrap_token
+        self.assertIsNotNone(first_token)
+        self.assertTrue(first.authenticate(first_token))
+        self.assertEqual(os.stat(auth_path).st_mode & 0o777, 0o600)
+        first.close()
+
+        second = LocalConsoleService(self.data_path, auth_path)
+        self.assertIsNone(second.bootstrap_token)
+        self.assertTrue(second.authenticate(first_token))
+        second.close()
+
+        rotated = LocalConsoleService(self.data_path, auth_path, rotate_token=True)
+        self.assertIsNotNone(rotated.bootstrap_token)
+        self.assertFalse(rotated.authenticate(first_token))
+        self.assertTrue(rotated.authenticate(rotated.bootstrap_token))
+        rotated.close()
+
 
     def test_reasoning_preview_returns_plan_without_changing_jpvr_state(self):
         version_before = self.service.checkpoint_version
@@ -121,6 +142,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.service = LocalConsoleService(os.path.join(self.temp.name, "http.jpvr"))
+        self.token = self.service.bootstrap_token
         self.server = create_http_server(self.service, port=0)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -134,8 +156,10 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.service.close()
         self.temp.cleanup()
 
-    def _post(self, path, payload, *, headers=None):
+    def _post(self, path, payload, *, headers=None, authenticated=True):
         request_headers = {"Content-Type": "application/json"}
+        if authenticated and self.token:
+            request_headers["Authorization"] = "Bearer " + self.token
         if headers:
             request_headers.update(headers)
         request = Request(
@@ -166,7 +190,35 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["storage"], "jpvr")
         self.assertEqual(payload["api_schema"], "jarvis.local-console")
-        self.assertEqual(payload["api_version"], 1)
+        self.assertEqual(payload["api_version"], 2)
+        self.assertTrue(payload["auth_required"])
+        self.assertEqual(payload["auth_scheme"], "Bearer")
+
+    def test_http_requires_a_valid_bearer_token_for_state_and_mutations(self):
+        with self.assertRaises(HTTPError) as missing:
+            urlopen(self.base_url + "/api/state", timeout=3)
+        self.assertEqual(missing.exception.code, 401)
+
+        wrong = Request(
+            self.base_url + "/api/state",
+            headers={"Authorization": "Bearer " + "A" * 43},
+        )
+        with self.assertRaises(HTTPError) as invalid:
+            urlopen(wrong, timeout=3)
+        self.assertEqual(invalid.exception.code, 401)
+
+        with urlopen(Request(
+            self.base_url + "/api/state",
+            headers={"Authorization": "Bearer " + self.token},
+        ), timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["tasks"], [])
+
+        with self.assertRaises(HTTPError) as blocked_mutation:
+            self._post("/api/sessions", {"title": "Must remain blocked"}, authenticated=False)
+        self.assertEqual(blocked_mutation.exception.code, 401)
+        self.assertEqual(self.service.state()["sessions"], [])
 
     def test_reasoning_preview_http_endpoint_returns_symbolic_plan(self):
         status, payload = self._post(
