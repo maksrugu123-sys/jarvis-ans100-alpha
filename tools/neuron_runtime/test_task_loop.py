@@ -206,6 +206,21 @@ class TaskLoopExecutionTests(unittest.TestCase):
         self.assertEqual(result.reason_code, "postcondition_not_met")
         self.assertIs(self.manager.get_task("task-1").status, TaskStatus.FAILED)
 
+    def test_invalid_reasoning_problem_fails_before_executor(self):
+        problem = ReasoningProblem(
+            task_id="task-1", goal_description="Malformed facts",
+            initial_facts=("duplicate", "duplicate"),
+            goal_facts=("goal",), actions=(),
+        )
+        result = self.loop.run(
+            self.manager, "task-1", problem, {}, self.policy,
+            self.executor, now_ns=100,
+        )
+        self.assertIs(result.status, TaskLoopStatus.FAILED)
+        self.assertIsNone(result.reasoning)
+        self.assertEqual(result.reason_code, "reasoning_invalid_request")
+        self.assertEqual(self.executor.keys, [])
+        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.FAILED)
     def test_in_memory_only_loop_rejects_side_effecting_binding(self):
         bindings = _bindings(EffectClass.REVERSIBLE)
         with self.assertRaises(TaskLoopError):
