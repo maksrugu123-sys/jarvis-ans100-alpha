@@ -104,7 +104,8 @@ Use the latest architecture file as the authoritative detail; this summary is on
 - Learning: pair-based excitatory STDP and reward-modulated STDP have documented mathematical specifications. Inhibitory plasticity remains a separate unresolved design item; do not apply excitatory STDP to inhibitory synapses by default.
 - Numeric parameters: `JARVIS_SINGLE_NEURON_STARTER_V1` is a starter profile, not a calibrated production profile. Values must be tested against deterministic sequences and compared with a float64 reference before being treated as validated.
 - Neural Core State, Neural Core State Engine, NCC, CQE v1, JNVM, and JPVR have architectural specifications. Specifications must not be reported as implemented subsystems.
-- Reasoning Engine v0.1 has a conceptual architecture in section 3.23: task decomposition, bounded hypotheses, evidence/contradiction evaluation, planning, safety authorization, outcome verification, and feedback. It is not implemented and is not part of the first one-neuron JPVR-001 prototype.
+- Reasoning Engine V0.1 is implemented as a bounded deterministic Python reference planner/evidence assessor (architecture §§3.23/3.44); Permission & Safety Gate V1 and Task Loop V0.1 are implemented as separate reference modules (§§3.45–3.46). They do not provide natural-language parsing, production NCC, built-in tools, or a trusted production identity/approval service.
+- Native Android: a Kotlin/Jetpack Compose V0.2 local UI shell and Android-only bounded SharedPreferences draft repository exist (§3.47). It is not connected to the Python runtime or JPVR; draft status must never be presented as engine execution. The loopback Python PWA console is a separate application and separate JPVR store.
 - The architecture document contains open questions and planned validation work. Check it before deciding what to do next.
 
 ## 10. Recommended workflow for each task
