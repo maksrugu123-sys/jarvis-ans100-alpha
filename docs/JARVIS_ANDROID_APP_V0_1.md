@@ -1,70 +1,76 @@
-# JARVIS Android App V0.2 — persistent local draft shell
+# JARVIS Android App V0.3 — local JPVR runtime bridge
 
-**Статус:** Android Compose shell V0.2 реализован как локальный интерфейс с сохранением сессий и черновиков в private SharedPreferences. Девять unit-тестов repository/codec AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, установка и UI instrumentation NOT RUN.
+**Статус:** Android Compose V0.3 adds a loopback client for the versioned Python local-console API. It can administer the Python TaskSessionManager and JPVR-backed task/session registry from the native UI. Nine Android local-repository tests and six Python console tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
 
-## Проект и совместимость
+## Project and compatibility
 
-- Application ID / namespace: `org.jarvis.ans100.alpha`.
+- Application ID / namespace: org.jarvis.ans100.alpha.
 - Kotlin + Jetpack Compose + Material 3.
 - Android Gradle Plugin 8.7.3; Kotlin 2.0.21.
 - compileSdk / targetSdk 35; minSdk 29; JVM target 17.
-- Android entry point: `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt`.
+- Android entry point: app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt.
+- Root Gradle Wrapper files are absent; Gradle/Android Studio compatibility has not been verified.
 
-Корневой Gradle wrapper в текущем репозитории не обнаружен. Проект имеет Gradle Kotlin DSL build files, но фактическая Android Studio sync / system-Gradle compatibility ещё не проверена.
+## Two separate kinds of data
 
-## Экран V0.2
+**Android-local drafts** remain in LocalDraftRepository and app-private SharedPreferences. Limits: 32 sessions, 500 drafts, 240 characters/title, 512 KiB snapshot. This store is not JPVR and is not synchronized with the Python manager.
 
-- Локальная панель состояния и два счётчика: сессии и черновики.
-- Создание сессий и выбор активного контекста.
-- Переходы OPEN -> PAUSED -> OPEN и OPEN/PAUSED -> CLOSED с проверкой текущей revision. CLOSED terminal.
-- Создание черновиков только в открытой сессии.
-- Поиск черновиков в выбранной сессии.
-- Просмотр деталей черновика и удаление локальной записи.
-- Компактная вертикальная компоновка со скроллом для небольшого экрана.
+**JARVIS runtime tasks/sessions** are loaded from the Python TaskSessionManager through the loopback bridge. These records are authoritative in the Python process and are saved through JPVRTaskSessionCheckpointStore. The native panel can:
+- connect and refresh the manager snapshot and JPVR checkpoint version;
+- create a Python session;
+- create a QUEUED Python task in an OPEN session;
+- pause, resume or close a session using its exact expected revision;
+- cancel a task only while it remains QUEUED, using its exact expected revision;
+- show backend session/task statuses, revisions and failure codes.
 
-Каждая задача помечается как **локальный черновик**. UI не показывает QUEUED/RUNNING/COMPLETED и не заявляет, что Python Reasoning Engine или Task Loop выполнили работу.
+There is no automatic copying or migration between Android drafts and Python tasks. A successful Android-local draft write does not create a backend task.
 
-## Android local repository V1
+## Loopback bridge
 
-Файлы:
-- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDraftRepository.kt` — versioned codec, bounded models, session state transitions, repository operations.
-- `app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesDraftStorage.kt` — private application SharedPreferences adapter.
-- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` — StateFlow UI state and lifecycle owner.
+Implementation:
+- data/LocalRuntimeBridgeClient.kt — bounded JSON/HTTP client, strict response parsing and API-version check.
+- JarvisViewModel.kt — single-threaded background request executor and StateFlow connection state.
+- MainActivity.kt — native runtime panel and lifecycle/task controls.
+- AndroidManifest.xml and res/xml/network_security_config.xml — INTERNET permission and cleartext allowance scoped to 127.0.0.1 / localhost; other cleartext destinations remain disallowed.
 
-Persisted text format begins with `JARVIS_ANDROID_DRAFTS\t1`; each session/task record is a type-tagged, tab-separated line with UTF-8 text fields encoded as URL-safe Base64. Decoder rejects unknown schema, unknown record types, malformed Base64/UTF-8, duplicate IDs, invalid counters/statuses, dangling session references and out-of-range sizes before returning state.
+The fixed endpoint is http://127.0.0.1:8765. It connects only to a Python console running on the same Android device. The client rejects an unexpected API schema/version, bounds request/response bodies, and sets connect/read timeouts. Redirects are disabled.
 
-Hard limits:
-- 32 sessions;
-- 500 local task drafts;
-- 240 characters per title;
-- 512 KiB encoded snapshot;
-- positive timestamps and revisions;
-- session status revision compare-and-swap.
+### Start the backend on the phone
 
-Mutations encode a complete candidate snapshot and use synchronous SharedPreferences `commit()`. An unsuccessful commit throws and does not report the candidate as saved. The synchronous disk write is deliberately bounded but has not been profiled on the target phone; this is a measurement gate, not a performance guarantee.
+From the repository root in Termux:
 
-## Trust and storage boundary
+    python3 -m tools.jarvis_app --port 8765
 
-This is an Android-only local draft repository. It is **not** the Python TaskSessionManager, JPVR, JNVM or an interoperable shared database. The Android state does not flow into the Python process. It contains no external executor, shell, filesystem/network capability, credentials, approval provider or autonomous background task runner.
+Keep that process running, open the Android app and tap **Подключить JARVIS**. The app does not launch Termux or start the backend automatically. Stop the backend with Ctrl+C in Termux.
 
-The repository is app-private SharedPreferences; the manifest disables Android backup. This design is a first persistence shell, not encrypted storage against a compromised device and not a multi-process transaction protocol.
+## API contract
 
-The separate `tools/jarvis_app` PWA remains an independent loopback Python console backed by JPVR; it is not automatically connected to this Compose application.
+The client requires GET /api/health to return:
+- status: "ok";
+- storage: "jpvr";
+- api_schema: "jarvis.local-console";
+- api_version: 1.
+
+It then uses:
+- GET /api/state;
+- POST /api/sessions;
+- POST /api/tasks;
+- POST /api/sessions/{session_id}/status;
+- POST /api/tasks/{task_id}/cancel.
+
+Every successful mutation returns the committed backend state snapshot. Session status and task cancellation requests include expected revision. The server serializes state mutations and publishes them through JPVR compare-and-swap before returning the updated snapshot.
+
+## Trust and capability boundary
+
+The native bridge has no endpoint or code path for shell, filesystem browsing, remote network, tool execution, approval grants or ActionExecutor. The backend capability flags remain false for external_actions, tool_execution and remote_access. Creating a task only creates a QUEUED lifecycle record; it does not execute it.
+
+The loopback check and Host/Origin validation are not identity authentication. Other software on the same device may be able to reach a loopback HTTP service. Therefore the console must remain bound to 127.0.0.1, must not be exposed on LAN/Internet, and must not accept secrets or side-effecting action requests. No external action is authorized by this bridge.
+
+The native UI does not yet call the structured /api/reasoning/preview endpoint. It does not invoke Reasoning Engine, PermissionSafetyGate or Task Loop. Trusted identity, UI approval, durable approval storage and a real ActionExecutor remain future work.
 
 ## Verification
 
-```sh
-python3 -m unittest tools.jarvis_app.test_server -v
-```
-
-The Android repository suite is authored at:
-
-```text
-app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
-```
-
-Nine tests cover repository recreation/round-trip, session transitions, stale revision rejection, closed/paused task-creation denial, no-op commit avoidance, failed storage commit, unknown schema rejection, session bound and invalid title rejection. Tests are AUTHORED, NOT RUN. No Kotlin compile, Gradle sync/build, APK/AAB, emulator/device install, Compose UI test or Android performance measurement was run.
-
-## Next integration boundary
-
-Implement a narrow, versioned Android-facing bridge to the local Python runtime. It must reconcile the separate Android draft model with TaskSessionManager identity/revisions and the JPVR checkpoint version before showing authoritative task states. The next UI increment must also provide a trusted approval surface bound to the exact AuthorizationRequest; do not turn draft actions into real tool calls before this trust boundary exists.
+- Android local repository tests: nine methods, AUTHORED, NOT RUN.
+- Python local-console API tests: six methods, AUTHORED, NOT RUN.
+- GitHub readback/static source review only for this bridge batch.
+- Kotlin compilation, Gradle sync/build, APK/AAB, device installation, Compose UI tests, Python tests, Android/Termux end-to-end I/O and performance measurements: NOT RUN.
