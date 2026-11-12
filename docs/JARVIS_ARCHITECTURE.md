@@ -4304,7 +4304,7 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 #### 3.47.2. Нативное Android-приложение JARVIS V0.2 — локальные сессии и черновики
 
-**Статус:** реализован начальный Kotlin/Jetpack Compose UI shell и отдельный versioned Android-local draft repository. Девять JVM unit tests AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, установка на устройство и Compose UI tests NOT RUN. Контракт: `docs/JARVIS_ANDROID_APP_V0_1.md`.
+**Статус V0.2 (baseline, superseded by §3.48):** реализованы Kotlin/Jetpack Compose UI shell и отдельный versioned Android-local draft repository. Девять JVM unit tests AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, установка на устройство и Compose UI tests NOT RUN. Контракт текущего приложения: `docs/JARVIS_ANDROID_APP_V0_1.md`.
 
 Android module:
 - `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` — русский Compose dashboard, local session selection, OPEN/PAUSED/CLOSED controls, draft creation/search/detail/delete.
@@ -4315,12 +4315,67 @@ Android module:
 
 Android local format `JARVIS_ANDROID_DRAFTS V1` is separate from JPVR. It stores sessions and draft tasks in a bounded text snapshot with Base64 UTF-8 fields. Limits: 32 sessions, 500 drafts, 240 characters/title, 512 KiB encoded state. Session transitions use per-session revision CAS: OPEN -> PAUSED/CLOSED; PAUSED -> OPEN/CLOSED; CLOSED terminal. New drafts are accepted only into OPEN sessions. A complete candidate snapshot is encoded and committed with synchronous SharedPreferences commit(); failed storage commit does not report success.
 
-UI clearly marks all Android task items as **local drafts not submitted to the engine**. The interface does not create TaskSessionManager QUEUED records, infer runtime state, call ReasoningEngine, invoke Task Loop, request real capabilities, execute shell/filesystem/network operations or claim task completion. This local repository is not JPVR, is not encrypted against a compromised device and is not a multi-process transaction store. Synchronous write latency has not been measured on the target phone.
+Android-local records remain explicitly labelled as drafts; they do not create TaskSessionManager records and do not imply execution. The new RuntimeBridge panel is separate: it displays records fetched from the Python TaskSessionManager/JPVR service and can administer backend sessions and queued tasks. The local Android repository remains outside JPVR, is not encrypted against a compromised device and is not a multi-process transaction store. Synchronous write latency has not been measured on the target phone.
 
-**Runtime boundary:** Python TaskSessionManager/JPVR and Android SharedPreferences repository are independent authorities. Do not merge their state by copying statuses. The next bridge must define strict versioned DTOs, manager/task/session identity and revision binding, persisted checkpoint CAS, process-death recovery, and a trusted approval provider tied to the exact AuthorizationRequest. Until that boundary exists, keep the Compose app draft-only.
+**Runtime boundary:** Python TaskSessionManager/JPVR remains authoritative for bridge-visible backend tasks. Android SharedPreferences remains authoritative only for local drafts. Never merge these stores by copying display status strings. The loopback bridge contract and limitations are specified in §3.48 and `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`. The bridge does not expose approvals, ActionExecutor or side-effecting capabilities.
 
-**PWA distinction:** `tools/jarvis_app` is a separate loopback-only Python local console backed by JPVR. Its web UI is not the Android Compose repository and does not share state with the native app.
+**PWA distinction:** `tools/jarvis_app` is the loopback-only Python local console backed by JPVR. Its PWA and the native Compose screen are separate frontends to the same running local-console process/API. Android-only SharedPreferences drafts remain separate and are not synchronized with the Python manager.
 
 **Проверки:** nine tests in `LocalDraftRepositoryTest.kt` cover round-trip/repository recreation, session transition/revision behavior, stale revisions, rejection of task creation into paused/closed sessions, no-op commit, failed storage write, unknown schema, session capacity and invalid titles. They are **AUTHORED, NOT RUN**. GitHub readback/static inspection only; Kotlin compile, Gradle sync/build, APK/AAB, emulator/device run, UI tests and Android performance measurement are **NOT RUN**. No CI/GitHub Actions was run.
 
-**Следующий этап:** versioned local runtime bridge between Compose and the Python reference service, with bounded DTOs, explicit storage ownership and fail-closed recovery. Do not enable external tools or mark tasks as executing/completed before the bridge and trusted approval flow are implemented.
+**Следующий этап:** add a structured Reasoning Engine preview flow to Compose without executing actions; then design authenticated approval and executor/reconciliation contracts separately. Do not expose side effects merely because the registry bridge exists.
+
+
+### 3.48. Android ↔ Python Runtime Bridge V1 — loopback task/session administration
+
+**Статус:** source implementation added; bridge integration and Android runtime behavior NOT TESTED. Contract: `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`.
+
+#### 3.48.1. Purpose and explicit scope
+
+The native Compose application now connects to the existing Python local console on the same Android device at `http://127.0.0.1:8765`. The bridge reuses the existing JPVR-backed TaskSessionManager instead of synchronizing the Android-local SharedPreferences draft format. It is a narrow management channel for task/session records, not a new runtime, not an RPC shell, and not an ActionExecutor.
+
+The UI retains two independent stores:
+- Android-local drafts in `LocalDraftRepository` / private SharedPreferences;
+- backend sessions/tasks in Python `TaskSessionManager` / dedicated `JPVRTaskSessionCheckpointStore`.
+
+No task/status copy or implicit migration occurs between them. A local Android draft remains a draft; a backend task created by this panel is a genuine QUEUED TaskSessionManager record.
+
+#### 3.48.2. API version and transport
+
+The local console health response declares:
+- `api_schema = "jarvis.local-console"`;
+- `api_version = 1`;
+- `status = "ok"`;
+- `storage = "jpvr"`.
+
+The Android client checks all four values before accepting its initial connection. It exposes only:
+- `GET /api/health` and `GET /api/state`;
+- `POST /api/sessions` and `POST /api/tasks`;
+- `POST /api/sessions/{session_id}/status`;
+- `POST /api/tasks/{task_id}/cancel`.
+
+The structured `POST /api/reasoning/preview` endpoint remains available in the Python console but is not yet called by the native Android UI.
+
+The client has fixed loopback origin, no redirect following, bounded request/response bodies (64 KiB / 256 KiB), bounded connect/read timeouts (1.8 / 2.5 seconds), ID validation and strict required-field parsing. Network requests run on a single background executor; UI state is published on the Android main thread.
+
+Android INTERNET permission is declared. Network Security Config denies cleartext by default and allows it only for 127.0.0.1/localhost. The service remains bound to 127.0.0.1.
+
+#### 3.48.3. Ownership, revisions and persistence
+
+The Python console remains the single service boundary. Backend session/task mutations are serialized under its service lock, applied to a detached TaskSessionManager candidate, and published through JPVR compare-and-swap before the new in-memory manager reference is installed.
+
+Session status operations and queued-task cancellation include expected revisions. Stale requests are rejected. Each successful mutation response includes the updated backend state snapshot; Android does not write JPVR pages or maintain a second checkpoint-version counter. Reconnect performs a fresh GET state read and does not automatically replay failed/unsent mutations.
+
+The native panel supports create/read operations for backend sessions and tasks, OPEN/PAUSED/CLOSED session transitions and cancellation of QUEUED tasks. It does not cancel RUNNING/WAITING/terminal tasks.
+
+#### 3.48.4. Security and capability boundary
+
+Loopback, exact Host and Origin validation are not identity authentication. Other software on the same Android device may reach a loopback service. This V1 API is only for local non-secret task/session administration. Do not bind to LAN/Internet or accept credentials/secrets.
+
+The server reports `external_actions=false`, `tool_execution=false`, `remote_access=false`. The bridge has no method to invoke Reasoning Engine, PermissionSafetyGate, Task Loop or ActionExecutor. Creating a QUEUED record is not evidence of execution. Approval UI/provider, signed/authenticated grants, executor-side durable idempotency and recovery remain separate future stages.
+
+#### 3.48.5. Verification and next work
+
+Six Python console test methods and nine Android local repository test methods are AUTHORED, NOT RUN. GitHub readback/static source inspection only. Kotlin compile, Gradle sync/build, APK/AAB, device install, Android↔Termux I/O, Python tests, UI tests, performance and security checks are NOT RUN.
+
+Next: expose bounded structured Reasoning Engine preview in Compose, then define a trusted approval provider and an executor boundary. Do not route external actions through this registry bridge.
