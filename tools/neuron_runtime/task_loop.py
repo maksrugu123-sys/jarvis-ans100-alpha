@@ -324,8 +324,8 @@ class JARVISTaskLoop:
         except ReasoningError:
             return self._finish_failed(
                 task_manager, task_id, running_task_revision, "reasoning_invalid_request",
-                "reasoning_invalid_request", "plan-invalid", None, (), (),
-                persist_lifecycle,
+                "reasoning_invalid_request", "plan-invalid", None, (),
+                problem.initial_facts, (), persist_lifecycle,
             )
         plan_id = self._plan_id(problem, action_bindings)
         if reasoning.status is not PlanStatus.SOLVED:
