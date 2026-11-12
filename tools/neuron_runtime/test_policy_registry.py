@@ -24,6 +24,7 @@ from tools.neuron_runtime.policy_registry import (
     SafetyPolicyRegistryNotFound,
 )
 from tools.neuron_runtime.task_session import TaskSessionManager, TaskStatus
+from tools.neuron_runtime.task_loop import JARVISTaskLoop
 
 
 def _policy(version=1, *, max_timeout_ms=1000):
@@ -142,6 +143,21 @@ class PersistentSafetyPolicyRegistryTests(unittest.TestCase):
         with self.assertRaises(SafetyPolicyRegistryCorrupt):
             self.registry.load()
 
+    def test_world_accessible_parent_directory_is_rejected(self):
+        shared = Path(self.temp.name) / "shared"
+        shared.mkdir(mode=0o755)
+        os.chmod(shared, 0o755)
+        with self.assertRaises(SafetyPolicyRegistryError):
+            PersistentSafetyPolicyRegistry(shared / "policy.json")
+
+    def test_boolean_schema_version_is_rejected(self):
+        self.registry.save_policy(_policy(), expected_record_version=0)
+        envelope = json.loads(self.path.read_text(encoding="ascii"))
+        envelope["schema_version"] = True
+        self.path.write_text(json.dumps(envelope), encoding="ascii")
+        with self.assertRaises(SafetyPolicyRegistryCorrupt):
+            self.registry.load()
+
 
 class PersistentPolicySafetyGateTests(unittest.TestCase):
     def setUp(self):
@@ -197,6 +213,21 @@ class PersistentPolicySafetyGateTests(unittest.TestCase):
         )
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.reason_code, "authorized_with_approval")
+
+    def test_gate_fails_closed_when_registry_digest_is_corrupt(self):
+        self.registry.save_policy(self.policy, expected_record_version=0)
+        envelope = json.loads(self.path.read_text(encoding="ascii"))
+        envelope["state_digest"] = "f" * 64
+        self.path.write_text(json.dumps(envelope), encoding="ascii")
+        decision = self.gate.authorize(
+            self.manager, self.policy, self.request, now_ns=100, approval=self.approval,
+        )
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason_code, "policy_registry_unavailable")
+
+    def test_persistent_gate_can_be_injected_into_task_loop(self):
+        loop = JARVISTaskLoop(permission_gate=self.gate)
+        self.assertIs(loop.permission_gate, self.gate)
 
 
 if __name__ == "__main__":
