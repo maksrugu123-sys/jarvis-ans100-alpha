@@ -4293,6 +4293,8 @@ Plan ID и step ID детерминированы. Для каждого дей�
 **Следующий этап:** versioned local Android-to-Python runtime bridge: DTOs для session/task/reasoning/authorization, явное владение TaskSessionManager/JPVR state и безопасная reconciliation после process death. Android Compose V0.2 draft UI уже описан в §3.47. Не подключать широкие системные capabilities до появления trusted approval provider, связанного с точным AuthorizationRequest и revision. Caller-supplied ApprovalGrant сам по себе не является production authentication.
 
 
+### 3.47. Android application: native Compose shell and runtime boundary
+
 #### 3.47.1. Историческая исходная версия Android UI V0.1
 
 **Исторический статус V0.1:** первоначальный Compose экран принимал название задачи и держал до 100 draft записей только в Compose state процесса. Он не переживал process death, не был связан с TaskSessionManager/JPVR и не запускал ReasoningEngine или Task Loop. Эти ограничения были исходными и заменены локальным repository этапа V0.2 ниже; не использовать описание V0.1 как текущий статус приложения.
