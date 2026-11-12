@@ -1,6 +1,6 @@
 # JARVIS Task Loop V0.1
 
-**Статус:** реализован как ограниченный последовательный Python reference coordinator; 14 focused tests AUTHORED, NOT RUN. Он связывает TaskSessionManager, ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Это ещё не автономный помощник, production NCC или Android-приложение.
+**Статус:** реализован как ограниченный последовательный Python reference coordinator; 18 focused tests AUTHORED, NOT RUN. Он связывает TaskSessionManager, ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Это ещё не автономный помощник, production NCC или Android-приложение.
 
 ## Основной проход
 
@@ -11,10 +11,11 @@ JARVISTaskLoop.run() принимает активный TaskSessionManager и I
 2. Перевести QUEUED (или ранее WAITING) в RUNNING. Если задан JPVR store, сначала проверить текущую checkpoint version и точное равенство canonical manager snapshot; переход в RUNNING сохранить до первого side effect.
 3. Запустить bounded deterministic ReasoningEngine. NO_PLAN, DEPTH_LIMIT, SEARCH_LIMIT или некорректный structured input не маскируются под успех.
 4. Для каждого шага вычислить стабильные plan ID, step ID и action idempotency key.
-5. Создать AuthorizationRequest с точными manager/task/session revisions и передать его PermissionSafetyGate непосредственно перед каждым действием.
-6. Только после ALLOWED вызвать executor.execute(action, request).
-7. Получить полный снимок observed facts после действия. Продолжить только при наличии всех ожидаемых facts_after_step. В конце ReasoningEngine.verify_result() должен подтвердить goal facts.
-8. Перевести задачу в COMPLETED или FAILED и, если включён JPVR store, сохранить итоговый task/session snapshot с CAS.
+5. После ALLOWED создать детерминированную дочернюю задачу шага, перевести её в RUNNING и сохранить общий TaskSessionManager snapshot в JPVR до вызова executor. Это durable intent шага.
+6. Создать AuthorizationRequest с точными manager/task/session revisions и передать его PermissionSafetyGate непосредственно перед каждым действием.
+7. Только после подтверждённой записи intent вызвать executor.execute(action, request).
+8. Получить полный снимок observed facts. После известного SUCCEEDED сохранить дочернюю задачу шага как COMPLETED с детерминированным digest ответа. Для FAILED_NO_EFFECT сохранить FAILED. Продолжить только при наличии всех ожидаемых facts_after_step. В конце ReasoningEngine.verify_result() должен подтвердить goal facts.
+9. Перевести родительскую задачу в COMPLETED или FAILED и, если включён JPVR store, сохранить итоговый task/session snapshot с CAS.
 
 ## Ожидание подтверждения и стабильная версия задачи
 
@@ -23,6 +24,16 @@ TaskLoopStatus.WAITING — это результат orchestration-вызова,
 Так сделано намеренно: TaskLoopResult.pending_authorization возвращает точный запрос, для которого можно сформировать ApprovalGrant. Если бы цикл сначала переводил задачу в WAITING, а затем обратно в RUNNING, revision изменилась бы и только что созданное approval устарело бы до исполнения. Нужно смотреть на TaskLoopResult.status, а не трактовать сохранённый TaskStatus.RUNNING как доказательство, что инструмент прямо сейчас работает.
 
 Для каждого шага approval передаётся в approvals по ключу step-000001, step-000002 и т. д. Approval одного шага не разрешает другой шаг.
+
+## Durable per-step intent/result и восстановление
+
+Каждый action step представлен детерминированной дочерней TaskRecord в том же TaskSessionManager и том же JPVR checkpoint, что и родительская задача. ID и idempotency key дочерней записи выводятся из manager/task/plan/step identity. Записи связываются с родителем, планом, шагом и action через ограниченные input_refs.
+
+Перед первым вызовом executor дочерняя задача переводится QUEUED -> RUNNING и сохраняется отдельным JPVR COMMIT. Это durable intent: после рестарта видно, что попытка могла уже привести к внешнему эффекту. Известный SUCCEEDED фиксируется переходом child RUNNING -> COMPLETED и сохранением digest outcome + полного отсортированного observed-facts набора. Известный FAILED_NO_EFFECT фиксируется как child FAILED. UNKNOWN/исключение оставляет child RUNNING, и loop возвращает WAITING.
+
+При восстановлении child RUNNING повторно проходит authorization gate и вызывает executor с тем же action idempotency key. Если child уже COMPLETED, executor также вызывается с тем же ключом, чтобы вернуть ранее сохранённый полный ответ; его digest сравнивается с JPVR записью. Несовпадение приводит к fail-closed результату step_replay_result_mismatch. Executor обязан хранить свой durable idempotency ledger и воспроизводить неизменный ответ для повторного ключа. JPVR хранит intent и digest, но не заменяет executor ledger и не хранит весь observed-facts payload.
+
+Каждый intent/result checkpoint — отдельный атомарный commit TaskSessionManager. Между внешним действием и записью результата всё ещё существует crash window; он разрешается только за счёт устойчивого idempotency ledger внешнего executor. Это не общая транзакция между JPVR и внешним сервисом и не exactly-once guarantee.
 
 ## Идемпотентность и восстановление
 
@@ -34,7 +45,7 @@ Plan ID детерминирован по task ID, исходным/целевы
 
 Любое действие с effect != READ_ONLY требует JPVRTaskSessionCheckpointStore и обязательный expected_checkpoint_version. Контейнер должен быть выделен только для TaskSessionManager: у JPVR MANIFEST один active CHECKPOINT pointer. Перед продолжением уже RUNNING task loop проверяет, что caller version совпадает с persisted record version и что persisted manager snapshot точно совпадает с in-memory manager. CAS conflict, невалидный checkpoint или несовпадение состояния блокируют запуск executor.
 
-Lifecycle snapshot фиксируется при входе в RUNNING и при terminal COMPLETED/FAILED. Сам TaskLoop V0.1 не хранит durable per-step intent/result ledger, scheduler lease или approvals. Во время одного многошагового плана checkpoint остаётся в RUNNING; после сбоя вызывающая сторона должна повторно передать тот же structured problem/bindings и открыть executor с его durable idempotency ledger. Если внешний executor не сохраняет идемпотентность вне процесса, повтор может повторно выполнить уже совершённое действие. JPVR task snapshot сам по себе не обеспечивает exactly-once external side effects.
+Lifecycle snapshot фиксируется при входе в RUNNING и при terminal COMPLETED/FAILED. Сам TaskLoop V0.1 не хранит durable per-step intent/result ledger, scheduler lease или approvals. Во время одного многошагового плана checkpoint остаётся в RUNNING; после сбоя вызывающая сторона должна повторно передать тот же structured problem/bindings и открыть executor с его durable idempotency ledger. Если внешний executor не сохраняет идемпотентность вне процесса, повтор может повторно выполнить уже совершённое действие. JPVR child-task ledger сам по себе не обеспечивает exactly-once external side effects и не устраняет необходимость durable executor idempotency.
 
 ## Что пока не реализовано
 
@@ -52,4 +63,4 @@ python3 -m unittest tools.neuron_runtime.test_task_loop -v
 python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
 ```
 
-14 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS и reopen of terminal state. Gate имеет 26 focused tests. Обе группы AUTHORED, NOT RUN. GitHub readback/static cross-reference only; Python execution/import checks, Android I/O, benchmarks, builds, CI и GitHub Actions не выполнялись.
+18 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS и reopen of terminal state. Gate имеет 26 focused tests. Обе группы AUTHORED, NOT RUN. GitHub readback/static cross-reference only; Python execution/import checks, Android I/O, benchmarks, builds, CI и GitHub Actions не выполнялись.
