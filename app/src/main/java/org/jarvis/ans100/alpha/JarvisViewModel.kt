@@ -4,7 +4,6 @@ import android.app.Application
 import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +12,6 @@ import org.jarvis.ans100.alpha.data.LocalDraftRepository
 import org.jarvis.ans100.alpha.data.LocalDraftState
 import org.jarvis.ans100.alpha.data.LocalRuntimeBridgeClient
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
-import org.jarvis.ans100.alpha.data.RuntimeBridgeException
 import org.jarvis.ans100.alpha.data.RuntimeBridgeSnapshot
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import java.util.concurrent.Executors
