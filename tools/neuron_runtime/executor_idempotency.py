@@ -382,6 +382,61 @@ class DurableIdempotencyExecutor:
         finally:
             connection.close()
 
+    def list_unresolved(self, *, limit: int = 50) -> tuple[DurableExecutionRecord, ...]:
+        """Return bounded IN_PROGRESS/UNKNOWN records without exposing action payloads."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= self.max_records:
+            raise DurableExecutorLedgerError(
+                f"limit must be in 1..{self.max_records}"
+            )
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT idempotency_key, request_digest, state, created_at_ns,
+                       updated_at_ns, result_json, result_digest, reconciliation_ref
+                FROM action_results
+                WHERE state IN ('in_progress', 'unknown')
+                ORDER BY created_at_ns ASC, idempotency_key ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return tuple(self._record_from_row(row) for row in rows)
+        except sqlite3.Error as exc:
+            raise DurableExecutorLedgerError("cannot list unresolved executor records") from exc
+        finally:
+            connection.close()
+
+    def state_counts(self) -> dict[str, int]:
+        """Return a complete fixed-shape state count snapshot for local diagnostics."""
+        counts = {
+            "in_progress": 0,
+            "unknown": 0,
+            "succeeded": 0,
+            "failed_no_effect": 0,
+            "total": 0,
+            "capacity": self.max_records,
+        }
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT state, COUNT(*) FROM action_results GROUP BY state"
+            ).fetchall()
+            for state, count in rows:
+                if state not in _FINAL_STATES and state not in {"in_progress", "unknown"}:
+                    raise DurableExecutorLedgerCorrupt("executor ledger contains an unknown state")
+                if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                    raise DurableExecutorLedgerCorrupt("executor ledger contains an invalid state count")
+                counts[state] = count
+                counts["total"] += count
+            if counts["total"] > self.max_records:
+                raise DurableExecutorLedgerCorrupt("executor ledger exceeds its configured record capacity")
+            return counts
+        except sqlite3.Error as exc:
+            raise DurableExecutorLedgerError("cannot read executor-ledger state counts") from exc
+        finally:
+            connection.close()
+
     def _mark_unknown(self, key: str, request_digest: str) -> None:
         now = time.time_ns()
         with self._transaction() as connection:
