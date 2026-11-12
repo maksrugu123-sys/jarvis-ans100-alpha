@@ -4266,7 +4266,7 @@ EXTERNAL и IRREVERSIBLE требуют ApprovalGrant всегда; REVERSIBLE �
 
 **Trust boundary:** build_approval_grant создаёт корректно связанный объект, но не аутентифицирует пользователя и не доказывает факт UI-подтверждения. Подлинность approver, approval_ref, credentials и источник policy должны проверяться отдельным защищённым provider. Gate не хранит approvals, не выполняет инструменты и не может принудительно ограничивать CPU/RAM/time — executor обязан соблюдать объявленные бюджеты.
 
-В Gate нет durable policy/revocation registry, подписи grant, secrets isolation, полноценной identity service, runtime sandbox или multi-process coordination. Поэтому этот модуль нельзя считать production security subsystem.
+Сам Gate не владеет хранилищем. Отдельный локальный CAS reference registry добавлен в §3.50: он хранит политику и revoked approval IDs и может быть подключён через PersistentPolicySafetyGate. Registry не проверяет подписи grant и не устанавливает identity; поэтому Gate + registry не являются production security subsystem.
 
 Проверки: `tools/neuron_runtime/test_permission_safety_gate.py` содержит 26 методов для exact grants/denials, scope/effect, task/session revisions, ресурсов/retries, approval expiry/binding, policy digest и retry-index binding. Все AUTHORED, NOT RUN; security audit и runtime execution не проводились.
 
@@ -4286,11 +4286,11 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 При исчерпании task/event capacity создание или запуск child-task отклоняется до вызова executor; это fail-closed backpressure, а не автоматическая очистка журнала.\n\n**Ограничения восстановления:** child-task ledger сохраняет шаги и digest результата, но не весь observed-facts payload; при повторе executor должен вернуть полный ранее сохранённый результат, который loop сравнит с digest. Между внешним side effect и сохранением child COMPLETED остаётся crash window; его безопасное разрешение зависит от durable idempotency ledger исполнителя. JPVR и внешний сервис не участвуют в общей транзакции, поэтому exactly-once guarantee не заявляется. Approvals, scheduler leases и сам ReasoningResult не сохраняются. При рестарте caller обязан передать тот же structured problem/bindings и восстановить executor с его durable idempotency ledger.
 
-Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, trusted UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox и production NCC. Android Compose V0.4 и loopback bridge описаны в §§3.47–3.48: они могут управлять task/session registry и запрашивать отдельный символьный preview, но не подключены к Task Loop или ActionExecutor.
+Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, trusted UI approval provider, signed grants, production-grade policy/revocation and identity service, scheduler/concurrency, runtime resource enforcement, Android sandbox и production NCC. Локальный policy/revocation reference registry описан в §3.50, но не подтверждает identity и не защищает от подделки grant. Android Compose V0.5 и loopback bridge описаны в §§3.47–3.48: они могут управлять task/session registry и запрашивать отдельный символьный preview, но не подключены к Task Loop или ActionExecutor.
 
 Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 20 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и terminal restore. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
-**Следующий этап:** спроектировать доверенную identity/approval boundary, постоянное хранение policy/revocation, executor-owned durable idempotency и процесс reconciliation после неоднозначного результата. Не подключать внешние эффекты до проверки этих механизмов. Caller-supplied ApprovalGrant сам по себе не является production authentication.
+**Следующий этап:** связать registry из §3.50 с trusted identity/approval boundary и проверкой подписей grant; затем обеспечить executor-owned durable idempotency и reconciliation после неоднозначного результата. Не подключать внешние эффекты до проверки всех этих механизмов. Caller-supplied ApprovalGrant сам по себе не является production authentication.
 
 
 ### 3.47. Android application: native Compose shell and runtime boundary
@@ -4323,7 +4323,7 @@ Android-local records remain explicitly labelled as drafts; they do not create T
 
 **Проверки:** nine tests in `LocalDraftRepositoryTest.kt` cover round-trip/repository recreation, session transition/revision behavior, stale revisions, rejection of task creation into paused/closed sessions, no-op commit, failed storage write, unknown schema, session capacity and invalid titles. They are **AUTHORED, NOT RUN**. GitHub readback/static inspection only; Kotlin compile, Gradle sync/build, APK/AAB, emulator/device run, UI tests and Android performance measurement are **NOT RUN**. No CI/GitHub Actions was run.
 
-**Следующий этап после V0.5:** реализовать и отдельно проверить trusted human identity и exact-request approval provider, durable policy/revocation, а также executor-owned durable idempotency/reconciliation. Bearer token локальной панели не заменяет approval. Preview нельзя считать approval, а TaskLoop/ActionExecutor нельзя подключать до этих контрактов.
+**Следующий этап после V0.5:** соединить локальный reference policy/revocation registry (§3.50) с trusted human identity и exact-request signed approval provider, затем реализовать executor-owned durable idempotency/reconciliation. Bearer token локальной панели не заменяет approval. Preview нельзя считать approval, а TaskLoop/ActionExecutor нельзя подключать к Android до этих контрактов.
 
 
 ### 3.48. Android ↔ Python Runtime Bridge V1 — loopback task/session administration
@@ -4397,3 +4397,20 @@ This mechanism proves possession of a local API secret, not the identity of a hu
 **Tests authored:** `tools/jarvis_app/test_server.py` contains 11 methods, including token persistence, restrictive file mode, rotation/revocation and HTTP deny/allow checks. Status: AUTHORED / NOT RUN. Android local token-store/UI tests have not yet been authored. No Python tests, cryptographic runtime checks, Android tests, builds, APK/AAB, CI or GitHub Actions were run.
 
 **Next gate:** author focused tests for auth-file corruption/permissions, API access and Android token-store behavior; run them on an authorized device before adding a trusted user-approval provider. Do not route preview plans to Task Loop or ActionExecutor yet.
+
+
+### 3.50. Persistent Safety Policy Registry V1 — local CAS reference
+
+**Статус:** IMPLEMENTED как POSIX-файловый Python reference store и fail-closed subclass PersistentPolicySafetyGate; 17 focused tests AUTHORED, NOT RUN. Контракт: docs/JARVIS_PERSISTENT_POLICY_REGISTRY_V1.md. Это отдельный компонент от JPVR task/session checkpoint и не является production trust/identity service.
+
+PersistentSafetyPolicyRegistry хранит один canonical JSON snapshot в выделенной private directory. Запись включает schema version, record CAS version, полный SafetyPolicy, digest policy, отсортированный список revoked approval IDs и domain-separated SHA-256 state digest. Файл и lock имеют права 0600; родительский каталог должен быть owner-only (0700). POSIX fcntl.flock сериализует процессы; обновления записываются во временный файл в том же каталоге, fsync-ятся, атомарно заменяют предыдущую версию и завершаются fsync каталога.
+
+Начальная policy создаётся через save_policy(policy, expected_record_version=0). Любое изменение содержимого policy должно строго увеличивать SafetyPolicy.version; каждая новая запись реестра увеличивает record_version. Устаревший writer получает SafetyPolicyRegistryConflict. Отзыв approval ID идемпотентен и защищён CAS; список ограничен 8192 идентификаторами и хранится в каноническом сортированном виде. В этом reference API отзыв постоянный; новый grant должен получить новый approval ID.
+
+PersistentPolicySafetyGate наследует Gate V1 и может передаваться конструктору Task Loop. Перед базовой проверкой он загружает реестр и требует точного совпадения digest с policy, переданной caller. Отсутствующая/повреждённая запись и несовпадение policy приводят к DENIED; revoked approval ID получает reason approval_revoked.
+
+Пример подключения: создать PersistentSafetyPolicyRegistry в приватном каталоге, один раз сохранить initial policy с expected_record_version=0, затем передать PersistentPolicySafetyGate(registry) в JARVISTaskLoop(permission_gate=gate).
+
+SHA-256 checksum обнаруживает случайное повреждение, но не является подписью или MAC. Владелец устройства/локального файла может изменить JSON и пересчитать digest. ApprovalGrant остаётся caller-supplied: реестр не проверяет identity approver или подписи grant, не предоставляет Android biometric approval и не имеет management API в Android. Этот слой обеспечивает только сохранение policy и отзыв ID для контролируемого Python caller; он не разрешает включать внешние действия.
+
+**Тесты:** tools/neuron_runtime/test_policy_registry.py содержит 17 методов: round-trip, owner-only permissions, uninitialized fail-closed, CAS, monotonic policy version, persist/idempotent revoke, digest/schema/symlink/parent permission rejection, missing/corrupt/mismatched policy denial, revoked grant denial и Task Loop injection. AUTHORED / NOT RUN. Python execution, import checks, race tests, filesystem fault injection, Termux execution и security audit не выполнялись.
