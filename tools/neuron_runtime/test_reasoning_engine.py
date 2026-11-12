@@ -1,10 +1,12 @@
 """Contract tests for the bounded symbolic Reasoning Engine V0.1."""
+import itertools
 import unittest
 
 from tools.neuron_runtime.reasoning_engine import (
     EvidencePolarity,
     EvidenceQuality,
     EvidenceRecord,
+    EvidenceVerificationStatus,
     Hypothesis,
     HypothesisStatus,
     PlanStatus,
@@ -161,8 +163,8 @@ class ReasoningEvidenceTests(unittest.TestCase):
             "task-1", "Assess claim", (), ("done",), (),
             hypotheses=(Hypothesis("h1", "The claim is true"),),
             evidence=(
-                EvidenceRecord("e1", "h1", EvidencePolarity.SUPPORTS, "source:1", EvidenceQuality.PRIMARY, "Supports claim"),
-                EvidenceRecord("e2", "h1", EvidencePolarity.REFUTES, "source:2", EvidenceQuality.INDEPENDENT, "Contradicts claim"),
+                EvidenceRecord("e1", "h1", EvidencePolarity.SUPPORTS, "source:1", EvidenceQuality.PRIMARY, "Supports claim", EvidenceVerificationStatus.VERIFIED, "review-1"),
+                EvidenceRecord("e2", "h1", EvidencePolarity.REFUTES, "source:2", EvidenceQuality.INDEPENDENT, "Contradicts claim", EvidenceVerificationStatus.VERIFIED, "review-2"),
             ),
         )
         result = ReasoningEngine().reason(problem)
@@ -183,13 +185,42 @@ class ReasoningEvidenceTests(unittest.TestCase):
             "task-1", "One source", (), ("done",), (),
             hypotheses=(Hypothesis("h1", "Candidate"),),
             evidence=(EvidenceRecord(
-                "e1", "h1", EvidencePolarity.SUPPORTS, "unverified:source",
-                EvidenceQuality.UNVERIFIED, "Unverified report",
+                "e1", "h1", EvidencePolarity.SUPPORTS, "source:verified",
+                EvidenceQuality.PRIMARY, "Reviewed supporting report",
+                EvidenceVerificationStatus.VERIFIED, "review-1",
             ),),
         ))
         assessment = result.hypothesis_assessments[0]
         self.assertIs(assessment.status, HypothesisStatus.SUPPORT_ONLY)
-        self.assertEqual(assessment.quality_labels, ("unverified",))
+        self.assertEqual(assessment.quality_labels, ("primary",))
+
+    def test_pending_evidence_does_not_affect_hypothesis_assessment(self):
+        result = ReasoningEngine().reason(ReasoningProblem(
+            "task-1", "Pending evidence", (), ("done",), (),
+            hypotheses=(Hypothesis("h1", "Candidate"),),
+            evidence=(EvidenceRecord(
+                "e1", "h1", EvidencePolarity.SUPPORTS, "source:pending",
+                EvidenceQuality.PRIMARY, "Not yet reviewed",
+            ),),
+        ))
+        assessment = result.hypothesis_assessments[0]
+        self.assertIs(assessment.status, HypothesisStatus.INSUFFICIENT)
+        self.assertEqual(assessment.supporting_evidence_ids, ())
+
+    def test_unverified_source_quality_is_ignored(self):
+        result = ReasoningEngine().reason(ReasoningProblem(
+            "task-1", "Unverified source", (), ("done",), (),
+            hypotheses=(Hypothesis("h1", "Candidate"),),
+            evidence=(EvidenceRecord(
+                "e1", "h1", EvidencePolarity.SUPPORTS, "source:weak",
+                EvidenceQuality.UNVERIFIED, "A claim without source validation",
+                EvidenceVerificationStatus.VERIFIED, "review-1",
+            ),),
+        ))
+        self.assertIs(
+            result.hypothesis_assessments[0].status,
+            HypothesisStatus.INSUFFICIENT,
+        )
 
     def test_evidence_for_unknown_hypothesis_is_rejected(self):
         with self.assertRaises(ReasoningError):
@@ -254,6 +285,16 @@ class ReasoningVerificationTests(unittest.TestCase):
     def test_observed_facts_reject_string_input(self):
         with self.assertRaises(ReasoningError):
             self.engine.verify_result(self.result, "output")
+
+    def test_observed_fact_generator_is_bounded_by_max_facts(self):
+        engine = ReasoningEngine(max_facts=3)
+        result = engine.reason(ReasoningProblem(
+            "task-bounded", "Bound observed data", ("input",), ("output",),
+            (_action("convert", ("input",), ("output",)),),
+        ))
+        values = (f"fact-{index}" for index in itertools.count())
+        with self.assertRaises(ReasoningError):
+            engine.verify_result(result, values)
 
 
 if __name__ == "__main__":
