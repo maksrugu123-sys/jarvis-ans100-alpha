@@ -1,0 +1,478 @@
+"""Loopback-only local JARVIS task console.
+
+This is a thin UI for the bounded Python reference APIs. It has no tool executor,
+network connector, shell access, credentials, or side-effecting capabilities.
+"""
+from __future__ import annotations
+
+import argparse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import ipaddress
+import json
+import mimetypes
+import os
+from pathlib import Path
+import threading
+import uuid
+from urllib.parse import urlsplit
+
+from tools.jpvr_reference.storage import JPVRStorage
+from tools.neuron_runtime.reasoning_engine import (
+    PlanningAction,
+    ReasoningEngine,
+    ReasoningError,
+    ReasoningProblem,
+)
+from tools.neuron_runtime.task_session import (
+    SessionStatus,
+    TaskConflict,
+    TaskNotFound,
+    TaskSessionError,
+    TaskSessionManager,
+    TaskStatus,
+)
+from tools.neuron_runtime.task_session_store import (
+    JPVRTaskSessionCheckpointError,
+    JPVRTaskSessionCheckpointNotFound,
+    JPVRTaskSessionCheckpointStore,
+)
+
+
+MANAGER_ID = "android-local-console"
+MAX_REQUEST_BYTES = 64 * 1024
+MAX_PREVIEW_ACTIONS = 64
+_STATE_EVENT_LIMIT = 100
+_STATIC_DIR = Path(__file__).with_name("static")
+_STATIC_FILES = {
+    "/": "index.html",
+    "/index.html": "index.html",
+    "/app.js": "app.js",
+    "/styles.css": "styles.css",
+    "/manifest.webmanifest": "manifest.webmanifest",
+    "/sw.js": "sw.js",
+    "/icon.svg": "icon.svg",
+}
+
+
+class LocalConsoleError(ValueError):
+    """Invalid local-console request or unavailable persisted state."""
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise LocalConsoleError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _required_text(value: object, name: str, *, maximum: int = 128) -> str:
+    if not isinstance(value, str):
+        raise LocalConsoleError(f"{name} must be text")
+    clean = value.strip()
+    if not clean or len(clean) > maximum or "\x00" in clean:
+        raise LocalConsoleError(f"{name} must contain 1..{maximum} characters")
+    return clean
+
+
+def _facts(value: object, name: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or len(value) > 256:
+        raise LocalConsoleError(f"{name} must be a list with at most 256 items")
+    facts = tuple(_required_text(item, name, maximum=128) for item in value)
+    if len(set(facts)) != len(facts):
+        raise LocalConsoleError(f"{name} must not contain duplicates")
+    return facts
+
+
+def _session_view(record) -> dict[str, object]:
+    return {
+        "session_id": record.session_id,
+        "status": record.status.value,
+        "revision": record.revision,
+        "created_order": record.created_order,
+        "title": record.metadata.get("title", record.session_id),
+    }
+
+
+def _task_view(record) -> dict[str, object]:
+    return {
+        "task_id": record.task_id,
+        "session_id": record.session_id,
+        "title": record.title,
+        "status": record.status.value,
+        "revision": record.revision,
+        "created_order": record.created_order,
+        "updated_order": record.updated_order,
+        "result": record.result,
+        "failure_code": record.failure_code,
+    }
+
+
+class LocalConsoleService:
+    """Single-writer state facade backed by a dedicated task/session JPVR file."""
+
+    def __init__(self, data_path: str | os.PathLike[str] | None = None) -> None:
+        default_path = Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr"
+        self.data_path = Path(data_path) if data_path is not None else default_path
+        self._lock = threading.RLock()
+        self.data_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+        try:
+            self.storage = JPVRStorage.open(self.data_path, recover_tail=True)
+        except FileNotFoundError:
+            try:
+                self.storage = JPVRStorage.create(self.data_path)
+            except FileExistsError:
+                self.storage = JPVRStorage.open(self.data_path, recover_tail=True)
+
+        self.store = JPVRTaskSessionCheckpointStore(self.storage)
+        try:
+            loaded = self.store.load(MANAGER_ID)
+        except JPVRTaskSessionCheckpointNotFound:
+            self.manager = TaskSessionManager(manager_id=MANAGER_ID)
+            try:
+                saved = self.store.save(self.manager, expected_record_version=0)
+            except (JPVRTaskSessionCheckpointError, OSError, ValueError) as exc:
+                self.storage.close()
+                raise LocalConsoleError("cannot initialize the local task/session checkpoint") from exc
+            self.checkpoint_version = saved.record_version
+        except (JPVRTaskSessionCheckpointError, OSError, ValueError) as exc:
+            self.storage.close()
+            raise LocalConsoleError("cannot restore the local task/session checkpoint") from exc
+        else:
+            self.manager = loaded.manager
+            self.checkpoint_version = loaded.descriptor.record_version
+
+    def close(self) -> None:
+        with self._lock:
+            self.storage.close()
+
+    def _candidate(self) -> TaskSessionManager:
+        try:
+            return TaskSessionManager.restore_snapshot(self.manager.encode_snapshot())
+        except TaskSessionError as exc:
+            raise LocalConsoleError("the in-memory task/session state is invalid") from exc
+
+    def _publish(self, candidate: TaskSessionManager) -> None:
+        try:
+            saved = self.store.save(
+                candidate, expected_record_version=self.checkpoint_version
+            )
+        except (JPVRTaskSessionCheckpointError, OSError, ValueError) as exc:
+            raise LocalConsoleError(
+                "the change was not published; reload the local console state"
+            ) from exc
+        self.manager = candidate
+        self.checkpoint_version = saved.record_version
+
+    def state(self) -> dict[str, object]:
+        with self._lock:
+            return {
+                "manager_id": self.manager.manager_id,
+                "checkpoint_version": self.checkpoint_version,
+                "sessions": [_session_view(item) for item in self.manager.sessions],
+                "tasks": [_task_view(item) for item in self.manager.tasks],
+                "events": [
+                    {
+                        "sequence": item.sequence,
+                        "entity_type": item.entity_type,
+                        "entity_id": item.entity_id,
+                        "from_status": item.from_status,
+                        "to_status": item.to_status,
+                        "revision": item.revision,
+                    }
+                    for item in self.manager.events[-_STATE_EVENT_LIMIT:]
+                ],
+                "capabilities": {
+                    "task_lifecycle": True,
+                    "reasoning_preview": True,
+                    "external_actions": False,
+                    "tool_execution": False,
+                    "remote_access": False,
+                },
+            }
+
+    def create_session(self, title: object) -> dict[str, object]:
+        clean_title = _required_text(title, "title", maximum=80)
+        with self._lock:
+            candidate = self._candidate()
+            session_id = "ses-" + uuid.uuid4().hex[:24]
+            record = candidate.create_session(
+                session_id, metadata={"title": clean_title, "source": "local-console"}
+            )
+            self._publish(candidate)
+            return _session_view(record)
+
+    def create_task(self, session_id: object, title: object) -> dict[str, object]:
+        clean_session = _required_text(session_id, "session_id", maximum=128)
+        clean_title = _required_text(title, "title", maximum=512)
+        with self._lock:
+            candidate = self._candidate()
+            task_id = "task-" + uuid.uuid4().hex[:24]
+            idempotency_key = "local-" + uuid.uuid4().hex
+            record = candidate.create_task(
+                task_id, clean_session, idempotency_key, clean_title
+            )
+            self._publish(candidate)
+            return _task_view(record)
+
+    def cancel_queued_task(self, task_id: object, expected_revision: object) -> dict[str, object]:
+        clean_task_id = _required_text(task_id, "task_id", maximum=128)
+        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
+            raise LocalConsoleError("expected_revision must be an integer")
+        with self._lock:
+            candidate = self._candidate()
+            current = candidate.get_task(clean_task_id)
+            if current.status is not TaskStatus.QUEUED:
+                raise LocalConsoleError("only queued tasks can be cancelled from this console")
+            updated = candidate.transition_task(
+                clean_task_id, TaskStatus.CANCELLED,
+                expected_revision=expected_revision,
+            )
+            self._publish(candidate)
+            return _task_view(updated)
+
+    def preview_reasoning(self, payload: object) -> dict[str, object]:
+        if not isinstance(payload, dict):
+            raise LocalConsoleError("reasoning preview must be a JSON object")
+        expected = {
+            "task_id", "goal_description", "initial_facts", "goal_facts", "actions"
+        }
+        if set(payload) != expected:
+            raise LocalConsoleError("reasoning preview fields do not match the V0.1 contract")
+        task_id = _required_text(payload["task_id"], "task_id", maximum=128)
+        goal = _required_text(payload["goal_description"], "goal_description", maximum=1024)
+        initial = _facts(payload["initial_facts"], "initial_facts")
+        goals = _facts(payload["goal_facts"], "goal_facts")
+        raw_actions = payload["actions"]
+        if not isinstance(raw_actions, list) or len(raw_actions) > MAX_PREVIEW_ACTIONS:
+            raise LocalConsoleError(
+                f"actions must be a list with at most {MAX_PREVIEW_ACTIONS} items"
+            )
+
+        actions = []
+        allowed_action_fields = {
+            "action_id", "summary", "preconditions", "add_facts",
+            "delete_facts", "rationale",
+        }
+        for index, raw in enumerate(raw_actions):
+            if not isinstance(raw, dict) or not {
+                "action_id", "summary", "preconditions", "add_facts"
+            }.issubset(raw) or set(raw) - allowed_action_fields:
+                raise LocalConsoleError(f"action {index + 1} fields are invalid")
+            actions.append(PlanningAction(
+                action_id=raw["action_id"],
+                summary=raw["summary"],
+                preconditions=_facts(raw["preconditions"], "preconditions"),
+                add_facts=_facts(raw["add_facts"], "add_facts"),
+                delete_facts=_facts(raw.get("delete_facts", []), "delete_facts"),
+                rationale=raw.get("rationale", ""),
+            ))
+
+        try:
+            result = ReasoningEngine().reason(ReasoningProblem(
+                task_id=task_id,
+                goal_description=goal,
+                initial_facts=initial,
+                goal_facts=goals,
+                actions=tuple(actions),
+            ))
+        except ReasoningError as exc:
+            raise LocalConsoleError(str(exc)) from exc
+
+        return {
+            "task_id": result.task_id,
+            "status": result.status.value,
+            "expanded_states": result.expanded_states,
+            "goal_facts": list(result.goal_facts),
+            "predicted_final_facts": list(result.predicted_final_facts),
+            "plan": [
+                {
+                    "index": step.index,
+                    "action_id": step.action_id,
+                    "summary": step.summary,
+                    "rationale": step.rationale,
+                    "required_facts": list(step.required_facts),
+                    "added_facts": list(step.added_facts),
+                    "deleted_facts": list(step.deleted_facts),
+                    "facts_after_step": list(step.facts_after_step),
+                }
+                for step in result.plan
+            ],
+            "notice": "Это только символьный preview. Действия не исполнялись.",
+        }
+
+
+def create_http_server(
+    service: LocalConsoleService,
+    *,
+    port: int = 8765,
+) -> ThreadingHTTPServer:
+    """Create a loopback-only HTTP server; tests may request port=0."""
+    if not isinstance(service, LocalConsoleService):
+        raise LocalConsoleError("service must be a LocalConsoleService")
+    if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+        raise LocalConsoleError("port must be an integer in 0..65535")
+
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "JARVISLocal/0.1"
+        sys_version = ""
+
+        def log_message(self, format: str, *args: object) -> None:
+            # Local task titles and identifiers are deliberately not written to logs.
+            return
+
+        def _send(self, status: int, payload: object, content_type: str = "application/json; charset=utf-8") -> None:
+            if content_type.startswith("application/json"):
+                body = json.dumps(
+                    payload, ensure_ascii=False, allow_nan=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            else:
+                body = payload if isinstance(payload, bytes) else str(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _error(self, status: int, message: str) -> None:
+            self._send(status, {"error": message})
+
+        def _check_local_origin(self) -> bool:
+            expected_host = f"127.0.0.1:{self.server.server_port}"
+            if self.headers.get("Host") != expected_host:
+                self._error(403, "Доступ разрешён только через 127.0.0.1")
+                return False
+            origin = self.headers.get("Origin")
+            if origin is not None and origin != f"http://{expected_host}":
+                self._error(403, "Запросы с другого источника запрещены")
+                return False
+            return True
+
+        def _read_json(self) -> dict[str, object] | None:
+            if self.headers.get_content_type() != "application/json":
+                self._error(415, "Ожидался Content-Type: application/json")
+                return None
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length) if raw_length is not None else -1
+            except ValueError:
+                length = -1
+            if not 0 <= length <= MAX_REQUEST_BYTES:
+                self._error(413 if length > MAX_REQUEST_BYTES else 400, "Размер запроса недопустим")
+                return None
+            try:
+                value = json.loads(
+                    self.rfile.read(length).decode("utf-8", errors="strict"),
+                    object_pairs_hook=_unique_object,
+                    parse_constant=lambda item: (_ for _ in ()).throw(
+                        LocalConsoleError(f"Недопустимое JSON-значение: {item}")
+                    ),
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError, LocalConsoleError) as exc:
+                self._error(400, str(exc) or "Некорректный JSON")
+                return None
+            if not isinstance(value, dict):
+                self._error(400, "Корень JSON должен быть объектом")
+                return None
+            return value
+
+        def do_GET(self) -> None:
+            path = urlsplit(self.path).path
+            if path == "/api/health":
+                self._send(200, {"status": "ok", "storage": "jpvr"})
+                return
+            if path == "/api/state":
+                self._send(200, service.state())
+                return
+            filename = _STATIC_FILES.get(path)
+            if filename is None:
+                self._error(404, "Страница не найдена")
+                return
+            target = _STATIC_DIR / filename
+            try:
+                content = target.read_bytes()
+            except OSError:
+                self._error(404, "Файл интерфейса не найден")
+                return
+            content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            if filename == "manifest.webmanifest":
+                content_type = "application/manifest+json"
+            if filename.endswith(".svg"):
+                content_type = "image/svg+xml"
+            self._send(200, content, f"{content_type}; charset=utf-8")
+
+        def do_POST(self) -> None:
+            if not self._check_local_origin():
+                return
+            payload = self._read_json()
+            if payload is None:
+                return
+            path = urlsplit(self.path).path
+            try:
+                if path == "/api/sessions":
+                    if set(payload) != {"title"}:
+                        raise LocalConsoleError("ожидалось поле title")
+                    result = service.create_session(payload["title"])
+                    self._send(201, {"session": result, "state": service.state()})
+                    return
+                if path == "/api/tasks":
+                    if set(payload) != {"session_id", "title"}:
+                        raise LocalConsoleError("ожидались поля session_id и title")
+                    result = service.create_task(payload["session_id"], payload["title"])
+                    self._send(201, {"task": result, "state": service.state()})
+                    return
+                if path.startswith("/api/tasks/") and path.endswith("/cancel"):
+                    task_id = path[len("/api/tasks/"):-len("/cancel")].strip("/")
+                    if not task_id or "/" in task_id or set(payload) != {"expected_revision"}:
+                        raise LocalConsoleError("неверный путь или expected_revision")
+                    result = service.cancel_queued_task(task_id, payload["expected_revision"])
+                    self._send(200, {"task": result, "state": service.state()})
+                    return
+                if path == "/api/reasoning/preview":
+                    self._send(200, service.preview_reasoning(payload))
+                    return
+                self._error(404, "Маршрут API не найден")
+            except (LocalConsoleError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
+                self._error(400, str(exc))
+            except Exception:
+                # Never return internal paths, checkpoint bytes, or tracebacks to the UI.
+                self._error(503, "Локальная операция не выполнена; проверьте состояние хранилища")
+
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server.daemon_threads = True
+    server.allow_reuse_address = False
+    return server
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="JARVIS local task console")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr",
+    )
+    args = parser.parse_args(argv)
+    service = LocalConsoleService(args.data)
+    server = create_http_server(service, port=args.port)
+    print(f"JARVIS Local Console: http://127.0.0.1:{server.server_port}/")
+    print(f"JPVR data: {service.data_path}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+        service.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
