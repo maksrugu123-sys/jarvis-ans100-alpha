@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jarvis.ans100.alpha.data.LocalSession
@@ -95,6 +96,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onSetSessionStatus = viewModel::setRuntimeSessionStatus,
                     onCancelTask = viewModel::cancelRuntimeTask,
                     onPreviewReasoning = viewModel::previewRuntimeReasoning,
+                    onSaveAccessToken = viewModel::saveRuntimeAccessToken,
+                    onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -319,7 +322,7 @@ private fun Header() {
             color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
             Text(
-                "V0.4",
+                "V0.5",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -495,7 +498,10 @@ private fun RuntimeBridgePanel(
     onSetSessionStatus: (String, String, Int) -> Unit,
     onCancelTask: (String, Int) -> Unit,
     onPreviewReasoning: (RuntimeReasoningPreviewRequest) -> Unit,
+    onSaveAccessToken: (String) -> Unit,
+    onForgetAccessToken: () -> Unit,
 ) {
+    var accessTokenInput by remember { mutableStateOf("") }
     var sessionTitle by rememberSaveable { mutableStateOf("") }
     var taskTitle by rememberSaveable { mutableStateOf("") }
     var selectedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -526,7 +532,45 @@ private fun RuntimeBridgePanel(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            SectionHeading("Подключение к ядру", "локальная JPVR-консоль в Termux")
+            SectionHeading("Подключение к ядру", "защищённая локальная JPVR-консоль в Termux")
+            OutlinedTextField(
+                value = accessTokenInput,
+                onValueChange = { accessTokenInput = it.take(64) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Токен доступа из Termux") },
+                placeholder = { Text("43 символа Base64URL") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                enabled = !state.isBusy,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = {
+                        onSaveAccessToken(accessTokenInput.trim())
+                        accessTokenInput = ""
+                    },
+                    enabled = !state.isBusy && accessTokenInput.trim().length == 43,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Сохранить токен") }
+                if (state.hasAccessToken) {
+                    OutlinedButton(
+                        enabled = !state.isBusy,
+                        onClick = onForgetAccessToken,
+                    ) { Text("Удалить токен") }
+                }
+            }
+            Text(
+                if (state.hasAccessToken) {
+                    "Токен хранится в зашифрованном виде через Android Keystore."
+                } else {
+                    "Скопируйте токен из Termux при первом запуске консоли. Не отправляйте его другим людям."
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 when {
                     state.isBusy -> "Связь с JARVIS проверяется…"
@@ -540,7 +584,7 @@ private fun RuntimeBridgePanel(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    enabled = !state.isBusy,
+                    enabled = !state.isBusy && state.hasAccessToken,
                     onClick = if (state.isConnected) onRefresh else onConnect,
                     modifier = Modifier.weight(1f),
                 ) {
