@@ -1507,3 +1507,30 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** native UI does not yet call the structured reasoning-preview endpoint; no trusted approval provider, authentication, ActionExecutor, neural Runtime/NetworkRuntime integration or end-to-end Task Loop is connected. Other local applications may be able to reach the loopback console; do not expose it to LAN/Internet.
 
 **Следующий этап:** add a bounded structured Reasoning Engine preview to Compose without executing actions. Then design a trusted approval boundary and executor-owned durable idempotency/reconciliation before any side effects.
+
+
+## 2026-11-12 — Android V0.4 symbolic Reasoning Engine preview
+
+**Цель:** завершить следующий безопасный шаг после Android↔Python JPVR registry bridge: дать нативному Compose UI возможность запросить и показать bounded Reasoning Engine plan, не исполняя действий и не меняя durable task/session state.
+
+**Добавлено / изменено:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` — DTOs для preview request/step/result; вызов `POST /api/reasoning/preview`; validation идентификаторов, текстовых полей, уникальных фактов/actions, лимитов 16 actions / 32 input facts per list / 64 возможных итоговых фактов; strict bounded response decode для статуса, шагов и facts.
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` — отдельная асинхронная preview-операция и StateFlow результата; сетевой запрос выполняется на существующем единственном background executor.
+- `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` — Android V0.4 UI для task label, цели, начальных/целевых фактов, чистых planning transitions и отображения SOLVED / NO_PLAN / DEPTH_LIMIT / SEARCH_LIMIT с шагами. Добавлены локальная проверка строки действий и входных списков.
+- `tools/jarvis_app/test_server.py` — три теста: service preview не меняет JPVR checkpoint/task registry; duplicate facts отклоняются; HTTP preview возвращает только символьный план. Всего девять console test methods.
+- `docs/JARVIS_ANDROID_APP_V0_1.md`, `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`, `docs/JARVIS_LOCAL_CONSOLE_V1.md`, `docs/JARVIS_ARCHITECTURE.md`, `README.md`, `AGENTS.md` — синхронизированы с Android V0.4 scope и trust boundary.
+
+**Архитектурные решения:**
+- Reasoning preview принимает caller-authored symbolic facts and pure transitions; это не natural-language parsing и не генерация executable shell/tool commands.
+- Preview ID — метка отдельного анализа, не TaskSessionManager task ID; preview не обновляет очередь и JPVR checkpoint.
+- Предлагаемые шаги не являются approval и не направляются в PermissionSafetyGate, Task Loop или ActionExecutor.
+- Внешние действия, tool execution и remote access остаются disabled. Loopback Host/Origin проверки не являются authentication.
+- Для следующего этапа требуется спроектировать authenticated local pairing/identity, durable policy/revocation, trusted approval provider и executor-owned idempotency/reconciliation до включения любых side effects.
+
+**Тесты / сборки:** девять Python local-console tests и девять Android local-draft repository tests — AUTHORED, NOT RUN. Kotlin compilation, Gradle sync/build, APK/AAB, installation, device UI, Android↔Termux end-to-end networking, Python test execution, performance, CI и GitHub Actions — NOT RUN. Не запускались тесты и сборки.
+
+**Статус проверки:** GitHub source readback/static cross-file inspection only. Изменения закоммичены в `main`; проверка runtime behavior не выполнена.
+
+**Ограничения:** Reasoning Engine всё ещё работает только с caller-supplied facts/actions. Нет natural-language understanding, automatic safe-action generation, authenticated evidence, approvals, TaskLoop invocation из Android, ActionExecutor, neural NetworkRuntime/CQE integration или APK. Отображение preview не означает, что цель выполнена в реальном мире.
+
+**Следующий этап:** создать отдельный защищённый local pairing/authentication flow между Android и Termux без LAN binding; затем durable policy/revocation и exact-request approval. До их реализации оставить executor недоступным.
