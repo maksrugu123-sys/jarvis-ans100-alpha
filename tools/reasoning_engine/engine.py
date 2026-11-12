@@ -6,7 +6,7 @@ capabilities, or mutate JARVIS runtime state.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 import hashlib
 import json
@@ -126,6 +126,7 @@ class ReasoningPlan:
     steps: tuple[PlanStep, ...]
     hypotheses: tuple[HypothesisAssessment, ...]
     unresolved_contradictions: tuple[UnresolvedContradiction, ...]
+    evidence: tuple[EvidenceItem, ...]
     source_evidence_refs: tuple[str, ...]
     execution_authorized: bool = False
 
@@ -147,6 +148,69 @@ class OutcomeVerification:
     failed_criterion_ids: tuple[str, ...]
     missing_criterion_ids: tuple[str, ...]
     reasons: tuple[str, ...]
+
+
+
+def _plan_payload(plan: ReasoningPlan) -> dict:
+    return {
+        "engine": ReasoningEngineV01.VERSION,
+        "request_id": plan.request_id,
+        "idempotency_key": plan.idempotency_key,
+        "objective": plan.objective,
+        "constraints": list(plan.constraints),
+        "assumptions": list(plan.assumptions),
+        "steps": [
+            {
+                "ordinal": item.ordinal,
+                "task_id": item.task_id,
+                "title": item.title,
+                "depends_on": list(item.depends_on),
+                "criteria": [
+                    [criterion.criterion_id, criterion.description]
+                    for criterion in item.criteria
+                ],
+            }
+            for item in plan.steps
+        ],
+        "hypotheses": [
+            {
+                "hypothesis_id": item.hypothesis_id,
+                "statement": item.statement,
+                "status": item.status.value,
+                "support_weight": item.support_weight,
+                "contradiction_weight": item.contradiction_weight,
+                "balance_score": item.balance_score,
+                "supporting": list(item.supporting_evidence_ids),
+                "contradicting": list(item.contradicting_evidence_ids),
+                "has_conflicting_evidence": item.has_conflicting_evidence,
+            }
+            for item in plan.hypotheses
+        ],
+        "evidence": [
+            {
+                "evidence_id": item.evidence_id,
+                "hypothesis_id": item.hypothesis_id,
+                "polarity": item.polarity.value,
+                "weight": item.weight,
+                "source_ref": item.source_ref,
+                "context": item.context,
+            }
+            for item in sorted(plan.evidence, key=lambda item: item.evidence_id)
+        ],
+        "source_evidence_refs": list(plan.source_evidence_refs),
+        "execution_authorized": plan.execution_authorized,
+    }
+
+
+def _plan_digest(plan: ReasoningPlan) -> str:
+    canonical = json.dumps(
+        _plan_payload(plan),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def _identifier(name: str, value: object) -> str:
@@ -454,51 +518,22 @@ class ReasoningEngineV01:
             for item in assessments
             if item.has_conflicting_evidence and item.status == HypothesisStatus.INSUFFICIENT
         )
-        payload = {
-            "engine": self.VERSION,
-            "request_id": clean.request_id,
-            "idempotency_key": clean.idempotency_key,
-            "objective": clean.objective,
-            "constraints": list(clean.constraints),
-            "assumptions": list(clean.assumptions),
-            "steps": [
-                {
-                    "ordinal": item.ordinal,
-                    "task_id": item.task_id,
-                    "title": item.title,
-                    "depends_on": list(item.depends_on),
-                    "criteria": [
-                        [criterion.criterion_id, criterion.description]
-                        for criterion in item.criteria
-                    ],
-                }
-                for item in steps
-            ],
-            "hypotheses": [
-                {
-                    "hypothesis_id": item.hypothesis_id,
-                    "status": item.status.value,
-                    "support_weight": item.support_weight,
-                    "contradiction_weight": item.contradiction_weight,
-                    "balance_score": item.balance_score,
-                    "supporting": list(item.supporting_evidence_ids),
-                    "contradicting": list(item.contradicting_evidence_ids),
-                }
-                for item in assessments
-            ],
-        }
-        canonical = json.dumps(
-            payload, sort_keys=True, separators=(",", ":"),
-            ensure_ascii=False, allow_nan=False,
-        ).encode("utf-8")
-        plan_id = hashlib.sha256(canonical).hexdigest()
-        return ReasoningPlan(
-            clean.request_id, clean.idempotency_key, plan_id, clean.objective,
-            clean.constraints, clean.assumptions, steps, assessments,
+        base_plan = ReasoningPlan(
+            clean.request_id,
+            clean.idempotency_key,
+            "",
+            clean.objective,
+            clean.constraints,
+            clean.assumptions,
+            steps,
+            assessments,
             contradictions,
-            tuple(sorted(item.source_ref for item in clean.evidence)),
+            tuple(sorted(clean.evidence, key=lambda item: item.evidence_id)),
+            tuple(sorted({item.source_ref for item in clean.evidence})),
             False,
         )
+        return replace(base_plan, plan_id=_plan_digest(base_plan))
+
 
     def verify_outcome(
         self,
@@ -508,8 +543,13 @@ class ReasoningEngineV01:
         observations: Iterable[CriterionObservation],
     ) -> OutcomeVerification:
         """Verify caller-supplied observations; never infer success from dispatch."""
-        if not isinstance(plan, ReasoningPlan) or not _HEX_256.fullmatch(plan.plan_id):
-            raise ReasoningEngineError("plan must be a valid ReasoningPlan")
+        if (
+            not isinstance(plan, ReasoningPlan)
+            or not isinstance(plan.plan_id, str)
+            or not _HEX_256.fullmatch(plan.plan_id)
+            or _plan_digest(plan) != plan.plan_id
+        ):
+            raise ReasoningEngineError("plan is invalid or has been modified since analysis")
         try:
             completed = tuple(_identifier("completed_step_id", item) for item in completed_step_ids)
             checks = tuple(observations)
