@@ -1365,3 +1365,29 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Проверки:** current-main GitHub readback/source cross-reference only. 31 tests — **AUTHORED, NOT RUN**. Python execution, imports/syntax, Android/Termux, benchmark, build, CI and GitHub Actions — **NOT RUN**.
 
 **Следующий этап без изменений:** Permission & Safety Gate V1 с deny-by-default capabilities, approvals, policy-version/task-revision binding и resource/time/retry budgets. Не подключать реальное исполнение действий до появления этого gate.
+
+## 2026-11-12 — Permission & Safety Gate V1 and bounded JARVIS Task Loop V0.1
+
+**Цель:** соединить уже существующие Task/Session Lifecycle, JPVR persistence и structured Reasoning Engine в последовательный путь выполнения, при котором каждый отдельный шаг проверяется Permission & Safety Gate до передачи внешнему исполнителю.
+
+**Добавлено / изменено:**
+- `tools/neuron_runtime/task_loop.py` — `JARVISTaskLoop`, точные `ActionBinding`, `ActionExecutionResult`, injected `ActionExecutor`, детерминированные plan/step IDs и idempotency keys, gate re-check перед каждым action, postcondition/final-goal verification, terminal lifecycle transition и JPVR CAS snapshot preflight/save.
+- `tools/neuron_runtime/test_task_loop.py` — 13 тестовых методов: multi-step plan, no-plan rejection, deny-by-default, uncertain executor result with stable key, explicit no-effect failure, postcondition mismatch, mandatory JPVR for side effects, per-step approvals, stale checkpoint CAS и reopen.
+- `tools/neuron_runtime/permission_safety_gate.py` — authorization intent digest теперь включает `retry_index`, чтобы approval нельзя было повторно использовать для другого retry attempt.
+- `tools/neuron_runtime/test_permission_safety_gate.py` — regression test связывает approval с retry index; текущий набор содержит 26 методов.
+- `tools/neuron_runtime/__init__.py` — публичные exports Task Loop.
+- `docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md`, `docs/JARVIS_TASK_LOOP_V0_1.md` — отдельные contracts, trust boundaries, retry/approval rules and recovery limitations.
+- `docs/JARVIS_ARCHITECTURE.md` — §§3.45–3.46 и актуальная дорожная карта; `README.md` — status, repository map and focused test commands.
+
+**Архитектурные решения:**
+- TaskLoopStatus.WAITING является orchestration yield, а не TaskSessionManager TaskStatus.WAITING: реестр сохраняет RUNNING и неизменную revision, пока ожидается approval или reconciliation. Точный pending AuthorizationRequest возвращается caller, чтобы grant оставался привязанным к той же revision.
+- Любой effect кроме READ_ONLY требует dedicated TaskSession JPVR store и актуальный CAS token. Перед resume RUNNING task сравниваются persisted record version и полный canonical manager snapshot; несовпадение блокирует executor.
+- ActionExecutor обязан обеспечить durable idempotency по стабильному request key. Неопределённый outcome никогда не классифицируется как гарантированное отсутствие side effect.
+
+**Тесты:** 13 Task Loop tests и 26 Permission Gate tests — **AUTHORED, NOT RUN**. Никакой тестовый модуль не запускался.
+
+**Проверки:** GitHub fetch/readback и статическая проверка связей между исходниками, exports, docs и README. Python execution, import/syntax checks, Android/Termux I/O, benchmarks, builds, CI and GitHub Actions — **NOT RUN**.
+
+**Ограничения:** approval grant и approval_ref поступают от caller и не аутентифицируются/не подписываются; policy не имеет durable revocation registry; executor injected, не встроен. Task Loop не сохраняет durable per-step intent/result ledger, approval records или scheduler lease, поэтому JPVR lifecycle checkpoint и executor idempotency contract не доказывают exactly-once side effects. Natural-language decomposition, automatic action generation, built-in tools, runtime resource enforcement, production NCC and Android app are not implemented.
+
+**Следующий шаг:** спроектировать и реализовать durable per-step intent/result ledger с безопасной reconciliation после restart и согласованной CQE inbox/outbox publication. Только после этого подключать ограниченные встроенные capabilities и тонкую UI оболочку.
