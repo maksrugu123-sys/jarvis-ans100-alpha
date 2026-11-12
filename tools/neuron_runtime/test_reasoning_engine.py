@@ -64,11 +64,10 @@ class ReasoningPlanningTests(unittest.TestCase):
                 _action("a-route", ("start",), ("goal",)),
             ),
         )
-        self.assertEqual(
-            self.engine.reason(problem).plan[0].action_id,
-            self.engine.reason(problem).plan[0].action_id,
-        )
-        self.assertEqual(self.engine.reason(problem).plan[0].action_id, "a-route")
+        first = self.engine.reason(problem)
+        second = self.engine.reason(problem)
+        self.assertEqual(first.plan, second.plan)
+        self.assertEqual(first.plan[0].action_id, "a-route")
 
     def test_already_satisfied_goal_has_empty_plan(self):
         result = self.engine.reason(ReasoningProblem(
