@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import ipaddress
 import json
 import mimetypes
 import os
@@ -261,14 +260,17 @@ class LocalConsoleService:
                 "action_id", "summary", "preconditions", "add_facts"
             }.issubset(raw) or set(raw) - allowed_action_fields:
                 raise LocalConsoleError(f"action {index + 1} fields are invalid")
-            actions.append(PlanningAction(
-                action_id=raw["action_id"],
-                summary=raw["summary"],
-                preconditions=_facts(raw["preconditions"], "preconditions"),
-                add_facts=_facts(raw["add_facts"], "add_facts"),
-                delete_facts=_facts(raw.get("delete_facts", []), "delete_facts"),
-                rationale=raw.get("rationale", ""),
-            ))
+            try:
+                actions.append(PlanningAction(
+                    action_id=raw["action_id"],
+                    summary=raw["summary"],
+                    preconditions=_facts(raw["preconditions"], "preconditions"),
+                    add_facts=_facts(raw["add_facts"], "add_facts"),
+                    delete_facts=_facts(raw.get("delete_facts", []), "delete_facts"),
+                    rationale=raw.get("rationale", ""),
+                ))
+            except ReasoningError as exc:
+                raise LocalConsoleError(str(exc)) from exc
 
         try:
             result = ReasoningEngine().reason(ReasoningProblem(
@@ -384,6 +386,8 @@ def create_http_server(
             return value
 
         def do_GET(self) -> None:
+            if not self._check_local_origin():
+                return
             path = urlsplit(self.path).path
             if path == "/api/health":
                 self._send(200, {"status": "ok", "storage": "jpvr"})
