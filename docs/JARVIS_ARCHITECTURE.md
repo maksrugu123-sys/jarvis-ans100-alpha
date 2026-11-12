@@ -4272,7 +4272,7 @@ EXTERNAL и IRREVERSIBLE требуют ApprovalGrant всегда; REVERSIBLE �
 
 ### 3.46. Bounded JARVIS Task Loop V0.1
 
-**Статус:** IMPLEMENTED как ограниченный последовательный Python reference coordinator с durable child-task intent/result ledger; 18 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_LOOP_V0_1.md`.
+**Статус:** IMPLEMENTED как ограниченный последовательный Python reference coordinator с durable child-task intent/result ledger; 19 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_LOOP_V0_1.md`.
 
 `JARVISTaskLoop` объединяет TaskSessionManager, bounded ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Caller передаёт структурированный ReasoningProblem, полный набор PlanningAction и ровно одну ActionBinding на каждое действие; свободный текст не декомпозируется, инструменты не генерируются автоматически.
 
@@ -4288,6 +4288,6 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox, production NCC и Android app.
 
-Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 18 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и terminal restore. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
+Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 19 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и terminal restore. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
 **Следующий этап:** тонкая локальная Android app shell поверх защищённого Task Loop: локальный UI для создания/просмотра задач, отображения статусов и подтверждения конкретного pending AuthorizationRequest. Пока не подключать широкие системные capabilities и не выполнять произвольные действия. UI approval provider и аутентификация пользователя остаются отдельными требованиями; текущие caller-supplied grants не являются production authentication.
