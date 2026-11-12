@@ -1,6 +1,6 @@
 # JARVIS Durable Executor Idempotency Ledger V1
 
-**Статус:** реализован как локальный SQLite/Python reference wrapper для caller-supplied ActionExecutor. `tools/neuron_runtime/test_executor_idempotency.py` содержит focused regression tests, **AUTHORED, NOT RUN**. Это локальный журнал резервирования и результатов вызова, не распределённая exactly-once транзакция и не production external executor.
+**Статус:** реализован как локальный SQLite/Python reference wrapper для caller-supplied ActionExecutor. `tools/neuron_runtime/test_executor_idempotency.py` содержит 21 focused regression tests, **AUTHORED, NOT RUN**. Это локальный журнал резервирования и результатов вызова, не распределённая exactly-once транзакция и не production external executor.
 
 ## 1. Назначение
 
@@ -20,6 +20,9 @@ Task Loop уже сохраняет дочернюю задачу шага до 
 Типы находятся в `tools/neuron_runtime/executor_idempotency.py` и экспортируются из `tools.neuron_runtime`:
 
 - `DurableIdempotencyExecutor(path, delegate, busy_timeout_ms=5000, max_records=256)`;
+- `lookup(idempotency_key)` — one record by exact key;
+- `list_unresolved(limit=50)` — bounded ordered IN_PROGRESS/UNKNOWN metadata only;
+- `state_counts()` — fixed-shape state/capacity counters;
 - `DurableExecutionRecord`;
 - `DurableExecutorLedgerError`, `DurableExecutorLedgerConflict`, `DurableExecutorLedgerCorrupt`, `DurableExecutorLedgerCapacity`.
 
@@ -127,6 +130,6 @@ SQLite обеспечивает локальную сериализацию ко
 python3 -m unittest tools.neuron_runtime.test_executor_idempotency -v
 ```
 
-19 методов покрывают persistence/reopen, SUCCEEDED и FAILED_NO_EFFECT replay, exact key binding, exception/UNKNOWN handling, сохранение unresolved UNKNOWN через reopen, caller reconciliation, contradictory result rejection, concurrent duplicate calls, private file modes, symlink/unsafe-directory rejection, schema/result-digest corruption, action ID validation и capacity fail-closed.
+21 методов покрывают persistence/reopen, SUCCEEDED и FAILED_NO_EFFECT replay, exact key binding, exception/UNKNOWN handling, сохранение unresolved UNKNOWN через reopen, caller reconciliation, contradictory result rejection, concurrent duplicate calls, private file modes, symlink/unsafe-directory rejection, schema/result-digest corruption, action ID validation, capacity fail-closed и bounded diagnostic listing/counts.
 
 Статус: **AUTHORED, NOT RUN**. GitHub source readback/static inspection only. Python execution/import checks, multi-process race tests, SQLite fault injection, Android/Termux measurements, security audit, Gradle/Android builds, APK/AAB, CI and GitHub Actions **NOT RUN**.
