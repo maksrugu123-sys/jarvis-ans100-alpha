@@ -4197,3 +4197,20 @@ Defaults: 128 sessions, 1,024 tasks, 4,096 lifecycle events, 32 input refs/task,
 Добавлены task_session.py и test_task_session.py (15 тестов) для lifecycle transitions, terminal immutability, CAS, idempotency, paused/closed rules, capacity atomicity, canonical round-trip, duplicate JSON key/schema/size rejection и invalid metadata. GitHub readback/static review only; tests AUTHORED, NOT RUN. Python execution/import/syntax checks, JPVR integration, device I/O, benchmarks, builds, CI and GitHub Actions не запускались.
 
 **Следующий этап:** versioned JPVR Task/Session checkpoint adapter/store с CAS, commit ancestry, bounded journal restore и interrupted-write recovery. После этого — authorization snapshot/version contract и первый ограниченный JARVIS task loop.
+
+
+### 3.43. Durable Task & Session JPVR Checkpoint V1
+
+**Статус:** реализован versioned Python reference adapter/store; 9 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md`.
+
+TaskSessionManager теперь можно сохранять как canonical V1 snapshot в JPVR и восстанавливать после закрытия/повторного открытия файла. Record type `0x0104`, schema tag JTSL V1; manager identity — domain-separated SHA-256 ID. Payload использует DATA для малого snapshot и BLOB для большого. Fixed-size JTSC descriptor связывает object ID, record version, DATA/BLOB page range, generation, payload length и CRC32C.
+
+Save публикует logical record и CHECKPOINT descriptor одним typed JPVR COMMIT. Load проверяет Superblock/MANIFEST pointer agreement, source COMMIT ancestry, transaction/generation, DATA/BLOB metadata, CRC и strict TaskSessionManager snapshot restore. `expected_record_version` — CAS guard; stale writers rejected. Reopen/load восстанавливает последнюю committed копию сессий, задач, revisions и lifecycle journal.
+
+**Отдельный контейнер обязателен.** JPVR MANIFEST имеет один активный CHECKPOINT pointer. Нельзя сохранять TaskSession checkpoint в том же контейнере, что JNCP/JNNW/JRCP/JRCM stores: это заменит pointer. Для общей runtime persistence потребуется новый composite descriptor с атомарной публикацией всех компонентов.
+
+**Ограничения:** это single-writer reference store, не multi-process lock protocol. Он не сохраняет внешние side effects, scheduler leases, authorization grants, CQE inbox/outbox или in-flight tool execution; значит, восстановление registry не означает exactly-once execution. Нет Android/Termux I/O или power-loss fault-injection подтверждения.
+
+Добавлены `task_session_adapter.py`, `task_session_store.py`, `test_task_session_store.py` (9 методов), public exports и отдельный контракт. GitHub readback/static review only; все 9 тестов AUTHORED, NOT RUN. Python tests/imports/syntax, fault injection, Android I/O, benchmarks, builds, CI and GitHub Actions не запускались.
+
+**Следующий этап:** authorization snapshot/version binding and a constrained task-loop coordinator. Before any real tool side effect, the loop must revalidate authorization and durable task revision; external execution must be represented as a recoverable intent/result protocol rather than inferred from task status.
