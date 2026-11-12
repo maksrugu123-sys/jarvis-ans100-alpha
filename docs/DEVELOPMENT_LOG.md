@@ -1442,3 +1442,39 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 - The Python test suites were not run; this batch changes only the Android UI/configuration and documentation.
 
 **Limitations / next step:** create versioned Android-facing task/session DTOs and a repository boundary, then design a safe local runtime bridge. Persistent task drafts, process-death recovery, UI-bound approval grants and actual engine execution are not implemented. This UI shell is not a working AI assistant.
+
+
+## 2026-11-12 — Android local app V0.2 and loopback PWA console improvements
+
+**Цель:** развить первый Android Compose UI shell до устойчивой локальной модели сессий/черновиков; отдельно улучшить существующую Python PWA-консоль, не смешивая их authoritative storage и trust boundaries.
+
+**Android app — добавлено / изменено:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDraftRepository.kt` — новый bounded versioned `JARVIS_ANDROID_DRAFTS V1` codec/repository; лимиты 32 сессии, 500 черновиков, 240 символов на название, 512 KiB snapshot; strict Base64/UTF-8 decode, duplicate/dangling ID rejection, schema/version checks, session revision CAS, OPEN/PAUSED/CLOSED transitions, task creation only in OPEN, terminal CLOSED, commit failure handling.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesDraftStorage.kt` — app-private storage adapter с synchronous commit result.
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` — StateFlow UI state and Android lifecycle owner.
+- `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` — Compose dashboard with session picker and controls, draft creation, draft search, detail dialog and delete. All task cards are explicitly labelled as unsent local drafts; no execution status is inferred.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt` — nine unit-test methods for persistence round-trip/repository recreation, session transitions, stale revision, paused/closed task creation rejection, no-op write avoidance, failed commit, unknown schema, session limit and invalid title.
+- `docs/JARVIS_ANDROID_APP_V0_1.md` — current V0.2 app and Android repository contract/limitations updated.
+
+**PWA console — добавлено / изменено:**
+- `tools/jarvis_app/server.py` — revision-checked `POST /api/sessions/{id}/status` for pause/resume/close; same-status calls avoid duplicate JPVR commits.
+- `tools/jarvis_app/test_server.py` — five test methods covering session lifecycle/revision, close blocked by active task, no-op status, HTTP endpoint and foreign-origin rejection.
+- `tools/jarvis_app/static/index.html`, `app.js`, `styles.css` — session controls, task search/status filters, active task counters, translated statuses and expandable result fields.
+- `tools/jarvis_app/static/sw.js` — cache version increment to v2, so clients replace the prior static shell.
+- `docs/JARVIS_LOCAL_CONSOLE_V1.md` — loopback startup/API/safety contract.
+
+**Architecture / contributor documentation:**
+- `docs/JARVIS_ARCHITECTURE.md` §3.47 — added native Android V0.2 status and explicit bridge boundary; clarified Task Loop §3.46 limitations.
+- `README.md` — Android/PWA file map and usage/limitations updated.
+- `AGENTS.md` — corrected stale claim that Reasoning Engine exists only conceptually; records current bounded Python reference modules and the disconnected Android draft shell.
+- `docs/DEVELOPMENT_LOG.md` — this entry.
+
+**Архитектурное решение:** Android SharedPreferences state and Python TaskSessionManager/JPVR remain separate stores. Android drafts are not QUEUED JARVIS tasks and must not be shown as executing/completed. The Python PWA is a separate loopback-only console backed by JPVR. A future bridge must use versioned DTOs, explicit ownership/revision/CAS and a trusted approval boundary; do not synchronize by copying display status strings.
+
+**Тесты:** nine Android repository tests and five PWA console tests are **AUTHORED, NOT RUN**. No Python unit test, Kotlin unit test, import/syntax check, Gradle sync/build, APK/AAB, emulator/device install, Compose UI/instrumentation test, browser/device PWA check or Android performance measurement was executed.
+
+**Проверки:** GitHub file readback and static cross-reference inspection of UI, repositories, routes, docs, README, architecture and contributor instructions only. No builds, tests, CI or GitHub Actions were run.
+
+**Ограничения:** Android repository is app-private but not encrypted against a compromised device, is not JPVR and has no multi-process transaction protocol. Synchronous SharedPreferences commit latency is unmeasured. Android does not yet invoke ReasoningEngine, PermissionSafetyGate, Task Loop or Python JPVR. No trusted UI approval provider, credentials, shell/filesystem/network capabilities or native runtime bridge exist. PWA remains loopback-only and does not execute tools.
+
+**Следующий этап:** design and implement a narrow local Android-to-Python runtime bridge with versioned DTOs, durable TaskSession/JPVR ownership, restart/reconciliation semantics and a trusted approval UX bound to the exact AuthorizationRequest. Until this bridge is implemented and verified, retain draft-only semantics.
