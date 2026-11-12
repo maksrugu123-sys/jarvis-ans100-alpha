@@ -292,6 +292,7 @@ class ReasoningEngine:
         expanded = 0
         hit_depth_limit = False
         hit_state_limit = False
+        hit_fact_limit = False
 
         while queue:
             state, path = queue.popleft()
@@ -317,12 +318,16 @@ class ReasoningEngine:
                 )
 
             if len(path) >= self.max_depth:
-                if any(
-                    set(action.preconditions).issubset(state)
-                    and ((state - set(action.delete_facts)) | set(action.add_facts)) != state
-                    for action in actions
-                ):
-                    hit_depth_limit = True
+                for action in actions:
+                    if not set(action.preconditions).issubset(state):
+                        continue
+                    next_state = (state - set(action.delete_facts)) | set(action.add_facts)
+                    if next_state == state or next_state in seen:
+                        continue
+                    if len(next_state) > self.max_facts:
+                        hit_fact_limit = True
+                    else:
+                        hit_depth_limit = True
                 continue
 
             expanded += 1
@@ -330,7 +335,10 @@ class ReasoningEngine:
                 if not set(action.preconditions).issubset(state):
                     continue
                 next_state = (state - set(action.delete_facts)) | set(action.add_facts)
-                if next_state == state or len(next_state) > self.max_facts or next_state in seen:
+                if next_state == state or next_state in seen:
+                    continue
+                if len(next_state) > self.max_facts:
+                    hit_fact_limit = True
                     continue
                 if len(seen) >= self.max_states:
                     hit_state_limit = True
@@ -341,7 +349,7 @@ class ReasoningEngine:
                 break
 
         status = (
-            PlanStatus.SEARCH_LIMIT if hit_state_limit
+            PlanStatus.SEARCH_LIMIT if hit_state_limit or hit_fact_limit
             else PlanStatus.DEPTH_LIMIT if hit_depth_limit
             else PlanStatus.NO_PLAN
         )
