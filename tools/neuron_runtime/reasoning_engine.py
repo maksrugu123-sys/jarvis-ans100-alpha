@@ -33,6 +33,12 @@ class EvidenceQuality(str, Enum):
     DERIVED = "derived"
 
 
+class EvidenceVerificationStatus(str, Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
 class HypothesisStatus(str, Enum):
     INSUFFICIENT = "insufficient"
     SUPPORT_ONLY = "support_only"
@@ -90,7 +96,10 @@ class PlanningAction:
     def __post_init__(self) -> None:
         _identifier("action_id", self.action_id)
         _text("action summary", self.summary, 256)
-        _text("action rationale", self.rationale, 512) if self.rationale else None
+        if not isinstance(self.rationale, str):
+            raise ReasoningError("action rationale must be text")
+        if self.rationale:
+            _text("action rationale", self.rationale, 512)
         pre = _facts("preconditions", self.preconditions, maximum=256)
         add = _facts("add_facts", self.add_facts, maximum=256)
         delete = _facts("delete_facts", self.delete_facts, maximum=256)
@@ -121,6 +130,8 @@ class EvidenceRecord:
     source_ref: str
     quality: EvidenceQuality
     summary: str
+    verification_status: EvidenceVerificationStatus = EvidenceVerificationStatus.PENDING
+    verification_ref: str = ""
 
     def __post_init__(self) -> None:
         _identifier("evidence_id", self.evidence_id)
@@ -132,6 +143,18 @@ class EvidenceRecord:
             raise ReasoningError("unsupported evidence polarity or quality") from exc
         _text("evidence source_ref", self.source_ref, 512)
         _text("evidence summary", self.summary, 512)
+        try:
+            object.__setattr__(
+                self, "verification_status",
+                EvidenceVerificationStatus(self.verification_status),
+            )
+        except ValueError as exc:
+            raise ReasoningError("unsupported evidence verification status") from exc
+        if self.verification_status is EvidenceVerificationStatus.PENDING:
+            if self.verification_ref:
+                raise ReasoningError("pending evidence must not have a verification_ref")
+        else:
+            _identifier("evidence verification_ref", self.verification_ref)
 
 
 @dataclass(frozen=True)
@@ -203,7 +226,12 @@ def _assess_hypotheses(
             raise ReasoningError("evidence references an unknown hypothesis")
     results = []
     for hypothesis in sorted(hypotheses, key=lambda item: item.hypothesis_id):
-        related = [item for item in evidence if item.hypothesis_id == hypothesis.hypothesis_id]
+        related = [
+            item for item in evidence
+            if item.hypothesis_id == hypothesis.hypothesis_id
+            and item.verification_status is EvidenceVerificationStatus.VERIFIED
+            and item.quality is not EvidenceQuality.UNVERIFIED
+        ]
         supporting = tuple(sorted(item.evidence_id for item in related if item.polarity is EvidencePolarity.SUPPORTS))
         refuting = tuple(sorted(item.evidence_id for item in related if item.polarity is EvidencePolarity.REFUTES))
         if supporting and refuting:
@@ -371,9 +399,15 @@ class ReasoningEngine:
         if isinstance(observed_facts, (str, bytes)):
             raise ReasoningError("observed_facts must be an iterable of fact identifiers")
         try:
-            observed = _facts("observed_facts", tuple(observed_facts), maximum=self.max_facts)
+            # Consume at most max_facts + 1 entries so an unbounded iterator
+            # cannot defeat the engine's memory budget.
+            from itertools import islice
+            observed_items = tuple(islice(iter(observed_facts), self.max_facts + 1))
         except TypeError as exc:
             raise ReasoningError("observed_facts must be iterable") from exc
+        if len(observed_items) > self.max_facts:
+            raise ReasoningError("observed_facts exceeds max_facts")
+        observed = _facts("observed_facts", observed_items, maximum=self.max_facts)
         observed_set = set(observed)
         goal_set = set(result.goal_facts)
         predicted_set = set(result.predicted_final_facts)
