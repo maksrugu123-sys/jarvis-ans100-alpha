@@ -225,9 +225,9 @@ class JARVISTaskLoop:
     def _step_task_identity(
         manager_id: str, task_id: str, plan_id: str, step_id: str,
     ) -> tuple[str, str]:
-        material = "\\x00".join((manager_id, task_id, plan_id, step_id)).encode("ascii")
+        material = "\x00".join((manager_id, task_id, plan_id, step_id)).encode("ascii")
         digest = hashlib.sha256(
-            b"JARVIS:TASK-LOOP:STEP-LEDGER:V1\\x00" + material
+            b"JARVIS:TASK-LOOP:STEP-LEDGER:V1\x00" + material
         ).hexdigest()
         return "step-" + digest[:48], "step-idem-" + digest
 
@@ -241,7 +241,7 @@ class JARVISTaskLoop:
             document, sort_keys=True, ensure_ascii=True, separators=(",", ":")
         ).encode("ascii")
         return hashlib.sha256(
-            b"JARVIS:TASK-LOOP:STEP-RESULT:V1\\x00" + payload
+            b"JARVIS:TASK-LOOP:STEP-RESULT:V1\x00" + payload
         ).hexdigest()
 
     @staticmethod
