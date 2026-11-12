@@ -1270,3 +1270,12 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** lifecycle snapshot is canonical serialization only, not durable storage. There is no JPVR task/session checkpoint, process-restart recovery, authorization snapshot/version binding, scheduler, general CQE inbox/outbox, concurrent writer, external action execution or production NCC. Logical counters are not wall-clock timestamps. Terminal task/session records are not evicted; capacity exhaustion fails closed.
 
 **Следующий этап:** implement a versioned JPVR Task/Session checkpoint adapter/store with CAS, source COMMIT ancestry validation, bounded journal restore and interrupted-write recovery. Then define authorization snapshot/version binding and integrate a restricted task loop.
+
+
+## 2026-11-12 — Task & Session JPVR Checkpoint V1
+
+- Added versioned JTSL V1 DATA/BLOB record adapter and JTSC V1 CHECKPOINT descriptor.
+- Added JPVRTaskSessionCheckpointStore with one-commit record+descriptor publication, manager identity binding, source COMMIT ancestry verification, CRC32C, and expected-record-version CAS.
+- Added reopen/restore, identity isolation, stale CAS, descriptor, corruption, and DATA/BLOB tests (9 test methods).
+- Exported the new adapter/store API and documented the dedicated-container rule: one active MANIFEST CHECKPOINT pointer means this store must not share a container with standalone/composite runtime checkpoint stores.
+- Tests are authored, not run. No Python execution, syntax/import check, fault injection, Android/Termux I/O, benchmark, build, CI, or GitHub Actions run.
