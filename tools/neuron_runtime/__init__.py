@@ -267,3 +267,52 @@ __all__ += [
     "TaskSessionManager",
     "TaskStatus",
 ]
+
+
+from .task_session_adapter import (
+    DecodedTaskSessionSnapshot,
+    TASK_SESSION_RECORD_TYPE,
+    TASK_SESSION_SCHEMA_ID,
+    TASK_SESSION_SCHEMA_VERSION,
+    TaskSessionPersistenceError,
+    decode_task_session_snapshot,
+    encode_task_session_snapshot,
+    make_task_session_record_input,
+    task_session_object_id,
+)
+
+__all__ += [
+    "DecodedTaskSessionSnapshot",
+    "TASK_SESSION_RECORD_TYPE",
+    "TASK_SESSION_SCHEMA_ID",
+    "TASK_SESSION_SCHEMA_VERSION",
+    "TaskSessionPersistenceError",
+    "decode_task_session_snapshot",
+    "encode_task_session_snapshot",
+    "make_task_session_record_input",
+    "task_session_object_id",
+]
+
+from .task_session_store import (
+    JPVRTaskSessionCheckpointConflict,
+    JPVRTaskSessionCheckpointError,
+    JPVRTaskSessionCheckpointNotFound,
+    JPVRTaskSessionCheckpointStore,
+    LoadedTaskSessionCheckpoint,
+    SavedTaskSessionCheckpoint,
+    TaskSessionCheckpointDescriptor,
+    decode_task_session_checkpoint_descriptor,
+    encode_task_session_checkpoint_descriptor,
+)
+
+__all__ += [
+    "JPVRTaskSessionCheckpointConflict",
+    "JPVRTaskSessionCheckpointError",
+    "JPVRTaskSessionCheckpointNotFound",
+    "JPVRTaskSessionCheckpointStore",
+    "LoadedTaskSessionCheckpoint",
+    "SavedTaskSessionCheckpoint",
+    "TaskSessionCheckpointDescriptor",
+    "decode_task_session_checkpoint_descriptor",
+    "encode_task_session_checkpoint_descriptor",
+]
