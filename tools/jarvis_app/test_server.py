@@ -71,20 +71,20 @@ class LocalConsoleServiceTests(unittest.TestCase):
 
     def test_access_token_persists_and_rotation_revokes_previous_token(self):
         auth_path = os.path.join(self.temp.name, "console.auth")
-        self.service.close()
-        first = LocalConsoleService(self.data_path, auth_path)
+        auth_data_path = os.path.join(self.temp.name, "auth-test.jpvr")
+        first = LocalConsoleService(auth_data_path, auth_path)
         first_token = first.bootstrap_token
         self.assertIsNotNone(first_token)
         self.assertTrue(first.authenticate(first_token))
         self.assertEqual(os.stat(auth_path).st_mode & 0o777, 0o600)
         first.close()
 
-        second = LocalConsoleService(self.data_path, auth_path)
+        second = LocalConsoleService(auth_data_path, auth_path)
         self.assertIsNone(second.bootstrap_token)
         self.assertTrue(second.authenticate(first_token))
         second.close()
 
-        rotated = LocalConsoleService(self.data_path, auth_path, rotate_token=True)
+        rotated = LocalConsoleService(auth_data_path, auth_path, rotate_token=True)
         self.assertIsNotNone(rotated.bootstrap_token)
         self.assertFalse(rotated.authenticate(first_token))
         self.assertTrue(rotated.authenticate(rotated.bootstrap_token))
