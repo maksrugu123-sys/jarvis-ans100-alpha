@@ -20,7 +20,7 @@
         <div class="brand-subtitle">ЛОКАЛЬНАЯ КОНСОЛЬ · ANS-100 ALPHA</div>
       </div>
     </div>
-    <div class="local-state"><span class="pulse"></span> Работает на этом устройстве</div>
+    <div class="local-state" id="local-state"><span class="pulse"></span> Локальное ядро</div>
   </header>
 
   <main class="shell">
@@ -33,6 +33,7 @@
     <section class="stats" aria-label="Состояние">
       <article class="stat-card"><span>Сессии</span><strong id="session-count">—</strong></article>
       <article class="stat-card"><span>Задачи</span><strong id="task-count">—</strong></article>
+      <article class="stat-card"><span>В работе</span><strong id="active-count">—</strong></article>
       <article class="stat-card"><span>JPVR checkpoint</span><strong id="checkpoint-version">—</strong></article>
     </section>
 
@@ -68,6 +69,21 @@
             <button type="submit">Добавить</button>
           </div>
         </form>
+        <div class="task-filters" aria-label="Фильтры задач">
+          <label class="sr-only" for="task-search">Поиск задач</label>
+          <input id="task-search" type="search" placeholder="Поиск по названию или ID" autocomplete="off">
+          <label class="sr-only" for="task-status-filter">Статус задачи</label>
+          <select id="task-status-filter">
+            <option value="all">Все статусы</option>
+            <option value="queued">В очереди</option>
+            <option value="running">В работе</option>
+            <option value="waiting">Ожидает</option>
+            <option value="completed">Завершена</option>
+            <option value="failed">Ошибка</option>
+            <option value="cancelled">Отменена</option>
+          </select>
+        </div>
+        <div id="task-counts" class="task-counts" aria-live="polite"></div>
         <div id="tasks" class="record-list empty">Пока нет задач.</div>
       </section>
     </div>
