@@ -41,9 +41,9 @@ build_approval_grant() только формирует объект с нужн�
 - Устаревшая task/session revision отвергается.
 - Approval для другого manager, task, revision, step, intent или policy digest не переиспользуется.
 - Gate не меняет task/session registry и не вызывает capability.
-- Approval records не подписаны и не хранятся здесь постоянно.
-- Нет identity/authentication service, secrets isolation, policy storage/revocation registry, runtime quota enforcement, multi-process coordination или системной sandbox.
-- Это reference boundary, а не production-grade security subsystem.
+- Approval records не подписываются и не хранятся внутри самого Gate. Отдельный PersistentSafetyPolicyRegistry в tools/neuron_runtime/policy_registry.py сохраняет versioned policy и revoked approval IDs; PersistentPolicySafetyGate проверяет текущий policy digest и блокирует отозванные IDs. Контракт: docs/JARVIS_PERSISTENT_POLICY_REGISTRY_V1.md.
+- Реестр не аутентифицирует approver и не проверяет подписи ApprovalGrant: caller всё ещё может создать поддельный grant. SHA-256 state digest обнаруживает случайное повреждение, но не защищает от владельца локального файла, который может переписать запись и пересчитать digest.
+- Нет trusted identity/authentication service, signed grants, secrets isolation, production policy/revocation service, runtime quota enforcement, multi-process coordination внешних действий или системной sandbox.
 
 ## Проверки
 
@@ -51,4 +51,4 @@ build_approval_grant() только формирует объект с нужн�
 python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
 ```
 
-26 тестовых методов покрывают allow/deny-by-default, exact scopes/effects, каждый resource ceiling, retries, stale task/session revisions, paused/closed states, чистоту authorize(), обязательные approvals, истечение grant, повторное использование для другого intent, смену policy version/digest, manager binding и retry-index binding. Все тесты AUTHORED, NOT RUN. Python execution, Android tests, security audit, build, CI и GitHub Actions не запускались.
+26 тестовых методов Gate покрывают allow/deny-by-default, exact scopes/effects, каждый resource ceiling, retries, stale task/session revisions, paused/closed states, чистоту authorize(), обязательные approvals, истечение grant, повторное использование для другого intent, смену policy version/digest, manager binding и retry-index binding. Дополнительные 17 тестов test_policy_registry.py покрывают disk round-trip, permissions, CAS, monotonic policy versions, idempotent revocation, повреждённые записи и интеграцию subclass с Task Loop. Все AUTHORED, NOT RUN.
