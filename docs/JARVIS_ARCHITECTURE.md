@@ -4190,7 +4190,7 @@ Defaults: 128 sessions, 1,024 tasks, 4,096 lifecycle events, 32 input refs/task,
 
 Каждый успешный create/transition добавляет упорядоченное событие. При заполнении event log операция отклоняется до изменения состояния; терминальные записи не вытесняются автоматически. Snapshot schema jarvis.task-session V1 использует canonical UTF-8 JSON; restore отвергает duplicate keys, non-finite JSON, неизвестную схему/поля, повторяющиеся identities, отсутствующие session refs, некорректные revisions/terminal data и превышение лимитов.
 
-**Критическое ограничение:** codec сериализует состояние, но сам не делает его durable. JPVR task/session store, crash recovery, authorization snapshot/version binding, retry scheduler, CQE inbox/outbox и cross-process ownership пока не реализованы. Нельзя утверждать, что сессия переживает перезапуск, пока snapshot не публикуется через versioned JPVR transaction.
+**Историческая граница milestone 3.42:** на момент создания lifecycle codec ещё не имел durable JPVR store. Последующая реализация JPVR Task/Session Checkpoint V1 и текущие ограничения описаны в разделе 3.43; не использовать это историческое описание как актуальный статус persistence.
 
 #### 3.42.5. Проверки и следующий шаг
 
@@ -4201,7 +4201,7 @@ Defaults: 128 sessions, 1,024 tasks, 4,096 lifecycle events, 32 input refs/task,
 
 ### 3.43. Durable Task & Session JPVR Checkpoint V1
 
-**Статус:** реализован versioned Python reference adapter/store; 9 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md`.
+**Статус:** реализован hardened versioned Python reference adapter/store; 14 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md`.
 
 TaskSessionManager теперь можно сохранять как canonical V1 snapshot в JPVR и восстанавливать после закрытия/повторного открытия файла. Record type `0x0104`, schema tag JTSL V1; manager identity — domain-separated SHA-256 ID. Payload использует DATA для малого snapshot и BLOB для большого. Fixed-size JTSC descriptor связывает object ID, record version, DATA/BLOB page range, generation, payload length и CRC32C.
 
@@ -4211,6 +4211,6 @@ Save публикует logical record и CHECKPOINT descriptor одним typed
 
 **Ограничения:** это single-writer reference store, не multi-process lock protocol. Он не сохраняет внешние side effects, scheduler leases, authorization grants, CQE inbox/outbox или in-flight tool execution; значит, восстановление registry не означает exactly-once execution. Нет Android/Termux I/O или power-loss fault-injection подтверждения.
 
-Добавлены `task_session_adapter.py`, `task_session_store.py`, `test_task_session_store.py` (9 методов), public exports и отдельный контракт. GitHub readback/static review only; все 9 тестов AUTHORED, NOT RUN. Python tests/imports/syntax, fault injection, Android I/O, benchmarks, builds, CI and GitHub Actions не запускались.
+Добавлены `task_session_adapter.py`, `task_session_store.py`, `test_task_session_store.py` (14 методов после последующего hardening review), public exports и отдельный контракт. GitHub readback/static review only; все 14 тестов AUTHORED, NOT RUN. Python tests/imports/syntax, fault injection, Android I/O, benchmarks, builds, CI and GitHub Actions не запускались.
 
 **Следующий этап:** authorization snapshot/version binding and a constrained task-loop coordinator. Before any real tool side effect, the loop must revalidate authorization and durable task revision; external execution must be represented as a recoverable intent/result protocol rather than inferred from task status.
