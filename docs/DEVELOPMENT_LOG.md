@@ -1395,3 +1395,26 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 ## 2026-11-12 — Task Loop invalid-input regression follow-up
 
 При последующей статической сверке уточнён тип TaskLoopResult.reasoning: он допускает None, когда ReasoningEngine отклоняет malformed structured input до построения плана. Добавлен 14-й тест `test_invalid_reasoning_problem_fails_before_executor`, проверяющий переход в FAILED без вызова executor. Историческая запись реализации выше не переписывается; актуальное количество — **14 Task Loop tests**, AUTHORED, NOT RUN. Обновлены `docs/JARVIS_TASK_LOOP_V0_1.md`, `docs/JARVIS_ARCHITECTURE.md` и `README.md`. Выполнен только GitHub source readback; Python/tests/builds/CI не запускались.
+
+
+## 2026-11-12 — Durable per-step intent/result ledger for JARVIS Task Loop
+
+**Цель:** закрыть известный recovery gap между записью parent task как RUNNING и внешним вызовом ActionExecutor, а также сохранить контрольный след подтверждённых шагов в том же task/session JPVR checkpoint.
+
+**Добавлено / изменено:**
+- `tools/neuron_runtime/task_loop.py` — каждый плановый шаг получает детерминированную дочернюю TaskRecord, identity которой связана с manager/task/plan/step. После ALLOWED child переводится в RUNNING и публикуется отдельным JPVR checkpoint до executor call. Известный SUCCEEDED фиксируется child COMPLETED с digest полного executor outcome/observed-facts ответа; FAILED_NO_EFFECT — child FAILED; UNKNOWN сохраняет RUNNING. При повторе completed step executor должен вернуть ранее сохранённый результат под тем же action idempotency key; loop сравнивает его digest и закрывается с ошибкой при несовпадении.
+- `tools/neuron_runtime/test_task_loop.py` — добавлены три сценария: child-step ledger появляется в RUNNING до входа в executor; неизвестный outcome восстанавливается после закрытия/повторного открытия JPVR файла; ранее завершённый шаг повторно читается через стабильный idempotency key и сравнивается при последующей неопределённости. Модуль содержит **18 test methods**.
+- `docs/JARVIS_TASK_LOOP_V0_1.md` — описаны step-ledger lifecycle, порядок gate -> durable intent -> executor, восстановление и ограничения.
+- `docs/JARVIS_ARCHITECTURE.md` §3.46 и `README.md` — синхронизированы со статусом и следующим этапом.
+
+**Архитектурное решение:** не создавать второй JPVR checkpoint format для шага. Child TaskRecord хранится в том же TaskSessionManager snapshot, поэтому intent/result и parent lifecycle используют существующий CAS-protected TaskSession JPVR store и его один MANIFEST checkpoint pointer. Каждая запись intent/result публикуется отдельным атомарным JPVR commit; это не атомарная транзакция с внешним сервисом.
+
+**Recovery contract:** child RUNNING означает, что side effect мог произойти; повтор uses the same action idempotency key. Child COMPLETED содержит digest, но не полный observed-facts payload; executor обязан хранить свой durable idempotency ledger и возвращать прежний полный ответ. При несовпадении digest parent task завершается fail-closed. Между внешним effect и сохранением child COMPLETED остаётся crash window; exactly-once external execution не заявляется.
+
+**Тесты:** 18 методов в `tools.neuron_runtime.test_task_loop` — **AUTHORED, NOT RUN**. Остальные существующие Reasoning Engine / Permission Gate / Task Session suites также не запускались в этом изменении.
+
+**Проверки:** GitHub fetch/readback и статическая сверка реализации, тестовых сценариев, JPVR store API, README, архитектуры и task-loop contract. Python execution, import/syntax checks, Android/Termux I/O, crash/fault injection, benchmarks, builds, CI and GitHub Actions — **NOT RUN**. По прежнему ограничению не выполнялись сборки и тесты.
+
+**Ограничения:** исполнителю необходим durable idempotency ledger, который переживает его собственный restart. JPVR step digest не является внешним receipt, не аутентифицирует исполнителя и не координирует внешнюю транзакцию. Scheduler leases, durable approval registry/provider, concurrent workers, Android sandbox and production NCC остаются за пределами V0.1.
+
+**Следующий этап:** тонкая локальная Android app shell поверх Task Loop: интерфейс задач/сессий, статусов, плана и pending approval. Не подключать произвольные системные действия до trusted approval provider и отдельной проверки Android capabilities.
