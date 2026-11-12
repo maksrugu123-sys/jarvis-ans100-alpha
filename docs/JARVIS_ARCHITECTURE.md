@@ -4286,7 +4286,7 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 При исчерпании task/event capacity создание или запуск child-task отклоняется до вызова executor; это fail-closed backpressure, а не автоматическая очистка журнала.\n\n**Ограничения восстановления:** child-task ledger сохраняет шаги и digest результата, но не весь observed-facts payload; при повторе executor должен вернуть полный ранее сохранённый результат, который loop сравнит с digest. Между внешним side effect и сохранением child COMPLETED остаётся crash window; его безопасное разрешение зависит от durable idempotency ledger исполнителя. JPVR и внешний сервис не участвуют в общей транзакции, поэтому exactly-once guarantee не заявляется. Approvals, scheduler leases и сам ReasoningResult не сохраняются. При рестарте caller обязан передать тот же structured problem/bindings и восстановить executor с его durable idempotency ledger.
 
-Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox, production NCC и Android app.
+Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, trusted UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox, production NCC и Android/Python runtime bridge. Отдельный нативный Android UI shell V0.2 и локальное draft repository описаны в §3.47; они не подключены к Task Loop.
 
 Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 20 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и terminal restore. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
@@ -4302,3 +4302,27 @@ Plan ID и step ID детерминированы. Для каждого дей�
 **Критическая граница:** черновики существуют только в Compose state процесса; они не сохраняются после process death, не связаны с TaskSessionManager/JPVR и не запускаются через ReasoningEngine или Task Loop. Это UI shell, не ассистент и не демонстрация интеллектуального выполнения. Встроенные инструменты, сеть, shell, файловые операции и background execution отсутствуют.
 
 Следующий шаг — отдельный versioned Android DTO/repository contract, экран сессии/задачи и безопасный локальный bridge к runtime. Любое действие с эффектом должно проходить через существующий Permission & Safety Gate и точный approval flow; UI не должен самостоятельно объявлять действие разрешённым.
+
+
+### 3.47. Нативное Android-приложение JARVIS V0.2 — локальные сессии и черновики
+
+**Статус:** реализован начальный Kotlin/Jetpack Compose UI shell и отдельный versioned Android-local draft repository. Девять JVM unit tests AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, установка на устройство и Compose UI tests NOT RUN. Контракт: `docs/JARVIS_ANDROID_APP_V0_1.md`.
+
+Android module:
+- `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` — русский Compose dashboard, local session selection, OPEN/PAUSED/CLOSED controls, draft creation/search/detail/delete.
+- `JarvisViewModel.kt` — StateFlow UI model and lifecycle.
+- `data/LocalDraftRepository.kt` — versioned bounded codec and repository.
+- `data/SharedPreferencesDraftStorage.kt` — app-private durable preference adapter.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt` — repository/codec contract tests.
+
+Android local format `JARVIS_ANDROID_DRAFTS V1` is separate from JPVR. It stores sessions and draft tasks in a bounded text snapshot with Base64 UTF-8 fields. Limits: 32 sessions, 500 drafts, 240 characters/title, 512 KiB encoded state. Session transitions use per-session revision CAS: OPEN -> PAUSED/CLOSED; PAUSED -> OPEN/CLOSED; CLOSED terminal. New drafts are accepted only into OPEN sessions. A complete candidate snapshot is encoded and committed with synchronous SharedPreferences commit(); failed storage commit does not report success.
+
+UI clearly marks all Android task items as **local drafts not submitted to the engine**. The interface does not create TaskSessionManager QUEUED records, infer runtime state, call ReasoningEngine, invoke Task Loop, request real capabilities, execute shell/filesystem/network operations or claim task completion. This local repository is not JPVR, is not encrypted against a compromised device and is not a multi-process transaction store. Synchronous write latency has not been measured on the target phone.
+
+**Runtime boundary:** Python TaskSessionManager/JPVR and Android SharedPreferences repository are independent authorities. Do not merge their state by copying statuses. The next bridge must define strict versioned DTOs, manager/task/session identity and revision binding, persisted checkpoint CAS, process-death recovery, and a trusted approval provider tied to the exact AuthorizationRequest. Until that boundary exists, keep the Compose app draft-only.
+
+**PWA distinction:** `tools/jarvis_app` is a separate loopback-only Python local console backed by JPVR. Its web UI is not the Android Compose repository and does not share state with the native app.
+
+**Проверки:** nine tests in `LocalDraftRepositoryTest.kt` cover round-trip/repository recreation, session transition/revision behavior, stale revisions, rejection of task creation into paused/closed sessions, no-op commit, failed storage write, unknown schema, session capacity and invalid titles. They are **AUTHORED, NOT RUN**. GitHub readback/static inspection only; Kotlin compile, Gradle sync/build, APK/AAB, emulator/device run, UI tests and Android performance measurement are **NOT RUN**. No CI/GitHub Actions was run.
+
+**Следующий этап:** versioned local runtime bridge between Compose and the Python reference service, with bounded DTOs, explicit storage ownership and fail-closed recovery. Do not enable external tools or mark tasks as executing/completed before the bridge and trusted approval flow are implemented.
