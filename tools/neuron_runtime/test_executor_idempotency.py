@@ -301,6 +301,23 @@ class DurableIdempotencyExecutorTests(unittest.TestCase):
         with self.assertRaises(DurableExecutorLedgerError):
             ledger.execute(other_action, self.request)
 
+    def test_record_capacity_fails_closed_without_dispatch(self):
+        delegate = CountingExecutor()
+        ledger = DurableIdempotencyExecutor(
+            self.path, delegate, max_records=1,
+        )
+        ledger.execute(self.action, self.request)
+        second_request = replace(self.request, idempotency_key="idem-2")
+        with self.assertRaises(DurableExecutorLedgerError):
+            ledger.execute(self.action, second_request)
+        self.assertEqual(delegate.calls, 1)
+
+    def test_maximum_record_capacity_cannot_be_disabled(self):
+        with self.assertRaises(DurableExecutorLedgerError):
+            DurableIdempotencyExecutor(
+                self.path, CountingExecutor(), max_records=0,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
