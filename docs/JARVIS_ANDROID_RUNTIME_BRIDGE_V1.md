@@ -1,6 +1,6 @@
 # JARVIS Android Runtime Bridge V1
 
-**Status:** Android V0.4 includes JPVR task/session administration and a bounded symbolic Reasoning Engine preview over the loopback Python API. End-to-end tests, Android build and device verification NOT RUN. This remains a registry/preview bridge, not tool execution.
+**Status:** Android V0.5 includes JPVR task/session administration, a bounded symbolic Reasoning Engine preview and bearer-token authentication over the loopback Python API v2. End-to-end tests, Android build and device verification NOT RUN. This remains a registry/preview bridge, not tool execution.
 
 ## Ownership
 
