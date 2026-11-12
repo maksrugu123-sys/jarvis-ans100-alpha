@@ -148,8 +148,10 @@ class EvidenceRecord:
                 self, "verification_status",
                 EvidenceVerificationStatus(self.verification_status),
             )
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise ReasoningError("unsupported evidence verification status") from exc
+        if not isinstance(self.verification_ref, str):
+            raise ReasoningError("evidence verification_ref must be text")
         if self.verification_status is EvidenceVerificationStatus.PENDING:
             if self.verification_ref:
                 raise ReasoningError("pending evidence must not have a verification_ref")
