@@ -165,10 +165,21 @@ class PersistentSafetyPolicyRegistry:
         self.path = Path(path)
         self.lock_path = self.path.with_name(self.path.name + ".lock")
         try:
+            parent_existed = self.path.parent.exists()
             self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            os.chmod(self.path.parent, 0o700)
+            if not parent_existed:
+                os.chmod(self.path.parent, 0o700)
+            parent_metadata = self.path.parent.stat()
         except OSError as exc:
             raise SafetyPolicyRegistryError("cannot secure policy-registry directory") from exc
+        if not stat.S_ISDIR(parent_metadata.st_mode):
+            raise SafetyPolicyRegistryError("policy-registry parent must be a directory")
+        if parent_metadata.st_mode & 0o077:
+            raise SafetyPolicyRegistryError(
+                "policy-registry parent directory must not be accessible to group or other users"
+            )
+        if hasattr(os, "geteuid") and parent_metadata.st_uid != os.geteuid():
+            raise SafetyPolicyRegistryError("policy-registry directory has an unexpected owner")
 
     @contextmanager
     def _locked(self, *, exclusive: bool) -> Iterator[None]:
@@ -234,7 +245,11 @@ class PersistentSafetyPolicyRegistry:
         }
         if not isinstance(envelope, dict) or set(envelope) != expected_fields:
             raise SafetyPolicyRegistryCorrupt("policy-registry envelope has unexpected fields")
-        if envelope["schema_version"] != _SCHEMA_VERSION:
+        if (
+            isinstance(envelope["schema_version"], bool)
+            or not isinstance(envelope["schema_version"], int)
+            or envelope["schema_version"] != _SCHEMA_VERSION
+        ):
             raise SafetyPolicyRegistryCorrupt("unsupported policy-registry schema")
         record_version = envelope["record_version"]
         if isinstance(record_version, bool) or not isinstance(record_version, int) or record_version < 1:
