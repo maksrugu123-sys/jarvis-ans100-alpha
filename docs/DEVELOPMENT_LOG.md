@@ -1252,3 +1252,21 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** this is a reward-feedback-only durable inbox, not a general CQE inbox/outbox or event broker. One pending proposal per reward task, bounded receipt retention, JRCM single-writer CAS, and caller-owned clock epoch remain. No sessions, plans, external side effects, concurrent multi-process writer, exactly-once delivery, Android crash guarantee, production NCC or resource measurements.
 
 **Следующий этап:** durable CQE task/session lifecycle with bounded task registry, authorization snapshot/version checks and explicit retry/terminal states, followed by a user-facing JARVIS task loop. General event outbox/inbox should remain a separate contract rather than being implied by this reward-only path.
+
+
+### 2026-11-12 — Task & Session Lifecycle V1 reference
+
+**Цель:** создать первый исполняемый ограниченный реестр задач и сессий для будущего JARVIS task loop, не смешивая lifecycle state с исполнением Reasoning Engine или разрешениями.
+
+**Добавлено / изменено:**
+- tools/neuron_runtime/task_session.py: SessionStatus OPEN/PAUSED/CLOSED; TaskStatus QUEUED/RUNNING/WAITING/COMPLETED/FAILED/CANCELLED; явные разрешённые переходы; expected_revision CAS; стабильные task/session/idempotency IDs; exact idempotent create retry; bounded task/session/event catalogs; logical order; ordered lifecycle event journal; canonical JSON snapshot encode/strict restore.
+- tools/neuron_runtime/test_task_session.py: 15 тестов для создания, idempotency/conflict, state machine, terminal immutability, stale revision, paused/closed session policy, capacity atomicity, snapshot round-trip, duplicate JSON keys, schema/size and invalid metadata.
+- docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md: контракт, ограничения и следующий JPVR этап.
+- tools/neuron_runtime/__init__.py: public lifecycle exports.
+- docs/JARVIS_ARCHITECTURE.md §3.42 and README repository map/status/usage updated.
+
+**Проверки:** GitHub source readback and static cross-reference review only. Fifteen tests are **AUTHORED, NOT RUN**. No Python tests, import/syntax execution, JPVR integration/fault injection, Android/Termux I/O, benchmarks, builds, CI or GitHub Actions were run.
+
+**Ограничения:** lifecycle snapshot is canonical serialization only, not durable storage. There is no JPVR task/session checkpoint, process-restart recovery, authorization snapshot/version binding, scheduler, general CQE inbox/outbox, concurrent writer, external action execution or production NCC. Logical counters are not wall-clock timestamps. Terminal task/session records are not evicted; capacity exhaustion fails closed.
+
+**Следующий этап:** implement a versioned JPVR Task/Session checkpoint adapter/store with CAS, source COMMIT ancestry validation, bounded journal restore and interrupted-write recovery. Then define authorization snapshot/version binding and integrate a restricted task loop.
