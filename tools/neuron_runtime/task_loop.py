@@ -151,7 +151,7 @@ class TaskLoopResult:
     task_id: str
     status: TaskLoopStatus
     plan_id: str
-    reasoning: ReasoningResult
+    reasoning: ReasoningResult | None
     executed_step_ids: tuple[str, ...]
     pending_step_id: str | None
     observed_facts: tuple[str, ...]
