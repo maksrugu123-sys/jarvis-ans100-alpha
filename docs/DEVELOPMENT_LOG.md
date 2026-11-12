@@ -1561,3 +1561,10 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Tests / builds:** 11 Python console tests are AUTHORED / NOT RUN; 9 Android local draft tests remain AUTHORED / NOT RUN. No Kotlin test, Gradle sync/build, APK/AAB, install, CI or GitHub Actions were run. The repository has no Gradle wrapper.
 
 **Limitations / next stage:** Android token storage and UI still have no dedicated tests. The local token does not establish a human identity or exact action approval. Next implement and independently test a trusted approval provider, persistent policy/revocation, and executor-owned durable idempotency/reconciliation before any side effects.
+
+
+## 2026-11-12 — V0.5 pairing polish
+
+- Android application metadata advanced to `versionCode = 2`, `versionName = "0.5.0"`.
+- PWA now provides an explicit sign-out control; logout removes the bearer token from tab sessionStorage and stops its periodic state refresh. Its service-worker shell cache was advanced to v4.
+- Static source readback confirmed the new version metadata, Android Keystore token store, API v2 bearer header, PWA login/logout controls and cache version. This is not a runtime or device test; all build/test prohibitions remain in force.
