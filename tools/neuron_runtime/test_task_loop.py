@@ -386,6 +386,36 @@ class TaskLoopJPVRTests(unittest.TestCase):
         self.assertEqual(executor.keys[0], executor.keys[2])
         self.assertEqual(executor.keys[1], executor.keys[3])
 
+    def test_changed_executor_replay_result_fails_closed(self):
+        manager = _manager()
+        self.store.save(manager)
+        loop = JARVISTaskLoop()
+        executor = MemoryExecutor(unknown_action_id="step-two")
+        bindings = _bindings(EffectClass.REVERSIBLE)
+        policy = _policy(EffectClass.REVERSIBLE)
+        first = loop.run(
+            manager, "task-1", _problem(), bindings, policy, executor,
+            now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=1,
+        )
+        self.assertIs(first.status, TaskLoopStatus.WAITING)
+        # Simulate an executor that violates its durable idempotency contract.
+        executor.ledger[executor.keys[0]] = ActionExecutionResult(
+            ExecutionOutcome.SUCCEEDED, ("start", "unexpected"),
+        )
+        persisted = self.store.load("loop-manager")
+        second = loop.run(
+            persisted.manager, "task-1", _problem(), bindings, policy, executor,
+            now_ns=200, checkpoint_store=self.store,
+            expected_checkpoint_version=persisted.descriptor.record_version,
+        )
+        self.assertIs(second.status, TaskLoopStatus.FAILED)
+        self.assertEqual(second.reason_code, "step_replay_result_mismatch")
+        self.assertIs(
+            self.store.load("loop-manager").manager.get_task("task-1").status,
+            TaskStatus.FAILED,
+        )
+
     def test_external_effect_without_approval_waits_and_persists(self):
         manager = _manager()
         bindings = _bindings(EffectClass.EXTERNAL)
