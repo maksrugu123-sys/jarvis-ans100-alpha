@@ -4272,7 +4272,7 @@ EXTERNAL и IRREVERSIBLE требуют ApprovalGrant всегда; REVERSIBLE �
 
 ### 3.46. Bounded JARVIS Task Loop V0.1
 
-**Статус:** IMPLEMENTED как ограниченный последовательный Python reference coordinator с durable child-task intent/result ledger; 21 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_LOOP_V0_1.md`.
+**Статус:** IMPLEMENTED как ограниченный последовательный Python reference coordinator с durable child-task intent/result ledger; 22 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_LOOP_V0_1.md`.
 
 `JARVISTaskLoop` объединяет TaskSessionManager, bounded ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Caller передаёт структурированный ReasoningProblem, полный набор PlanningAction и ровно одну ActionBinding на каждое действие; свободный текст не декомпозируется, инструменты не генерируются автоматически.
 
@@ -4288,7 +4288,7 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, trusted UI approval provider, signed grants, production-grade policy/identity service, verified downstream idempotency and trusted reconciliation, scheduler/concurrency, runtime resource enforcement, Android sandbox и production NCC. Local policy/revocation registry (§3.50) и SQLite executor ledger (§3.51) — bounded local reference components, не production trust/execution boundary. Android Compose V0.5 и loopback bridge (§§3.47–3.48) управляют task/session registry и symbolic preview, но не подключены к Task Loop или ActionExecutor.
 
-Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 21 метод для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS, terminal restore и интеграции DurableIdempotencyExecutor с reconciliation. Вместе с 26 Gate tests и 21 executor-ledger tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
+Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 22 метода для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS, terminal restore, интеграции DurableIdempotencyExecutor с reconciliation и совместного запуска persistent policy/executor ledgers. Вместе с 26 Gate tests и 21 executor-ledger tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
 **Следующий этап:** связать registry из §3.50 с trusted identity/approval boundary и проверкой подписей grant; затем подключить SQLite wrapper из §3.51 вместе с downstream idempotency guarantees и authoritative reconciliation. Не подключать внешние эффекты до проверки этих механизмов. Caller-supplied ApprovalGrant и reconciliation_ref сами по себе не являются production authentication.
 
