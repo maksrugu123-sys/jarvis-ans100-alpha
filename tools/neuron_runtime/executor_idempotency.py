@@ -133,12 +133,24 @@ def _decode_result(raw: str, expected_digest: str) -> ActionExecutionResult:
     actual = hashlib.sha256(b"JARVIS:EXECUTOR-RESULT:V1\x00" + encoded).hexdigest()
     if not hmac.compare_digest(actual, expected_digest):
         raise DurableExecutorLedgerCorrupt("stored executor result digest mismatch")
+    def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, item in pairs:
+            if key in result:
+                raise DurableExecutorLedgerCorrupt("stored executor result has duplicate JSON keys")
+            result[key] = item
+        return result
+
     try:
-        value = json.loads(raw)
+        value = json.loads(raw, object_pairs_hook=unique_object)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise DurableExecutorLedgerCorrupt("stored executor result JSON is invalid") from exc
     if not isinstance(value, dict) or set(value) != {"outcome", "observed_facts", "failure_code"}:
         raise DurableExecutorLedgerCorrupt("stored executor result has unexpected fields")
+    if not isinstance(value["outcome"], str) or not isinstance(value["observed_facts"], list):
+        raise DurableExecutorLedgerCorrupt("stored executor result field types are invalid")
+    if value["failure_code"] is not None and not isinstance(value["failure_code"], str):
+        raise DurableExecutorLedgerCorrupt("stored failure_code must be text or null")
     try:
         result = ActionExecutionResult(
             outcome=ExecutionOutcome(value["outcome"]),
@@ -222,6 +234,7 @@ class DurableIdempotencyExecutor:
             os.close(descriptor)
 
     def _connect(self) -> sqlite3.Connection:
+        connection: sqlite3.Connection | None = None
         try:
             connection = sqlite3.connect(
                 self.path,
@@ -235,6 +248,8 @@ class DurableIdempotencyExecutor:
             os.chmod(self.path, 0o600)
             return connection
         except (OSError, sqlite3.Error) as exc:
+            if connection is not None:
+                connection.close()
             raise DurableExecutorLedgerError("cannot open executor-ledger database") from exc
 
     @contextmanager
