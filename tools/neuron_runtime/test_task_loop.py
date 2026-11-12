@@ -5,6 +5,10 @@ import unittest
 
 from tools.jpvr_reference.storage import JPVRStorage
 from tools.neuron_runtime.executor_idempotency import DurableIdempotencyExecutor
+from tools.neuron_runtime.policy_registry import (
+    PersistentPolicySafetyGate,
+    PersistentSafetyPolicyRegistry,
+)
 from tools.neuron_runtime.permission_safety_gate import (
     CapabilityRule,
     EffectClass,
@@ -246,6 +250,36 @@ class TaskLoopExecutionTests(unittest.TestCase):
             self.assertEqual(delegate.keys.count(request.idempotency_key), 1)
             self.assertEqual(len(delegate.ledger), 2)
             self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.COMPLETED)
+
+    def test_persistent_policy_and_executor_ledgers_compose_in_task_loop(self):
+        with tempfile.TemporaryDirectory() as temp:
+            policy_registry = PersistentSafetyPolicyRegistry(
+                os.path.join(temp, "policy", "registry.json")
+            )
+            policy_registry.save_policy(self.policy, expected_record_version=0)
+            gate = PersistentPolicySafetyGate(policy_registry)
+
+            delegate = MemoryExecutor()
+            executor = DurableIdempotencyExecutor(
+                os.path.join(temp, "executor", "ledger.sqlite3"),
+                delegate,
+            )
+            loop = JARVISTaskLoop(permission_gate=gate)
+            result = loop.run(
+                self.manager,
+                "task-1",
+                self.problem,
+                self.bindings,
+                self.policy,
+                executor,
+                now_ns=100,
+            )
+
+            self.assertIs(result.status, TaskLoopStatus.COMPLETED)
+            self.assertEqual(delegate.calls if hasattr(delegate, "calls") else len(delegate.keys), 2)
+            self.assertEqual(executor.state_counts()["succeeded"], 2)
+            self.assertEqual(executor.state_counts()["unknown"], 0)
+            self.assertEqual(policy_registry.load().record_version, 1)
 
     def test_known_no_effect_failure_marks_task_failed(self):
         executor = MemoryExecutor(failed=True)
