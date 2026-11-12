@@ -9,6 +9,7 @@ from tools.neuron_runtime.permission_safety_gate import (
     EffectClass,
     RequestedBudget,
     SafetyPolicy,
+    build_approval_grant,
 )
 from tools.neuron_runtime.reasoning_engine import (
     PlanStatus,
@@ -151,7 +152,7 @@ class TaskLoopExecutionTests(unittest.TestCase):
         self.assertIs(result.status, TaskLoopStatus.FAILED)
         self.assertIs(result.reasoning.status, PlanStatus.NO_PLAN)
         self.assertEqual(result.reason_code, "reasoning_no_plan")
-        self.assertEqual(self.executor.keys, ())
+        self.assertEqual(self.executor.keys, [])
         self.assertIs(manager.get_task("task-1").status, TaskStatus.FAILED)
 
     def test_missing_capability_waits_and_never_invokes_executor(self):
@@ -164,7 +165,7 @@ class TaskLoopExecutionTests(unittest.TestCase):
         self.assertEqual(result.reason_code, "capability_not_granted")
         self.assertEqual(result.pending_step_id, "step-000001")
         self.assertEqual(self.executor.keys, [])
-        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.WAITING)
+        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.RUNNING)
 
     def test_uncertain_executor_reply_retries_with_identical_idempotency_key(self):
         executor = MemoryExecutor(unknown_once=True)
@@ -261,7 +262,65 @@ class TaskLoopJPVRTests(unittest.TestCase):
         self.assertEqual(result.reason_code, "approval_required")
         self.assertIs(
             self.store.load("loop-manager").manager.get_task("task-1").status,
-            TaskStatus.WAITING,
+            TaskStatus.RUNNING,
+        )
+
+
+    def test_exact_approval_can_resume_without_changing_bound_task_revision(self):
+        manager = _manager()
+        loop = JARVISTaskLoop()
+        problem = _problem()
+        bindings = _bindings(EffectClass.EXTERNAL)
+        policy = _policy(EffectClass.EXTERNAL)
+        executor = MemoryExecutor()
+
+        pending_first = loop.run(
+            manager, "task-1", problem, bindings, policy, executor,
+            now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=0,
+        )
+        self.assertIs(pending_first.status, TaskLoopStatus.WAITING)
+        first_request = pending_first.pending_authorization
+        self.assertIsNotNone(first_request)
+        self.assertEqual(manager.get_task("task-1").revision, first_request.expected_task_revision)
+
+        first_approval = build_approval_grant(
+            first_request, policy, approval_id="approval-step-1",
+            approved_by="owner-1", approval_ref="confirm-step-1",
+            expires_at_ns=10_000,
+        )
+        pending_second = loop.run(
+            manager, "task-1", problem, bindings, policy, executor,
+            now_ns=200, approvals={"step-000001": first_approval},
+            checkpoint_store=self.store, expected_checkpoint_version=1,
+        )
+        self.assertIs(pending_second.status, TaskLoopStatus.WAITING)
+        self.assertEqual(pending_second.pending_step_id, "step-000002")
+        self.assertEqual(pending_second.executed_step_ids, ("step-000001",))
+        self.assertEqual(manager.get_task("task-1").revision, first_request.expected_task_revision)
+        second_request = pending_second.pending_authorization
+        self.assertIsNotNone(second_request)
+
+        second_approval = build_approval_grant(
+            second_request, policy, approval_id="approval-step-2",
+            approved_by="owner-1", approval_ref="confirm-step-2",
+            expires_at_ns=10_000,
+        )
+        completed = loop.run(
+            manager, "task-1", problem, bindings, policy, executor,
+            now_ns=300,
+            approvals={
+                "step-000001": first_approval,
+                "step-000002": second_approval,
+            },
+            checkpoint_store=self.store, expected_checkpoint_version=1,
+        )
+        self.assertIs(completed.status, TaskLoopStatus.COMPLETED)
+        self.assertEqual(completed.executed_step_ids, ("step-000001", "step-000002"))
+        self.assertEqual(len(executor.ledger), 2)
+        self.assertIs(
+            self.store.load("loop-manager").manager.get_task("task-1").status,
+            TaskStatus.COMPLETED,
         )
 
     def test_stale_checkpoint_version_blocks_executor(self):
