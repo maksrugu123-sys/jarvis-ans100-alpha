@@ -35,13 +35,13 @@ from .reasoning_engine import (
 )
 from .task_session import (
     SessionStatus,
-    TaskConflict,
     TaskSessionError,
     TaskSessionManager,
     TaskStatus,
 )
 from .task_session_store import (
     JPVRTaskSessionCheckpointError,
+    JPVRTaskSessionCheckpointNotFound,
     JPVRTaskSessionCheckpointStore,
 )
 
@@ -301,6 +301,36 @@ class JARVISTaskLoop:
             raise TaskLoopError("task must be queued, running, or waiting")
 
         checkpoint_version = expected_checkpoint_version
+
+        if checkpoint_store is not None:
+            # Confirm both the caller's CAS token and the exact in-memory manager
+            # snapshot before resuming a RUNNING task or performing any effect.
+            try:
+                persisted = checkpoint_store.load(task_manager.manager_id)
+            except JPVRTaskSessionCheckpointNotFound:
+                if task.status is not TaskStatus.QUEUED or checkpoint_version != 0:
+                    raise TaskLoopPersistenceError(
+                        "a non-queued task requires an existing matching JPVR checkpoint"
+                    )
+            except (JPVRTaskSessionCheckpointError, OSError, ValueError) as exc:
+                raise TaskLoopPersistenceError(
+                    "cannot verify the active task/session JPVR checkpoint"
+                ) from exc
+            else:
+                if persisted.descriptor.record_version != checkpoint_version:
+                    raise TaskLoopPersistenceError(
+                        "caller checkpoint version does not match the active JPVR record version"
+                    )
+                try:
+                    same_snapshot = persisted.manager.encode_snapshot() == task_manager.encode_snapshot()
+                except TaskSessionError as exc:
+                    raise TaskLoopPersistenceError(
+                        "in-memory task/session snapshot cannot be canonically encoded"
+                    ) from exc
+                if not same_snapshot:
+                    raise TaskLoopPersistenceError(
+                        "in-memory task/session state differs from the active JPVR checkpoint"
+                    )
 
         def persist_lifecycle() -> None:
             nonlocal checkpoint_version
