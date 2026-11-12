@@ -1349,3 +1349,19 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** V0.1 по-прежнему принимает только структурированные факты и готовые actions от caller; не декомпозирует свободный естественный язык, не извлекает внешние источники, не выполняет actions, не запрашивает одобрение и не вызывает инструменты. План не связан с TaskSessionManager durable revision и не сохраняется в JPVR.
 
 **Следующий этап:** Permission & Safety Gate V1: deny-by-default capability scopes, явные approvals для значимых side effects, policy-version и task/revision binding, ограниченные resource/time/retry budgets. После этого — bounded JARVIS Task Loop.
+
+
+## 2026-11-12 — Reasoning Engine V0.1 verification-boundary follow-up
+
+**Сверка текущего состояния main:** после предыдущей записи hardening в ветке присутствуют два дополнительных regression tests, поэтому актуальное количество focused tests — **31**, а не 29. Историческую запись выше не переписываем.
+
+**Дополнительные проверки в текущем source/test set:**
+- `EvidenceRecord` с terminal review status требует непустой stable `verification_ref`.
+- `verify_result()` отклоняет caller-constructed `ReasoningResult(status=SOLVED)`, если его `predicted_final_facts` не содержит все обязательные goal facts; это не позволяет принять внутренне противоречивый plan result за успешно решённый.
+- Полный текущий набор из 31 метода также включает bounded consumption observed-facts generator и ранее добавленные pending/verified/rejected evidence checks.
+
+**Актуальные связанные файлы:** `tools/neuron_runtime/reasoning_engine.py`, `tools/neuron_runtime/test_reasoning_engine.py`, `docs/JARVIS_REASONING_ENGINE_V0_1.md`, `docs/JARVIS_ARCHITECTURE.md` §3.44, `README.md` и public exports в `tools/neuron_runtime/__init__.py`. Контракт и README отражают 31 тест и caller-provided trust boundary.
+
+**Проверки:** current-main GitHub readback/source cross-reference only. 31 tests — **AUTHORED, NOT RUN**. Python execution, imports/syntax, Android/Termux, benchmark, build, CI and GitHub Actions — **NOT RUN**.
+
+**Следующий этап без изменений:** Permission & Safety Gate V1 с deny-by-default capabilities, approvals, policy-version/task-revision binding и resource/time/retry budgets. Не подключать реальное исполнение действий до появления этого gate.
