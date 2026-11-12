@@ -1279,3 +1279,22 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 - Added reopen/restore, identity isolation, stale CAS, descriptor, corruption, and DATA/BLOB tests (9 test methods).
 - Exported the new adapter/store API and documented the dedicated-container rule: one active MANIFEST CHECKPOINT pointer means this store must not share a container with standalone/composite runtime checkpoint stores.
 - Tests are authored, not run. No Python execution, syntax/import check, fault injection, Android/Termux I/O, benchmark, build, CI, or GitHub Actions run.
+
+
+## 2026-11-12 — Task & Session JPVR checkpoint hardening review
+
+**Цель:** провести source-level review уже добавленного Task/Session JPVR persistence перед переходом к Reasoning Engine.
+
+**Исправления:**
+- `task_session_adapter.py`: manager ID теперь проверяется тем же ASCII identifier pattern, что и TaskSessionManager; encoder выполняет restore-round-trip и отвергает snapshot, который нельзя восстановить в идентичные canonical bytes; decoder требует canonical bytes.
+- `task_session_store.py`: descriptor теперь проверяет JPVR logical-record limit, согласованность DATA/BLOB с длиной, точное количество BLOB страниц, переполнение page range и нулевые reserved bytes. Перед любыми JPVR изменениями save предварительно валидирует полный snapshot; BLOB plan additionally verifies schema, generation, transaction and page range metadata.
+- `test_task_session_store.py`: добавлены regression tests для reserved-byte rejection, неправильного BLOB page count, canonical adapter round-trip, нестабильного manager ID, non-canonical bytes и отказа до изменения genesis container при некорректном внутреннем состоянии.
+- README, architecture §3.42–3.43 и JPVR store contract согласованы с текущим durable статусом и числом тестов.
+
+**Тесты:** 14 методов в `tools.neuron_runtime.test_task_session_store` — **AUTHORED, NOT RUN**. Пятнадцать lifecycle tests также не запускались в этом этапе.
+
+**Проверка:** только чтение исходников из GitHub, проверка связанных контрактов и readback опубликованных изменений. Python execution, import/syntax checks, unit tests, fault injection, Android/Termux I/O, benchmarks, builds, CI and GitHub Actions — **NOT RUN**.
+
+**Ограничения:** store остаётся single-writer Python reference; container должен быть выделенным из-за единственного активного MANIFEST CHECKPOINT pointer. Он восстанавливает только последний committed registry snapshot и не доказывает exactly-once execution внешних действий, не сохраняет scheduler leases/authorization/CQE side effects и не подтверждён тестами питания/сбоев на Android.
+
+**Следующий этап:** определить versioned Authorization Snapshot + Permission & Safety Gate контракт; только после проверки разрешений и актуальной task revision разрешать side effect. Затем объединить reasoning plan, approval and durable intent/result в ограниченный JARVIS Task Loop.
