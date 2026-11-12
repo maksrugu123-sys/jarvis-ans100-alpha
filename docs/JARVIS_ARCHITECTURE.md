@@ -4381,7 +4381,7 @@ The server reports `external_actions=false`, `tool_execution=false`, `remote_acc
 
 Eleven Python console test methods and nine Android local repository test methods are AUTHORED, NOT RUN. GitHub readback/static source inspection only. Kotlin compile, Gradle sync/build, APK/AAB, device install, Android↔Termux I/O, Python tests, UI tests, performance and security checks are NOT RUN.
 
-Next: implement a trusted identity and exact-request approval provider, persistent policy/revocation, and executor-side durable idempotency/reconciliation. The local Bearer token is transport access control only. Keep all external actions disabled until those independent contracts are implemented and verified.
+Next: implement trusted approver identity and exact-request signed grants; connect the local policy registry (§3.50) to a trusted key/revocation source; connect the executor ledger (§3.51) to downstream provider idempotency and a trusted reconciler. The Bearer token remains transport access only. Keep external actions disabled until these independent contracts are implemented and verified.
 
 
 ### 3.49. Local-console bearer authentication V1
@@ -4392,11 +4392,11 @@ The local console now protects `GET /api/state` and every `POST /api/*` route wi
 
 On first start, the console generates a 256-bit random token encoded as 43 Base64URL characters and prints it once. The token digest is stored as SHA-256 in a separate owner-only file with mode 0600; its parent directory is restricted to 0700. The original token is not persisted by the Python service. `--rotate-token` creates a replacement and invalidates the digest accepted by a newly started service process. The Android client encrypts the token using AES-GCM with a non-exportable Android Keystore key and persists only the encrypted envelope in app-private preferences. The PWA stores the token only in the active tab's sessionStorage and removes it after a 401 response.
 
-This mechanism proves possession of a local API secret, not the identity of a human approver. It has no user accounts, device enrollment/allowlist, trusted approval signatures, expiry/revocation policy store, rate limiting or production threat model. Anyone who obtains the bearer token can access the permitted local registry APIs until the token is rotated. The local API remains non-secret registry administration plus a non-mutating symbolic preview; capability flags for external actions, tool execution and remote access remain false.
+This mechanism proves possession of a local API secret, not the identity of a human approver. It has no user accounts, device enrollment/allowlist, trusted approval signatures, per-approver grants or production threat model. A separate local policy/revocation reference store now exists in §3.50, but it is not an authenticated policy authority or signed-grant verifier. Anyone who obtains the bearer token can access the permitted local registry APIs until the token is rotated. The local API remains non-secret registry administration plus a non-mutating symbolic preview; capability flags for external actions, tool execution and remote access remain false.
 
 **Tests authored:** `tools/jarvis_app/test_server.py` contains 11 methods, including token persistence, restrictive file mode, rotation/revocation and HTTP deny/allow checks. Status: AUTHORED / NOT RUN. Android local token-store/UI tests have not yet been authored. No Python tests, cryptographic runtime checks, Android tests, builds, APK/AAB, CI or GitHub Actions were run.
 
-**Next gate:** author focused tests for auth-file corruption/permissions, API access and Android token-store behavior; run them on an authorized device before adding a trusted user-approval provider. Do not route preview plans to Task Loop or ActionExecutor yet.
+**Next gate:** author focused tests for auth-file corruption/permissions, Android token-store behavior and end-to-end API access; run them on an authorized device. Then implement trusted approver identity and signed exact-request grants. Do not route preview plans to Task Loop or ActionExecutor yet.
 
 
 ### 3.50. Persistent Safety Policy Registry V1 — local CAS reference
