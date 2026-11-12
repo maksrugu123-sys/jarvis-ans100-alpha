@@ -4286,11 +4286,11 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 При исчерпании task/event capacity создание или запуск child-task отклоняется до вызова executor; это fail-closed backpressure, а не автоматическая очистка журнала.\n\n**Ограничения восстановления:** child-task ledger сохраняет шаги и digest результата, но не весь observed-facts payload; при повторе executor должен вернуть полный ранее сохранённый результат, который loop сравнит с digest. Между внешним side effect и сохранением child COMPLETED остаётся crash window; его безопасное разрешение зависит от durable idempotency ledger исполнителя. JPVR и внешний сервис не участвуют в общей транзакции, поэтому exactly-once guarantee не заявляется. Approvals, scheduler leases и сам ReasoningResult не сохраняются. При рестарте caller обязан передать тот же structured problem/bindings и восстановить executor с его durable idempotency ledger.
 
-Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, trusted UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox, production NCC и Android/Python runtime bridge. Отдельный нативный Android UI shell V0.2 и локальное draft repository описаны в §3.47; они не подключены к Task Loop.
+Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, trusted UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox и production NCC. Android Compose V0.4 и loopback bridge описаны в §§3.47–3.48: они могут управлять task/session registry и запрашивать отдельный символьный preview, но не подключены к Task Loop или ActionExecutor.
 
 Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 20 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и terminal restore. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
-**Следующий этап:** versioned local Android-to-Python runtime bridge: DTOs для session/task/reasoning/authorization, явное владение TaskSessionManager/JPVR state и безопасная reconciliation после process death. Android Compose V0.2 draft UI уже описан в §3.47. Не подключать широкие системные capabilities до появления trusted approval provider, связанного с точным AuthorizationRequest и revision. Caller-supplied ApprovalGrant сам по себе не является production authentication.
+**Следующий этап:** спроектировать доверенную identity/approval boundary, постоянное хранение policy/revocation, executor-owned durable idempotency и процесс reconciliation после неоднозначного результата. Не подключать внешние эффекты до проверки этих механизмов. Caller-supplied ApprovalGrant сам по себе не является production authentication.
 
 
 ### 3.47. Android application: native Compose shell and runtime boundary
@@ -4323,12 +4323,12 @@ Android-local records remain explicitly labelled as drafts; they do not create T
 
 **Проверки:** nine tests in `LocalDraftRepositoryTest.kt` cover round-trip/repository recreation, session transition/revision behavior, stale revisions, rejection of task creation into paused/closed sessions, no-op commit, failed storage write, unknown schema, session capacity and invalid titles. They are **AUTHORED, NOT RUN**. GitHub readback/static inspection only; Kotlin compile, Gradle sync/build, APK/AAB, emulator/device run, UI tests and Android performance measurement are **NOT RUN**. No CI/GitHub Actions was run.
 
-**Следующий этап:** add a structured Reasoning Engine preview flow to Compose without executing actions; then design authenticated approval and executor/reconciliation contracts separately. Do not expose side effects merely because the registry bridge exists.
+**Следующий этап после V0.4:** определить и реализовать доверенную локальную identity/approval boundary и durable policy/revocation. Preview нельзя считать approval, а TaskLoop/ActionExecutor нельзя подключать до executor-side durable idempotency и recovery contract.
 
 
 ### 3.48. Android ↔ Python Runtime Bridge V1 — loopback task/session administration
 
-**Статус:** source implementation added; bridge integration and Android runtime behavior NOT TESTED. Contract: `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`.
+**Статус Android V0.4:** source changes for registry bridge and structured symbolic preview are present. GitHub readback/static inspection only; Android runtime behavior and end-to-end bridge NOT TESTED. Contract: `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`.
 
 #### 3.48.1. Purpose and explicit scope
 
@@ -4352,9 +4352,10 @@ The Android client checks all four values before accepting its initial connectio
 - `GET /api/health` and `GET /api/state`;
 - `POST /api/sessions` and `POST /api/tasks`;
 - `POST /api/sessions/{session_id}/status`;
-- `POST /api/tasks/{task_id}/cancel`.
+- `POST /api/tasks/{task_id}/cancel`;
+- `POST /api/reasoning/preview` with bounded caller-supplied facts and pure planning actions.
 
-The structured `POST /api/reasoning/preview` endpoint remains available in the Python console but is not yet called by the native Android UI.
+Android V0.4 sends the structured preview request, decodes the bounded plan response and displays the proposed steps. Preview does not modify the task/session registry or JPVR checkpoint.
 
 The client has fixed loopback origin, no redirect following, bounded request/response bodies (64 KiB / 256 KiB), bounded connect/read timeouts (1.8 / 2.5 seconds), ID validation and strict required-field parsing. Network requests run on a single background executor; UI state is published on the Android main thread.
 
@@ -4372,10 +4373,10 @@ The native panel supports create/read operations for backend sessions and tasks,
 
 Loopback, exact Host and Origin validation are not identity authentication. Other software on the same Android device may reach a loopback service. This V1 API is only for local non-secret task/session administration. Do not bind to LAN/Internet or accept credentials/secrets.
 
-The server reports `external_actions=false`, `tool_execution=false`, `remote_access=false`. The bridge has no method to invoke Reasoning Engine, PermissionSafetyGate, Task Loop or ActionExecutor. Creating a QUEUED record is not evidence of execution. Approval UI/provider, signed/authenticated grants, executor-side durable idempotency and recovery remain separate future stages.
+The server reports `external_actions=false`, `tool_execution=false`, `remote_access=false`. Android can invoke only the non-mutating Reasoning Engine preview; it does not invoke PermissionSafetyGate, Task Loop or ActionExecutor. Creating a QUEUED record or displaying a symbolic plan is not evidence of execution or authorization. Approval UI/provider, signed/authenticated grants, executor-side durable idempotency and recovery remain separate future stages.
 
 #### 3.48.5. Verification and next work
 
-Six Python console test methods and nine Android local repository test methods are AUTHORED, NOT RUN. GitHub readback/static source inspection only. Kotlin compile, Gradle sync/build, APK/AAB, device install, Android↔Termux I/O, Python tests, UI tests, performance and security checks are NOT RUN.
+Nine Python console test methods and nine Android local repository test methods are AUTHORED, NOT RUN. GitHub readback/static source inspection only. Kotlin compile, Gradle sync/build, APK/AAB, device install, Android↔Termux I/O, Python tests, UI tests, performance and security checks are NOT RUN.
 
-Next: expose bounded structured Reasoning Engine preview in Compose, then define a trusted approval provider and an executor boundary. Do not route external actions through this registry bridge.
+Next: define authenticated local client pairing and trusted approval, persistent policy/revocation, and executor-side idempotency/reconciliation. Keep all external actions disabled until those independent contracts are implemented and verified.
