@@ -151,10 +151,12 @@ class SafetyPolicy:
 
 @dataclass(frozen=True)
 class AuthorizationRequest:
-    """One proposed action bound to an exact task revision and idempotency key."""
+    """One proposed action bound to exact task/session revisions and an idempotency key."""
 
     task_id: str
     expected_task_revision: int
+    expected_session_revision: int
+    session_id: str
     plan_id: str
     step_id: str
     action_id: str
@@ -165,9 +167,10 @@ class AuthorizationRequest:
     budget: RequestedBudget
 
     def __post_init__(self) -> None:
-        for name in ("task_id", "plan_id", "step_id", "action_id", "capability", "idempotency_key"):
+        for name in ("task_id", "session_id", "plan_id", "step_id", "action_id", "capability", "idempotency_key"):
             _identifier(name, getattr(self, name))
         _uint("expected_task_revision", self.expected_task_revision, minimum=1)
+        _uint("expected_session_revision", self.expected_session_revision, minimum=1)
         object.__setattr__(self, "scope", _scope("scope", self.scope))
         try:
             object.__setattr__(self, "effect", EffectClass(self.effect))
@@ -186,6 +189,8 @@ class ApprovalGrant:
     approval_ref: str
     task_id: str
     task_revision: int
+    session_id: str
+    session_revision: int
     plan_id: str
     step_id: str
     action_id: str
@@ -199,13 +204,14 @@ class ApprovalGrant:
 
     def __post_init__(self) -> None:
         for name in (
-            "approval_id", "approved_by", "task_id", "plan_id", "step_id",
+            "approval_id", "approved_by", "task_id", "session_id", "plan_id", "step_id",
             "action_id", "capability", "idempotency_key", "policy_id",
         ):
             _identifier(name, getattr(self, name))
-        _scope("approval_ref", self.approval_ref)
-        _scope("scope", self.scope)
+        object.__setattr__(self, "approval_ref", _scope("approval_ref", self.approval_ref))
+        object.__setattr__(self, "scope", _scope("scope", self.scope))
         _uint("task_revision", self.task_revision, minimum=1)
+        _uint("session_revision", self.session_revision, minimum=1)
         _uint("policy_version", self.policy_version, minimum=1)
         _uint("expires_at_ns", self.expires_at_ns, minimum=1)
         if not isinstance(self.intent_digest, str) or not _DIGEST.fullmatch(self.intent_digest):
@@ -235,6 +241,7 @@ def authorization_intent_digest(request: AuthorizationRequest) -> str:
     document = {
         "task_id": request.task_id,
         "task_revision": request.expected_task_revision,
+        "session_revision": request.expected_session_revision,
         "plan_id": request.plan_id,
         "step_id": request.step_id,
         "action_id": request.action_id,
@@ -274,6 +281,8 @@ def build_approval_grant(
         approval_ref=approval_ref,
         task_id=request.task_id,
         task_revision=request.expected_task_revision,
+        session_id=request.session_id,
+        session_revision=request.expected_session_revision,
         plan_id=request.plan_id,
         step_id=request.step_id,
         action_id=request.action_id,
@@ -324,8 +333,12 @@ class PermissionSafetyGate:
             session = task_manager.get_session(task.session_id)
         except TaskSessionError:
             return deny("task_or_session_not_found", 0)
+        if task.session_id != request.session_id:
+            return deny("task_session_mismatch", task.revision)
         if task.revision != request.expected_task_revision:
             return deny("stale_task_revision", task.revision)
+        if session.revision != request.expected_session_revision:
+            return deny("stale_session_revision", task.revision)
         if task.status is not TaskStatus.RUNNING:
             return deny("task_not_running", task.revision)
         if session.status is not SessionStatus.OPEN:
@@ -365,6 +378,8 @@ class PermissionSafetyGate:
         bindings = (
             approval.task_id == request.task_id
             and approval.task_revision == task.revision
+            and approval.session_id == session.session_id
+            and approval.session_revision == session.revision
             and approval.plan_id == request.plan_id
             and approval.step_id == request.step_id
             and approval.action_id == request.action_id
