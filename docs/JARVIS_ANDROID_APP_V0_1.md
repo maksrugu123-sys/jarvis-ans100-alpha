@@ -1,6 +1,6 @@
-# JARVIS Android App V0.3 — local JPVR runtime bridge
+# JARVIS Android App V0.4 — JPVR bridge and symbolic reasoning preview
 
-**Статус:** Android Compose V0.3 adds a loopback client for the versioned Python local-console API. It can administer the Python TaskSessionManager and JPVR-backed task/session registry from the native UI. Nine Android local-repository tests and six Python console tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
+**Статус:** Android Compose V0.4 adds a bounded symbolic Reasoning Engine preview to the existing loopback JPVR task/session bridge. It still has no task executor or approval flow. Nine Android local-repository tests and nine Python console tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
 
 ## Project and compatibility
 
@@ -21,9 +21,20 @@
 - create a QUEUED Python task in an OPEN session;
 - pause, resume or close a session using its exact expected revision;
 - cancel a task only while it remains QUEUED, using its exact expected revision;
-- show backend session/task statuses, revisions and failure codes.
+- show backend session/task statuses, revisions and failure codes;
+- submit a bounded caller-authored symbolic problem to `POST /api/reasoning/preview` and display its returned plan.
 
 There is no automatic copying or migration between Android drafts and Python tasks. A successful Android-local draft write does not create a backend task.
+
+## Symbolic Reasoning Engine preview
+
+The native panel provides editable task ID, goal description, initial facts, goal facts and a line-based action editor. Each non-empty action line uses this format:
+
+    action_id | summary | preconditions | add_facts | delete_facts
+
+The final `delete_facts` field is optional. Fact lists are comma-separated identifiers. The Android client caps a request at 16 actions and 32 facts per input list; the resulting fact universe is bounded to 64 identifiers. Each action must add or delete at least one fact and cannot both add and delete the same fact. The local Python engine independently enforces its own state, depth and search bounds.
+
+The response displays SOLVED, NO_PLAN, DEPTH_LIMIT or SEARCH_LIMIT, the expanded-state count, predicted final facts and every planned step. This is deterministic symbolic planning over facts and caller-provided transitions. It is not natural-language understanding, evidence authentication, safety authorization, task queue execution or neural-runtime inference. The preview route does not mutate TaskSessionManager or JPVR checkpoint state and does not call an executor. Preview input is independent of any queued task record.
 
 ## Loopback bridge
 
@@ -56,7 +67,8 @@ It then uses:
 - POST /api/sessions;
 - POST /api/tasks;
 - POST /api/sessions/{session_id}/status;
-- POST /api/tasks/{task_id}/cancel.
+- POST /api/tasks/{task_id}/cancel;
+- POST /api/reasoning/preview (bounded, non-mutating symbolic planning request).
 
 Every successful mutation returns the committed backend state snapshot. Session status and task cancellation requests include expected revision. The server serializes state mutations and publishes them through JPVR compare-and-swap before returning the updated snapshot.
 
@@ -66,11 +78,11 @@ The native bridge has no endpoint or code path for shell, filesystem browsing, r
 
 The loopback check and Host/Origin validation are not identity authentication. Other software on the same device may be able to reach a loopback HTTP service. Therefore the console must remain bound to 127.0.0.1, must not be exposed on LAN/Internet, and must not accept secrets or side-effecting action requests. No external action is authorized by this bridge.
 
-The native UI does not yet call the structured /api/reasoning/preview endpoint. It does not invoke Reasoning Engine, PermissionSafetyGate or Task Loop. Trusted identity, UI approval, durable approval storage and a real ActionExecutor remain future work.
+The native UI calls the structured `/api/reasoning/preview` endpoint, but does not invoke PermissionSafetyGate, Task Loop or ActionExecutor. Preview results are informational only and are not approvals. Trusted identity, authenticated approval, durable approval/revocation storage, executor-owned idempotency and recovery remain future work.
 
 ## Verification
 
 - Android local repository tests: nine methods, AUTHORED, NOT RUN.
-- Python local-console API tests: six methods, AUTHORED, NOT RUN.
+- Python local-console API tests: nine methods, AUTHORED, NOT RUN.
 - GitHub readback/static source review only for this bridge batch.
 - Kotlin compilation, Gradle sync/build, APK/AAB, device installation, Compose UI tests, Python tests, Android/Termux end-to-end I/O and performance measurements: NOT RUN.
