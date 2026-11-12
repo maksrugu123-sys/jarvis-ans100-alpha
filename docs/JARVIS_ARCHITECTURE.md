@@ -4291,3 +4291,14 @@ Plan ID и step ID детерминированы. Для каждого дей�
 Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 20 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и terminal restore. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
 **Следующий этап:** тонкая локальная Android app shell поверх защищённого Task Loop: локальный UI для создания/просмотра задач, отображения статусов и подтверждения конкретного pending AuthorizationRequest. Пока не подключать широкие системные capabilities и не выполнять произвольные действия. UI approval provider и аутентификация пользователя остаются отдельными требованиями; текущие caller-supplied grants не являются production authentication.
+
+
+### 3.47. JARVIS Android App V0.1 — начальный UI shell
+
+**Статус:** Android Compose UI shell добавлен в `android-app/` как отдельный Gradle application module в корне репозитория. Kotlin/Gradle build, APK, install и device checks — NOT RUN. Контракт: `docs/JARVIS_ANDROID_APP_V0_1.md`.
+
+Приложение использует package ID `org.jarvis.ans100.alpha`, Kotlin 2.0.21, Android Gradle Plugin 8.7.3, Jetpack Compose BOM 2024.12.01, minSdk 29 и compile/target SDK 35. Первый экран на русском показывает состояние интерфейса, принимает название задачи и добавляет локальный черновик в ограниченный список (до 100 записей; название до 240 символов).
+
+**Критическая граница:** черновики существуют только в Compose state процесса; они не сохраняются после process death, не связаны с TaskSessionManager/JPVR и не запускаются через ReasoningEngine или Task Loop. Это UI shell, не ассистент и не демонстрация интеллектуального выполнения. Встроенные инструменты, сеть, shell, файловые операции и background execution отсутствуют.
+
+Следующий шаг — отдельный versioned Android DTO/repository contract, экран сессии/задачи и безопасный локальный bridge к runtime. Любое действие с эффектом должно проходить через существующий Permission & Safety Gate и точный approval flow; UI не должен самостоятельно объявлять действие разрешённым.
