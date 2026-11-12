@@ -1,7 +1,7 @@
 # JARVIS ANS-100 Alpha — архитектура и журнал решений
 
 **Статус документа:** рабочая спецификация и журнал согласованных проектных решений  
-**Дата последнего обновления:** 11 ноября 2026 года  
+**Дата последнего обновления:** 12 ноября 2026 года  
 **Репозиторий:** `maksrugu123-sys/jarvis-ans100-alpha` (Private)  
 **Основная ветка:** `main`
 
@@ -2511,7 +2511,7 @@ python3 -m tools.numerical_oracle.calibration_sweeps
 
 ### 3.23. JARVIS Reasoning Engine v0.1 — ограниченный контур рассуждения
 
-**Статус:** архитектура v0.1 специфицирована на концептуальном уровне; исходный код, исполняемые контракты и экспериментальная проверка отсутствуют. Это отдельный когнитивный слой более высокого уровня, а не функция одного искусственного нейрона.
+**Статус:** полная архитектура v0.1 остаётся концептуальной спецификацией. Ограниченная часть — структурированный символьный planner, оценка явно проверенных evidence-записей и сравнение наблюдаемого результата — реализована как Python reference в §3.44. Интерпретация естественного языка, автоматическая генерация действий, внешнее извлечение фактов, авторизация, исполнение и полная интеграция остаются нереализованными.
 
 #### 3.23.1. Назначение и границы
 
@@ -4218,7 +4218,7 @@ Save публикует logical record и CHECKPOINT descriptor одним typed
 
 ### 3.44. Reasoning Engine V0.1
 
-**Статус:** реализован bounded deterministic Python reference engine; 26 focused tests AUTHORED, NOT RUN. Это первый исполняемый символьный планировщик, не natural-language model, не production agent и не tool executor. Контракт: `docs/JARVIS_REASONING_ENGINE_V0_1.md`.
+**Статус:** реализован bounded deterministic Python reference engine; 29 focused tests AUTHORED, NOT RUN. Это первый исполняемый символьный планировщик, не natural-language model, не production agent и не tool executor. Контракт: `docs/JARVIS_REASONING_ENGINE_V0_1.md`.
 
 #### 3.44.1. Структурная постановка и декомпозиция
 
@@ -4232,9 +4232,9 @@ ReasoningEngine использует breadth-first search по неизменя�
 
 #### 3.44.2. Гипотезы и evidence review
 
-Hypothesis содержит стабильный ID и формулировку. EvidenceRecord явно связывает evidence_id с hypothesis_id, polarity SUPPORTS/REFUTES, source_ref, quality label и summary. Результат — INSUFFICIENT, SUPPORT_ONLY, REFUTE_ONLY или MIXED; dangling/duplicate IDs и неизвестные enum значения отвергаются.
+Hypothesis содержит стабильный ID и формулировку. EvidenceRecord связывает evidence_id с hypothesis_id, polarity SUPPORTS/REFUTES, source_ref, source-quality label и summary, а также хранит verification_status (PENDING/VERIFIED/REJECTED) и verification_ref. По умолчанию evidence pending. Только caller-marked VERIFIED записи с quality, отличным от UNVERIFIED, входят в расчёт INSUFFICIENT, SUPPORT_ONLY, REFUTE_ONLY или MIXED; pending/rejected/unverified-quality evidence остаётся видимым как входная запись, но не двигает assessment.
 
-Это покрытие предоставленного набора записей, не проверка истинности. Quality labels не являются весами и не влияют на verdict. Engine не аутентифицирует источник, не получает его содержимое, не оценивает независимость и не выводит вероятность. SUPPORT_ONLY нельзя трактовать как доказанный факт.
+Verification status/ref — переданные caller сведения о review, не криптографическое подтверждение и не внешняя аутентификация reviewer/source. Quality labels не являются весами или вероятностями. Engine не получает содержимое source_ref, не проверяет независимость и не доказывает истинность гипотезы. SUPPORT_ONLY нельзя трактовать как доказанный факт.
 
 #### 3.44.3. Bounded search
 
@@ -4248,8 +4248,8 @@ ReasoningResult пока не сохраняется в TaskSessionManager/JPVR.
 
 #### 3.44.5. Ограничения и проверки
 
-Добавлены `reasoning_engine.py`, `test_reasoning_engine.py` (26 тестов), public exports, README и отдельный контракт. Тесты покрывают deterministic shortest plan, already-satisfied/unreachable goals, preconditions/effects, deletion, depth/state/fact bounds, cycle detection, hypothesis/evidence grouping, duplicate/dangling IDs и observed-result comparison.
+Добавлены `reasoning_engine.py`, `test_reasoning_engine.py` (29 тестов), public exports, README и отдельный контракт. Тесты покрывают deterministic shortest plan, already-satisfied/unreachable goals, preconditions/effects, deletion, depth/state/fact bounds, cycle detection, pending/verified/rejected evidence policy, quality filtering, duplicate/dangling IDs, bounded observed-fact iteration и observed-result comparison.
 
-GitHub readback/source review only. Все 26 тестов AUTHORED, NOT RUN. Python execution/import/syntax checks, Android/Termux measurements, benchmarks, builds, CI and GitHub Actions — NOT RUN.
+GitHub readback/source review only. Все 29 тестов AUTHORED, NOT RUN. Python execution/import/syntax checks, Android/Termux measurements, benchmarks, builds, CI and GitHub Actions — NOT RUN.
 
 **Следующий этап по дорожной карте:** Permission & Safety Gate — capability scopes, explicit approvals, authorization version binding, task/revision binding, resource/time budgets and deny-by-default behavior. После этого Reasoning Engine и TaskSessionManager можно объединить в JARVIS Task Loop, не разрешая planner напрямую вызывать внешние инструменты.
