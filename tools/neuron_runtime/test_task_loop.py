@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from tools.jpvr_reference.storage import JPVRStorage
+from tools.neuron_runtime.executor_idempotency import DurableIdempotencyExecutor
 from tools.neuron_runtime.permission_safety_gate import (
     CapabilityRule,
     EffectClass,
@@ -208,6 +209,43 @@ class TaskLoopExecutionTests(unittest.TestCase):
         self.assertEqual(executor.keys[0], executor.keys[1])
         self.assertEqual(len(executor.ledger), 2)
         self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.COMPLETED)
+
+    def test_durable_executor_reconciles_unknown_before_task_loop_continues(self):
+        with tempfile.TemporaryDirectory() as temp:
+            delegate = MemoryExecutor(unknown_once=True)
+            executor = DurableIdempotencyExecutor(
+                os.path.join(temp, "executor-ledger.sqlite3"),
+                delegate,
+            )
+            first = self.loop.run(
+                self.manager, "task-1", self.problem, self.bindings,
+                self.policy, executor, now_ns=100,
+            )
+            self.assertIs(first.status, TaskLoopStatus.WAITING)
+            self.assertEqual(first.reason_code, "execution_outcome_unknown")
+            request = first.pending_authorization
+            self.assertIsNotNone(request)
+            action = next(item for item in self.problem.actions if item.action_id == request.action_id)
+
+            verified_result = ActionExecutionResult(
+                ExecutionOutcome.SUCCEEDED,
+                tuple(sorted(delegate.facts)),
+            )
+            executor.record_reconciled_result(
+                action,
+                request,
+                verified_result,
+                reconciliation_ref="test-provider-state-check",
+            )
+
+            second = self.loop.run(
+                self.manager, "task-1", self.problem, self.bindings,
+                self.policy, executor, now_ns=200,
+            )
+            self.assertIs(second.status, TaskLoopStatus.COMPLETED)
+            self.assertEqual(delegate.keys.count(request.idempotency_key), 1)
+            self.assertEqual(len(delegate.ledger), 2)
+            self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.COMPLETED)
 
     def test_known_no_effect_failure_marks_task_failed(self):
         executor = MemoryExecutor(failed=True)
