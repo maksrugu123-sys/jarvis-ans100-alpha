@@ -1403,7 +1403,7 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 **Добавлено / изменено:**
 - `tools/neuron_runtime/task_loop.py` — каждый плановый шаг получает детерминированную дочернюю TaskRecord, identity которой связана с manager/task/plan/step. После ALLOWED child переводится в RUNNING и публикуется отдельным JPVR checkpoint до executor call. Известный SUCCEEDED фиксируется child COMPLETED с digest полного executor outcome/observed-facts ответа; FAILED_NO_EFFECT — child FAILED; UNKNOWN сохраняет RUNNING. При повторе completed step executor должен вернуть ранее сохранённый результат под тем же action idempotency key; loop сравнивает его digest и закрывается с ошибкой при несовпадении.
-- `tools/neuron_runtime/test_task_loop.py` — добавлены три сценария: child-step ledger появляется в RUNNING до входа в executor; неизвестный outcome восстанавливается после закрытия/повторного открытия JPVR файла; ранее завершённый шаг повторно читается по стабильному idempotency key и сверяется; изменённый replay result блокируется fail-closed; исчерпание task capacity блокирует executor до side effect. После mismatch и capacity regression module contains **20 test methods**.
+- `tools/neuron_runtime/test_task_loop.py` — добавлены пять сценариев: child-step ledger появляется в RUNNING до входа в executor; неизвестный outcome восстанавливается после закрытия/повторного открытия JPVR файла; ранее завершённый шаг повторно читается по стабильному idempotency key и сверяется; изменённый replay result блокируется fail-closed; исчерпание task capacity блокирует executor до side effect. Модуль содержит **20 test methods**.
 - `docs/JARVIS_TASK_LOOP_V0_1.md` — описаны step-ledger lifecycle, порядок gate -> durable intent -> executor, восстановление и ограничения.
 - `docs/JARVIS_ARCHITECTURE.md` §3.46 и `README.md` — синхронизированы со статусом и следующим этапом.
 
@@ -1411,7 +1411,7 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 **Recovery contract:** child RUNNING означает, что side effect мог произойти; повтор uses the same action idempotency key. Child COMPLETED содержит digest, но не полный observed-facts payload; executor обязан хранить свой durable idempotency ledger и возвращать прежний полный ответ. При несовпадении digest parent task завершается fail-closed. Между внешним effect и сохранением child COMPLETED остаётся crash window; exactly-once external execution не заявляется.
 
-**Тесты:** 18 методов в `tools.neuron_runtime.test_task_loop` — **AUTHORED, NOT RUN**. Остальные существующие Reasoning Engine / Permission Gate / Task Session suites также не запускались в этом изменении.
+**Тесты:** 20 методов в `tools.neuron_runtime.test_task_loop` — **AUTHORED, NOT RUN**. Остальные существующие Reasoning Engine / Permission Gate / Task Session suites также не запускались в этом изменении.
 
 **Проверки:** GitHub fetch/readback и статическая сверка реализации, тестовых сценариев, JPVR store API, README, архитектуры и task-loop contract. Python execution, import/syntax checks, Android/Termux I/O, crash/fault injection, benchmarks, builds, CI and GitHub Actions — **NOT RUN**. По прежнему ограничению не выполнялись сборки и тесты.
 
