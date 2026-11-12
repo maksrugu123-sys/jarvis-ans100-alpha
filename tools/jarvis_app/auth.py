@@ -11,7 +11,6 @@ import stat
 
 
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
-_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}\\n$")
 
 
 class LocalConsoleAuthError(ValueError):
@@ -51,7 +50,7 @@ class LocalConsoleAuth:
             )
             with os.fdopen(descriptor, "w", encoding="ascii") as stream:
                 descriptor = None
-                stream.write("sha256:" + hex_digest + "\\n")
+                stream.write("sha256:" + hex_digest + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.path)
@@ -77,7 +76,7 @@ class LocalConsoleAuth:
             raw = self.path.read_text(encoding="ascii")
         except (OSError, UnicodeError) as exc:
             raise LocalConsoleAuthError("cannot read authentication digest") from exc
-        if not re.fullmatch(r"sha256:[0-9a-f]{64}\\n", raw):
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}\n", raw):
             raise LocalConsoleAuthError("authentication digest has an invalid format")
         return bytes.fromhex(raw[7:-1])
 
