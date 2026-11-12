@@ -122,7 +122,13 @@ def _encode_result(result: ActionExecutionResult) -> tuple[str, str, str]:
 
 
 def _decode_result(raw: str, expected_digest: str) -> ActionExecutionResult:
-    if not isinstance(raw, str) or len(raw.encode("utf-8")) > _MAX_RESULT_BYTES:
+    if not isinstance(raw, str):
+        raise DurableExecutorLedgerCorrupt("stored executor result must be text")
+    try:
+        raw_size = len(raw.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise DurableExecutorLedgerCorrupt("stored executor result contains invalid Unicode") from exc
+    if raw_size > _MAX_RESULT_BYTES:
         raise DurableExecutorLedgerCorrupt("stored executor result exceeds its size limit")
     if not isinstance(expected_digest, str) or not _DIGEST_PATTERN.fullmatch(expected_digest):
         raise DurableExecutorLedgerCorrupt("stored result digest has an invalid format")
@@ -244,7 +250,13 @@ class DurableIdempotencyExecutor:
             connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
             connection.execute("PRAGMA foreign_keys=ON")
             connection.execute("PRAGMA synchronous=FULL")
-            connection.execute(f"PRAGMA max_page_count={_MAX_DATABASE_PAGES}")
+            page_limit = connection.execute(
+                f"PRAGMA max_page_count={_MAX_DATABASE_PAGES}"
+            ).fetchone()[0]
+            if page_limit > _MAX_DATABASE_PAGES:
+                raise DurableExecutorLedgerCorrupt(
+                    "executor-ledger database already exceeds the configured page limit"
+                )
             os.chmod(self.path, 0o600)
             return connection
         except (OSError, sqlite3.Error) as exc:
