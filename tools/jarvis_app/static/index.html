@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101722">
+  <meta name="description" content="Локальная консоль задач и структурированного планирования JARVIS.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <title>JARVIS — локальная консоль</title>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">J</div>
+      <div>
+        <div class="brand-name">JARVIS</div>
+        <div class="brand-subtitle">ЛОКАЛЬНАЯ КОНСОЛЬ · ANS-100 ALPHA</div>
+      </div>
+    </div>
+    <div class="local-state"><span class="pulse"></span> Работает на этом устройстве</div>
+  </header>
+
+  <main class="shell">
+    <section class="intro">
+      <div class="eyebrow">ПЕРВЫЙ ЛОКАЛЬНЫЙ ИНТЕРФЕЙС</div>
+      <h1>Панель управления JARVIS</h1>
+      <p>Сессии, задачи, история изменений и проверка планов. Пока это исследовательский интерфейс: он не выполняет внешние действия.</p>
+    </section>
+
+    <section class="stats" aria-label="Состояние">
+      <article class="stat-card"><span>Сессии</span><strong id="session-count">—</strong></article>
+      <article class="stat-card"><span>Задачи</span><strong id="task-count">—</strong></article>
+      <article class="stat-card"><span>JPVR checkpoint</span><strong id="checkpoint-version">—</strong></article>
+    </section>
+
+    <div id="notice" class="notice" role="status" aria-live="polite">Подключение к локальному ядру…</div>
+
+    <div class="columns">
+      <section class="panel">
+        <div class="panel-heading">
+          <div><div class="eyebrow">КОНТЕКСТ</div><h2>Сессии</h2></div>
+        </div>
+        <form id="session-form" class="inline-form">
+          <label for="session-title">Новая сессия</label>
+          <div class="input-row">
+            <input id="session-title" name="title" maxlength="80" placeholder="Например, личные задачи" required>
+            <button type="submit">Создать</button>
+          </div>
+        </form>
+        <div id="sessions" class="record-list empty">Пока нет сессий.</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div><div class="eyebrow">УПРАВЛЕНИЕ</div><h2>Задачи</h2></div>
+        </div>
+        <form id="task-form" class="stack-form">
+          <label for="task-session">Сессия</label>
+          <select id="task-session" name="session_id" required>
+            <option value="">Сначала создайте сессию</option>
+          </select>
+          <label for="task-title">Название задачи</label>
+          <div class="input-row">
+            <input id="task-title" name="title" maxlength="512" placeholder="Что нужно сделать?" required>
+            <button type="submit">Добавить</button>
+          </div>
+        </form>
+        <div id="tasks" class="record-list empty">Пока нет задач.</div>
+      </section>
+    </div>
+
+    <section class="panel reasoning-panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">REASONING ENGINE V0.1</div><h2>Проверка плана</h2></div>
+        <span class="tag">ТОЛЬКО PREVIEW</span>
+      </div>
+      <p class="panel-copy">Укажи начальные факты, цель и возможные шаги. Движок найдёт короткий план или сообщит, почему цель недостижима. Никакие действия не выполняются.</p>
+      <form id="reasoning-form" class="stack-form">
+        <div class="two-fields">
+          <div><label for="reasoning-task">ID задачи</label><input id="reasoning-task" value="preview-task" maxlength="128" required></div>
+          <div><label for="goal-description">Цель</label><input id="goal-description" value="Проверить достижимость цели" maxlength="1024" required></div>
+        </div>
+        <label for="initial-facts">Начальные факты (через запятую)</label>
+        <input id="initial-facts" value="start" placeholder="start, connected, unlocked">
+        <label for="goal-facts">Требуемые факты (через запятую)</label>
+        <input id="goal-facts" value="goal" placeholder="goal, completed">
+        <div class="actions-heading">
+          <div><h3>Доступные шаги</h3><p>Каждый шаг — только описание изменения фактов.</p></div>
+          <button id="add-action" class="secondary-button" type="button">Добавить шаг</button>
+        </div>
+        <div id="action-rows">
+          <div class="action-row">
+            <div class="action-grid">
+              <div><label>ID</label><input data-field="action_id" value="step-one" maxlength="128"></div>
+              <div><label>Название</label><input data-field="summary" value="Получить промежуточный факт" maxlength="256"></div>
+              <div><label>Требует</label><input data-field="preconditions" value="start" placeholder="факт, факт"></div>
+              <div><label>Добавляет</label><input data-field="add_facts" value="middle" placeholder="факт, факт"></div>
+              <div><label>Удаляет</label><input data-field="delete_facts" placeholder="необязательно"></div>
+            </div>
+            <button class="remove-action" type="button" aria-label="Удалить шаг">×</button>
+          </div>
+          <div class="action-row">
+            <div class="action-grid">
+              <div><label>ID</label><input data-field="action_id" value="step-two" maxlength="128"></div>
+              <div><label>Название</label><input data-field="summary" value="Достичь цели" maxlength="256"></div>
+              <div><label>Требует</label><input data-field="preconditions" value="middle"></div>
+              <div><label>Добавляет</label><input data-field="add_facts" value="goal"></div>
+              <div><label>Удаляет</label><input data-field="delete_facts" placeholder="необязательно"></div>
+            </div>
+            <button class="remove-action" type="button" aria-label="Удалить шаг">×</button>
+          </div>
+        </div>
+        <button class="wide-button" type="submit">Построить план</button>
+      </form>
+      <div id="reasoning-result" class="reasoning-result empty">Результат планирования появится здесь.</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">АУДИТ</div><h2>Журнал событий</h2></div>
+      </div>
+      <div id="events" class="event-list empty">Событий пока нет.</div>
+    </section>
+
+    <footer>
+      <p>JARVIS ANS-100 Alpha · локальный режим</p>
+      <p>Внешние действия, сетевые инструменты и подтверждение опасных операций пока отключены.</p>
+    </footer>
+  </main>
+</body>
+</html>
