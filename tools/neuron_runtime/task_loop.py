@@ -261,8 +261,15 @@ class JARVISTaskLoop:
             not isinstance(value, ActionBinding) for value in action_bindings.values()
         ):
             raise TaskLoopError("action_bindings must exactly cover every planning action")
-        if approvals is not None and not isinstance(approvals, Mapping):
-            raise TaskLoopError("approvals must map step IDs to ApprovalGrant objects")
+        if approvals is not None:
+            if not isinstance(approvals, Mapping):
+                raise TaskLoopError("approvals must map step IDs to ApprovalGrant objects")
+            if any(
+                not isinstance(step_id, str) or not _ID.fullmatch(step_id)
+                or not isinstance(grant, ApprovalGrant)
+                for step_id, grant in approvals.items()
+            ):
+                raise TaskLoopError("approvals contains an invalid step ID or grant")
         if checkpoint_store is not None:
             if not isinstance(checkpoint_store, JPVRTaskSessionCheckpointStore):
                 raise TaskLoopError("checkpoint_store must be a JPVRTaskSessionCheckpointStore")
@@ -279,7 +286,7 @@ class JARVISTaskLoop:
             for binding in action_bindings.values()
         ) and checkpoint_store is None:
             raise TaskLoopError("side-effecting actions require a durable JPVR task checkpoint store")
-        if not isinstance(now_ns, int) and not callable(now_ns):
+        if isinstance(now_ns, bool) or (not isinstance(now_ns, int) and not callable(now_ns)):
             raise TaskLoopError("now_ns must be an integer or a zero-argument clock callable")
 
         try:
@@ -324,8 +331,8 @@ class JARVISTaskLoop:
         except ReasoningError:
             return self._finish_failed(
                 task_manager, task_id, running_task_revision, "reasoning_invalid_request",
-                "reasoning_invalid_request", "plan-invalid", None, (),
-                problem.initial_facts, (), persist_lifecycle,
+                "plan-invalid", None, (), problem.initial_facts, (),
+                persist_lifecycle,
             )
         plan_id = self._plan_id(problem, action_bindings)
         if reasoning.status is not PlanStatus.SOLVED:
