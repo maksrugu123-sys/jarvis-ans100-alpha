@@ -242,3 +242,28 @@ __all__ += [
     "RewardSynapseTarget",
     "process_reward_feedback",
 ]
+
+
+from .task_session import (
+    LifecycleEvent,
+    SessionRecord,
+    SessionStatus,
+    TaskConflict,
+    TaskNotFound,
+    TaskRecord,
+    TaskSessionError,
+    TaskSessionManager,
+    TaskStatus,
+)
+
+__all__ += [
+    "LifecycleEvent",
+    "SessionRecord",
+    "SessionStatus",
+    "TaskConflict",
+    "TaskNotFound",
+    "TaskRecord",
+    "TaskSessionError",
+    "TaskSessionManager",
+    "TaskStatus",
+]
