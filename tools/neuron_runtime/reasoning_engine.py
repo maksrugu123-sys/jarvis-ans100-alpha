@@ -139,7 +139,7 @@ class EvidenceRecord:
         try:
             object.__setattr__(self, "polarity", EvidencePolarity(self.polarity))
             object.__setattr__(self, "quality", EvidenceQuality(self.quality))
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise ReasoningError("unsupported evidence polarity or quality") from exc
         _text("evidence source_ref", self.source_ref, 512)
         _text("evidence summary", self.summary, 512)
