@@ -46,6 +46,8 @@ import org.jarvis.ans100.alpha.data.LocalSession
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.LocalTaskDraft
 import org.jarvis.ans100.alpha.data.RuntimeBridgeUiState
+import org.jarvis.ans100.alpha.data.RuntimePlanningAction
+import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +94,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onCreateTask = viewModel::createRuntimeTask,
                     onSetSessionStatus = viewModel::setRuntimeSessionStatus,
                     onCancelTask = viewModel::cancelRuntimeTask,
+                    onPreviewReasoning = viewModel::previewRuntimeReasoning,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -491,10 +494,22 @@ private fun RuntimeBridgePanel(
     onCreateTask: (String, String) -> Unit,
     onSetSessionStatus: (String, String, Int) -> Unit,
     onCancelTask: (String, Int) -> Unit,
+    onPreviewReasoning: (RuntimeReasoningPreviewRequest) -> Unit,
 ) {
     var sessionTitle by rememberSaveable { mutableStateOf("") }
     var taskTitle by rememberSaveable { mutableStateOf("") }
     var selectedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var previewTaskId by rememberSaveable { mutableStateOf("android-preview") }
+    var previewGoalDescription by rememberSaveable { mutableStateOf("Подготовить систему к работе") }
+    var previewInitialFacts by rememberSaveable { mutableStateOf("battery_ok") }
+    var previewGoalFacts by rememberSaveable { mutableStateOf("ready") }
+    var previewActionsText by rememberSaveable {
+        mutableStateOf(
+            "power_on | Включить питание | battery_ok | powered_on\n" +
+                "boot | Запустить систему | powered_on | ready"
+        )
+    }
+    var previewInputError by rememberSaveable { mutableStateOf<String?>(null) }
     val snapshot = state.snapshot
     val selectedSession = snapshot?.sessions?.firstOrNull {
         it.sessionId == selectedSessionId
@@ -722,6 +737,159 @@ private fun RuntimeBridgePanel(
                         }
                     }
                 }
+
+                SectionHeading("Предварительное планирование", "Reasoning Engine V0.1 · без исполнения")
+                Text(
+                    "Задайте факты и простые переходы. Это отдельный символьный анализ: он не запускает очередь задач и не меняет JPVR.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = previewTaskId,
+                    onValueChange = { previewTaskId = it.take(128) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("ID анализа") },
+                    singleLine = true,
+                    enabled = !state.isBusy,
+                )
+                OutlinedTextField(
+                    value = previewGoalDescription,
+                    onValueChange = { previewGoalDescription = it.take(512) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Что нужно получить") },
+                    minLines = 2,
+                    maxLines = 3,
+                    enabled = !state.isBusy,
+                )
+                OutlinedTextField(
+                    value = previewInitialFacts,
+                    onValueChange = { previewInitialFacts = it.take(2048) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Начальные факты через запятую") },
+                    placeholder = { Text("battery_ok, network_ready") },
+                    singleLine = true,
+                    enabled = !state.isBusy,
+                )
+                OutlinedTextField(
+                    value = previewGoalFacts,
+                    onValueChange = { previewGoalFacts = it.take(2048) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Целевые факты через запятую") },
+                    placeholder = { Text("ready") },
+                    singleLine = true,
+                    enabled = !state.isBusy,
+                )
+                OutlinedTextField(
+                    value = previewActionsText,
+                    onValueChange = { previewActionsText = it.take(12_000) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Действия — по одному на строку") },
+                    placeholder = {
+                        Text("id | описание | нужны факты | добавить факты | удалить факты (необязательно)")
+                    },
+                    minLines = 3,
+                    maxLines = 7,
+                    enabled = !state.isBusy,
+                )
+                Text(
+                    "Формат строки: id | описание | предусловия | добавить | удалить (последнее поле можно пропустить). " +
+                        "Факты — идентификаторы через запятую. Максимум 16 действий и 32 факта в каждом списке.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!previewInputError.isNullOrBlank()) {
+                    Text(
+                        previewInputError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Button(
+                    onClick = {
+                        try {
+                            val request = buildRuntimeReasoningPreview(
+                                taskId = previewTaskId,
+                                goalDescription = previewGoalDescription,
+                                initialFactsText = previewInitialFacts,
+                                goalFactsText = previewGoalFacts,
+                                actionsText = previewActionsText,
+                            )
+                            previewInputError = null
+                            onPreviewReasoning(request)
+                        } catch (error: IllegalArgumentException) {
+                            previewInputError = error.message ?: "Проверьте поля символьного плана."
+                        }
+                    },
+                    enabled = !state.isBusy && state.isConnected && snapshot != null &&
+                        previewTaskId.isNotBlank() && previewGoalDescription.isNotBlank() &&
+                        previewGoalFacts.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (state.isBusy) "Расчёт…" else "Рассчитать план без запуска") }
+
+                state.reasoningPreview?.let { preview ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text("Результат символьного планирования", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                reasoningStatusLabel(preview.status),
+                                color = if (preview.status == "solved") MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                "ID: ${preview.taskId} · раскрыто состояний: ${preview.expandedStates}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (preview.status == "solved" && preview.plan.isEmpty()) {
+                                Text("Цель уже выполняется по начальным фактам; дополнительные действия не нужны.")
+                            }
+                            preview.plan.forEach { step ->
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("${step.index}. ${step.summary}", fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "Действие: ${step.actionId}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (step.requiredFacts.isNotEmpty()) {
+                                        Text(
+                                            "Требует: ${step.requiredFacts.joinToString()}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    if (step.addedFacts.isNotEmpty() || step.deletedFacts.isNotEmpty()) {
+                                        Text(
+                                            "Изменения: +${step.addedFacts.joinToString()} −${step.deletedFacts.joinToString()}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            }
+                            if (preview.status != "solved") {
+                                Text(
+                                    "Цель не была доказана в заданной модели. Измените факты или действия и повторите preview.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            Text(
+                                "Прогнозируемые факты: ${preview.predictedFinalFacts.joinToString().ifBlank { "—" }}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                "Важно: действия не исполнялись. Это не запуск задачи и не разрешение на выполнение.",
+                                fontWeight = FontWeight.Medium,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
             } else {
                 Text(
                     "В Termux запустите: python3 -m tools.jarvis_app --port 8765. " +
@@ -732,6 +900,91 @@ private fun RuntimeBridgePanel(
             }
         }
     }
+}
+
+private fun buildRuntimeReasoningPreview(
+    taskId: String,
+    goalDescription: String,
+    initialFactsText: String,
+    goalFactsText: String,
+    actionsText: String,
+): RuntimeReasoningPreviewRequest {
+    val id = taskId.trim()
+    val description = goalDescription.trim()
+    require(FACT_ID_PATTERN.matches(id)) { "ID анализа должен быть от 1 до 128 символов и содержать только буквы, цифры, точку, дефис, подчёркивание или двоеточие." }
+    require(description.isNotEmpty() && description.length <= 512) {
+        "Описание цели должно содержать от 1 до 512 символов."
+    }
+    val initialFacts = parseRuntimeFacts(initialFactsText, "Начальные факты")
+    val goalFacts = parseRuntimeFacts(goalFactsText, "Целевые факты")
+    require(goalFacts.isNotEmpty()) { "Добавьте хотя бы один целевой факт." }
+
+    val lines = actionsText.lineSequence()
+        .mapIndexed { index, value -> (index + 1) to value.trim() }
+        .filter { it.second.isNotEmpty() }
+        .toList()
+    require(lines.size <= 16) { "Допускается не более 16 действий." }
+    val seenActionIds = HashSet<String>()
+    val actions = lines.map { (lineNumber, line) ->
+        val fields = line.split('|').map(String::trim)
+        require(fields.size == 4 || fields.size == 5) {
+            "Строка $lineNumber: нужно 4 или 5 полей, разделённых символом |."
+        }
+        val actionId = fields[0]
+        val summary = fields[1]
+        require(FACT_ID_PATTERN.matches(actionId)) {
+            "Строка $lineNumber: некорректный ID действия."
+        }
+        require(seenActionIds.add(actionId)) {
+            "Строка $lineNumber: ID действия повторяется."
+        }
+        require(summary.isNotEmpty() && summary.length <= 256) {
+            "Строка $lineNumber: описание действия должно быть от 1 до 256 символов."
+        }
+        val preconditions = parseRuntimeFacts(fields[2], "Предусловия в строке $lineNumber")
+        val addFacts = parseRuntimeFacts(fields[3], "Добавляемые факты в строке $lineNumber")
+        val deleteFacts = parseRuntimeFacts(fields.getOrElse(4) { "" }, "Удаляемые факты в строке $lineNumber")
+        require(addFacts.isNotEmpty() || deleteFacts.isNotEmpty()) {
+            "Строка $lineNumber: действие должно добавлять или удалять хотя бы один факт."
+        }
+        require(addFacts.intersect(deleteFacts.toSet()).isEmpty()) {
+            "Строка $lineNumber: один факт нельзя одновременно добавлять и удалять."
+        }
+        RuntimePlanningAction(
+            actionId = actionId,
+            summary = summary,
+            preconditions = preconditions,
+            addFacts = addFacts,
+            deleteFacts = deleteFacts,
+        )
+    }
+    return RuntimeReasoningPreviewRequest(
+        taskId = id,
+        goalDescription = description,
+        initialFacts = initialFacts,
+        goalFacts = goalFacts,
+        actions = actions,
+    )
+}
+
+private fun parseRuntimeFacts(raw: String, label: String): List<String> {
+    if (raw.isBlank()) return emptyList()
+    val facts = raw.split(',').map(String::trim)
+    require(facts.size <= 32 && facts.all { it.isNotEmpty() && FACT_ID_PATTERN.matches(it) }) {
+        "$label: используйте до 32 непустых идентификаторов через запятую."
+    }
+    require(facts.distinct().size == facts.size) { "$label: повторяющиеся факты запрещены." }
+    return facts
+}
+
+private val FACT_ID_PATTERN = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+
+private fun reasoningStatusLabel(status: String): String = when (status) {
+    "solved" -> "План найден"
+    "no_plan" -> "План не найден"
+    "depth_limit" -> "Достигнут лимит глубины"
+    "search_limit" -> "Достигнут лимит поиска"
+    else -> status
 }
 
 private fun runtimeStatusLabel(status: String): String = when (status) {
