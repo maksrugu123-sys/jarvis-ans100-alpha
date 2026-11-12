@@ -415,4 +415,10 @@ The bounded TaskSessionManager provides explicit session/task states, revision c
 
 ### Task & Session JPVR Persistence V1 (12 Nov 2026)
 
-TaskSessionManager now has a versioned JPVR DATA/BLOB adapter and a CAS-protected checkpoint store. It commits the snapshot record and CHECKPOINT descriptor together, validates source COMMIT ancestry and payload CRC on load, and restores the last committed task/session registry after reopening the JPVR file. Use a **dedicated JPVR container**; the format currently has one active CHECKPOINT pointer. This does not provide exactly-once external tool execution, scheduler leases, authorization persistence, or multi-process locking. Contract: [JARVIS_TASK_SESSION_JPVR_STORE_V1](docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md). Nine focused tests are authored, not run; no builds or CI were run.
+Focused persistence tests:
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_task_session_store -v
+```
+
+TaskSessionManager now has a versioned JPVR DATA/BLOB adapter and a CAS-protected checkpoint store. It commits the snapshot record and CHECKPOINT descriptor together, validates source COMMIT ancestry and payload CRC on load, and restores the last committed task/session registry after reopening the JPVR file. Use a **dedicated JPVR container**; the format currently has one active CHECKPOINT pointer. This does not provide exactly-once external tool execution, scheduler leases, authorization persistence, or multi-process locking. Contract: [JARVIS_TASK_SESSION_JPVR_STORE_V1](docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md). Fourteen focused tests are AUTHORED, NOT RUN; no builds or CI were run.
