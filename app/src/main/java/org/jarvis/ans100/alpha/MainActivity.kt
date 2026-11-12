@@ -319,7 +319,7 @@ private fun Header() {
             color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
             Text(
-                "V0.3",
+                "V0.4",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
