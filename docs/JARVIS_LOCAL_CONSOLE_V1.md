@@ -1,58 +1,52 @@
 # JARVIS Local Console V1
 
-**Статус:** реализована loopback-only PWA-консоль на Python HTTP server + HTML/CSS/JavaScript. Функциональные проверки локального console API добавлены в `tools/jarvis_app/test_server.py` (5 test methods), AUTHORED, NOT RUN. Это не нативный Android APK и не исполнитель произвольных действий.
+**Статус:** loopback-only Python console on HTTP + PWA web UI. The same local API is now also consumed by the native Android Compose client; both interfaces operate on the same Python TaskSessionManager and JPVR checkpoint while talking to the same running console process. Six console test methods are AUTHORED, NOT RUN. The console remains a reference task/session manager, not a production executor.
 
-## Запуск на Android / Termux
+## Start on Android / Termux
 
-Из корня репозитория:
+From the repository root:
 
-```sh
-python3 -m tools.jarvis_app --port 8765
-```
+    python3 -m tools.jarvis_app --port 8765
 
-Открыть на этом же устройстве:
+Open the web UI on the same device at:
 
-```text
-http://127.0.0.1:8765/
-```
+    http://127.0.0.1:8765/
 
-При желании браузер может добавить PWA на главный экран. Сервер привязан только к loopback `127.0.0.1`; он не принимает соединения из локальной сети или интернета. JPVR-файл по умолчанию находится в `~/.jarvis-ans100-alpha/local-console.jpvr`; путь можно переопределить аргументом `--data`. Остановка: Ctrl+C в Termux-сессии.
+The native Compose application also connects to http://127.0.0.1:8765; launch one console process and keep it running while using either or both local interfaces. JPVR file default: ~/.jarvis-ans100-alpha/local-console.jpvr; override using --data. Stop with Ctrl+C in Termux.
 
-## Возможности V1
+## Capabilities
 
-- Создание сессий и задач; TaskSessionManager snapshot после каждой мутации сохраняется через dedicated JPVRTaskSessionCheckpointStore.
-- Пауза и продолжение сессии с обязательной expected-revision проверкой.
-- Закрытие сессии только когда все связанные задачи terminal; закрытая сессия не может быть возобновлена.
-- Отмена только QUEUED задач с expected-revision проверкой.
-- Поиск задач по названию/ID, фильтр по статусу, просмотр количества задач в работе и раскрываемых result records.
-- История последних 100 lifecycle events.
-- Structured Reasoning Engine preview по пользовательским фактам и действиям; preview не исполняет actions и явно сообщает, что это только план.
-- PWA shell cache для HTML/CSS/JS; API всегда запрашивается у локального процесса и не кэшируется.
+- Create sessions and tasks; each mutation is persisted through a dedicated JPVRTaskSessionCheckpointStore.
+- Pause/resume/close sessions with expected-revision checks; a session cannot close while any task is non-terminal.
+- Cancel QUEUED tasks with expected-revision checks.
+- Read sessions, tasks, recent lifecycle events and checkpoint version.
+- Structured Reasoning Engine preview from caller-supplied facts/actions. This is a symbolic preview only and does not execute actions.
+- PWA static assets are cached; API responses are not cached.
 
-## API contract
+## Versioned API contract
 
-- `GET /api/health` — локальный статус сервиса и вид хранилища.
-- `GET /api/state` — сессии, задачи, последние lifecycle events, JPVR checkpoint version и capability flags.
-- `POST /api/sessions` — `{"title":"..." }`.
-- `POST /api/tasks` — `{"session_id":"...","title":"..." }`.
-- `POST /api/sessions/{session_id}/status` — `{"status":"paused|open|closed","expected_revision":N }`.
-- `POST /api/tasks/{task_id}/cancel` — `{"expected_revision":N }`.
-- `POST /api/reasoning/preview` — bounded structured ReasoningProblem payload.
+GET /api/health returns status, storage, api_schema = "jarvis.local-console" and api_version = 1. The Android client fails closed for an unsupported schema/version.
 
-POST routes require JSON objects with exact documented fields. All mutating state operations are serialized under the service lock, applied to a detached candidate manager, and published through JPVR compare-and-swap before the in-memory manager reference is replaced. A failed save does not publish the candidate state.
+- GET /api/health — service and API contract version.
+- GET /api/state — manager identity, sessions, tasks, recent lifecycle events, JPVR checkpoint version and capability flags.
+- POST /api/sessions — JSON object with title.
+- POST /api/tasks — JSON object with session_id and title.
+- POST /api/sessions/{session_id}/status — JSON object with status and expected_revision.
+- POST /api/tasks/{task_id}/cancel — JSON object with expected_revision.
+- POST /api/reasoning/preview — bounded structured ReasoningProblem payload.
+
+Mutating POST routes require exact JSON fields. Mutations are serialized under the service lock, applied to a detached candidate manager and published through JPVR compare-and-swap before the in-memory manager reference is replaced. Failed commits do not publish the candidate state.
 
 ## Safety and trust boundary
 
-The console explicitly reports `external_actions=false`, `tool_execution=false`, and `remote_access=false`. It exposes no shell, filesystem browsing, browser automation, credentials, network connector, approval provider, or ActionExecutor. The local console does not run JARVIS Task Loop; it only creates lifecycle records and previews structured plans.
+The console reports external_actions=false, tool_execution=false and remote_access=false. It has no shell, filesystem browsing, browser automation, credentials, network connector, approval provider or ActionExecutor. The console does not run JARVIS Task Loop; it only manages task/session lifecycle and supplies a caller-driven structured reasoning preview.
 
-The server checks the exact Host header and rejects a foreign Origin. Bind only to `127.0.0.1`; do not change to `0.0.0.0` without a separately designed authentication and network security boundary. The loopback check is not an identity/authentication system and assumes the local device/process environment is trusted.
+The server validates the exact loopback Host and rejects a foreign Origin. It must bind only to 127.0.0.1; do not change to 0.0.0.0. Loopback/Host/Origin checks are not identity authentication: other local software may still reach the service. Never use this unauthenticated HTTP interface for secrets or side-effecting tool actions.
 
-The PWA may be installed to a home screen by a compatible mobile browser, but this repository contains no Gradle project, AndroidManifest, Kotlin or Java Android application module. A native APK, Android lifecycle integration, OS-level permissions and verified approval UI remain unimplemented.
+The PWA is one local frontend. The Compose application is a separate native frontend that uses the same loopback API; Android SharedPreferences drafts remain a separate, non-interoperable store and are not copied into JPVR tasks.
 
 ## Verification
 
-```sh
-python3 -m unittest tools.jarvis_app.test_server -v
-```
+Run: python3 -m unittest tools.jarvis_app.test_server -v
 
-Five tests cover session pause/resume/close revision flow, blocking close with nonterminal tasks, idempotent no-op status update, the HTTP status endpoint, and rejection of foreign Origin. Tests are AUTHORED, NOT RUN. No Python execution, syntax/import checks, browser/device check, Android build, APK, CI or GitHub Actions run was performed.
+Six test methods cover session pause/resume/close and revision flow, close blocked by a non-terminal task, no-op status update, HTTP session status, versioned health contract and foreign-Origin rejection. Tests are AUTHORED, NOT RUN. No Python tests, Android build/APK, browser/device check, Termux end-to-end test, CI or GitHub Actions run was performed for the current Android bridge batch.
