@@ -1,0 +1,300 @@
+"""Contract tests for the bounded JARVIS Task Loop V0.1."""
+import os
+import tempfile
+import unittest
+
+from tools.jpvr_reference.storage import JPVRStorage
+from tools.neuron_runtime.permission_safety_gate import (
+    CapabilityRule,
+    EffectClass,
+    RequestedBudget,
+    SafetyPolicy,
+)
+from tools.neuron_runtime.reasoning_engine import (
+    PlanStatus,
+    PlanningAction,
+    ReasoningProblem,
+)
+from tools.neuron_runtime.task_loop import (
+    ActionBinding,
+    ActionExecutionResult,
+    ExecutionOutcome,
+    JARVISTaskLoop,
+    TaskLoopError,
+    TaskLoopPersistenceError,
+    TaskLoopStatus,
+)
+from tools.neuron_runtime.task_session import TaskSessionManager, TaskStatus
+from tools.neuron_runtime.task_session_store import JPVRTaskSessionCheckpointStore
+
+
+def _manager():
+    manager = TaskSessionManager(manager_id="loop-manager")
+    manager.create_session("session-1")
+    manager.create_task("task-1", "session-1", "task-key", "Run a bounded plan")
+    return manager
+
+
+def _problem():
+    return ReasoningProblem(
+        task_id="task-1",
+        goal_description="Reach the goal",
+        initial_facts=("start",),
+        goal_facts=("goal",),
+        actions=(
+            PlanningAction("step-one", "Discover the intermediate state",
+                           ("start",), ("middle",)),
+            PlanningAction("step-two", "Reach the final state",
+                           ("middle",), ("goal",)),
+        ),
+    )
+
+
+def _bindings(effect=EffectClass.READ_ONLY):
+    return {
+        "step-one": ActionBinding(
+            "demo.read", "demo:one", effect,
+            RequestedBudget(10, 1024, 1000, 256, 0),
+        ),
+        "step-two": ActionBinding(
+            "demo.read", "demo:two", effect,
+            RequestedBudget(10, 1024, 1000, 256, 0),
+        ),
+    }
+
+
+def _policy(effect=EffectClass.READ_ONLY):
+    return SafetyPolicy(
+        "loop-policy", 1,
+        (
+            CapabilityRule(
+                "demo.read", ("demo:one", "demo:two"), (effect,),
+                max_compute_units=20, max_memory_bytes=2048,
+                max_timeout_ms=2000, max_output_bytes=512, max_retries=2,
+            ),
+        ),
+    )
+
+
+class MemoryExecutor:
+    """Deterministic executor with a process-independent-style idempotency ledger."""
+
+    def __init__(self, *, unknown_once=False, failed=False, omit_postcondition=False):
+        self.facts = {"start"}
+        self.ledger = {}
+        self.keys = []
+        self.unknown_once = unknown_once
+        self.failed = failed
+        self.omit_postcondition = omit_postcondition
+
+    def execute(self, action, request):
+        key = request.idempotency_key
+        self.keys.append(key)
+        if key in self.ledger:
+            return self.ledger[key]
+        if self.failed:
+            return ActionExecutionResult(
+                ExecutionOutcome.FAILED_NO_EFFECT, tuple(sorted(self.facts)),
+                "executor_rejected",
+            )
+        if not set(action.preconditions).issubset(self.facts):
+            return ActionExecutionResult(
+                ExecutionOutcome.FAILED_NO_EFFECT, tuple(sorted(self.facts)),
+                "executor_precondition",
+            )
+        next_facts = set(self.facts)
+        next_facts.difference_update(action.delete_facts)
+        next_facts.update(action.add_facts)
+        if self.omit_postcondition:
+            next_facts.difference_update(action.add_facts)
+        self.facts = next_facts
+        result = ActionExecutionResult(
+            ExecutionOutcome.SUCCEEDED, tuple(sorted(self.facts))
+        )
+        self.ledger[key] = result
+        if self.unknown_once:
+            self.unknown_once = False
+            raise RuntimeError("simulated lost executor response after effect commit")
+        return result
+
+
+class TaskLoopExecutionTests(unittest.TestCase):
+    def setUp(self):
+        self.manager = _manager()
+        self.loop = JARVISTaskLoop()
+        self.problem = _problem()
+        self.bindings = _bindings()
+        self.policy = _policy()
+        self.executor = MemoryExecutor()
+
+    def test_two_step_plan_runs_only_after_authorization_and_completes(self):
+        result = self.loop.run(
+            self.manager, "task-1", self.problem, self.bindings,
+            self.policy, self.executor, now_ns=100,
+        )
+        self.assertIs(result.status, TaskLoopStatus.COMPLETED)
+        self.assertEqual(result.executed_step_ids, ("step-000001", "step-000002"))
+        self.assertEqual(result.observed_facts, ("goal", "middle", "start"))
+        self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.COMPLETED)
+        self.assertEqual(len(result.authorization_decisions), 2)
+        self.assertTrue(all(item.allowed for item in result.authorization_decisions))
+
+    def test_unreachable_goal_fails_without_calling_executor(self):
+        manager = self.manager
+        problem = ReasoningProblem(
+            "task-1", "No route", ("start",), ("missing",), (),
+        )
+        result = self.loop.run(
+            manager, "task-1", problem, {}, self.policy,
+            self.executor, now_ns=100,
+        )
+        self.assertIs(result.status, TaskLoopStatus.FAILED)
+        self.assertIs(result.reasoning.status, PlanStatus.NO_PLAN)
+        self.assertEqual(result.reason_code, "reasoning_no_plan")
+        self.assertEqual(self.executor.keys, ())
+        self.assertIs(manager.get_task("task-1").status, TaskStatus.FAILED)
+
+    def test_missing_capability_waits_and_never_invokes_executor(self):
+        policy = SafetyPolicy("empty", 1, ())
+        result = self.loop.run(
+            self.manager, "task-1", self.problem, self.bindings,
+            policy, self.executor, now_ns=100,
+        )
+        self.assertIs(result.status, TaskLoopStatus.WAITING)
+        self.assertEqual(result.reason_code, "capability_not_granted")
+        self.assertEqual(result.pending_step_id, "step-000001")
+        self.assertEqual(self.executor.keys, [])
+        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.WAITING)
+
+    def test_uncertain_executor_reply_retries_with_identical_idempotency_key(self):
+        executor = MemoryExecutor(unknown_once=True)
+        first = self.loop.run(
+            self.manager, "task-1", self.problem, self.bindings,
+            self.policy, executor, now_ns=100,
+        )
+        self.assertIs(first.status, TaskLoopStatus.WAITING)
+        self.assertEqual(first.reason_code, "execution_outcome_unknown")
+        self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.WAITING)
+
+        second = self.loop.run(
+            self.manager, "task-1", self.problem, self.bindings,
+            self.policy, executor, now_ns=200,
+        )
+        self.assertIs(second.status, TaskLoopStatus.COMPLETED)
+        self.assertEqual(executor.keys[0], executor.keys[1])
+        self.assertEqual(len(executor.ledger), 2)
+        self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.COMPLETED)
+
+    def test_known_no_effect_failure_marks_task_failed(self):
+        executor = MemoryExecutor(failed=True)
+        result = self.loop.run(
+            self.manager, "task-1", self.problem, self.bindings,
+            self.policy, executor, now_ns=100,
+        )
+        self.assertIs(result.status, TaskLoopStatus.FAILED)
+        self.assertEqual(result.reason_code, "executor_rejected")
+        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.FAILED)
+
+    def test_missing_postcondition_fails_closed(self):
+        executor = MemoryExecutor(omit_postcondition=True)
+        result = self.loop.run(
+            self.manager, "task-1", self.problem, self.bindings,
+            self.policy, executor, now_ns=100,
+        )
+        self.assertIs(result.status, TaskLoopStatus.FAILED)
+        self.assertEqual(result.reason_code, "postcondition_not_met")
+        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.FAILED)
+
+    def test_in_memory_only_loop_rejects_side_effecting_binding(self):
+        bindings = _bindings(EffectClass.REVERSIBLE)
+        with self.assertRaises(TaskLoopError):
+            self.loop.run(
+                self.manager, "task-1", self.problem, bindings,
+                _policy(EffectClass.REVERSIBLE), self.executor, now_ns=100,
+            )
+        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.QUEUED)
+        self.assertEqual(self.executor.keys, [])
+
+    def test_invalid_binding_set_is_rejected_before_lifecycle_mutation(self):
+        with self.assertRaises(TaskLoopError):
+            self.loop.run(
+                self.manager, "task-1", self.problem,
+                {"step-one": self.bindings["step-one"]},
+                self.policy, self.executor, now_ns=100,
+            )
+        self.assertIs(self.manager.get_task("task-1").status, TaskStatus.QUEUED)
+
+
+class TaskLoopJPVRTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.temp.name, "task-loop.jpvr")
+        self.storage = JPVRStorage.create(self.path)
+        self.store = JPVRTaskSessionCheckpointStore(self.storage)
+        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(self.storage.close)
+
+    def test_side_effecting_plan_requires_and_persists_jpvr_lifecycle(self):
+        manager = _manager()
+        executor = MemoryExecutor()
+        bindings = _bindings(EffectClass.REVERSIBLE)
+        policy = _policy(EffectClass.REVERSIBLE)
+        result = JARVISTaskLoop().run(
+            manager, "task-1", _problem(), bindings, policy, executor,
+            now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=0,
+        )
+        self.assertIs(result.status, TaskLoopStatus.COMPLETED)
+        self.assertEqual(self.store.load("loop-manager").manager.get_task("task-1").status,
+                         TaskStatus.COMPLETED)
+
+    def test_external_effect_without_approval_waits_and_persists(self):
+        manager = _manager()
+        bindings = _bindings(EffectClass.EXTERNAL)
+        policy = _policy(EffectClass.EXTERNAL)
+        result = JARVISTaskLoop().run(
+            manager, "task-1", _problem(), bindings, policy,
+            MemoryExecutor(), now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=0,
+        )
+        self.assertIs(result.status, TaskLoopStatus.WAITING)
+        self.assertEqual(result.reason_code, "approval_required")
+        self.assertIs(
+            self.store.load("loop-manager").manager.get_task("task-1").status,
+            TaskStatus.WAITING,
+        )
+
+    def test_stale_checkpoint_version_blocks_executor(self):
+        manager = _manager()
+        self.store.save(manager)  # Version 1 exists; caller supplies stale version 0.
+        executor = MemoryExecutor()
+        with self.assertRaises(TaskLoopPersistenceError):
+            JARVISTaskLoop().run(
+                manager, "task-1", _problem(),
+                _bindings(EffectClass.REVERSIBLE),
+                _policy(EffectClass.REVERSIBLE), executor,
+                now_ns=100, checkpoint_store=self.store,
+                expected_checkpoint_version=0,
+            )
+        self.assertEqual(executor.keys, [])
+        self.assertIs(self.store.load("loop-manager").manager.get_task("task-1").status,
+                      TaskStatus.QUEUED)
+
+    def test_reopened_checkpoint_preserves_terminal_task_state(self):
+        manager = _manager()
+        JARVISTaskLoop().run(
+            manager, "task-1", _problem(),
+            _bindings(EffectClass.REVERSIBLE),
+            _policy(EffectClass.REVERSIBLE), MemoryExecutor(),
+            now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=0,
+        )
+        self.storage.close()
+        reopened = JPVRStorage.open(self.path, recover_tail=False)
+        self.addCleanup(reopened.close)
+        restored = JPVRTaskSessionCheckpointStore(reopened).load("loop-manager")
+        self.assertIs(restored.manager.get_task("task-1").status, TaskStatus.COMPLETED)
+
+
+if __name__ == "__main__":
+    unittest.main()
