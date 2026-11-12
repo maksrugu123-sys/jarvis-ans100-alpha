@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -121,12 +122,8 @@ def _decode_result(raw: str, expected_digest: str) -> ActionExecutionResult:
         raise DurableExecutorLedgerCorrupt("stored result digest has an invalid format")
     encoded = raw.encode("ascii", errors="strict")
     actual = hashlib.sha256(b"JARVIS:EXECUTOR-RESULT:V1\x00" + encoded).hexdigest()
-    if not hashlib.compare_digest(actual, expected_digest):
-        # hashlib.compare_digest is not exposed on every supported Python;
-        # hmac.compare_digest is the portable constant-time comparison.
-        import hmac
-        if not hmac.compare_digest(actual, expected_digest):
-            raise DurableExecutorLedgerCorrupt("stored executor result digest mismatch")
+    if not hmac.compare_digest(actual, expected_digest):
+        raise DurableExecutorLedgerCorrupt("stored executor result digest mismatch")
     try:
         value = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -227,6 +224,12 @@ class DurableIdempotencyExecutor:
             connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.commit()
+        except sqlite3.Error as exc:
+            try:
+                connection.rollback()
+            except sqlite3.Error:
+                pass
+            raise DurableExecutorLedgerError("executor-ledger transaction failed") from exc
         except Exception:
             try:
                 connection.rollback()
