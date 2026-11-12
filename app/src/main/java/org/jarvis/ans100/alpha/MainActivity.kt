@@ -46,7 +46,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jarvis.ans100.alpha.data.LocalSession
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.LocalTaskDraft
-import org.jarvis.ans100.alpha.data.RuntimeBridgeUiState
 import org.jarvis.ans100.alpha.data.RuntimePlanningAction
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 
