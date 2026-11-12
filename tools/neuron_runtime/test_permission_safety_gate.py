@@ -240,7 +240,17 @@ class PermissionSafetyGateApprovalTests(unittest.TestCase):
         decision = self.gate.authorize(
             self.manager, self.policy, changed, now_ns=100, approval=approval
         )
-        self.assertEqual(decision.reason_code, "approval_binding_mismatch")
+        self.assertEqual(decision.reason_code, "stale_session_revision")
+
+    def test_rule_can_require_approval_for_reversible_effects(self):
+        rule = _rule(
+            allowed_effects=(EffectClass.READ_ONLY, EffectClass.REVERSIBLE),
+            requires_approval=True,
+        )
+        policy = _policy(rule)
+        request = _request(self.manager, effect=EffectClass.REVERSIBLE)
+        decision = self.gate.authorize(self.manager, policy, request, now_ns=100)
+        self.assertEqual(decision.reason_code, "approval_required")
 
     def test_empty_approval_reference_is_rejected(self):
         with self.assertRaises(PermissionSafetyError):
