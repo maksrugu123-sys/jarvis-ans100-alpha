@@ -1,10 +1,10 @@
-| `tools/neuron_runtime/feedback_transaction.py` | Candidate-state multi-synapse R-STDP feedback + one composite JPVR commit |\n| `tools/neuron_runtime/test_feedback_transaction.py` | Atomic feedback rollback, CAS, replay and terminal no-op tests |\n# JARVIS ANS-100 Alpha
+# JARVIS ANS-100 Alpha
 
 **JARVIS ANS-100 Alpha** is a research project for a compact adaptive neural system. Development is staged: begin with one artificial neuron and a small number of synapses, validate behavior and resource cost, and scale only when each previous step is supported by evidence.
 
 The repository has entered the first executable Python reference-orchestration stage. It is still not a production neural runtime, an integrated JPVR-001 prototype, or a finished assistant.
 
-## Current status — 11 November 2026
+## Current status — 12 November 2026
 
 - **JPVR reference:** seventeen modules currently contain **362 test methods**. The COW-integrated typed builder feeds a file-backed two-Superblock storage engine. JPVRStorage.scan_history() audits the full COMMIT/MANIFEST history and validates the OUTBOX chain even for the last verified prefix when a later generation is damaged. JPVRStorage.recover_copy(destination, expected_commit_id=...) can publish that verified prefix as a separate file: it rechecks history under a shared lock, requires the exact commit identity, copies and reads back only verified pages, reconstructs both alternating Superblock slots, and publishes atomically without overwriting an existing path. The original file is never truncated or rewritten. The 23 historical-scan tests and 12 recovery-copy tests are AUTHORED, NOT RUN. The reference writer/scanner/copy-recovery are not yet Android-device-verified or production-ready. In-place repair, compaction, free-page reuse, durable CQE delivery and hardware-level power-loss guarantees remain out of scope. **Neuron checkpoint persistence:** tools/neuron_runtime/jpvr_adapter.py serializes complete one-neuron state/configuration into versioned JREC/DATA or BLOB records, and tools/neuron_runtime/jpvr_store.py now resolves a fixed 100-byte versioned locator in the neuron COW INDEX. JPVRNeuronCheckpointStore.save() commits the checkpoint record and locator in one transaction; load() validates the COMMIT ancestry, DATA/BLOB metadata, CRCs and snapshot schema before restoring NeuronRuntime. A genesis container receives its seven empty index roots in a separate initialization commit. The 17 adapter tests and 17 new store tests are AUTHORED, NOT RUN. The one-neuron facade defaults to a 4096-page materialized catalog. A separate JPVRNetworkCheckpointStore now persists the complete bounded NetworkRuntime topology, pending events, scheduler limits and model clock in one BLOB+CHECKPOINT commit. A bounded RewardBaselineManager now owns per-task ordered feedback and idempotency; JPVRRewardBaselineStore persists its pending/committed state in a dedicated container. The two checkpoints are not yet one atomic Runtime snapshot.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
@@ -28,6 +28,9 @@ The repository has entered the first executable Python reference-orchestration s
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
 ## Repository map
+| `tools/neuron_runtime/task_session.py` | Bounded task/session lifecycle registry and canonical snapshot codec (not durable JPVR storage) |
+| `tools/neuron_runtime/test_task_session.py` | Task/session lifecycle, CAS, idempotency, capacity and snapshot tests |
+| `docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md` | Task/session lifecycle V1 contract and limitations |
 
 | Path | Purpose |
 |---|---|
@@ -397,3 +400,14 @@ python3 -m unittest tools.neuron_runtime.test_feedback_transaction -v
 ## Durable CQE reward-feedback inbox
 
 process_cqe_reward_feedback() preflights all targets on a detached network copy, then persists the normalized reward EVENT and its target/context digest as a pending JRCM checkpoint before applying synapse rewards to authoritative state. The completed receipt, baseline advance and network updates are then published together. After interruption, reload the active JRCM checkpoint and retry the exact envelope with its latest runtime version. This adapter handles reward-feedback only; upstream source authorization and external schema registration are required; general CQE events remain volatile. Contract: docs/JNVM_CQE_REWARD_FEEDBACK_INBOX_V1.md. Twelve focused tests are **AUTHORED, NOT RUN**.
+
+
+## Task & Session Lifecycle V1
+
+Run focused reference tests (authored, not run):
+
+\`\`\`sh
+python3 -m unittest tools.neuron_runtime.test_task_session -v
+\`\`\`
+
+The bounded TaskSessionManager provides explicit session/task states, revision checks, idempotent task creation, ordered lifecycle events and a canonical snapshot codec. It is a single-writer Python reference registry. Snapshot encoding is not durable persistence: no JPVR Task/Session checkpoint store or restart recovery is implemented yet. Contract: docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md. Fifteen tests are **AUTHORED, NOT RUN**.
