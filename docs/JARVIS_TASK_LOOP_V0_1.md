@@ -1,6 +1,6 @@
 # JARVIS Task Loop V0.1
 
-**Статус:** реализован как ограниченный последовательный Python reference coordinator; 19 focused tests AUTHORED, NOT RUN. Он связывает TaskSessionManager, ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Это ещё не автономный помощник, production NCC или Android-приложение.
+**Статус:** реализован как ограниченный последовательный Python reference coordinator; 20 focused tests AUTHORED, NOT RUN. Он связывает TaskSessionManager, ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Это ещё не автономный помощник, production NCC или Android-приложение.
 
 ## Основной проход
 
@@ -33,7 +33,7 @@ TaskLoopStatus.WAITING — это результат orchestration-вызова,
 
 При восстановлении child RUNNING повторно проходит authorization gate и вызывает executor с тем же action idempotency key. Если child уже COMPLETED, executor также вызывается с тем же ключом, чтобы вернуть ранее сохранённый полный ответ; его digest сравнивается с JPVR записью. Несовпадение приводит к fail-closed результату step_replay_result_mismatch. Executor обязан хранить свой durable idempotency ledger и воспроизводить неизменный ответ для повторного ключа. JPVR хранит intent и digest, но не заменяет executor ledger и не хранит весь observed-facts payload.
 
-Каждый intent/result checkpoint — отдельный атомарный commit TaskSessionManager. Между внешним действием и записью результата всё ещё существует crash window; он разрешается только за счёт устойчивого idempotency ledger внешнего executor. Это не общая транзакция между JPVR и внешним сервисом и не exactly-once guarantee.
+При исчерпании лимита задач или lifecycle events child intent не создаётся/не переводится в RUNNING, поэтому executor не вызывается. Каждый intent/result checkpoint — отдельный атомарный commit TaskSessionManager. Между внешним действием и записью результата всё ещё существует crash window; он разрешается только за счёт устойчивого idempotency ledger внешнего executor. Это не общая транзакция между JPVR и внешним сервисом и не exactly-once guarantee.
 
 ## Идемпотентность и восстановление
 
@@ -63,4 +63,4 @@ python3 -m unittest tools.neuron_runtime.test_task_loop -v
 python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
 ```
 
-19 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS и reopen of terminal state. Gate имеет 26 focused tests. Обе группы AUTHORED, NOT RUN. GitHub readback/static cross-reference only; Python execution/import checks, Android I/O, benchmarks, builds, CI и GitHub Actions не выполнялись.
+20 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS и reopen of terminal state. Gate имеет 26 focused tests. Обе группы AUTHORED, NOT RUN. GitHub readback/static cross-reference only; Python execution/import checks, Android I/O, benchmarks, builds, CI и GitHub Actions не выполнялись.
