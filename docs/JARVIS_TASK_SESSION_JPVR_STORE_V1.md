@@ -5,7 +5,7 @@
 ## Record contract
 
 - Record type: `0x0104`; schema tag `JTSL`; schema version 1.
-- Object identity is the first 16 bytes of SHA-256 over a domain-separated UTF-8 manager ID.
+- Object identity is the first 16 bytes of SHA-256 over a domain-separated manager ID. The ID must satisfy the same stable ASCII identifier pattern as TaskSessionManager (1–128 characters: letters, digits, dot, underscore, colon or hyphen; first character alphanumeric).
 - The payload is the canonical `TaskSessionManager.encode_snapshot()` document. Restore reuses the manager's strict V1 decoder.
 - Payloads are stored as one DATA record when they fit the JPVR small-record bound, otherwise as a contiguous BLOB record.
 - The fixed-size `JTSC` V1 CHECKPOINT descriptor binds manager object ID, record version, storage kind, page range, generation, payload length and CRC32C.
