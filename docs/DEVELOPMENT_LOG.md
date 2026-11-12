@@ -1391,3 +1391,7 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** approval grant и approval_ref поступают от caller и не аутентифицируются/не подписываются; policy не имеет durable revocation registry; executor injected, не встроен. Task Loop не сохраняет durable per-step intent/result ledger, approval records или scheduler lease, поэтому JPVR lifecycle checkpoint и executor idempotency contract не доказывают exactly-once side effects. Natural-language decomposition, automatic action generation, built-in tools, runtime resource enforcement, production NCC and Android app are not implemented.
 
 **Следующий шаг:** спроектировать и реализовать durable per-step intent/result ledger с безопасной reconciliation после restart и согласованной CQE inbox/outbox publication. Только после этого подключать ограниченные встроенные capabilities и тонкую UI оболочку.
+
+## 2026-11-12 — Task Loop invalid-input regression follow-up
+
+При последующей статической сверке уточнён тип TaskLoopResult.reasoning: он допускает None, когда ReasoningEngine отклоняет malformed structured input до построения плана. Добавлен 14-й тест `test_invalid_reasoning_problem_fails_before_executor`, проверяющий переход в FAILED без вызова executor. Историческая запись реализации выше не переписывается; актуальное количество — **14 Task Loop tests**, AUTHORED, NOT RUN. Обновлены `docs/JARVIS_TASK_LOOP_V0_1.md`, `docs/JARVIS_ARCHITECTURE.md` и `README.md`. Выполнен только GitHub source readback; Python/tests/builds/CI не запускались.
