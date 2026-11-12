@@ -316,3 +316,40 @@ __all__ += [
     "decode_task_session_checkpoint_descriptor",
     "encode_task_session_checkpoint_descriptor",
 ]
+
+
+from .reasoning_engine import (
+    EvidencePolarity,
+    EvidenceQuality,
+    EvidenceRecord,
+    Hypothesis,
+    HypothesisAssessment,
+    HypothesisStatus,
+    PlanStatus,
+    PlanningAction,
+    ReasoningEngine,
+    ReasoningError,
+    ReasoningProblem,
+    ReasoningResult,
+    ReasoningStep,
+    ResultVerification,
+    VerificationStatus,
+)
+
+__all__ += [
+    "EvidencePolarity",
+    "EvidenceQuality",
+    "EvidenceRecord",
+    "Hypothesis",
+    "HypothesisAssessment",
+    "HypothesisStatus",
+    "PlanStatus",
+    "PlanningAction",
+    "ReasoningEngine",
+    "ReasoningError",
+    "ReasoningProblem",
+    "ReasoningResult",
+    "ReasoningStep",
+    "ResultVerification",
+    "VerificationStatus",
+]
