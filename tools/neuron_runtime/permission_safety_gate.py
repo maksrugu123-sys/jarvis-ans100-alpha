@@ -153,6 +153,7 @@ class SafetyPolicy:
 class AuthorizationRequest:
     """One proposed action bound to exact task/session revisions and an idempotency key."""
 
+    manager_id: str
     task_id: str
     expected_task_revision: int
     expected_session_revision: int
@@ -167,7 +168,7 @@ class AuthorizationRequest:
     budget: RequestedBudget
 
     def __post_init__(self) -> None:
-        for name in ("task_id", "session_id", "plan_id", "step_id", "action_id", "capability", "idempotency_key"):
+        for name in ("manager_id", "task_id", "session_id", "plan_id", "step_id", "action_id", "capability", "idempotency_key"):
             _identifier(name, getattr(self, name))
         _uint("expected_task_revision", self.expected_task_revision, minimum=1)
         _uint("expected_session_revision", self.expected_session_revision, minimum=1)
@@ -187,6 +188,7 @@ class ApprovalGrant:
     approval_id: str
     approved_by: str
     approval_ref: str
+    manager_id: str
     task_id: str
     task_revision: int
     session_id: str
@@ -205,7 +207,7 @@ class ApprovalGrant:
 
     def __post_init__(self) -> None:
         for name in (
-            "approval_id", "approved_by", "task_id", "session_id", "plan_id", "step_id",
+            "approval_id", "approved_by", "manager_id", "task_id", "session_id", "plan_id", "step_id",
             "action_id", "capability", "idempotency_key", "policy_id",
         ):
             _identifier(name, getattr(self, name))
@@ -264,7 +266,7 @@ def safety_policy_digest(policy: SafetyPolicy) -> str:
     encoded = json.dumps(
         document, sort_keys=True, ensure_ascii=True, separators=(",", ":"), allow_nan=False
     ).encode("ascii")
-    return hashlib.sha256(b"JARVIS:SAFETY-POLICY:V1\\x00" + encoded).hexdigest()
+    return hashlib.sha256(b"JARVIS:SAFETY-POLICY:V1\x00" + encoded).hexdigest()
 
 
 def authorization_intent_digest(request: AuthorizationRequest) -> str:
@@ -272,6 +274,7 @@ def authorization_intent_digest(request: AuthorizationRequest) -> str:
     if not isinstance(request, AuthorizationRequest):
         raise PermissionSafetyError("request must be an AuthorizationRequest")
     document = {
+        "manager_id": request.manager_id,
         "task_id": request.task_id,
         "task_revision": request.expected_task_revision,
         "session_revision": request.expected_session_revision,
@@ -312,6 +315,7 @@ def build_approval_grant(
         approval_id=approval_id,
         approved_by=approved_by,
         approval_ref=approval_ref,
+        manager_id=request.manager_id,
         task_id=request.task_id,
         task_revision=request.expected_task_revision,
         session_id=request.session_id,
@@ -363,6 +367,8 @@ class PermissionSafetyGate:
 
         if not policy.enabled:
             return deny("policy_disabled")
+        if request.manager_id != task_manager.manager_id:
+            return deny("task_manager_mismatch", 0)
         try:
             task = task_manager.get_task(request.task_id)
             session = task_manager.get_session(task.session_id)
@@ -411,7 +417,8 @@ class PermissionSafetyGate:
         if not isinstance(approval, ApprovalGrant):
             raise PermissionSafetyError("approval must be an ApprovalGrant or None")
         bindings = (
-            approval.task_id == request.task_id
+            approval.manager_id == task_manager.manager_id
+            and approval.task_id == request.task_id
             and approval.task_revision == task.revision
             and approval.session_id == session.session_id
             and approval.session_revision == session.revision
