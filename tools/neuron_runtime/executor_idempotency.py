@@ -259,6 +259,10 @@ class DurableIdempotencyExecutor:
                 )
             os.chmod(self.path, 0o600)
             return connection
+        except DurableExecutorLedgerError:
+            if connection is not None:
+                connection.close()
+            raise
         except (OSError, sqlite3.Error) as exc:
             if connection is not None:
                 connection.close()
