@@ -48,7 +48,9 @@ class LocalRuntimeBridgeClient {
     fun connect(): RuntimeBridgeSnapshot {
         val health = request("GET", "/api/health")
         if (requiredString(health, "status") != "ok" ||
-            requiredString(health, "storage") != "jpvr"
+            requiredString(health, "storage") != "jpvr" ||
+            requiredString(health, "api_schema") != "jarvis.local-console" ||
+            requiredInt(health, "api_version") != 1
         ) {
             throw RuntimeBridgeException("Локальный сервис не подтвердил готовность JPVR.")
         }
