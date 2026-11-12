@@ -398,6 +398,16 @@ class ReasoningEngine:
             raise ReasoningError("result must be a ReasoningResult")
         if result.status is not PlanStatus.SOLVED:
             raise ReasoningError("only a solved plan can be result-verified")
+        task_id = _identifier("result.task_id", result.task_id)
+        _text("result goal_description", result.goal_description, 512)
+        result_goals = _facts("result.goal_facts", result.goal_facts, maximum=self.max_facts)
+        result_predicted = _facts(
+            "result.predicted_final_facts",
+            result.predicted_final_facts,
+            maximum=self.max_facts,
+        )
+        if not result_goals or not set(result_goals).issubset(result_predicted):
+            raise ReasoningError("solved result must predict every required goal fact")
         if isinstance(observed_facts, (str, bytes)):
             raise ReasoningError("observed_facts must be an iterable of fact identifiers")
         try:
@@ -411,13 +421,13 @@ class ReasoningEngine:
             raise ReasoningError("observed_facts exceeds max_facts")
         observed = _facts("observed_facts", observed_items, maximum=self.max_facts)
         observed_set = set(observed)
-        goal_set = set(result.goal_facts)
-        predicted_set = set(result.predicted_final_facts)
+        goal_set = set(result_goals)
+        predicted_set = set(result_predicted)
         missing_goal = tuple(sorted(goal_set - observed_set))
         missing_predicted = tuple(sorted(predicted_set - observed_set))
         unexpected = tuple(sorted(observed_set - predicted_set))
         return ResultVerification(
-            result.task_id,
+            task_id,
             VerificationStatus.GOAL_INCOMPLETE if missing_goal else VerificationStatus.GOAL_SATISFIED,
             missing_goal,
             missing_predicted,
