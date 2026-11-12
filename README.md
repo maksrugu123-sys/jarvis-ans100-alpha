@@ -410,7 +410,7 @@ Run focused reference tests (authored, not run):
 python3 -m unittest tools.neuron_runtime.test_task_session -v
 \`\`\`
 
-The bounded TaskSessionManager provides explicit session/task states, revision checks, idempotent task creation, ordered lifecycle events and a canonical snapshot codec. It is a single-writer Python reference registry. Snapshot encoding is not durable persistence: no JPVR Task/Session checkpoint store or restart recovery is implemented yet. Contract: docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md. Fifteen tests are **AUTHORED, NOT RUN**.
+The bounded TaskSessionManager provides explicit session/task states, revision checks, idempotent task creation, ordered lifecycle events and a canonical snapshot codec. Its state can now be persisted with `JPVRTaskSessionCheckpointStore` as one versioned DATA/BLOB record plus a JTSC CHECKPOINT descriptor in one JPVR COMMIT, then restored after reopening the file. This is a single-writer Python reference store; use a **dedicated JPVR container** because MANIFEST has one active CHECKPOINT pointer. It does not persist external side effects, scheduler leases, authorization grants or CQE delivery, and does not guarantee exactly-once tool execution. Contracts: [lifecycle](docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md) and [JPVR store](docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md). Fifteen lifecycle tests and fourteen JPVR adapter/store tests are **AUTHORED, NOT RUN**.
 
 
 ### Task & Session JPVR Persistence V1 (12 Nov 2026)
