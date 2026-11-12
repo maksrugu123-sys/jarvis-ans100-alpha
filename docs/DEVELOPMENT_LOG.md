@@ -1583,3 +1583,19 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Граница доверия:** это local POSIX file reference store, не JPVR service. SHA-256 state digest защищает от случайного повреждения, но не от владельца файла, способного переписать JSON и пересчитать digest. ApprovalGrant остаётся caller-supplied; подписи grant и identity approver не проверяются. Не подключать к внешнему executor как production authorization.
 
 **Проверки:** GitHub readback/static review only. 17 test methods AUTHORED, NOT RUN. No Python imports/tests, filesystem fault injection, multi-process race testing, Termux runtime check, Android build, APK/AAB, CI or GitHub Actions were run.
+
+
+## 2026-11-12 — Durable Executor Idempotency Ledger V1 reference
+
+**Цель:** дать Task Loop устойчивый локальный invocation/result journal для одного ActionExecutor key и закрыть автоматический повтор delegate после неоднозначного результата.
+
+**Добавлено:**
+- tools/neuron_runtime/executor_idempotency.py — SQLite-backed DurableIdempotencyExecutor; canonical digest полного authorization intent + PlanningAction; commit IN_PROGRESS claim до delegate call; сохранение SUCCEEDED/FAILED_NO_EFFECT payload; replay final result; fail-closed UNKNOWN для unresolved key; ручная запись authoritative reconciliation result.
+- SQLite controls: BEGIN IMMEDIATE, busy timeout, synchronous=FULL, owner-only directory/database, symlink refusal, 256 records maximum V1, 128 KiB result bound, 16,384-page DB cap.
+- tools/neuron_runtime/test_executor_idempotency.py — 18 focused tests, AUTHORED / NOT RUN.
+- Public exports through tools.neuron_runtime.__init__.
+- docs/JARVIS_EXECUTOR_IDEMPOTENCY_LEDGER_V1.md, architecture §3.51, Task Loop contract, README map and AGENTS safety gate synchronized.
+
+**Гарантия и границы:** wrapper returns cached known results and never redispatches an existing IN_PROGRESS/UNKNOWN key. It does not guarantee exactly-once behavior at a downstream service. A crash can leave an unresolved claim before the side effect; an independent trusted reconciliation provider is needed. A caller-supplied reconciliation_ref is an audit string, not proof. No ActionExecutor was connected to an external system and no Android execution route was added.
+
+**Проверки:** GitHub source readback/static review only. 18 tests AUTHORED, NOT RUN. No Python import/test run, multiprocess/fault-injection test, downstream integration, Termux runtime, Android build, APK/AAB, CI or GitHub Actions.
