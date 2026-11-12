@@ -23,7 +23,7 @@ The repository has entered the first executable Python reference-orchestration s
 - **V4.2 causal-credit audit:** user-run Android Termux verification: **6/6 dedicated tests passed**; smoke (128 episodes) and pilot (2,048 episodes) completed. In pilot, R-STDP produced 1,355 negative, 0 positive and 693 zero updates. Correct FAST episodes had negative eligibility despite positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility magnitude/sign balance but did not change any per-episode eligibility or weight-update signs. This diagnoses a temporal-credit alignment limitation, not a proven fix. Details: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md and docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.
 - **V4.3 decision-boundary temporal credit:** focused tests passed (7/7, 1.636 s), and smoke/pilot completed on Android Termux. In the two-seed pilot, Decision-Latched reached 82.23% held-out accuracy versus 83.01% for frozen V4 R-STDP and 100% for STDP. It processed all sensory inputs and gated exactly 1,024 post-decision plasticity events, but did not improve held-out quality. It remains experimental, not the default. Details: docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md.
 
-- **Not implemented yet:** production neuron/NCC runtime, scheduler-owned clock-epoch continuity/rebase policy, atomic combined NetworkRuntime+RewardBaseline Runtime checkpoint and cross-domain feedback/weight transaction, general CQE inbox/outbox delivery, in-place JPVR repair/rollback, compaction/free-page reuse, full capability scopes/resource budgets, production-grade scheduler guarantees, natural-language reasoning/action generation and autonomous tool execution. Reasoning Engine V0.1 is currently a structured symbolic reference planner only. One-neuron and whole-network checkpoint stores are bounded Python reference APIs, not production JNVM services. Non-destructive recovery-copy publication remains a Python reference API, not automatic restoration or production repair.
+- **Not implemented yet:** production neuron/NCC runtime, scheduler-owned clock-epoch continuity/rebase policy, general CQE inbox/outbox delivery and durable per-step Task Loop intent/result ledger, in-place JPVR repair/rollback, compaction/free-page reuse, signed/authenticated approval and identity service, persistent policy/revocation store, runtime resource enforcement, production-grade scheduler guarantees, natural-language task parsing/decomposition, automatic safe-action generation, built-in tool execution and the Android app. Reasoning Engine V0.1, Permission & Safety Gate V1 and Task Loop V0.1 are bounded Python reference components, not production autonomous-agent infrastructure. Task Loop side effects require an injected executor and its own durable idempotency ledger. One-neuron, network, and task/session stores remain bounded Python reference APIs, not production JNVM services. Non-destructive recovery-copy publication remains a Python reference API, not automatic restoration or production repair.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
@@ -37,6 +37,12 @@ The repository has entered the first executable Python reference-orchestration s
 | `tools/neuron_runtime/reasoning_engine.py` | Bounded symbolic BFS planner, evidence assessor and observed-result verifier V0.1 |
 | `tools/neuron_runtime/test_reasoning_engine.py` | Reasoning planner, bounds, evidence and result-verification tests |
 | `docs/JARVIS_REASONING_ENGINE_V0_1.md` | Reasoning Engine V0.1 contract, limits and explicit non-goals |
+| `tools/neuron_runtime/permission_safety_gate.py` | Deny-by-default capability, approval, revision and resource authorization gate V1 |
+| `tools/neuron_runtime/test_permission_safety_gate.py` | Permission gate allow/deny, approval binding and budget tests (26 authored, not run) |
+| `docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md` | Permission & Safety Gate V1 trust boundary and contract |
+| `tools/neuron_runtime/task_loop.py` | Bounded sequential reasoning-authorized task orchestration with injected executor |
+| `tools/neuron_runtime/test_task_loop.py` | Task Loop execution, approval, retry, persistence and failure tests (13 authored, not run) |
+| `docs/JARVIS_TASK_LOOP_V0_1.md` | Task Loop V0.1 flow, idempotency and recovery limits |
 
 | Path | Purpose |
 |---|---|
@@ -438,3 +444,22 @@ python3 -m unittest tools.neuron_runtime.test_task_session_store -v
 ```
 
 TaskSessionManager now has a versioned JPVR DATA/BLOB adapter and a CAS-protected checkpoint store. It commits the snapshot record and CHECKPOINT descriptor together, validates source COMMIT ancestry and payload CRC on load, and restores the last committed task/session registry after reopening the JPVR file. Use a **dedicated JPVR container**; the format currently has one active CHECKPOINT pointer. This does not provide exactly-once external tool execution, scheduler leases, authorization persistence, or multi-process locking. Contract: [JARVIS_TASK_SESSION_JPVR_STORE_V1](docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md). Fourteen focused tests are AUTHORED, NOT RUN; no builds or CI were run.
+## Permission & Safety Gate V1
+
+Run the focused contract tests (authored, not run):
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
+```
+
+The deny-by-default gate binds each action to the current manager/task/session revisions, exact capability and scope, effect class, resource budget, retry index, policy digest and (when required) a step-specific expiring approval. It never invokes a tool. Approval records are caller-supplied and are not cryptographically authenticated; runtime quota enforcement and a trusted approval provider remain future work. Twenty-six tests are AUTHORED, NOT RUN. Contract: [Permission & Safety Gate V1](docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md).
+
+## JARVIS Task Loop V0.1
+
+Run the focused reference tests (authored, not run):
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_task_loop -v
+```
+
+The sequential Task Loop connects the structured Reasoning Engine to TaskSessionManager and the Permission & Safety Gate. Every step is re-authorized immediately before an injected executor is called, then checked against observed postconditions and final goal facts. Non-read-only actions require a dedicated task/session JPVR checkpoint store and CAS version. WAITING is an orchestration result: the task registry intentionally retains RUNNING and the same revision while approval or outcome reconciliation is pending, so the exact approval remains bound to the task revision. The caller receives the pending AuthorizationRequest. The executor must keep a durable idempotency ledger; Task Loop V0.1 does not persist per-step intent/result and therefore cannot claim exactly-once external effects. Thirteen focused tests are AUTHORED, NOT RUN. Contract: [JARVIS Task Loop V0.1](docs/JARVIS_TASK_LOOP_V0_1.md).
