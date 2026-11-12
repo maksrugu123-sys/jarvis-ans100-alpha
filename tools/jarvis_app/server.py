@@ -216,6 +216,26 @@ class LocalConsoleService:
             self._publish(candidate)
             return _task_view(record)
 
+    def set_session_status(
+        self, session_id: object, status: object, expected_revision: object,
+    ) -> dict[str, object]:
+        clean_session_id = _required_text(session_id, "session_id", maximum=128)
+        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
+            raise LocalConsoleError("expected_revision must be an integer")
+        try:
+            target = SessionStatus(status)
+        except (TypeError, ValueError) as exc:
+            raise LocalConsoleError("unsupported session status") from exc
+        with self._lock:
+            candidate = self._candidate()
+            updated = candidate.set_session_status(
+                clean_session_id, target, expected_revision=expected_revision,
+            )
+            if updated.revision != candidate.get_session(clean_session_id).revision:
+                raise LocalConsoleError("session revision did not advance")
+            self._publish(candidate)
+            return _session_view(updated)
+
     def cancel_queued_task(self, task_id: object, expected_revision: object) -> dict[str, object]:
         clean_task_id = _required_text(task_id, "task_id", maximum=128)
         if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
@@ -431,6 +451,15 @@ def create_http_server(
                         raise LocalConsoleError("ожидались поля session_id и title")
                     result = service.create_task(payload["session_id"], payload["title"])
                     self._send(201, {"task": result, "state": service.state()})
+                    return
+                if path.startswith("/api/sessions/") and path.endswith("/status"):
+                    session_id = path[len("/api/sessions/"):-len("/status")].strip("/")
+                    if not session_id or "/" in session_id or set(payload) != {"status", "expected_revision"}:
+                        raise LocalConsoleError("неверный путь или поля status/expected_revision")
+                    result = service.set_session_status(
+                        session_id, payload["status"], payload["expected_revision"]
+                    )
+                    self._send(200, {"session": result, "state": service.state()})
                     return
                 if path.startswith("/api/tasks/") and path.endswith("/cancel"):
                     task_id = path[len("/api/tasks/"):-len("/cancel")].strip("/")
