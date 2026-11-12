@@ -1605,3 +1605,9 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 - Added an integration scenario to `tools/neuron_runtime/test_task_loop.py`: delegate applies the first step but loses its reply; SQLite wrapper returns UNKNOWN without a second delegate call; after recording an independently verified result, Task Loop resumes and executes the next step.
 - Task Loop focused test count is now 21 (AUTHORED / NOT RUN). This is an authored integration regression, not evidence of a passing runtime test.
+
+
+### Unresolved executor key restart regression
+
+- Added `test_unresolved_key_survives_reopen_without_redispatch`: a fresh DurableIdempotencyExecutor sees the persisted UNKNOWN key and returns UNKNOWN without invoking its new delegate.
+- Executor ledger suite: 19 methods; AUTHORED, NOT RUN.
