@@ -228,11 +228,12 @@ class LocalConsoleService:
             raise LocalConsoleError("unsupported session status") from exc
         with self._lock:
             candidate = self._candidate()
+            current = candidate.get_session(clean_session_id)
             updated = candidate.set_session_status(
                 clean_session_id, target, expected_revision=expected_revision,
             )
-            if updated.revision != candidate.get_session(clean_session_id).revision:
-                raise LocalConsoleError("session revision did not advance")
+            if updated.revision == current.revision:
+                return _session_view(updated)
             self._publish(candidate)
             return _session_view(updated)
 
