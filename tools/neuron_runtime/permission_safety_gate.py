@@ -199,6 +199,7 @@ class ApprovalGrant:
     idempotency_key: str
     policy_id: str
     policy_version: int
+    policy_digest: str
     intent_digest: str
     expires_at_ns: int
 
@@ -214,6 +215,8 @@ class ApprovalGrant:
         _uint("session_revision", self.session_revision, minimum=1)
         _uint("policy_version", self.policy_version, minimum=1)
         _uint("expires_at_ns", self.expires_at_ns, minimum=1)
+        if not isinstance(self.policy_digest, str) or not _DIGEST.fullmatch(self.policy_digest):
+            raise PermissionSafetyError("policy_digest must be 64 lowercase hexadecimal characters")
         if not isinstance(self.intent_digest, str) or not _DIGEST.fullmatch(self.intent_digest):
             raise PermissionSafetyError("intent_digest must be 64 lowercase hexadecimal characters")
 
@@ -224,6 +227,7 @@ class AuthorizationDecision:
     reason_code: str
     policy_id: str
     policy_version: int
+    policy_digest: str
     task_id: str
     task_revision: int
     intent_digest: str
@@ -232,6 +236,35 @@ class AuthorizationDecision:
     @property
     def allowed(self) -> bool:
         return self.status is AuthorizationStatus.ALLOWED
+
+
+def safety_policy_digest(policy: SafetyPolicy) -> str:
+    """Canonical digest of the complete effective policy, not only its version."""
+    if not isinstance(policy, SafetyPolicy):
+        raise PermissionSafetyError("policy must be a SafetyPolicy")
+    document = {
+        "policy_id": policy.policy_id,
+        "version": policy.version,
+        "enabled": policy.enabled,
+        "rules": [
+            {
+                "capability": rule.capability,
+                "allowed_scopes": list(rule.allowed_scopes),
+                "allowed_effects": sorted(effect.value for effect in rule.allowed_effects),
+                "requires_approval": rule.requires_approval,
+                "max_compute_units": rule.max_compute_units,
+                "max_memory_bytes": rule.max_memory_bytes,
+                "max_timeout_ms": rule.max_timeout_ms,
+                "max_output_bytes": rule.max_output_bytes,
+                "max_retries": rule.max_retries,
+            }
+            for rule in policy.rules
+        ],
+    }
+    encoded = json.dumps(
+        document, sort_keys=True, ensure_ascii=True, separators=(",", ":"), allow_nan=False
+    ).encode("ascii")
+    return hashlib.sha256(b"JARVIS:SAFETY-POLICY:V1\\x00" + encoded).hexdigest()
 
 
 def authorization_intent_digest(request: AuthorizationRequest) -> str:
@@ -291,6 +324,7 @@ def build_approval_grant(
         idempotency_key=request.idempotency_key,
         policy_id=policy.policy_id,
         policy_version=policy.version,
+        policy_digest=safety_policy_digest(policy),
         intent_digest=digest,
         expires_at_ns=expires_at_ns,
     )
@@ -319,11 +353,12 @@ class PermissionSafetyGate:
         now = _uint("now_ns", now_ns)
 
         digest = authorization_intent_digest(request)
+        policy_digest = safety_policy_digest(policy)
 
         def deny(reason: str, revision: int = request.expected_task_revision):
             return AuthorizationDecision(
                 AuthorizationStatus.DENIED, reason, policy.policy_id, policy.version,
-                request.task_id, revision, digest, None,
+                policy_digest, request.task_id, revision, digest, None,
             )
 
         if not policy.enabled:
@@ -369,7 +404,7 @@ class PermissionSafetyGate:
         if not approval_required:
             return AuthorizationDecision(
                 AuthorizationStatus.ALLOWED, "authorized", policy.policy_id,
-                policy.version, request.task_id, task.revision, digest, None,
+                policy.version, policy_digest, request.task_id, task.revision, digest, None,
             )
         if approval is None:
             return deny("approval_required", task.revision)
@@ -388,6 +423,7 @@ class PermissionSafetyGate:
             and approval.idempotency_key == request.idempotency_key
             and approval.policy_id == policy.policy_id
             and approval.policy_version == policy.version
+            and approval.policy_digest == policy_digest
             and approval.intent_digest == digest
         )
         if not bindings:
@@ -396,6 +432,6 @@ class PermissionSafetyGate:
             return deny("approval_expired", task.revision)
         return AuthorizationDecision(
             AuthorizationStatus.ALLOWED, "authorized_with_approval",
-            policy.policy_id, policy.version, request.task_id, task.revision,
-            digest, approval.approval_id,
+            policy.policy_id, policy.version, policy_digest, request.task_id,
+            task.revision, digest, approval.approval_id,
         )
