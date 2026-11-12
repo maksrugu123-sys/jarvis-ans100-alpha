@@ -4323,7 +4323,7 @@ Android-local records remain explicitly labelled as drafts; they do not create T
 
 **Проверки:** nine tests in `LocalDraftRepositoryTest.kt` cover round-trip/repository recreation, session transition/revision behavior, stale revisions, rejection of task creation into paused/closed sessions, no-op commit, failed storage write, unknown schema, session capacity and invalid titles. They are **AUTHORED, NOT RUN**. GitHub readback/static inspection only; Kotlin compile, Gradle sync/build, APK/AAB, emulator/device run, UI tests and Android performance measurement are **NOT RUN**. No CI/GitHub Actions was run.
 
-**Следующий этап после V0.4:** определить и реализовать доверенную локальную identity/approval boundary и durable policy/revocation. Preview нельзя считать approval, а TaskLoop/ActionExecutor нельзя подключать до executor-side durable idempotency и recovery contract.
+**Следующий этап после V0.5:** реализовать и отдельно проверить trusted human identity и exact-request approval provider, durable policy/revocation, а также executor-owned durable idempotency/reconciliation. Bearer token локальной панели не заменяет approval. Preview нельзя считать approval, а TaskLoop/ActionExecutor нельзя подключать до этих контрактов.
 
 
 ### 3.48. Android ↔ Python Runtime Bridge V1 — loopback task/session administration
@@ -4350,7 +4350,7 @@ The local console health response declares:
 - `status = "ok"`;
 - `storage = "jpvr"`.
 
-The Android client checks all four values before accepting its initial connection. It exposes only:
+The Android client checks status, storage, schema, version and both authentication declarations before accepting its initial connection. It exposes only:
 - `GET /api/health` and `GET /api/state`;
 - `POST /api/sessions` and `POST /api/tasks`;
 - `POST /api/sessions/{session_id}/status`;
