@@ -382,3 +382,24 @@ __all__ += [
     "TaskLoopResult",
     "TaskLoopStatus",
 ]
+
+
+from .policy_registry import (
+    PersistentPolicySafetyGate,
+    PersistentSafetyPolicyRegistry,
+    SafetyPolicyRegistryConflict,
+    SafetyPolicyRegistryCorrupt,
+    SafetyPolicyRegistryError,
+    SafetyPolicyRegistryNotFound,
+    SafetyPolicyRegistrySnapshot,
+)
+
+__all__ += [
+    "PersistentPolicySafetyGate",
+    "PersistentSafetyPolicyRegistry",
+    "SafetyPolicyRegistryConflict",
+    "SafetyPolicyRegistryCorrupt",
+    "SafetyPolicyRegistryError",
+    "SafetyPolicyRegistryNotFound",
+    "SafetyPolicyRegistrySnapshot",
+]
