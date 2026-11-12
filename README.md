@@ -23,7 +23,7 @@ The repository has entered the first executable Python reference-orchestration s
 - **V4.2 causal-credit audit:** user-run Android Termux verification: **6/6 dedicated tests passed**; smoke (128 episodes) and pilot (2,048 episodes) completed. In pilot, R-STDP produced 1,355 negative, 0 positive and 693 zero updates. Correct FAST episodes had negative eligibility despite positive feedback; false-positive SLOW→FAST episodes had positive eligibility with negative feedback; correct SLOW episodes had zero eligibility. The 1 ns shadow changed aggregate eligibility magnitude/sign balance but did not change any per-episode eligibility or weight-update signs. This diagnoses a temporal-credit alignment limitation, not a proven fix. Details: docs/TASK_VALIDATION_R_STDP_V4_2_CREDIT_AUDIT.md and docs/TASK_VALIDATION_R_STDP_V4_2_RESULTS.md.
 - **V4.3 decision-boundary temporal credit:** focused tests passed (7/7, 1.636 s), and smoke/pilot completed on Android Termux. In the two-seed pilot, Decision-Latched reached 82.23% held-out accuracy versus 83.01% for frozen V4 R-STDP and 100% for STDP. It processed all sensory inputs and gated exactly 1,024 post-decision plasticity events, but did not improve held-out quality. It remains experimental, not the default. Details: docs/TASK_VALIDATION_R_STDP_V4_3.md and docs/TASK_VALIDATION_R_STDP_V4_3_RESULTS.md.
 
-- **Not implemented yet:** production neuron/NCC runtime, scheduler-owned clock-epoch continuity/rebase policy, atomic combined NetworkRuntime+RewardBaseline Runtime checkpoint and cross-domain feedback/weight transaction, CQE inbox/outbox/session persistence and durable event delivery, in-place JPVR repair/rollback, compaction/free-page reuse, full capability scopes/resource budgets, production-grade scheduler guarantees, and Reasoning Engine execution. One-neuron and whole-network checkpoint stores are bounded Python reference APIs, not production JNVM services. Non-destructive recovery-copy publication remains a Python reference API, not automatic restoration or production repair.
+- **Not implemented yet:** production neuron/NCC runtime, scheduler-owned clock-epoch continuity/rebase policy, atomic combined NetworkRuntime+RewardBaseline Runtime checkpoint and cross-domain feedback/weight transaction, general CQE inbox/outbox delivery, in-place JPVR repair/rollback, compaction/free-page reuse, full capability scopes/resource budgets, production-grade scheduler guarantees, natural-language reasoning/action generation and autonomous tool execution. Reasoning Engine V0.1 is currently a structured symbolic reference planner only. One-neuron and whole-network checkpoint stores are bounded Python reference APIs, not production JNVM services. Non-destructive recovery-copy publication remains a Python reference API, not automatic restoration or production repair.
 - **Not measured or validated yet:** target-device runtime performance, RAM/CPU/energy/I/O, float32 runtime equivalence, and JPVR crash consistency.
 - No application builds, APK/AAB generation, CI runs or GitHub Actions workflows were performed for these experiments.
 
@@ -31,6 +31,12 @@ The repository has entered the first executable Python reference-orchestration s
 | `tools/neuron_runtime/task_session.py` | Bounded task/session lifecycle registry and canonical snapshot codec (not durable JPVR storage) |
 | `tools/neuron_runtime/test_task_session.py` | Task/session lifecycle, CAS, idempotency, capacity and snapshot tests |
 | `docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md` | Task/session lifecycle V1 contract and limitations |
+| `tools/neuron_runtime/task_session_adapter.py` | Canonical versioned JPVR DATA/BLOB codec for task/session snapshots |
+| `tools/neuron_runtime/task_session_store.py` | CAS-protected JPVR checkpoint save/load and recovery validation for TaskSessionManager |
+| `docs/JARVIS_TASK_SESSION_JPVR_STORE_V1.md` | Durable task/session checkpoint contract and dedicated-container boundary |
+| `tools/neuron_runtime/reasoning_engine.py` | Bounded symbolic BFS planner, evidence assessor and observed-result verifier V0.1 |
+| `tools/neuron_runtime/test_reasoning_engine.py` | Reasoning planner, bounds, evidence and result-verification tests |
+| `docs/JARVIS_REASONING_ENGINE_V0_1.md` | Reasoning Engine V0.1 contract, limits and explicit non-goals |
 
 | Path | Purpose |
 |---|---|
@@ -396,6 +402,16 @@ python3 -m unittest tools.neuron_runtime.test_feedback_transaction -v
 
 `process_reward_feedback()` clones the network and baseline manager, applies all selected synapse rewards to candidate state, and commits both snapshots through one composite JRCM JPVR transaction. The function leaves caller objects untouched; replace them with the returned network and manager after success. The runtime version is mandatory for compare-and-swap. See `docs/JNVM_ATOMIC_REWARD_FEEDBACK_TRANSACTION_V1.md`.
 
+
+## Reasoning Engine V0.1
+
+Run the focused structured-reasoning contract tests (authored, not run):
+
+```sh
+python3 -m unittest tools.neuron_runtime.test_reasoning_engine -v
+```
+
+`ReasoningEngine` performs bounded deterministic breadth-first planning over caller-supplied symbolic facts and pure actions, groups supplied supporting/refuting evidence by hypothesis, and compares caller-supplied observed facts with a plan's goal. It returns a shortest action-count plan when one is found. It does **not** execute actions, interpret natural language, retrieve/authenticate evidence, or authorize tools. Twenty-six focused tests are AUTHORED, NOT RUN. Contract: [JARVIS_REASONING_ENGINE_V0_1](docs/JARVIS_REASONING_ENGINE_V0_1.md).
 
 ## Durable CQE reward-feedback inbox
 
