@@ -52,7 +52,7 @@ From the repository root in Termux:
 
     python3 -m tools.jarvis_app --port 8765
 
-Keep that process running, open the Android app and tap **Подключить JARVIS**. The app does not launch Termux or start the backend automatically. Stop the backend with Ctrl+C in Termux.
+On first run, copy the one-time access token printed in Termux and paste it into the Android token field. Save it before tapping **Подключить JARVIS**. Keep the process running; the app does not launch Termux or start the backend automatically. Stop the backend with Ctrl+C in Termux.
 
 ## API contract
 
