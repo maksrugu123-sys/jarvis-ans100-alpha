@@ -158,6 +158,7 @@ class TaskLoopResult:
     reason_code: str
     task_revision: int
     authorization_decisions: tuple[AuthorizationDecision, ...]
+    pending_authorization: AuthorizationRequest | None = None
 
 
 class JARVISTaskLoop:
@@ -331,7 +332,7 @@ class JARVISTaskLoop:
         except ReasoningError:
             return self._finish_failed(
                 task_manager, task_id, running_task_revision, "reasoning_invalid_request",
-                "plan-invalid", None, (), problem.initial_facts, (),
+                "plan-invalid", None, (), (), (),
                 persist_lifecycle,
             )
         plan_id = self._plan_id(problem, action_bindings)
@@ -393,7 +394,7 @@ class JARVISTaskLoop:
                 return self._finish_waiting(
                     task_manager, task_id, running_task_revision,
                     decision.reason_code, plan_id, reasoning, executed,
-                    step_id, observed_facts, decisions, persist_lifecycle,
+                    step_id, observed_facts, decisions, persist_lifecycle, request,
                 )
 
             try:
@@ -404,7 +405,7 @@ class JARVISTaskLoop:
                 return self._finish_waiting(
                     task_manager, task_id, running_task_revision,
                     "execution_outcome_unknown", plan_id, reasoning, executed,
-                    step_id, observed_facts, decisions, persist_lifecycle,
+                    step_id, observed_facts, decisions, persist_lifecycle, request,
                 )
             if not isinstance(execution, ActionExecutionResult):
                 return self._finish_waiting(
@@ -467,18 +468,20 @@ class JARVISTaskLoop:
     def _finish_waiting(
         self, manager, task_id, expected_revision, reason_code, plan_id,
         reasoning, executed, pending_step_id, observed_facts, decisions, persist,
+        pending_authorization=None,
     ) -> TaskLoopResult:
+        # Keep the RUNNING revision stable while approval/reconciliation is pending.
+        # The exact request and any ApprovalGrant remain bound to this revision.
         try:
-            waiting = manager.transition_task(
-                task_id, TaskStatus.WAITING, expected_revision=expected_revision
-            )
+            current = manager.get_task(task_id)
         except TaskSessionError as exc:
-            raise TaskLoopConflict("task lifecycle changed before WAITING could be committed") from exc
-        persist()
+            raise TaskLoopConflict("task disappeared while awaiting authorization or reconciliation") from exc
+        if current.status is not TaskStatus.RUNNING or current.revision != expected_revision:
+            raise TaskLoopConflict("task lifecycle changed while awaiting authorization or reconciliation")
         return TaskLoopResult(
             task_id, TaskLoopStatus.WAITING, plan_id, reasoning,
             tuple(executed), pending_step_id, tuple(observed_facts), reason_code,
-            waiting.revision, tuple(decisions),
+            current.revision, tuple(decisions), pending_authorization,
         )
 
     def _finish_failed(
