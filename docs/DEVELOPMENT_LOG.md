@@ -1534,3 +1534,30 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** Reasoning Engine всё ещё работает только с caller-supplied facts/actions. Нет natural-language understanding, automatic safe-action generation, authenticated evidence, approvals, TaskLoop invocation из Android, ActionExecutor, neural NetworkRuntime/CQE integration или APK. Отображение preview не означает, что цель выполнена в реальном мире.
 
 **Следующий этап:** создать отдельный защищённый local pairing/authentication flow между Android и Termux без LAN binding; затем durable policy/revocation и exact-request approval. До их реализации оставить executor недоступным.
+
+
+## 2026-11-12 — Android V0.5 authenticated local-console bridge
+
+**Цель:** закрыть предыдущую критическую границу локальной консоли: task/session state и все мутации ранее были доступны любому локальному процессу, способному обратиться к loopback-порту.
+
+**Добавлено / изменено:**
+- `tools/jarvis_app/auth.py` — 256-bit random Base64URL bearer token, SHA-256 digest-only persistence, owner-only file permissions (0600) and private parent directory (0700), constant-time digest comparison, explicit token rotation.
+- `tools/jarvis_app/server.py` — API v2; public health advertises required Bearer auth, while `GET /api/state` and every POST route reject missing/invalid credentials with HTTP 401. The process still binds only to 127.0.0.1.
+- `tools/jarvis_app/test_server.py` — token persistence/restart/rotation and HTTP deny/allow regressions; 11 console test methods total, all AUTHORED / NOT RUN.
+- `app/.../data/RuntimeAccessTokenStore.kt` — AES-GCM encrypted token envelope using Android Keystore; plaintext is not persisted in SharedPreferences.
+- `LocalRuntimeBridgeClient.kt` and `JarvisViewModel.kt` — API v2 handshake, Bearer header, token load/save/forget and fail-closed UI state.
+- `MainActivity.kt` — V0.5 token entry and masked input.
+- `tools/jarvis_app/static/app.js`, `index.html`, `styles.css`, `sw.js` — PWA sign-in panel, bearer request headers, current-tab sessionStorage and refreshed static cache version.
+- Android bridge, app, local-console and architecture documents plus `AGENTS.md` synchronized to the v2 auth contract.
+
+**Архитектурные решения:**
+- The API health endpoint remains unauthenticated but returns no task/session details.
+- Token possession is local transport access control; it is not trusted human identity, exact-request approval, signed grants, durable policy or authorization for side effects.
+- External actions, tool execution and remote access remain disabled. No Task Loop or ActionExecutor route was added.
+- Old V0.4 clients expect API v1 and must be updated/rebuilt before they can use the API v2 console.
+
+**Verification:** latest source files and documentation were fetched back from GitHub and inspected statically. No runtime auth/HTTP/crypto test or Android-to-Termux test was run.
+
+**Tests / builds:** 11 Python console tests are AUTHORED / NOT RUN; 9 Android local draft tests remain AUTHORED / NOT RUN. No Kotlin test, Gradle sync/build, APK/AAB, install, CI or GitHub Actions were run. The repository has no Gradle wrapper.
+
+**Limitations / next stage:** Android token storage and UI still have no dedicated tests. The local token does not establish a human identity or exact action approval. Next implement and independently test a trusted approval provider, persistent policy/revocation, and executor-owned durable idempotency/reconciliation before any side effects.
