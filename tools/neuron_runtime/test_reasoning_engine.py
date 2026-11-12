@@ -14,6 +14,7 @@ from tools.neuron_runtime.reasoning_engine import (
     ReasoningEngine,
     ReasoningError,
     ReasoningProblem,
+    ReasoningResult,
     VerificationStatus,
 )
 
@@ -245,6 +246,14 @@ class ReasoningEvidenceTests(unittest.TestCase):
                 evidence=(evidence, evidence),
             ))
 
+    def test_reviewed_evidence_requires_a_review_reference(self):
+        with self.assertRaises(ReasoningError):
+            EvidenceRecord(
+                "e1", "h1", EvidencePolarity.SUPPORTS, "source",
+                EvidenceQuality.PRIMARY, "Evidence",
+                EvidenceVerificationStatus.VERIFIED, "",
+            )
+
 
 class ReasoningVerificationTests(unittest.TestCase):
     def setUp(self):
@@ -285,6 +294,21 @@ class ReasoningVerificationTests(unittest.TestCase):
     def test_observed_facts_reject_string_input(self):
         with self.assertRaises(ReasoningError):
             self.engine.verify_result(self.result, "output")
+
+    def test_forged_solved_result_must_include_goal_in_prediction(self):
+        forged = ReasoningResult(
+            task_id="task-forged",
+            goal_description="Inconsistent plan result",
+            status=PlanStatus.SOLVED,
+            goal_facts=("goal",),
+            initial_facts=(),
+            predicted_final_facts=("other",),
+            plan=(),
+            hypothesis_assessments=(),
+            expanded_states=0,
+        )
+        with self.assertRaises(ReasoningError):
+            self.engine.verify_result(forged, ("goal",))
 
     def test_observed_fact_generator_is_bounded_by_max_facts(self):
         engine = ReasoningEngine(max_facts=3)
