@@ -1618,3 +1618,9 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 - Added `DurableIdempotencyExecutor.list_unresolved(limit=50)` for ordered bounded metadata inspection of IN_PROGRESS/UNKNOWN records, and `state_counts()` for state totals/capacity.
 - Added two focused tests for state counts, unresolved ordering, invalid limits and non-disclosure of action payloads.
 - Executor ledger test inventory: 21 methods, AUTHORED / NOT RUN.
+
+
+### Combined persistent Task Loop reference composition
+
+- Added a Task Loop integration test that injects `PersistentPolicySafetyGate` and `DurableIdempotencyExecutor` together. It runs a bounded read-only two-step plan, then checks both executor results are durably recorded and the policy snapshot stays at the expected record version.
+- Task Loop focused inventory is now 22 methods, AUTHORED / NOT RUN. The new integration test has not been executed.
