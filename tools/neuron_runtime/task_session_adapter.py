@@ -14,6 +14,7 @@ TASK_SESSION_RECORD_TYPE = 0x0104
 TASK_SESSION_SCHEMA_ID = 0x4A54534C  # JTSL
 TASK_SESSION_SCHEMA_VERSION = 1
 _DOMAIN = b"JARVIS:JPVR:TASK-SESSION:V1\x00"
+_MANAGER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
 class TaskSessionPersistenceError(ValueError):
