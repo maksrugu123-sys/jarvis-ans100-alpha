@@ -4196,7 +4196,7 @@ Defaults: 128 sessions, 1,024 tasks, 4,096 lifecycle events, 32 input refs/task,
 
 Добавлены task_session.py и test_task_session.py (15 тестов) для lifecycle transitions, terminal immutability, CAS, idempotency, paused/closed rules, capacity atomicity, canonical round-trip, duplicate JSON key/schema/size rejection и invalid metadata. GitHub readback/static review only; tests AUTHORED, NOT RUN. Python execution/import/syntax checks, JPVR integration, device I/O, benchmarks, builds, CI and GitHub Actions не запускались.
 
-**Следующий этап:** versioned JPVR Task/Session checkpoint adapter/store с CAS, commit ancestry, bounded journal restore и interrupted-write recovery. После этого — authorization snapshot/version contract и первый ограниченный JARVIS task loop.
+**Исторический следующий этап:** JPVR Task/Session checkpoint adapter/store; он реализован в разделе 3.43. Текущий следующий этап — authorization snapshot/version contract и первый ограниченный JARVIS task loop.
 
 
 ### 3.43. Durable Task & Session JPVR Checkpoint V1
