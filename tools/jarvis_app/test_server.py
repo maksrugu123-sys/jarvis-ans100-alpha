@@ -70,6 +70,53 @@ class LocalConsoleServiceTests(unittest.TestCase):
         self.assertEqual(self.service.checkpoint_version, version)
 
 
+    def test_reasoning_preview_returns_plan_without_changing_jpvr_state(self):
+        version_before = self.service.checkpoint_version
+        payload = {
+            "task_id": "preview-service",
+            "goal_description": "Prepare the system",
+            "initial_facts": ["battery_ok"],
+            "goal_facts": ["ready"],
+            "actions": [
+                {
+                    "action_id": "power_on",
+                    "summary": "Power on",
+                    "preconditions": ["battery_ok"],
+                    "add_facts": ["powered_on"],
+                },
+                {
+                    "action_id": "boot",
+                    "summary": "Boot",
+                    "preconditions": ["powered_on"],
+                    "add_facts": ["ready"],
+                },
+            ],
+        }
+        result = self.service.preview_reasoning(payload)
+
+        self.assertEqual(result["status"], "solved")
+        self.assertEqual(
+            [step["action_id"] for step in result["plan"]],
+            ["power_on", "boot"],
+        )
+        self.assertEqual(
+            result["notice"],
+            "Это только символьный preview. Действия не исполнялись.",
+        )
+        self.assertEqual(self.service.checkpoint_version, version_before)
+        self.assertEqual(self.service.state()["tasks"], [])
+
+    def test_reasoning_preview_rejects_duplicate_facts(self):
+        with self.assertRaisesRegex(ValueError, "duplicates"):
+            self.service.preview_reasoning({
+                "task_id": "preview-invalid",
+                "goal_description": "Prepare the system",
+                "initial_facts": ["ready", "ready"],
+                "goal_facts": ["ready"],
+                "actions": [],
+            })
+
+
 class LocalConsoleHttpTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -120,6 +167,29 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(payload["storage"], "jpvr")
         self.assertEqual(payload["api_schema"], "jarvis.local-console")
         self.assertEqual(payload["api_version"], 1)
+
+    def test_reasoning_preview_http_endpoint_returns_symbolic_plan(self):
+        status, payload = self._post(
+            "/api/reasoning/preview",
+            {
+                "task_id": "preview-http",
+                "goal_description": "Prepare the system",
+                "initial_facts": ["battery_ok"],
+                "goal_facts": ["ready"],
+                "actions": [
+                    {
+                        "action_id": "boot",
+                        "summary": "Boot",
+                        "preconditions": ["battery_ok"],
+                        "add_facts": ["ready"],
+                    },
+                ],
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["status"], "solved")
+        self.assertEqual(payload["plan"][0]["action_id"], "boot")
+        self.assertIn("не исполнялись", payload["notice"])
 
     def test_foreign_origin_is_rejected(self):
         created = self.service.create_session("Origin check")
