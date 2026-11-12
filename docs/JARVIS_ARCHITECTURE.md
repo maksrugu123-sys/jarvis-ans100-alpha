@@ -4244,7 +4244,7 @@ Defaults: 2,048 visited fact states, depth 32, 256 actions, 2,048 facts, 128 hyp
 
 После внешнего исполнения вызывающая сторона передаёт observed facts в verify_result(). Engine сообщает, все ли goal facts присутствуют, какие predicted facts отсутствуют и какие неожиданные факты появились. Он не может удостоверить происхождение наблюдений, проверить реальный внешний side effect или самостоятельно определить, кто имеет право выполнять шаг.
 
-ReasoningResult пока не сохраняется в TaskSessionManager/JPVR. Интеграция должна будет связать plan с конкретной task revision и durable intent/result; Permission & Safety Gate должен повторно проверять разрешение непосредственно перед каждым side effect.
+ReasoningResult/plan не сохраняется как отдельный durable объект. Реализованный Task Loop V0.1 (§3.46) связывает каждый AuthorizationRequest с точными manager/task/session revisions и повторно вызывает Permission & Safety Gate (§3.45) непосредственно перед каждым действием. Внешние side effects выполняет только внедряемый исполнитель за отдельной trust boundary; durable per-step intent/result ledger пока отсутствует.
 
 #### 3.44.5. Ограничения и проверки
 
@@ -4252,4 +4252,42 @@ ReasoningResult пока не сохраняется в TaskSessionManager/JPVR.
 
 GitHub readback/source review only. Все 31 тест AUTHORED, NOT RUN. Python execution/import/syntax checks, Android/Termux measurements, benchmarks, builds, CI and GitHub Actions — NOT RUN.
 
-**Следующий этап по дорожной карте:** Permission & Safety Gate — capability scopes, explicit approvals, authorization version binding, task/revision binding, resource/time budgets and deny-by-default behavior. После этого Reasoning Engine и TaskSessionManager можно объединить в JARVIS Task Loop, не разрешая planner напрямую вызывать внешние инструменты.
+**Реализация следующего этапа зафиксирована в §3.45–3.46:** Permission & Safety Gate V1 и bounded JARVIS Task Loop V0.1. Эти компоненты остаются Python reference APIs; они не дают Reasoning Engine право самостоятельно вызывать инструменты.
+
+### 3.45. Permission & Safety Gate V1
+
+**Статус:** IMPLEMENTED как pure deny-by-default Python reference gate; 26 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md`.
+
+Gate проверяет один AuthorizationRequest перед передачей действия executor. Запрос привязан к manager ID, task/session IDs и их точным revisions, plan/step/action, capability, exact scope, idempotency key, effect и RequestedBudget. Разрешение возможно только при открытой сессии, RUNNING задаче, действующей policy, полном совпадении capability/scope/effect allow-list и соблюдении каждого лимита.
+
+CapabilityRule задаёт разрешённые эффекты READ_ONLY/REVERSIBLE/EXTERNAL/IRREVERSIBLE, scope и пределы compute, memory, timeout, output и retries. Scope сравниваются точно, без префиксов. Неизвестные capability/effect/scope и выключенная policy отклоняются.
+
+EXTERNAL и IRREVERSIBLE требуют ApprovalGrant всегда; REVERSIBLE требует approval, если rule установило requires_approval. Grant привязан к точной manager/task/session revision, plan/step/action, capability/scope/idempotency, policy version + canonical policy digest, authorization intent digest и времени истечения. Intent digest включает retry_index, поэтому grant нельзя переносить на иной номер повторной попытки.
+
+**Trust boundary:** build_approval_grant создаёт корректно связанный объект, но не аутентифицирует пользователя и не доказывает факт UI-подтверждения. Подлинность approver, approval_ref, credentials и источник policy должны проверяться отдельным защищённым provider. Gate не хранит approvals, не выполняет инструменты и не может принудительно ограничивать CPU/RAM/time — executor обязан соблюдать объявленные бюджеты.
+
+В Gate нет durable policy/revocation registry, подписи grant, secrets isolation, полноценной identity service, runtime sandbox или multi-process coordination. Поэтому этот модуль нельзя считать production security subsystem.
+
+Проверки: `tools/neuron_runtime/test_permission_safety_gate.py` содержит 26 методов для exact grants/denials, scope/effect, task/session revisions, ресурсов/retries, approval expiry/binding, policy digest и retry-index binding. Все AUTHORED, NOT RUN; security audit и runtime execution не проводились.
+
+### 3.46. Bounded JARVIS Task Loop V0.1
+
+**Статус:** IMPLEMENTED как ограниченный последовательный Python reference coordinator; 13 focused tests AUTHORED, NOT RUN. Контракт: `docs/JARVIS_TASK_LOOP_V0_1.md`.
+
+`JARVISTaskLoop` объединяет TaskSessionManager, bounded ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Caller передаёт структурированный ReasoningProblem, полный набор PlanningAction и ровно одну ActionBinding на каждое действие; свободный текст не декомпозируется, инструменты не генерируются автоматически.
+
+Plan ID и step ID детерминированы. Для каждого действия строится AuthorizationRequest, привязанный к актуальным manager/task/session revisions; Gate проверяется непосредственно перед вызовом executor. Исполнение не начинается при отсутствии capability/approval, при stale version, ошибке планирования или нарушении preconditions. После executor каждый шаг сверяется с полным снимком observed facts и ожидаемыми postconditions; завершение проверяет goal facts через ReasoningEngine.verify_result().
+
+Каждое действие имеет стабильный idempotency key, derived из task identity, task idempotency key, plan ID, step ID и action ID. Executor обязан хранить durable idempotency ledger и возвращать прежний результат для повторного ключа; UNKNOWN/потерянный ответ не превращается в FAILED_NO_EFFECT и не запускает вслепую новую операцию.
+
+**Особенность WAITING:** TaskLoopStatus.WAITING — orchestration result, а не TaskStatus.WAITING в TaskSessionManager. Пока ожидается approval или reconciliation неопределённого результата, task registry сохраняет RUNNING и ту же revision. TaskLoopResult.pending_authorization возвращает точный запрос, к которому можно привязать approval. Это не доказывает, что исполнитель сейчас работает; это означает, что шаг не получил однозначного terminal result. Изменение task revision инвалидировало бы только что выданное approval.
+
+Любой effect кроме READ_ONLY требует dedicated JPVRTaskSessionCheckpointStore и expected_record_version. Перед возобновлением уже RUNNING task loop проверяет persisted version и точное canonical snapshot equality с in-memory manager; несовпадение блокирует executor. Вход в RUNNING и terminal COMPLETED/FAILED сохраняются через CAS.
+
+**Ограничения восстановления:** Task Loop V0.1 не сохраняет per-step intent/result ledger, approvals, scheduler leases или ReasoningResult в JPVR. При рестарте caller обязан передать тот же structured problem/bindings и восстановить исполнитель с его durable idempotency ledger. Без внешнего durable ledger повтор может повторить side effect; exactly-once guarantee не заявляется. Task/session snapshot содержит лишь registry state.
+
+Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox, production NCC и Android app.
+
+Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 13 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и reopen. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
+
+**Следующий технический gate:** durable per-step intent/result ledger и согласованная публикация intent/result с CQE inbox/outbox, чтобы прерывание между внешним действием и registry commit можно было безопасно разрешать. После этого — тонкий локальный JARVIS app shell поверх уже защищённого Task Loop; не наоборот.
