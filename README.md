@@ -52,6 +52,7 @@ The native Kotlin/Compose app at `app/` now has two deliberately separate views 
 | `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDraftRepository.kt` | Bounded versioned Android-only draft/session codec and repository |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesDraftStorage.kt` | App-private durable storage adapter for the local draft repository |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` | Bounded, version-checked HTTP client for the on-device loopback JPVR console |
+| `app/src/main/res/xml/network_security_config.xml` | Deny cleartext by default; allow only loopback for the local runtime bridge |
 | `app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt` | Nine repository/codec contract tests (authored, not run) |
 | `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.3 local-draft and loopback bridge contract |
 | `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` | Android-to-Termux JPVR task/session bridge, API version, bounds and trust boundary |
@@ -481,11 +482,11 @@ The sequential Task Loop connects the structured Reasoning Engine to TaskSession
 
 
 
-## Native Android application V0.2
+## Native Android application V0.3
 
-The native Compose application now provides local sessions and task drafts. Sessions can be paused, resumed or closed with revision checks; draft tasks can be created, searched, inspected and deleted. Local state is persisted in app-private SharedPreferences using the versioned `JARVIS_ANDROID_DRAFTS V1` format (32 sessions, 500 drafts, 240 characters/title, 512 KiB maximum encoded state).
+The native Compose application provides app-private local drafts and a separate JPVR runtime panel. The runtime panel connects to the local Python console at 127.0.0.1:8765 and can read/create backend sessions/tasks, pause/resume/close sessions with revision checks, and cancel QUEUED tasks. The local draft store remains independent and is persisted in SharedPreferences using JARVIS_ANDROID_DRAFTS V1 (32 sessions, 500 drafts, 240 characters/title, 512 KiB maximum encoded state).
 
-This is **not** the JPVR TaskSessionManager store and is not connected to the Python runtime. Every Android item is explicitly a local draft; Reasoning Engine, Permission & Safety Gate and Task Loop are not invoked by this UI. A separate, versioned, authenticated local runtime bridge is still required before the Android app can display authoritative JARVIS task statuses or request execution approval.
+The local draft repository is **not** the JPVR TaskSessionManager store. The separate runtime panel reads authoritative backend task/session records through the versioned local-console API, but it does not call Reasoning Engine, Permission & Safety Gate, Task Loop or ActionExecutor. A created backend task remains QUEUED; no execution or approval is implied. The loopback API is not authenticated and must not be exposed beyond the device.
 
 Android repository tests:
 
@@ -493,7 +494,7 @@ Android repository tests:
 app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
 ```
 
-Nine unit tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contract: [JARVIS Android App V0.2](docs/JARVIS_ANDROID_APP_V0_1.md).
+Nine Android local-repository tests and six Python console API tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.3](docs/JARVIS_ANDROID_APP_V0_1.md) and [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md).
 
 ## Separate local PWA console
 
@@ -503,4 +504,4 @@ The Python local console can be started from the repository root:
 python3 -m tools.jarvis_app --port 8765
 ```
 
-Open `http://127.0.0.1:8765/` on the same device. It binds only to loopback and persists TaskSessionManager through its dedicated JPVR checkpoint file. The PWA is independent from the native Compose app and does not share state with Android SharedPreferences. Its session controls and task filters are documented in [JARVIS Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md). The five console tests are **AUTHORED, NOT RUN**.
+Open `http://127.0.0.1:8765/` on the same device. The same running console serves the PWA and the native Compose bridge; both operate on the JPVR-backed TaskSessionManager. Android SharedPreferences drafts remain separate. The service binds only to loopback. Its API and safety boundary are documented in [JARVIS Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md). The six console tests are **AUTHORED, NOT RUN**.
