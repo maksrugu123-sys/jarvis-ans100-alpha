@@ -1,6 +1,6 @@
 # JARVIS Reasoning Engine V0.1
 
-**Status:** implemented as a bounded deterministic Python reference planner and evidence assessor. Focused tests are authored, not run. This is not a natural-language model, autonomous agent, tool executor, or production NCC component.
+**Status:** implemented as a bounded deterministic Python reference planner and evidence assessor. Twenty-nine focused tests are authored, not run. This is not a natural-language model, autonomous agent, tool executor, or production NCC component.
 
 ## Purpose
 
@@ -15,13 +15,17 @@ The engine uses breadth-first search over immutable fact sets. With unit-cost ac
 
 ## Hypothesis and evidence review
 
-Evidence records identify a hypothesis, source reference, polarity (supports/refutes), quality label, and summary. The engine reports one of four evidence-coverage states:
-- `insufficient` — no linked evidence;
-- `support_only` — supporting entries and no refuting entries;
-- `refute_only` — refuting entries and no supporting entries;
-- `mixed` — both directions are present.
+Evidence records identify a hypothesis, source reference, polarity (supports/refutes), source-quality label, and summary. They also carry:
+- `verification_status`: `pending` by default, `verified`, or `rejected`;
+- `verification_ref`: a stable reviewer/verification record reference required for a terminal review status.
 
-These labels describe the supplied record set only. They are not probabilities, source authentication, independent corroboration, or proof that a hypothesis is true or false. Quality labels are carried through for review and do not silently change the verdict.
+Only records explicitly marked `verified` and whose quality is not `unverified` contribute to the hypothesis assessment. Pending, rejected, and unverified-quality records remain excluded. The resulting states are:
+- `insufficient` — no eligible evidence;
+- `support_only` — eligible supporting entries and no eligible refuting entries;
+- `refute_only` — eligible refuting entries and no eligible supporting entries;
+- `mixed` — eligible evidence points in both directions.
+
+These labels describe only the caller-supplied, reviewed record set. The engine does not authenticate the reviewer, source, or verification reference; those fields are provenance metadata, not cryptographic proof. The states are not probabilities, independent corroboration, or proof that a hypothesis is true or false. A pending or unverified statement cannot silently support a hypothesis.
 
 ## Boundedness
 
@@ -51,4 +55,4 @@ Focused tests:
 python3 -m unittest tools.neuron_runtime.test_reasoning_engine -v
 ```
 
-The test module covers deterministic shortest-plan search, already-satisfied and unreachable goals, depth/state limits, action preconditions and effects, input bounds/identity validation, evidence grouping, and observed-result verification. Tests are AUTHORED, NOT RUN. No Python execution/import/syntax check, Android/Termux measurement, benchmark, build, CI or GitHub Actions run was performed for this implementation.
+The test module has 29 methods covering deterministic shortest-plan search, already-satisfied and unreachable goals, depth/state/fact limits, action preconditions and effects, input bounds/identity validation, pending/verified/rejected evidence semantics, conflicting evidence, bounded observed-fact iteration, and observed-result verification. Tests are AUTHORED, NOT RUN. No Python execution/import/syntax check, Android/Termux measurement, benchmark, build, CI or GitHub Actions run was performed for this implementation.
