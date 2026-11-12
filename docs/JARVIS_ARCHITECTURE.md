@@ -4290,21 +4290,17 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 20 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, child intent-before-executor, reopen/replay, result-digest consistency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и terminal restore. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
-**Следующий этап:** тонкая локальная Android app shell поверх защищённого Task Loop: локальный UI для создания/просмотра задач, отображения статусов и подтверждения конкретного pending AuthorizationRequest. Пока не подключать широкие системные capabilities и не выполнять произвольные действия. UI approval provider и аутентификация пользователя остаются отдельными требованиями; текущие caller-supplied grants не являются production authentication.
+**Следующий этап:** versioned local Android-to-Python runtime bridge: DTOs для session/task/reasoning/authorization, явное владение TaskSessionManager/JPVR state и безопасная reconciliation после process death. Android Compose V0.2 draft UI уже описан в §3.47. Не подключать широкие системные capabilities до появления trusted approval provider, связанного с точным AuthorizationRequest и revision. Caller-supplied ApprovalGrant сам по себе не является production authentication.
 
 
-### 3.47. JARVIS Android App V0.1 — начальный UI shell
+#### 3.47.1. Историческая исходная версия Android UI V0.1
 
-**Статус:** Android Compose UI shell добавлен в `android-app/` как отдельный Gradle application module в корне репозитория. Kotlin/Gradle build, APK, install и device checks — NOT RUN. Контракт: `docs/JARVIS_ANDROID_APP_V0_1.md`.
+**Исторический статус V0.1:** первоначальный Compose экран принимал название задачи и держал до 100 draft записей только в Compose state процесса. Он не переживал process death, не был связан с TaskSessionManager/JPVR и не запускал ReasoningEngine или Task Loop. Эти ограничения были исходными и заменены локальным repository этапа V0.2 ниже; не использовать описание V0.1 как текущий статус приложения.
 
-Приложение использует package ID `org.jarvis.ans100.alpha`, Kotlin 2.0.21, Android Gradle Plugin 8.7.3, Jetpack Compose BOM 2024.12.01, minSdk 29 и compile/target SDK 35. Первый экран на русском показывает состояние интерфейса, принимает название задачи и добавляет локальный черновик в ограниченный список (до 100 записей; название до 240 символов).
-
-**Критическая граница:** черновики существуют только в Compose state процесса; они не сохраняются после process death, не связаны с TaskSessionManager/JPVR и не запускаются через ReasoningEngine или Task Loop. Это UI shell, не ассистент и не демонстрация интеллектуального выполнения. Встроенные инструменты, сеть, shell, файловые операции и background execution отсутствуют.
-
-Следующий шаг — отдельный versioned Android DTO/repository contract, экран сессии/задачи и безопасный локальный bridge к runtime. Любое действие с эффектом должно проходить через существующий Permission & Safety Gate и точный approval flow; UI не должен самостоятельно объявлять действие разрешённым.
+Первоначальная граница доверия остаётся актуальной: UI не должен запускать shell, файловые/сетевые инструменты или background side effects и не может самостоятельно объявлять действие разрешённым.
 
 
-### 3.47. Нативное Android-приложение JARVIS V0.2 — локальные сессии и черновики
+#### 3.47.2. Нативное Android-приложение JARVIS V0.2 — локальные сессии и черновики
 
 **Статус:** реализован начальный Kotlin/Jetpack Compose UI shell и отдельный versioned Android-local draft repository. Девять JVM unit tests AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, установка на устройство и Compose UI tests NOT RUN. Контракт: `docs/JARVIS_ANDROID_APP_V0_1.md`.
 
