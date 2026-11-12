@@ -7,15 +7,25 @@ let refreshTimer = null;
 function lockConsole(message) {
   accessToken = "";
   sessionStorage.removeItem("jarvis.console.access.v2");
+  if (refreshTimer !== null) {
+    window.clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
   document.body.classList.add("auth-required");
   $("#auth-panel").hidden = false;
+  $("#logout").hidden = true;
   if (message) setNotice(message, "error");
 }
 
 function unlockConsole() {
   document.body.classList.remove("auth-required");
   $("#auth-panel").hidden = true;
+  $("#logout").hidden = false;
 }
+
+$("#logout").addEventListener("click", () => {
+  lockConsole("Вы вышли из локальной консоли. Для входа нужен токен доступа.");
+});
 
 async function api(path, body) {
   const headers = { "Accept": "application/json" };
