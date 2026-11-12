@@ -252,6 +252,28 @@ class PermissionSafetyGateApprovalTests(unittest.TestCase):
         decision = self.gate.authorize(self.manager, policy, request, now_ns=100)
         self.assertEqual(decision.reason_code, "approval_required")
 
+
+    def test_approval_is_bound_to_retry_index(self):
+        rule = _rule(
+            allowed_effects=(EffectClass.READ_ONLY, EffectClass.EXTERNAL),
+            max_retries=1,
+        )
+        policy = _policy(rule)
+        request = _request(self.manager, effect=EffectClass.EXTERNAL)
+        approval = build_approval_grant(
+            request, policy, approval_id="approval-retry",
+            approved_by="owner-1", approval_ref="confirmation-retry",
+            expires_at_ns=1000,
+        )
+        retried = _request(
+            self.manager, effect=EffectClass.EXTERNAL,
+            budget=RequestedBudget(10, 1024, 500, 128, 1),
+        )
+        decision = self.gate.authorize(
+            self.manager, policy, retried, now_ns=100, approval=approval,
+        )
+        self.assertEqual(decision.reason_code, "approval_binding_mismatch")
+
     def test_empty_approval_reference_is_rejected(self):
         with self.assertRaises(PermissionSafetyError):
             ApprovalGrant(
