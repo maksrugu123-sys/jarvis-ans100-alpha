@@ -1298,3 +1298,28 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** store остаётся single-writer Python reference; container должен быть выделенным из-за единственного активного MANIFEST CHECKPOINT pointer. Он восстанавливает только последний committed registry snapshot и не доказывает exactly-once execution внешних действий, не сохраняет scheduler leases/authorization/CQE side effects и не подтверждён тестами питания/сбоев на Android.
 
 **Следующий этап:** определить versioned Authorization Snapshot + Permission & Safety Gate контракт; только после проверки разрешений и актуальной task revision разрешать side effect. Затем объединить reasoning plan, approval and durable intent/result в ограниченный JARVIS Task Loop.
+
+
+## 2026-11-12 — Reasoning Engine V0.1
+
+**Цель:** добавить первый исполняемый механизм структурированного планирования, оценки предоставленных evidence-записей и проверки результата для следующего этапа JARVIS.
+
+**Добавлено:**
+- `tools/neuron_runtime/reasoning_engine.py` — bounded deterministic breadth-first planner over caller-supplied facts/actions; support/refute evidence grouping; hypothesis coverage states; explicit depth/state/fact-limit outcomes; comparison of observed facts with plan goals.
+- `tools/neuron_runtime/test_reasoning_engine.py` — 26 focused tests for shortest deterministic plans, already-satisfied/unreachable goals, preconditions/add/delete effects, bounds/cycle behavior, evidence status/identity checks and result verification.
+- `docs/JARVIS_REASONING_ENGINE_V0_1.md` — V0.1 API contract, boundedness, evidence interpretation and non-goals.
+- `tools/neuron_runtime/__init__.py` — public Reasoning Engine exports.
+- `docs/JARVIS_ARCHITECTURE.md` §3.44 and `README.md` — status, constraints, usage and roadmap updated.
+
+**Технические решения:**
+- Search is breadth-first with unit-cost actions and stable action-ID ordering. It finds a shortest action-count plan when one is found within configured bounds; deterministic tie-breaking is explicit.
+- Actions are data-only precondition/add/delete records. No Python callback, tool invocation or external side effect can be embedded in a plan.
+- Evidence statuses describe only supplied support/refute records. Source authenticity, independence and truth are not inferred; quality labels are informational and do not act as probabilities.
+- Result verification trusts caller-supplied observed facts and reports goal completion plus predicted/observed differences. It does not authenticate external outcomes.
+- Engine is not yet wired to TaskSessionManager or CQE. Permission & Safety Gate remains the next milestone before any task-loop side effect.
+
+**Проверки:** GitHub source readback and static review only. Twenty-six tests are **AUTHORED, NOT RUN**. No Python execution, import/syntax checks, Android/Termux measurements, benchmark, build, CI or GitHub Actions were run.
+
+**Ограничения:** V0.1 does not parse natural language, generate actions from text, retrieve/authenticate external evidence, execute tools, enforce permissions, persist plans or coordinate concurrent work. It is a structured symbolic reference component, not a general intelligence or autonomous assistant.
+
+**Следующий этап:** Permission & Safety Gate with deny-by-default capabilities, approval and policy-version binding, task/revision binding, and explicit resource/time budgets. Then connect lifecycle + reasoner + gate through a bounded JARVIS Task Loop.
