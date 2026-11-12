@@ -51,7 +51,7 @@ Lifecycle snapshot фиксируется при входе родительск
 
 - Natural-language parsing, task decomposition из свободного текста и генерация безопасных action bindings.
 - Встроенные браузер/файловые/системные инструменты, credentials, сеть или UI approval provider.
-- Подлинная identity authentication, подпись/проверка approval grants, durable policy/approval registry и revocation.
+- Подлинная identity authentication и подпись/проверка approval grants. Отдельный локальный CAS policy/revocation reference registry добавлен в tools/neuron_runtime/policy_registry.py; его можно подключить как JARVISTaskLoop(permission_gate=PersistentPolicySafetyGate(registry)). Это не identity service и не защищает от подделки caller-supplied ApprovalGrant.
 - Durable step ledger/outbox, scheduler leases, concurrent workers, общая atomic transaction с внешним side effect, production NCC или multi-process locks.
 - Реальное enforcement CPU/RAM/time quota внутри executor, Android sandbox и resource measurements.
 - Persistence самого ReasoningResult/plan; plan детерминированно пересчитывается по caller-supplied input.
@@ -63,4 +63,4 @@ python3 -m unittest tools.neuron_runtime.test_task_loop -v
 python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
 ```
 
-20 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS и reopen of terminal state. Gate имеет 26 focused tests. Обе группы AUTHORED, NOT RUN. GitHub readback/static cross-reference only; Python execution/import checks, Android I/O, benchmarks, builds, CI и GitHub Actions не выполнялись.
+20 Task Loop tests покрывают multi-step completion, unreachable goal, deny-by-default, uncertain executor reply + stable idempotency key, known no-effect failure, missing postcondition, JPVR requirement for side effects, exact multi-step approval flow, stale checkpoint CAS и reopen of terminal state. Gate имеет 26 focused tests; persistent policy registry — 17 focused tests. Все группы AUTHORED, NOT RUN.
