@@ -37,6 +37,11 @@ def encode_task_session_snapshot(manager: TaskSessionManager) -> bytes:
         raise TaskSessionPersistenceError("manager must be a TaskSessionManager")
     try:
         payload = manager.encode_snapshot()
+        restored = TaskSessionManager.restore_snapshot(payload)
+        if restored.encode_snapshot() != payload:
+            raise TaskSessionPersistenceError("task/session snapshot is not canonical or restorable")
+    except TaskSessionPersistenceError:
+        raise
     except TaskSessionError as exc:
         raise TaskSessionPersistenceError(str(exc)) from exc
     if not payload or len(payload) > MAX_LOGICAL_RECORD_BYTES:
@@ -52,8 +57,15 @@ def decode_task_session_snapshot(payload: bytes | bytearray | memoryview) -> Dec
         raise TaskSessionPersistenceError("payload length is outside JPVR limits")
     try:
         manager = TaskSessionManager.restore_snapshot(raw)
+        if manager.encode_snapshot() != raw:
+            raise TaskSessionPersistenceError("task/session snapshot is not canonically encoded")
+        object_id = task_session_object_id(manager.manager_id)
+    except TaskSessionPersistenceError:
+        raise
     except TaskSessionError as exc:
         raise TaskSessionPersistenceError(str(exc)) from exc
+    if object_id == bytes(16):
+        raise TaskSessionPersistenceError("task/session object identity must be non-zero")
     return DecodedTaskSessionSnapshot(manager.manager_id, manager)
 
 
