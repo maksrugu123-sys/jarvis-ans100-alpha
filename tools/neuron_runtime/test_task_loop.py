@@ -80,11 +80,15 @@ def _policy(effect=EffectClass.READ_ONLY):
 class MemoryExecutor:
     """Deterministic executor with a process-independent-style idempotency ledger."""
 
-    def __init__(self, *, unknown_once=False, failed=False, omit_postcondition=False):
+    def __init__(
+        self, *, unknown_once=False, unknown_action_id=None,
+        failed=False, omit_postcondition=False,
+    ):
         self.facts = {"start"}
         self.ledger = {}
         self.keys = []
         self.unknown_once = unknown_once
+        self.unknown_action_id = unknown_action_id
         self.failed = failed
         self.omit_postcondition = omit_postcondition
 
@@ -113,8 +117,9 @@ class MemoryExecutor:
             ExecutionOutcome.SUCCEEDED, tuple(sorted(self.facts))
         )
         self.ledger[key] = result
-        if self.unknown_once:
+        if self.unknown_once or self.unknown_action_id == action.action_id:
             self.unknown_once = False
+            self.unknown_action_id = None
             raise RuntimeError("simulated lost executor response after effect commit")
         return result
 
@@ -139,6 +144,23 @@ class TaskLoopExecutionTests(unittest.TestCase):
         self.assertEqual(self.manager.get_task("task-1").status, TaskStatus.COMPLETED)
         self.assertEqual(len(result.authorization_decisions), 2)
         self.assertTrue(all(item.allowed for item in result.authorization_decisions))
+
+    def test_each_successful_action_has_a_terminal_child_task_record(self):
+        result = self.loop.run(
+            self.manager, "task-1", self.problem, self.bindings,
+            self.policy, self.executor, now_ns=100,
+        )
+        self.assertIs(result.status, TaskLoopStatus.COMPLETED)
+        step_tasks = tuple(
+            item for item in self.manager.tasks if item.task_id.startswith("step-")
+        )
+        self.assertEqual(len(step_tasks), 2)
+        self.assertTrue(all(item.status is TaskStatus.COMPLETED for item in step_tasks))
+        self.assertTrue(all(
+            item.result["schema"] == "jarvis.task-loop-step"
+            and item.result["version"] == 1
+            for item in step_tasks
+        ))
 
     def test_unreachable_goal_fails_without_calling_executor(self):
         manager = self.manager
@@ -264,6 +286,105 @@ class TaskLoopJPVRTests(unittest.TestCase):
         self.assertIs(result.status, TaskLoopStatus.COMPLETED)
         self.assertEqual(self.store.load("loop-manager").manager.get_task("task-1").status,
                          TaskStatus.COMPLETED)
+
+    def test_step_intent_is_committed_before_executor_is_called(self):
+        manager = _manager()
+        self.store.save(manager)
+        loop = JARVISTaskLoop()
+        delegate = MemoryExecutor()
+        step_task_id, _ = loop._step_task_identity(
+            manager.manager_id, "task-1", loop._plan_id(_problem(), _bindings(EffectClass.REVERSIBLE)),
+            "step-000001",
+        )
+
+        class CheckingExecutor:
+            def execute(inner_self, action, request):
+                persisted = self.store.load("loop-manager").manager
+                self.assertIs(
+                    persisted.get_task("task-1").status, TaskStatus.RUNNING
+                )
+                self.assertIs(
+                    persisted.get_task(step_task_id).status, TaskStatus.RUNNING
+                )
+                return delegate.execute(action, request)
+
+        result = loop.run(
+            manager, "task-1", _problem(), _bindings(EffectClass.REVERSIBLE),
+            _policy(EffectClass.REVERSIBLE), CheckingExecutor(),
+            now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=1,
+        )
+        self.assertIs(result.status, TaskLoopStatus.COMPLETED)
+
+    def test_unknown_step_recovers_after_jpvr_reopen(self):
+        manager = _manager()
+        self.store.save(manager)
+        loop = JARVISTaskLoop()
+        executor = MemoryExecutor(unknown_once=True)
+        bindings = _bindings(EffectClass.REVERSIBLE)
+        policy = _policy(EffectClass.REVERSIBLE)
+        first = loop.run(
+            manager, "task-1", _problem(), bindings, policy, executor,
+            now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=1,
+        )
+        self.assertIs(first.status, TaskLoopStatus.WAITING)
+        persisted = self.store.load("loop-manager")
+        step_id, _ = loop._step_task_identity(
+            "loop-manager", "task-1", first.plan_id, "step-000001"
+        )
+        self.assertIs(persisted.manager.get_task(step_id).status, TaskStatus.RUNNING)
+
+        self.storage.close()
+        reopened = JPVRStorage.open(self.path, recover_tail=False)
+        self.addCleanup(reopened.close)
+        reopened_store = JPVRTaskSessionCheckpointStore(reopened)
+        restored = reopened_store.load("loop-manager")
+        second = loop.run(
+            restored.manager, "task-1", _problem(), bindings, policy, executor,
+            now_ns=200, checkpoint_store=reopened_store,
+            expected_checkpoint_version=restored.descriptor.record_version,
+        )
+        self.assertIs(second.status, TaskLoopStatus.COMPLETED)
+        self.assertEqual(executor.keys[0], executor.keys[1])
+        final_state = reopened_store.load("loop-manager").manager
+        self.assertIs(final_state.get_task("task-1").status, TaskStatus.COMPLETED)
+        self.assertTrue(all(
+            item.status is TaskStatus.COMPLETED
+            for item in final_state.tasks if item.task_id.startswith("step-")
+        ))
+
+    def test_completed_step_result_is_replayed_and_compared_after_later_unknown(self):
+        manager = _manager()
+        self.store.save(manager)
+        loop = JARVISTaskLoop()
+        executor = MemoryExecutor(unknown_action_id="step-two")
+        bindings = _bindings(EffectClass.REVERSIBLE)
+        policy = _policy(EffectClass.REVERSIBLE)
+        first = loop.run(
+            manager, "task-1", _problem(), bindings, policy, executor,
+            now_ns=100, checkpoint_store=self.store,
+            expected_checkpoint_version=1,
+        )
+        self.assertIs(first.status, TaskLoopStatus.WAITING)
+        persisted = self.store.load("loop-manager")
+        first_step_id, _ = loop._step_task_identity(
+            "loop-manager", "task-1", first.plan_id, "step-000001"
+        )
+        second_step_id, _ = loop._step_task_identity(
+            "loop-manager", "task-1", first.plan_id, "step-000002"
+        )
+        self.assertIs(persisted.manager.get_task(first_step_id).status, TaskStatus.COMPLETED)
+        self.assertIs(persisted.manager.get_task(second_step_id).status, TaskStatus.RUNNING)
+
+        second = loop.run(
+            persisted.manager, "task-1", _problem(), bindings, policy, executor,
+            now_ns=200, checkpoint_store=self.store,
+            expected_checkpoint_version=persisted.descriptor.record_version,
+        )
+        self.assertIs(second.status, TaskLoopStatus.COMPLETED)
+        self.assertEqual(executor.keys[0], executor.keys[2])
+        self.assertEqual(executor.keys[1], executor.keys[3])
 
     def test_external_effect_without_approval_waits_and_persists(self):
         manager = _manager()
