@@ -4288,6 +4288,6 @@ Plan ID и step ID детерминированы. Для каждого дей�
 
 Не реализованы natural-language parsing/decomposition, генерация actions/bindings, встроенные browser/file/system tools, credentials, UI approval provider, signed grants, persistent policy/revocation, scheduler/concurrency, runtime resource enforcement, Android sandbox, production NCC и Android app.
 
-Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 13 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и reopen. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
+Проверки: `tools/neuron_runtime/test_task_loop.py` содержит 14 методов для multi-step plan, gates, unknown executor outcome, stable idempotency, failure/postcondition paths, JPVR mandatory for side effects, exact multi-step approvals, stale CAS и reopen. Вместе с 26 Gate tests — AUTHORED, NOT RUN. Выполнены только GitHub readback и source cross-reference review; Python, Android I/O, benchmarks, builds, CI и GitHub Actions — NOT RUN.
 
 **Следующий технический gate:** durable per-step intent/result ledger и согласованная публикация intent/result с CQE inbox/outbox, чтобы прерывание между внешним действием и registry commit можно было безопасно разрешать. После этого — тонкий локальный JARVIS app shell поверх уже защищённого Task Loop; не наоборот.
