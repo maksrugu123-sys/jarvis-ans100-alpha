@@ -1478,3 +1478,32 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** Android repository is app-private but not encrypted against a compromised device, is not JPVR and has no multi-process transaction protocol. Synchronous SharedPreferences commit latency is unmeasured. Android does not yet invoke ReasoningEngine, PermissionSafetyGate, Task Loop or Python JPVR. No trusted UI approval provider, credentials, shell/filesystem/network capabilities or native runtime bridge exist. PWA remains loopback-only and does not execute tools.
 
 **Следующий этап:** design and implement a narrow local Android-to-Python runtime bridge with versioned DTOs, durable TaskSession/JPVR ownership, restart/reconciliation semantics and a trusted approval UX bound to the exact AuthorizationRequest. Until this bridge is implemented and verified, retain draft-only semantics.
+
+
+## 2026-11-12 — Android ↔ Python JPVR runtime bridge V1
+
+**Цель:** подключить нативное Android-приложение к уже существующей локальной Python-консоли, не смешивая Android-local drafts с authoritative TaskSessionManager/JPVR state и не открывая внешнее исполнение.
+
+**Добавлено / изменено:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` — фиксированный HTTP client для `127.0.0.1:8765`; health/API schema validation; GET state; create session/task; pause/resume/close session с expected revision; cancel QUEUED task с expected revision; strict bounded JSON parsing, request/response limits, timeouts, redirect disabled.
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` — StateFlow runtime connection state and one background executor for HTTP work; results return to main thread.
+- `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` — V0.3 panel shows JPVR-backed backend sessions/tasks and supports the bounded lifecycle operations. Android-local drafts remain in their own section/store.
+- `app/src/main/AndroidManifest.xml` and `app/src/main/res/xml/network_security_config.xml` — INTERNET permission; cleartext is denied by default and allowed only to loopback 127.0.0.1/localhost.
+- `tools/jarvis_app/server.py` — `GET /api/health` now publishes `api_schema="jarvis.local-console"` and `api_version=1`.
+- `tools/jarvis_app/test_server.py` — added versioned-health regression test; six test methods authored.
+- `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` — transport, API, ownership, bounds, reconciliation, security boundary and non-goals.
+- `docs/JARVIS_ANDROID_APP_V0_1.md`, `docs/JARVIS_LOCAL_CONSOLE_V1.md`, `docs/JARVIS_ARCHITECTURE.md` §3.47–3.48, `README.md`, and `AGENTS.md` — updated for Android V0.3 bridge status and constraints.
+
+**Архитектурные решения:**
+- Python TaskSessionManager + dedicated JPVR checkpoint remain authoritative for backend tasks/sessions. Android SharedPreferences remain authoritative only for local drafts; no cross-store copying or status mirroring.
+- The bridge exposes only session/task registry operations. It does not call Reasoning Engine, PermissionSafetyGate, Task Loop or ActionExecutor. Created backend tasks remain QUEUED; no execution is inferred.
+- API schema/version is checked before initial connection. The bridge is fixed to loopback; no configurable remote host or LAN binding is exposed.
+- Loopback/Host/Origin checks are not identity authentication. This API is restricted to non-secret local registry administration.
+
+**Тесты / сборки:** six Python local-console tests and nine Android local-repository tests are AUTHORED, NOT RUN. No Python tests, Kotlin tests, import/syntax checks, Gradle sync/build, APK/AAB, installation, Android↔Termux end-to-end I/O, CI or GitHub Actions were run.
+
+**Статус проверки:** GitHub source readback and static cross-reference review only. No runtime behavior, device networking, Android cleartext policy behavior, or performance has been verified on the target phone. Gradle Wrapper remains absent.
+
+**Ограничения:** native UI does not yet call the structured reasoning-preview endpoint; no trusted approval provider, authentication, ActionExecutor, neural Runtime/NetworkRuntime integration or end-to-end Task Loop is connected. Other local applications may be able to reach the loopback console; do not expose it to LAN/Internet.
+
+**Следующий этап:** add a bounded structured Reasoning Engine preview to Compose without executing actions. Then design a trusted approval boundary and executor-owned durable idempotency/reconciliation before any side effects.
