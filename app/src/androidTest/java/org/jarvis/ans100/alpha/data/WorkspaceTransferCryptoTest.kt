@@ -76,6 +76,37 @@ class WorkspaceTransferCryptoTest {
     }
 
     @Test
+    fun encryptedBackupUsesSeparateEnvelopeAndAad() {
+        val original = """{"format":"jarvis.workspace.backup","message":"Точная резервная копия"}"""
+        val bundle = WorkspaceTransferCrypto.encryptBackup(original, passphrase.toCharArray())
+        val envelope = JSONObject(String(bundle, StandardCharsets.UTF_8))
+        assertEquals("jarvis.workspace.backup.encrypted", envelope.getString("format"))
+        assertEquals(original, WorkspaceTransferCrypto.decryptBackup(
+            bundle.copyOf(), passphrase.toCharArray(),
+        ))
+        expectIllegalArgument {
+            WorkspaceTransferCrypto.decrypt(bundle.copyOf(), passphrase.toCharArray())
+        }
+        val transfer = WorkspaceTransferCrypto.encrypt(original, passphrase.toCharArray())
+        expectIllegalArgument {
+            WorkspaceTransferCrypto.decryptBackup(transfer, passphrase.toCharArray())
+        }
+    }
+
+    @Test
+    fun backupPassphraseIsClearedAfterEncryptionAndDecryption() {
+        val encryptionPassphrase = passphrase.toCharArray()
+        val bundle = WorkspaceTransferCrypto.encryptBackup(
+            """{"format":"jarvis.workspace.backup"}""",
+            encryptionPassphrase,
+        )
+        assertEquals(true, encryptionPassphrase.all { it == '\u0000' })
+        val decryptionPassphrase = passphrase.toCharArray()
+        WorkspaceTransferCrypto.decryptBackup(bundle, decryptionPassphrase)
+        assertEquals(true, decryptionPassphrase.all { it == '\u0000' })
+    }
+
+    @Test
     fun authenticatedCiphertextTamperingIsRejected() {
         val bundle = WorkspaceTransferCrypto.encrypt(
             """{"format":"jarvis.workspace"}""",
