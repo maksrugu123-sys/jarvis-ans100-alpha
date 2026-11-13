@@ -10,50 +10,71 @@ from __future__ import annotations
 import errno
 import os
 import time
+import threading
 from typing import Final
 
 _LOCK_OFFSET: Final[int] = 0
 _LOCK_LENGTH: Final[int] = 1
+_LOCAL_LOCKS_GUARD = threading.Lock()
+_LOCAL_LOCKS: dict[tuple[int, int], threading.RLock] = {}
+
+
+def _local_lock_for(fd: int) -> threading.RLock:
+    stat = os.fstat(fd)
+    key = (stat.st_dev, stat.st_ino)
+    with _LOCAL_LOCKS_GUARD:
+        lock = _LOCAL_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _LOCAL_LOCKS[key] = lock
+        return lock
 
 
 def lock_file(fd: int, kind: int) -> None:
-    """Acquire a process-wide file lock; Windows safely serializes all access."""
-    if os.name == "nt":
-        import msvcrt
+    """Acquire a cross-process lock and serialize handles within this process."""
+    if kind not in (1, 2):
+        raise ValueError("unknown JPVR lock mode")
+    local_lock = _local_lock_for(fd)
+    local_lock.acquire()
+    try:
+        if os.name == "nt":
+            import msvcrt
 
-        # msvcrt.locking() uses the descriptor's current position.
-        # LK_NBLCK lets us wait without its built-in ten-second timeout.
-        while True:
-            os.lseek(fd, _LOCK_OFFSET, os.SEEK_SET)
-            try:
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, _LOCK_LENGTH)
-                return
-            except OSError as exc:
-                if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
-                    raise
-                time.sleep(0.05)
-    else:
-        import fcntl
-
-        if kind == 1:
-            fcntl.flock(fd, fcntl.LOCK_SH)
-        elif kind == 2:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            # msvcrt.locking() uses the descriptor's current position.
+            # LK_NBLCK lets us wait without its built-in ten-second timeout.
+            while True:
+                os.lseek(fd, _LOCK_OFFSET, os.SEEK_SET)
+                try:
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, _LOCK_LENGTH)
+                    return
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
+                    time.sleep(0.05)
         else:
-            raise ValueError("unknown JPVR lock mode")
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_SH if kind == 1 else fcntl.LOCK_EX)
+    except Exception:
+        local_lock.release()
+        raise
 
 
 def unlock_file(fd: int) -> None:
-    """Release a lock acquired by lock_file()."""
-    if os.name == "nt":
-        import msvcrt
+    """Release the OS lock and the matching in-process lock."""
+    local_lock = _local_lock_for(fd)
+    try:
+        if os.name == "nt":
+            import msvcrt
 
-        os.lseek(fd, _LOCK_OFFSET, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, _LOCK_LENGTH)
-    else:
-        import fcntl
+            os.lseek(fd, _LOCK_OFFSET, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, _LOCK_LENGTH)
+        else:
+            import fcntl
 
-        fcntl.flock(fd, fcntl.LOCK_UN)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        local_lock.release()
 
 
 def read_at_seek(fd: int, size: int, offset: int) -> bytes:
