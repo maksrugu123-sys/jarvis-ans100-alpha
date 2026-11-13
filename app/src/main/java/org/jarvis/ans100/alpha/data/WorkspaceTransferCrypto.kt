@@ -31,8 +31,9 @@ object WorkspaceTransferCrypto {
         try {
             validatePassphrase(passphrase)
             val plainBytes = plaintext.toByteArray(StandardCharsets.UTF_8)
-            require(plainBytes.isNotEmpty() && plainBytes.size <= MAX_PLAINTEXT_BYTES) {
-                "Рабочее пространство превышает лимит 16 МиБ."
+            if (plainBytes.isEmpty() || plainBytes.size > MAX_PLAINTEXT_BYTES) {
+                plainBytes.fill(0)
+                throw IllegalArgumentException("Рабочее пространство превышает лимит 16 МиБ.")
             }
             val salt = ByteArray(16).also(random::nextBytes)
             val nonce = ByteArray(12).also(random::nextBytes)
@@ -100,20 +101,20 @@ object WorkspaceTransferCrypto {
             }
             val version = envelope.optJSONObject("version")
                 ?: throw IllegalArgumentException("Версия файла отсутствует.")
-            require(version.optInt("major", -1) == 1 && version.optInt("minor", -1) == 0 &&
+            require(version.opt("major") == 1 && version.opt("minor") == 0 &&
                 version.length() == 2) {
                 "Версия зашифрованного файла не поддерживается."
             }
             val kdf = envelope.optJSONObject("kdf")
                 ?: throw IllegalArgumentException("Параметры KDF отсутствуют.")
             require(kdf.optString("name") == "PBKDF2-HMAC-SHA256" &&
-                kdf.optInt("iterations", -1) == ITERATIONS && kdf.length() == 3) {
+                kdf.opt("iterations") == ITERATIONS && kdf.length() == 3) {
                 "Параметры PBKDF2 не поддерживаются."
             }
             val cipherMetadata = envelope.optJSONObject("cipher")
                 ?: throw IllegalArgumentException("Параметры шифра отсутствуют.")
             require(cipherMetadata.optString("name") == "AES-256-GCM" &&
-                cipherMetadata.optInt("tag_bits", -1) == 128 &&
+                cipherMetadata.opt("tag_bits") == 128 &&
                 cipherMetadata.length() == 3) {
                 "Параметры AES-GCM не поддерживаются."
             }
