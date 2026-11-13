@@ -106,7 +106,7 @@ class JPVRStorageTests(unittest.TestCase):
         return JPVRStorage.create(self.path, container_uuid=UUID)
 
     def corrupt(self, offset):
-        fd = os.open(self.path, os.O_RDWR)
+        fd = os.open(self.path, os.O_RDWR | getattr(os, "O_BINARY", 0))
         try:
             old = read_at(fd, 1, offset)
             write_all_at(fd, bytes((old[0] ^ 0x80,)), offset)
