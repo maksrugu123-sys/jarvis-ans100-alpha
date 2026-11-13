@@ -643,8 +643,16 @@ async function decryptWorkspaceBundle(bundle, passphrase) {
     throw new Error("Расшифрованное рабочее пространство превышает лимит 16 МиБ.");
   }
   let document;
-  try { document = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(plaintext)); }
-  catch { throw new Error("Расшифрованные данные не являются корректным UTF-8 JSON."); }
+  let plaintextText;
+  try {
+    plaintextText = new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
+    document = JSON.parse(plaintextText);
+  } catch {
+    throw new Error("Расшифрованные данные не являются корректным UTF-8 JSON.");
+  }
+  if (canonicalJson(document) !== plaintextText) {
+    throw new Error("Рабочее пространство не сохранено в каноническом JSON-формате.");
+  }
   return verifyPortableWorkspace(document);
 }
 
