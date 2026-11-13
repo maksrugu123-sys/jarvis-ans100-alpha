@@ -25,7 +25,7 @@ This workspace is deliberately separate from the existing TaskSessionManager che
 - UTF-8 JSON, object keys sorted lexicographically, no insignificant whitespace, no duplicate keys, no NaN/Infinity.
 - Arrays retain their defined order.
 - `integrity.digest` is lowercase SHA-256 over the canonical document with the entire `integrity` property omitted.
-- The portable setting value types are string, integer, boolean or null. Floating-point settings are excluded to avoid platform-specific number serialization differences.
+- The portable setting value types are string, safe integer (±9,007,199,254,740,991), boolean or null. Floating-point and out-of-range integer settings are excluded to preserve canonical numeric equality across Python, JavaScript and Kotlin.
 - Memory records require `user_approved: true`; the store does not infer or silently save personal facts.
 - Credentials, passwords, tokens, private keys and auth-like settings are rejected. Do not put secrets in conversations or memories either.
 - Unknown fields and unsupported schema versions fail closed.
