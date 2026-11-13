@@ -50,7 +50,11 @@ The V0.5 bridge source supports:
 - digest-only token storage in the Python console, restrictive local file permissions and token rotation;
 - create/read sessions and tasks, revision-checked session transitions and queued-task cancellation;
 - bounded structured Reasoning Engine preview, which does not mutate JPVR state and does not execute actions;
-- a PWA login/logout flow using current-tab session storage.
+- a PWA login/logout flow using current-tab session storage;
+- shared-workspace CRUD and encrypted JWS merge transfer;
+- a separate encrypted JWB point-in-time backup and full workspace replacement flow with local verification, explicit preview/confirmation, a separately saved current-revision backup acknowledgement and server-side CAS revision guard.
+
+The JWB scope is only the portable workspace. It does not include the task/session JPVR registry, Android-only drafts, authentication tokens, Keystore keys or neural/network checkpoints. Raw JPVR file recovery remains a separate Python reference workflow.
 
 A backend task created from the UI remains QUEUED. A reasoning preview is an informational symbolic plan, not an approval or execution. The Android app does not yet invoke PermissionSafetyGate, Task Loop, ActionExecutor, NetworkRuntime or CQE.
 
@@ -58,7 +62,7 @@ The local console must remain bound to 127.0.0.1. Do not expose it to LAN or the
 
 ## Verification status and honesty rules
 
-For the Android V0.5 bridge, current source records 11 Python console tests and 9 Android local-draft tests as AUTHORED / NOT RUN. Other reference suites have their own mixed historical evidence; use the exact status in each component contract.
+For the current Android/console source, the inventories are: 18 Python service/API tests, 11 Python auth tests, 9 Android local-draft tests, 7 Android Keystore instrumentation tests and 9 Android transfer/backup crypto instrumentation tests. These are AUTHORED / NOT RUN. Other reference suites have their own mixed historical evidence; use each component contract for exact counts and status.
 
 For the latest Android/authentication bridge changes, only GitHub source readback and static cross-file inspection are recorded. The following have NOT been verified for V0.5:
 - Python unit-test execution and runtime authentication behavior;
@@ -75,7 +79,7 @@ The repository currently has no Gradle Wrapper. Do not claim an APK exists or th
 
 Work in substantial, coherent batches, update this handoff and the append-only development log after each meaningful batch, and preserve the safety gates.
 
-1. Close V0.5 client-auth gaps: add focused Android Keystore token-store tests and Python auth/server negative-path coverage; inspect token rotation, malformed credentials, stale revisions, oversized bodies and error handling. Do not claim runtime success until tests are actually run.
+1. Verify the new source-level backup/restore and the existing Android/authentication bridge on Termux/Android, desktop browser and Windows. This requires explicit permission before any tests, build, device run or CI; include cross-platform JWB round-trip, CAS race, large workspace, failed write, ambiguous response and restore-reconciliation scenarios. Until those checks run, keep the feature labelled source-level and the new tests AUTHORED / NOT RUN.
 2. Define trusted approver identity: select a realistic local trust root (for example Android Keystore-backed signing key plus explicit user-authenticated approval). Bind each grant cryptographically to the exact canonical AuthorizationRequest, action, arguments, capability, scope, policy version, expiry and one-time approval ID. A generic Bearer token or preview result must never count as approval.
 3. Connect policy/revocation to a trusted source: the current local policy registry is only a reference store. Define signed policy updates, key rotation, rollback prevention and revocation semantics before allowing the gate to authorize side effects.
 4. Define trusted reconciliation and downstream idempotency: the current SQLite ledger is a local guard, not proof of exactly-once external execution. Specify provider idempotency keys, authoritative outcome receipts and crash recovery; unresolved outcomes must remain UNKNOWN and must not be blindly retried.
@@ -86,7 +90,8 @@ Work in substantial, coherent batches, update this handoff and the append-only d
 
 ## Working protocol
 - Repository: maksrugu123-sys/jarvis-ans100-alpha.
-- Primary branch: main (the user has authorized direct commits to main in this project).
+- Active user-authorized branch: mobile-first-offline-v1.
+- Never commit to, merge into, or move main unless the user explicitly changes this instruction.
 - Make real repository changes rather than only returning task lists.
 - Work in large, coherent batches and report a concise summary after a batch.
 - Preserve append-only development history and update README/architecture/contracts when behavior changes.
