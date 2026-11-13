@@ -72,8 +72,9 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 | `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.5 local-draft, authenticated loopback bridge and symbolic-preview contract |
 | `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` | Android-to-Termux JPVR task/session bridge, API version, bounds and trust boundary |
 | `tools/jarvis_app/server.py` | Loopback-only Python local console with separate task/session and shared-workspace JPVR stores; authenticated workspace API V1 |
+| `tools/jarvis_app/static/index.html`, `app.js`, `styles.css` | Desktop PWA shared-memory manager with explicit consent, search, create, list and confirmed delete |
 | `tools/jarvis_app/static/index.html`, `app.js`, `styles.css` | Desktop PWA shared-memory manager: explicit consent, search, list, create and confirmed delete |
-| `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 auth coverage for every POST route and reasoning-preview tests (14 authored, not run) |
+| `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 auth coverage for every POST route and reasoning-preview and shared-memory CRUD/CAS tests (16 authored, not run) |
 | `tools/jarvis_app/test_auth.py` | Token digest storage, owner-only permissions, one-time bootstrap, rotation, malformed input and symlink-parent/file rejection (11 authored, not run) |
 | `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
 
