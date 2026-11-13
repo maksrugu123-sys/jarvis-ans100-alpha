@@ -1,6 +1,6 @@
 # JARVIS Shared Workspace & Memory V1
 
-**Status:** Python JPVR store and authenticated local API implemented; Android and desktop browser memory-management UI wired to the API. Runtime/device verification is pending.  
+**Status:** Python JPVR store and authenticated local API implemented; Android and desktop browser memory-management UI wired to the API. Encrypted JWS transfer and separate JWB workspace backup/restore exist at source level. Runtime/device verification is pending.  
 **Date:** 2026-11-13
 
 ## Goal
@@ -38,6 +38,7 @@ The loopback-only Python service exposes these routes under the existing Bearer-
 |---|---|---|
 | GET | `/api/workspace` | Read the canonical workspace document and current revision |
 | POST | `/api/workspace` | Save a validated document using `expected_revision` compare-and-swap |
+| POST | `/api/workspace/restore` | Replace the entire validated portable workspace using the same compare-and-swap revision; authenticated and limited to 16 MiB |
 
 POST body:
 
@@ -50,7 +51,7 @@ POST body:
 }
 ```
 
-A stale revision returns HTTP 409. Invalid documents return HTTP 400. Workspace requests are bounded to 16 MiB. Health reports `workspace_api_version: 1`; the existing local-console API remains version 2 for backwards compatibility.
+A stale revision returns HTTP 409. Invalid documents return HTTP 400. Both workspace save and restore requests are bounded to 16 MiB. Restore requires the exact body fields `expected_revision` and `workspace`; it validates the same canonical schema/integrity rules, refuses a different workspace ID and does not merge records. Health reports `workspace_api_version: 1`; the existing local-console API remains version 2 for backwards compatibility.
 
 The service binds only to `127.0.0.1`. Do not expose it to a LAN, tunnel or public network. The Bearer token is local transport access control, not a human identity or permission to execute actions.
 
@@ -88,6 +89,25 @@ Import is a merge, never a replacement:
 
 A file transfer is a manual copy between devices. It does not enable LAN exposure, cloud sync, automatic pairing, or background synchronization. Keep the passphrase separate from the `.jws` file.
 
+
+## Encrypted offline backup and restore V1
+
+The `.jwb` format is deliberately separate from the merge-oriented `.jws` transfer. It represents one point-in-time backup of the *complete portable workspace* and restore replaces that workspace; it is not a merge.
+
+- Payload schema: `schemas/workspace/v1/workspace-backup.schema.json`.
+- Encrypted envelope: `schemas/workspace/v1/encrypted-backup.schema.json`.
+- Envelope marker: `jarvis.workspace.backup.encrypted`; payload marker: `jarvis.workspace.backup`; version 1.0.
+- PBKDF2-HMAC-SHA256 (310,000 rounds), random 16-byte salt, AES-256-GCM, random 12-byte nonce, 128-bit tag.
+- Backup-specific AAD is `JARVIS-WORKSPACE-BACKUP-ENCRYPTED-V1`, so a `.jws` transfer cannot be substituted for a `.jwb` backup even with the same password.
+- The wrapper carries a backup ID, creation timestamp, source platform, nested canonical workspace and its own SHA-256 integrity digest. The nested workspace retains its original integrity digest. The GCM tag authenticates the encrypted envelope.
+- Restore checks format, exact allowed fields, canonical JSON, both digests, inner workspace schema/limits/secret-setting restrictions and workspace ID before any write.
+- Both frontends display the backup's collection counts. Restore is blocked until a separately saved backup of the current workspace revision is acknowledged; then a second explicit confirmation is required.
+- The server independently validates the replacement and commits it via JPVR compare-and-swap at `POST /api/workspace/restore`. An intervening write returns HTTP 409; stale previews must be discarded. An ambiguous response must be reconciled by refreshing and inspecting the current workspace rather than retrying blindly.
+
+The `.jwb` file includes conversations, explicitly approved memories, task summaries and non-secret settings only. It does **not** include the separate task/session JPVR registry, Android SharedPreferences drafts, auth tokens, Android Keystore keys, Python environments, application binaries, or neuron/network/reward checkpoints. It is manually moved between devices; it does not enable live sync.
+
+This workflow requires a readable local workspace service. It cannot recover a damaged `workspace.jpvr` file if the service cannot open it. For JPVR corruption, first preserve a byte-for-byte copy of the original. The existing `JPVRStorage.scan_history()` is read-only, and `recover_copy(...)` can publish a previously verified prefix as a new file without modifying the original; that reference API is not yet surfaced as automatic application repair and has not been device/Windows verified. See [Workspace Backup & Restore V1](JARVIS_WORKSPACE_BACKUP_RESTORE_V1.md).
+
 ## Manual transfer procedure
 
 1. On the source device, open the JARVIS memory panel and choose **Export .jws**. Enter a passphrase of at least 12 characters and save the generated file.
@@ -113,4 +133,4 @@ Focused tests are authored in:
 - `tools/neuron_runtime/test_workspace_store.py`
 - `tools/jarvis_app/test_server.py`
 
-They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Workspace-store coverage now has 11 authored tests (not run). Six Android instrumentation transfer codec tests are authored but unexecuted; both desktop and Android UI behavior remain source-reviewed only and still require browser/device verification. The Python/Android implementation is source-level until those checks run on the target environments.
+They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Workspace-store coverage has 11 authored tests (not run). The Android transfer/backup crypto suite has 9 instrumentation tests authored but unexecuted; the Python local-console API suite has 18 tests authored but unexecuted. Both desktop and Android UI behavior remain source-reviewed only and still require browser/device verification. The Python/Android implementation is source-level until those checks run on the target environments.
