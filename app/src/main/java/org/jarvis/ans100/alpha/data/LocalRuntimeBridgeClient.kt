@@ -9,6 +9,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.UUID
 
 data class RuntimeSessionSnapshot(
@@ -267,7 +268,7 @@ class LocalRuntimeBridgeClient {
                 .matches(document.optString("workspace_id")) ||
             !Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
                 .matches(document.optString("export_id")) ||
-            runCatching { Instant.parse(document.optString("exported_at")) }.isFailure ||
+            runCatching { OffsetDateTime.parse(document.optString("exported_at")) }.isFailure ||
             document.optString("source_platform") !in setOf("desktop", "android")
         ) {
             throw RuntimeBridgeException("Файл не соответствует схеме рабочего пространства V1.")
