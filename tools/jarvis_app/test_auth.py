@@ -5,6 +5,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import stat
 import tempfile
 import unittest
 
@@ -54,6 +55,16 @@ class LocalConsoleAuthTests(unittest.TestCase):
         reopened = LocalConsoleAuth(self.path)
         self.assertIsNone(reopened.bootstrap_token)
         self.assertTrue(reopened.verify(new_token))
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute regression")
+    def test_windows_rotation_replaces_legacy_readonly_digest(self):
+        first = LocalConsoleAuth(self.path)
+        old_token = first.bootstrap_token
+        os.chmod(self.path, stat.S_IREAD)
+        rotated = LocalConsoleAuth(self.path, rotate=True)
+        self.assertIsNotNone(rotated.bootstrap_token)
+        self.assertFalse(rotated.verify(old_token))
+        self.assertTrue(rotated.verify(rotated.bootstrap_token))
 
     def test_malformed_tokens_are_rejected_without_raising(self):
         auth = LocalConsoleAuth(self.path)
