@@ -119,7 +119,7 @@ class JPVRStorageTests(unittest.TestCase):
             self.assertEqual(os.path.getsize(self.path), 2 * PAGE_SIZE)
             self.assertEqual(store.get_superblock(), genesis_superblock())
         from .codec import decode_superblock
-        fd = os.open(self.path, os.O_RDONLY)
+        fd = os.open(self.path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
         try:
             self.assertEqual(
                 decode_superblock(read_at(fd, SUPERBLOCK_SIZE, 0), expected_slot_id=0),
@@ -179,7 +179,7 @@ class JPVRStorageTests(unittest.TestCase):
         plan = build_genesis_plan()
         with self.create_store() as store:
             store.commit(plan)
-        fd = os.open(self.path, os.O_RDWR)
+        fd = os.open(self.path, os.O_RDWR | getattr(os, "O_BINARY", 0))
         try:
             write_all_at(fd, bytes(PAGE_SIZE), 11 * PAGE_SIZE)
             os.fsync(fd)
