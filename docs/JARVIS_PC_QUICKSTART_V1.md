@@ -3,7 +3,7 @@
 **Status:** source-level desktop development entry point  
 **Date:** 2026-11-13
 
-This guide starts the existing Python local console on a PC. It does not install a finished conversational assistant or a native desktop executable.
+This guide starts the existing Python local console on a POSIX PC (Linux or macOS). Windows support is currently blocked by the JPVR storage layer. It does not install a finished conversational assistant or a native desktop executable.
 
 ## What currently works at source level
 
@@ -23,17 +23,9 @@ Not yet delivered: integrated offline language model, full natural-language conv
 
 The repository's Python modules use modern Python syntax. The minimum supported Python version has not yet been formally declared or verified across Windows, macOS, and Linux. If startup fails, record the exact Python version and error instead of changing dependencies blindly.
 
-## Start on Windows
+## Windows compatibility
 
-Open PowerShell in the repository directory:
-
-    py -3 --version
-    py -3 -m tools.jarvis_app --port 8765
-
-If the Python launcher is unavailable but python is on PATH:
-
-    python --version
-    python -m tools.jarvis_app --port 8765
+**Windows is not supported by the current JPVR file-backed runtime yet.** The storage implementation imports POSIX fcntl and uses positional file I/O APIs that are not available with the same semantics on standard Windows Python. Do not use the launch command below on Windows and do not replace the storage lock with a no-op. A Windows-safe locking and positional-I/O adapter must be implemented and verified first.
 
 ## Start on Linux or macOS
 
@@ -80,4 +72,4 @@ The PWA and Android Compose client use the same API contract when they connect t
 
 ## Verification status
 
-This is a documented launch procedure based on the current CLI source. It has not been executed or verified on Windows, Linux, or macOS. No package, installer, desktop executable, build, test, or performance measurement is claimed.
+This is a documented launch procedure based on the current CLI source. It has not been executed or verified on Linux or macOS. Windows is not supported by the current JPVR storage implementation. No package, installer, desktop executable, build, test, or performance measurement is claimed.
