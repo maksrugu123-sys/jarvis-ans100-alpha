@@ -8,7 +8,7 @@ This guide describes the existing Python local console for Linux/macOS and the c
 ## What currently works at source level
 
 - Python local-console process.
-- Local browser/PWA interface.
+- Local browser/PWA interface with the shared-format memory manager (create/search/list/delete).
 - Local JPVR task/session registry.
 - Separate JPVR shared workspace for conversations, explicit memories, task summaries and non-secret settings.
 - Authenticated workspace API V1 with revision-based conflict detection.
