@@ -292,8 +292,9 @@ class LocalRuntimeBridgeClient {
         if (plan.expectedRevision < 0L) {
             throw RuntimeBridgeException("Ревизия импорта недопустима.")
         }
-        validateTransferDocument(plan.mergedDocument)
-        return saveWorkspace(sealWorkspace(plan.mergedDocument), plan.expectedRevision)
+        val sealed = sealWorkspace(plan.mergedDocument)
+        validateTransferDocument(sealed)
+        return saveWorkspace(sealed, plan.expectedRevision)
     }
 
     private fun validateTransferDocument(document: JSONObject) {
@@ -462,7 +463,8 @@ class LocalRuntimeBridgeClient {
             }
             val value = setting.opt("value")
             val portable = value == JSONObject.NULL || value is String || value is Boolean ||
-                (value is Int || value is Long)
+                (value is Int || value is Long) &&
+                (value as Number).toLong() in -9_007_199_254_740_991L..9_007_199_254_740_991L
             if (!portable) {
                 throw RuntimeBridgeException("Значение настройки не является переносимым типом.")
             }
