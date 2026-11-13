@@ -1,4 +1,4 @@
-const CACHE_NAME = "jarvis-local-console-v4";
+const CACHE_NAME = "jarvis-local-console-v5";
 const SHELL = ["/", "/index.html", "/app.js", "/styles.css", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", event => {
