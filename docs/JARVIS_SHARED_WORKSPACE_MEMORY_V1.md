@@ -64,7 +64,7 @@ The service binds only to `127.0.0.1`. Do not expose it to a LAN, tunnel or publ
 
 ## Encrypted offline transfer V1
 
-The desktop PWA now exports and imports a `.jws` envelope using browser WebCrypto. Android now has a matching Kotlin cryptographic codec wired to the Storage Access Framework document picker; it imports with stable-ID/key merge semantics. The Android path has not been built or device-tested.
+The desktop PWA exports/imports a `.jws` envelope using browser WebCrypto. Android uses a matching Kotlin codec and Storage Access Framework document picker. Both show a merge preview and require explicit confirmation before writing. Android source has not been built or device-tested.
 
 The interoperable envelope is defined by `schemas/workspace/v1/encrypted-bundle.schema.json` and is JSON with exactly these fields:
 
@@ -83,7 +83,7 @@ Import is a merge, never a replacement:
 - New records are appended.
 - Identical records are ignored.
 - Conflicting records are skipped, retaining the destination's local version.
-- The desktop UI displays the merge counts before the user confirms the write.
+- Both desktop and Android UIs display merge counts before the user confirms the write.
 - The final write uses the existing JPVR compare-and-swap revision. A stale revision fails rather than overwriting newer local state.
 
 A file transfer is a manual copy between devices. It does not enable LAN exposure, cloud sync, automatic pairing, or background synchronization. Keep the passphrase separate from the `.jws` file.
@@ -103,4 +103,4 @@ Focused tests are authored in:
 - `tools/neuron_runtime/test_workspace_store.py`
 - `tools/jarvis_app/test_server.py`
 
-They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Four Android instrumentation transfer codec tests are authored but unexecuted; both desktop and Android UI behavior remain source-reviewed only and still require browser/device verification. The Python/Android implementation is source-level until those checks run on the target environments.
+They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Workspace-store coverage now has 11 authored tests (not run). Four Android instrumentation transfer codec tests are authored but unexecuted; both desktop and Android UI behavior remain source-reviewed only and still require browser/device verification. The Python/Android implementation is source-level until those checks run on the target environments.
