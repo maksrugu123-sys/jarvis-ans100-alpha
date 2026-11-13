@@ -1,6 +1,6 @@
 # JARVIS Shared Workspace & Memory V1
 
-**Status:** implemented Python reference store and authenticated local API; Android bridge methods added. Runtime/device verification is pending.  
+**Status:** Python JPVR store and authenticated local API implemented; Android and desktop browser memory-management UI wired to the API. Runtime/device verification is pending.  
 **Date:** 2026-11-13
 
 ## Goal
@@ -57,13 +57,16 @@ The service binds only to `127.0.0.1`. Do not expose it to a LAN, tunnel or publ
 ## Platform adapters
 
 - Desktop Python uses the same JPVR workspace store and JSON schema.
-- Android's `LocalRuntimeBridgeClient` now exposes `getWorkspace()` and `saveWorkspace(document, expectedRevision)`. It validates the workspace envelope/version and uses the same local API contract.
+- Android's `LocalRuntimeBridgeClient` exposes `getWorkspace()`, `saveWorkspace(document, expectedRevision)`, `createMemory(...)` and `deleteMemory(...)`. The Compose screen provides consent-gated create, search, list and confirmed delete operations.
+- The desktop PWA provides the same consent-gated create, search, list and confirmed delete operations. It calculates the canonical SHA-256 envelope in the browser and uses the same compare-and-swap API.
 - On Termux, launch with `--platform android`; on a PC use `--platform desktop`. This labels the platform that last wrote the snapshot.
 - Both adapters use the same workspace format and CAS revision. They do not yet merge concurrent edits automatically.
 
 ## Important current boundary
 
 The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing, encrypted transfer, conflict-aware import/export and background sync are future work. Do not expose the loopback service as a workaround.
+
+The browser and Android memory screens manage explicitly entered records only. Automatic extraction from chat, semantic retrieval, ranking and conflict merging are not implemented.
 
 The workspace is a durable data layer, not a conversational AI model. Natural-language chat, retrieval ranking, semantic memory extraction, embeddings and offline LLM inference are not implemented by this milestone.
 
@@ -74,4 +77,4 @@ Focused tests are authored in:
 - `tools/neuron_runtime/test_workspace_store.py`
 - `tools/jarvis_app/test_server.py`
 
-They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Tests and Android builds have **NOT RUN** in this change set. The Python/Android implementation is source-level until those checks run on the target environments.
+They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Tests and Android builds have **NOT RUN** in this change set. UI behavior is source-reviewed only and still requires browser and device verification. The Python/Android implementation is source-level until those checks run on the target environments.
