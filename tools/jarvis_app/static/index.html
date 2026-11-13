@@ -103,6 +103,30 @@
       </section>
     </div>
 
+    <section class="panel memory-panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">ДОЛГОВРЕМЕННЫЙ КОНТЕКСТ</div><h2>Память JARVIS</h2></div>
+        <span class="tag" id="memory-revision">REV —</span>
+      </div>
+      <p class="panel-copy">Здесь находятся только воспоминания, которые вы добавили и подтвердили сами. Они хранятся отдельно от задач и сессий.</p>
+      <form id="memory-form" class="stack-form">
+        <label for="memory-content">Новое воспоминание</label>
+        <textarea id="memory-content" maxlength="10000" rows="3" placeholder="Напишите, что JARVIS должен помнить…" required></textarea>
+        <div class="two-fields">
+          <div><label for="memory-category">Категория</label><input id="memory-category" maxlength="64" value="general" pattern="[A-Za-z0-9._ -]+" required></div>
+          <div class="memory-consent"><label><input id="memory-approval" type="checkbox" required> Я подтверждаю сохранение этого воспоминания</label></div>
+        </div>
+        <button class="wide-button" type="submit">Сохранить в память</button>
+      </form>
+      <div class="task-filters">
+        <label class="sr-only" for="memory-search">Поиск воспоминаний</label>
+        <input id="memory-search" type="search" placeholder="Поиск по содержимому и категории" autocomplete="off">
+        <button id="memory-refresh" class="secondary-button" type="button">Обновить</button>
+      </div>
+      <div id="memory-counts" class="task-counts" aria-live="polite"></div>
+      <div id="memories" class="record-list empty">Загрузка общей памяти…</div>
+    </section>
+
     <section class="panel reasoning-panel">
       <div class="panel-heading">
         <div><div class="eyebrow">REASONING ENGINE V0.1</div><h2>Проверка плана</h2></div>
