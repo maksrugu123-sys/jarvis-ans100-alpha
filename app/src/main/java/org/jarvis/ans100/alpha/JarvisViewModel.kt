@@ -200,6 +200,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun exportWorkspace(passphrase: CharArray, onReady: (ByteArray) -> Unit) {
+        pendingWorkspaceMerge = null
         val before = mutableState.value
         if (before.workspace.isBusy) {
             passphrase.fill('\u0000')
