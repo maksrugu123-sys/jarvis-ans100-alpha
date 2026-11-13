@@ -173,3 +173,14 @@ textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(109,214,1
 .memory-consent input { width:auto; }
 .memory-content { white-space:pre-wrap; overflow-wrap:anywhere; margin:10px 0 6px; }
 .memory-panel { margin-top:16px; }
+
+
+.transfer-panel { margin-top:16px; }
+.transfer-panel > label { display:block; margin:10px 0 6px; font-size:12px; color:var(--muted); }
+.transfer-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:10px; }
+.transfer-actions button { flex:1 1 210px; }
+.transfer-preview {
+  margin-top:12px; padding:12px; border:1px solid #40556d; border-radius:10px;
+  background:#101e2c; color:#d5e9ff; font-size:12px; line-height:1.6;
+}
+.transfer-panel .muted { display:block; margin-top:10px; }
