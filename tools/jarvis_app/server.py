@@ -6,6 +6,7 @@ but no tool executor, external credentials, shell access, or side-effecting capa
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
@@ -41,6 +42,7 @@ from tools.neuron_runtime.task_session_store import (
 
 MANAGER_ID = "android-local-console"
 MAX_REQUEST_BYTES = 64 * 1024
+MAX_WORKSPACE_REQUEST_BYTES = 16 * 1024 * 1024
 MAX_PREVIEW_ACTIONS = 64
 _STATE_EVENT_LIMIT = 100
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -119,6 +121,8 @@ class LocalConsoleService:
         auth_path: str | os.PathLike[str] | None = None,
         *,
         rotate_token: bool = False,
+        workspace_path: str | os.PathLike[str] | None = None,
+        platform: str = "desktop",
     ) -> None:
         default_path = Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr"
         self.data_path = (
@@ -128,23 +132,28 @@ class LocalConsoleService:
             Path(auth_path).expanduser() if auth_path is not None
             else self.data_path.with_name(self.data_path.name + ".access-token")
         )
+        self.workspace_path = (
+            Path(workspace_path).expanduser() if workspace_path is not None
+            else self.data_path.with_name("workspace.jpvr")
+        )
+        if platform not in ("desktop", "android"):
+            raise LocalConsoleError("platform must be desktop or android")
+        self.platform = platform
+        paths = (self.data_path, self.auth_path, self.workspace_path)
         try:
-            same_path = (
-                self.data_path.resolve(strict=False)
-                == self.auth_path.resolve(strict=False)
-            )
-            if not same_path and self.data_path.exists() and self.auth_path.exists():
-                same_path = os.path.samefile(self.data_path, self.auth_path)
+            resolved = [path.resolve(strict=False) for path in paths]
+            for index, path in enumerate(paths):
+                for other_index in range(index):
+                    same = resolved[index] == resolved[other_index]
+                    if not same and path.exists() and paths[other_index].exists():
+                        same = os.path.samefile(path, paths[other_index])
+                    if same:
+                        raise LocalConsoleError("JPVR data, workspace, and authentication paths must be separate files")
         except (OSError, RuntimeError) as exc:
-            raise LocalConsoleError(
-                "cannot validate separate JPVR and authentication paths"
-            ) from exc
-        if same_path:
-            raise LocalConsoleError(
-                "JPVR data and authentication digest must use different files"
-            )
+            raise LocalConsoleError("cannot validate separate JARVIS storage paths") from exc
         self._lock = threading.RLock()
         self.data_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.workspace_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 
         try:
             self.storage = JPVRStorage.open(self.data_path, recover_tail=True)
