@@ -10,6 +10,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from tools.jarvis_app.server import (
+    LocalConsoleError,
     LocalConsoleService,
     create_http_server,
 )
@@ -89,6 +90,21 @@ class LocalConsoleServiceTests(unittest.TestCase):
         self.assertFalse(rotated.authenticate(first_token))
         self.assertTrue(rotated.authenticate(rotated.bootstrap_token))
         rotated.close()
+
+
+    def test_auth_path_cannot_alias_jpvr_file_even_during_rotation(self):
+        with open(self.data_path, "rb") as stream:
+            before = stream.read()
+
+        with self.assertRaisesRegex(LocalConsoleError, "different files"):
+            LocalConsoleService(
+                self.data_path,
+                self.data_path,
+                rotate_token=True,
+            )
+
+        with open(self.data_path, "rb") as stream:
+            self.assertEqual(stream.read(), before)
 
 
     def test_reasoning_preview_returns_plan_without_changing_jpvr_state(self):
@@ -219,6 +235,49 @@ class LocalConsoleHttpTests(unittest.TestCase):
             self._post("/api/sessions", {"title": "Must remain blocked"}, authenticated=False)
         self.assertEqual(blocked_mutation.exception.code, 401)
         self.assertEqual(self.service.state()["sessions"], [])
+
+    def test_every_post_route_rejects_missing_token_before_processing(self):
+        session = self.service.create_session("Protected session")
+        task = self.service.create_task(session["session_id"], "Protected task")
+        version_before = self.service.checkpoint_version
+        session_id = session["session_id"]
+        task_id = task["task_id"]
+        routes = [
+            ("/api/sessions", {"title": "unauthorized"}),
+            ("/api/tasks", {"session_id": session_id, "title": "unauthorized"}),
+            (
+                f"/api/sessions/{session_id}/status",
+                {"status": "paused", "expected_revision": session["revision"]},
+            ),
+            (
+                f"/api/tasks/{task_id}/cancel",
+                {"expected_revision": task["revision"]},
+            ),
+            (
+                "/api/reasoning/preview",
+                {
+                    "task_id": "unauthorized-preview",
+                    "goal_description": "Must not be processed",
+                    "initial_facts": ["start"],
+                    "goal_facts": ["finish"],
+                    "actions": [],
+                },
+            ),
+        ]
+
+        for path, payload in routes:
+            with self.subTest(path=path):
+                with self.assertRaises(HTTPError) as captured:
+                    self._post(path, payload, authenticated=False)
+                self.assertEqual(captured.exception.code, 401)
+
+        state = self.service.state()
+        self.assertEqual(self.service.checkpoint_version, version_before)
+        self.assertEqual(len(state["sessions"]), 1)
+        self.assertEqual(len(state["tasks"]), 1)
+        self.assertEqual(state["sessions"][0]["status"], "open")
+        self.assertEqual(state["tasks"][0]["status"], "queued")
+
 
     def test_reasoning_preview_http_endpoint_returns_symbolic_plan(self):
         status, payload = self._post(
