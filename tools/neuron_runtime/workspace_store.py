@@ -39,6 +39,7 @@ _SCHEMA_ID = 0x31
 _SCHEMA_VERSION = 1
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SETTING_PATTERN = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
+_SECRET_SETTING_PARTS = ("password", "passwd", "secret", "token", "credential", "api_key", "private_key", "auth")
 
 
 class WorkspaceError(ValueError):
@@ -80,6 +81,17 @@ def _check_id(value, name):
     if not isinstance(value, str) or not _ID_PATTERN.fullmatch(value):
         raise WorkspaceError(f"{name} is not a valid workspace identifier")
     return value
+
+
+def _check_datetime(value, name):
+    if not isinstance(value, str):
+        raise WorkspaceError(f"{name} must be an ISO-8601 date-time")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise WorkspaceError(f"{name} must be an ISO-8601 date-time") from exc
+    if parsed.tzinfo is None:
+        raise WorkspaceError(f"{name} must include a timezone")
 
 
 def _canonical(value) -> bytes:
@@ -135,8 +147,7 @@ def encode_workspace(snapshot: WorkspaceSnapshot) -> bytes:
             seen.add(item["id"])
             if isinstance(item.get("revision"), bool) or not isinstance(item.get("revision"), int) or not 0 <= item["revision"] <= 2147483647:
                 raise WorkspaceError(f"{collection}.revision is invalid")
-            if not isinstance(item.get("updated_at"), str):
-                raise WorkspaceError(f"{collection}.updated_at must be text")
+            _check_datetime(item.get("updated_at"), f"{collection}.updated_at")
             if collection == "memories":
                 if set(item) - {"id", "revision", "updated_at", "content", "category", "user_approved"}:
                     raise WorkspaceError("memory contains unsupported fields")
@@ -160,6 +171,7 @@ def encode_workspace(snapshot: WorkspaceSnapshot) -> bytes:
                     if message["id"] in message_ids:
                         raise WorkspaceError("message IDs must be unique within a conversation")
                     message_ids.add(message["id"])
+                    _check_datetime(message["created_at"], "message.created_at")
                     if message["role"] not in ("user", "assistant", "system") or not isinstance(message["content"], str) or len(message["content"]) > 100000:
                         raise WorkspaceError("conversation message is invalid")
             else:
@@ -178,6 +190,8 @@ def encode_workspace(snapshot: WorkspaceSnapshot) -> bytes:
         key = setting["key"]
         if not isinstance(key, str) or not _SETTING_PATTERN.fullmatch(key) or key in setting_keys:
             raise WorkspaceError("setting key is invalid or duplicated")
+        if any(part in key for part in _SECRET_SETTING_PARTS):
+            raise WorkspaceError("credentials, tokens, and secrets are forbidden in portable workspace settings")
         setting_keys.add(key)
         value = setting["value"]
         if value is not None and not isinstance(value, (str, int, float, bool)):
@@ -340,7 +354,7 @@ class JPVRWorkspaceStore:
                 if (
                     commit.transaction_id != checkpoint.transaction_id
                     or source_manifest.transaction_id != commit.transaction_id
-                    or source_manifest.manifest.checkpoint_page_no == 0
+                    or source_manifest.manifest.checkpoint_page_no != checkpoint.page_no
                     or commit.record.durable_tail_page_no != page_no
                 ):
                     raise WorkspaceError("workspace checkpoint is not published by its source COMMIT")
