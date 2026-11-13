@@ -69,6 +69,7 @@ The native Kotlin/Compose app at `app/` keeps two deliberately separate views of
 | `tools/jarvis_app/test_auth.py` | Token digest storage, owner-only permissions, one-time bootstrap, rotation, malformed input and symlink-parent/file rejection (9 authored, not run) |
 | `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
 
+| docs/JARVIS_PROJECT_HANDOFF_2026-11-13.md | Consolidated project handoff: architecture/status, Android V0.5 boundaries, verification truth, safety gates and ordered next steps |
 | Path | Purpose |
 |---|---|
 | `docs/JARVIS_ARCHITECTURE.md` | Main architecture specification, decisions, open questions and development plan |
