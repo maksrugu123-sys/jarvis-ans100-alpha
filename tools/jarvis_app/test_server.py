@@ -276,6 +276,61 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(payload["workspace_api_version"], 1)
         self.assertEqual(payload["platform"], "desktop")
 
+    def test_workspace_restore_replaces_all_records_with_revision_guard(self):
+        initial = self.service.workspace_state()
+        now = datetime.now(timezone.utc).isoformat()
+        records = initial["workspace"]["records"]
+        records["memories"].append({
+            "id": "restore-memory-001",
+            "revision": 0,
+            "updated_at": now,
+            "content": "A backup memory for restore coverage.",
+            "category": "test",
+            "user_approved": True,
+        })
+        replacement = json.loads(encode_workspace(WorkspaceSnapshot(
+            workspace_id="jarvis-default",
+            revision=0,
+            exported_at=now,
+            source_platform="desktop",
+            records=records,
+        )))
+        status, restored = self._post("/api/workspace/restore", {
+            "expected_revision": initial["revision"],
+            "workspace": replacement,
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            [item["id"] for item in restored["workspace"]["records"]["memories"]],
+            ["restore-memory-001"],
+        )
+        current_revision = restored["revision"]
+
+        empty_replacement = initial["workspace"]
+        status, replaced = self._post("/api/workspace/restore", {
+            "expected_revision": current_revision,
+            "workspace": empty_replacement,
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(replaced["revision"], current_revision + 1)
+        self.assertEqual(replaced["workspace"]["records"]["memories"], [])
+
+        with self.assertRaises(HTTPError) as unauthenticated:
+            self._post("/api/workspace/restore", {
+                "expected_revision": replaced["revision"],
+                "workspace": replacement,
+            }, authenticated=False)
+        self.assertEqual(unauthenticated.exception.code, 401)
+
+        with self.assertRaises(HTTPError) as stale:
+            self._post("/api/workspace/restore", {
+                "expected_revision": current_revision,
+                "workspace": replacement,
+            })
+        self.assertEqual(stale.exception.code, 409)
+        latest = self.service.workspace_state()
+        self.assertEqual(latest["workspace"]["records"]["memories"], [])
+
     def test_workspace_api_creates_and_deletes_explicit_memories(self):
         initial = self.service.workspace_state()
         records = initial["workspace"]["records"]
