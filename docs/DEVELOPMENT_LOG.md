@@ -1711,3 +1711,32 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Ограничения:** реализация существует на уровне исходного кода. Android SAF, криптография на реальном Android, desktop WebCrypto, round-trip между Android и desktop, обработка крупных файлов и реальный CAS-конфликт требуют runtime-проверки. Передача ручная; файлы на телефоне и PC остаются раздельными до импорта.
 
 **Следующий этап:** после разрешения пользователя выполнить отдельную проверку на Android и desktop без включения внешних действий; прежде этого — не заявлять runtime-совместимость как доказанную.
+
+
+## 2026-11-13 — Encrypted workspace backup and guarded restore V1
+
+**Цель:** добавить отдельный зашифрованный point-in-time backup общей памяти для Android и PC, не смешивая его с merge-переносом JWS и не представляя его как восстановление сырого JPVR-файла.
+
+**Изменено / добавлено:**
+- Добавлены `schemas/workspace/v1/workspace-backup.schema.json` и `schemas/workspace/v1/encrypted-backup.schema.json`. JWB payload и envelope имеют отдельные versioned markers; backup encryption domain отделён от JWS purpose-specific AAD.
+- `tools/jarvis_app/server.py` — добавлен authenticated `POST /api/workspace/restore`; маршрут требует ровно `expected_revision` и полный `workspace`, использует существующую schema/integrity validation, сохраняет workspace identity и публикует полную замену через JPVR CAS. Лимит 16 MiB применяется и к save, и к restore routes.
+- `tools/jarvis_app/test_server.py` — добавлены два regression tests: большой restore payload (70,000-byte message) с полной заменой и stale CAS/auth checks; отказ для foreign workspace ID и tampered SHA-256. Инвентарь теперь 18 методов, AUTHORED / NOT RUN.
+- `tools/jarvis_app/static/index.html`, `static/app.js`, `static/sw.js` — desktop PWA получил JWB export, local decrypt/validation preview, отдельное подтверждение backup текущей ревизии, destructive restore confirmation, CAS commit и fail-closed invalidation после stale/ambiguous response. В WebCrypto best-effort обнуляются временные password/plaintext/salt/nonce/ciphertext byte arrays. Service-worker cache увеличен до v7.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCrypto.kt` — добавлены encrypt/decrypt APIs для JWB с отдельным marker/AAD, сохраняя прежний JWS contract.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` — добавлены JWB payload creation/validation, nested + wrapper digest checks, same-workspace validation, collection-count preview и CAS replacement call.
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` и `MainActivity.kt` — добавлены backup revision evidence, Android SAF create/open, local preview, required acknowledgement, second confirmation, restore state invalidation and error path. Memory mutations are disabled while destructive restore preview is active.
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` — добавлены проверки JWB/JWS cryptographic domain separation, wrong passphrase, tampered ciphertext и passphrase cleanup. Теперь 9 instrumentation methods, AUTHORED / NOT RUN.
+- Добавлен `docs/JARVIS_WORKSPACE_BACKUP_RESTORE_V1.md` и обновлены схемы, README, architecture §3.52, Android App/Runtime Bridge, Shared Workspace Memory, Cross-Platform Runtime, PC Quick Start, Local Console и project handoff.
+- `AGENTS.md` и project handoff теперь указывают `mobile-first-offline-v1` как текущую авторизованную ветку и запрещают изменение `main` без отдельного явного разрешения.
+
+**Формат и гарантии:**
+- JWB uses PBKDF2-HMAC-SHA256 (310,000 rounds), random 16-byte salt, AES-256-GCM, 12-byte nonce, 128-bit tag and backup-only AAD `JARVIS-WORKSPACE-BACKUP-ENCRYPTED-V1`.
+- Restore is full replacement, not merge. It validates encrypted envelope, canonical JSON, backup wrapper SHA-256, nested workspace SHA-256, schema/limits and same workspace ID before write.
+- Both interfaces require the user to save a separate current-revision backup, acknowledge it and confirm replacement. Server independently validates and uses expected revision CAS.
+- JWB contains only portable workspace collections. It excludes task/session JPVR, Android drafts, tokens, Android Keystore keys, binaries and neuron/network checkpoints. It cannot repair a corrupt workspace JPVR file that cannot be opened; preserve the original and use the separate JPVR recovery-copy reference flow.
+
+**Проверки:** GitHub source readback and static cross-file review only. Python `test_server.py` (18) and Android `WorkspaceTransferCryptoTest.kt` (9) are **AUTHORED, NOT RUN**. Existing Python auth (11), workspace-store (11), Android Keystore (7) and Android local repository (9) suites remain as recorded in their contracts. No Python tests, Kotlin compilation, Gradle sync/build, Android APK/AAB, SAF/device run, desktop browser flow, Windows 10/11 execution, cross-platform JWB interoperability, CI or GitHub Actions were run.
+
+**Ограничения:** implementation is source-level only. Browser download retention cannot be proven by the page; desktop requires explicit user acknowledgement after download initiation. Android marks a backup written only after its SAF output stream closes, then still requires checkbox acknowledgement. The backup is not a raw JPVR file image. A stale or ambiguous restore response clears its preview and requires refresh/reconciliation before another attempt. No live pairing or sync exists.
+
+**Следующий этап:** получить отдельное разрешение на focused runtime/device/browser verification of JWB/JWS and bridge behavior. After evidence, continue with trusted approver identity, signed exact-request grants, trusted policy/revocation source and downstream idempotency/reconciliation. Keep all external actions disabled.
