@@ -107,6 +107,31 @@ class WorkspaceTransferCryptoTest {
     }
 
     @Test
+    fun encryptedBackupRejectsWrongPassphraseAndTamperedCiphertext() {
+        val bundle = WorkspaceTransferCrypto.encryptBackup(
+            """{"format":"jarvis.workspace.backup","message":"Защищённая копия"}""",
+            passphrase.toCharArray(),
+        )
+        expectIllegalArgument {
+            WorkspaceTransferCrypto.decryptBackup(
+                bundle.copyOf(),
+                "different password phrase".toCharArray(),
+            )
+        }
+
+        val envelope = JSONObject(String(bundle, StandardCharsets.UTF_8))
+        val ciphertext = Base64.getDecoder().decode(envelope.getString("ciphertext"))
+        ciphertext[ciphertext.lastIndex] = (ciphertext.last().toInt() xor 1).toByte()
+        envelope.put("ciphertext", Base64.getEncoder().encodeToString(ciphertext))
+        expectIllegalArgument {
+            WorkspaceTransferCrypto.decryptBackup(
+                envelope.toString().toByteArray(StandardCharsets.UTF_8),
+                passphrase.toCharArray(),
+            )
+        }
+    }
+
+    @Test
     fun authenticatedCiphertextTamperingIsRejected() {
         val bundle = WorkspaceTransferCrypto.encrypt(
             """{"format":"jarvis.workspace"}""",
