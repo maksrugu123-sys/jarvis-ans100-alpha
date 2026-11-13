@@ -1664,3 +1664,18 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** локальный bearer token остаётся только transport access control, не удостоверяет человека и не является approval. Проверки владельца/прав/симлинков не защищают файлы от злонамеренного владельца того же Android UID; directory fsync является best-effort для совместимости файловых систем. Android Keystore и токенизация не проверялись runtime. Внешние действия, Task Loop и ActionExecutor остаются выключенными.
 
 **Следующий шаг:** добавить тесты Android token store в подходящем instrumentation harness и проверить полный authenticated bridge на Termux/Android без включения side effects.
+
+## 2026-11-13 — Android Keystore token-store instrumentation tests authored
+
+**Цель:** добавить device-level tests для реального Android Keystore, поскольку JVM unit tests не могут подтвердить поведение AndroidKeyStore/AES-GCM.
+
+**Изменено:**
+- `app/build.gradle.kts` — добавлен AndroidJUnitRunner и androidTest dependencies для AndroidX Test core/runner/JUnit.
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/RuntimeAccessTokenStoreTest.kt` — 7 instrumentation tests: round-trip после recreation и отсутствие plaintext token в preferences; clear; randomized GCM IV on each save; malformed-envelope fail-closed + cleanup; invalidation after Keystore-key deletion; invalid token rejection before persistence; non-exportability of Android Keystore key.
+- Обновлены README, Android App V0.5, Runtime Bridge и architecture §3.49.
+
+**Проверки:** source readback/static dependency and test-inventory review only. Семь Android Keystore instrumentation tests **AUTHORED, NOT RUN**. Gradle sync, Kotlin compile, connectedAndroidTest, emulator/device execution, APK/AAB, Android↔Termux end-to-end test, Python tests, CI и GitHub Actions не запускались.
+
+**Ограничения:** реальные AES-GCM/Android Keystore assertions остаются непроверенными до запуска instrumentation suite на Android API 29+ устройстве/эмуляторе. UI flows и полное соединение с Termux также не проверены. Внешние действия остаются выключенными.
+
+**Следующий шаг:** пользователь может отдельно разрешить запуск instrumentation tests/build; до этого оставлять результат как AUTHORED, NOT RUN.
