@@ -1762,3 +1762,34 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Desktop `app.js` delays object-URL revocation after initiating JWS/JWB download and clears the prior-backup acknowledgement after reconciling an ambiguous restore as successfully applied.
 - PWA service-worker shell cache is now `jarvis-local-console-v8`.
 - No test inventory changed: Python service/API 18, Python auth 11, Android transfer/backup crypto 9, Android Keystore 7, Android local draft 9 are AUTHORED / NOT RUN as applicable. Static GitHub source readback only; no tests, builds, browser execution, device runs, CI or Actions were performed.
+
+
+## 2026-11-13 — Signed exact-request approval verifier V1
+
+**Цель:** устранить ключевой пробел legacy Permission & Safety Gate: объект ApprovalGrant был привязан к запросу и сроку, но не содержал проверяемого доказательства того, какой доверенный approver его подписал. Добавить отдельный fail-closed Ed25519 режим без включения внешнего исполнения.
+
+**Добавлено / изменено:**
+- `tools/neuron_runtime/signed_approval.py` — добавлены immutable `ApprovalTrustKey` / `ApprovalTrustStore`, `SignedApprovalEnvelope`, domain-separated canonical signing bytes, strict UTF-8 JSON encode/decode и Ed25519 signature verification. Подпись покрывает schema/version/algorithm, key/approver IDs, UTC issue/expiry и полный ApprovalGrant. Проверяются approver-to-key binding, key status/validity, signature, expiry, не более 30 секунд допустимого future skew и lifetime не более 5 минут. Envelope ограничен 32 KiB, повторяющиеся и неизвестные JSON поля отклоняются. Если optional `cryptography` package отсутствует, проверка завершается fail-closed; криптографического fallback нет.
+- `TrustedApprovalSafetyGate` — добавлен отдельный gate, принимающий только подписанный envelope; unsigned ApprovalGrant отклоняется. Существующий `PermissionSafetyGate` оставлен как legacy reference API, чтобы не менять смысл старых unit/reference сценариев.
+- `tools/neuron_runtime/task_loop.py` — approvals mapping теперь принимает SignedApprovalEnvelope наряду с legacy ApprovalGrant; фактический режим enforcement определяется внедрённым gate. В trusted режиме `now_ns` должен быть UTC Unix nanoseconds.
+- `tools/neuron_runtime/__init__.py` — экспортированы новые типы, decoder/encoder и verifier.
+- `tools/neuron_runtime/test_signed_approval.py` — добавлено 16 методов: valid Ed25519 signature, signature tamper, изменение любого grant-поля, unknown/revoked/mismatched key, expiry, future clock skew, key validity, запрет unsigned grant, отсутствие approval, JSON round-trip, duplicate/unknown JSON fields, неверная длина signature и duplicate key IDs. **AUTHORED, NOT RUN.**
+- Добавлены `schemas/approval/v1/signed-approval.schema.json` и optional dependency manifest `requirements-trusted-approval.txt`.
+- Обновлены README, Permission & Safety Gate V1, Task Loop V0.1, architecture §3.53 и project handoff.
+
+**Точные границы контракта:**
+- Signature algorithm: Ed25519; raw public key 32 bytes; signature 64 bytes; JSON signature — unpadded Base64URL, 86 characters.
+- Canonical payload is sorted compact ASCII JSON with domain separator `JARVIS:SIGNED-APPROVAL:V1\\0`; signature covers all envelope fields except the signature itself.
+- Intent/policy digests and full ApprovalGrant bind the grant to task/session revisions, plan/step/action, capability, scope, idempotency key, policy identity/digest, resource budgets, effect, retry index and expiry. Task Loop plan ID commits to the canonical structured plan/action bindings.
+- Legacy unsigned gate remains available for reference tests only. The Android/PWA UI and local-console API do not yet create or consume signed approval envelopes.
+
+**Проверки:** GitHub branch readback and static cross-file/source review only. 16 tests in `test_signed_approval.py` are **AUTHORED, NOT RUN**. No Python imports/tests, cryptographic runtime checks, Termux execution, Android Keystore, desktop signer, Gradle/build/APK/AAB, browser/device run, CI or GitHub Actions were run.
+
+**Ограничения / security gaps still open:**
+- The verifier trusts only keys in the supplied in-memory trust snapshot; there is no authenticated enrollment/root, signed trust bundle, persistent key rotation/revocation, monotonic anti-rollback counter or secure recovery.
+- `trust_epoch` is metadata only; it does not prevent a caller from rolling back a trust snapshot.
+- No platform private-key signer exists. Android needs non-exportable Android Keystore signing with explicit user-authenticated approval; desktop needs a protected signer and enrollment path.
+- The verifier does not itself prove a human saw the approval UI, consume approval IDs across processes, reconcile external outcomes or enable an executor. External actions, tools and remote access remain disabled.
+- Cross-platform signature interoperability and Python cryptography availability on the target Termux/Python environment have not been measured.
+
+**Следующий этап:** design and implement secure approver enrollment/key provisioning and signed trust-store updates with rotation, revocation and anti-rollback; only after that integrate the Android user-confirmation signer and test signed envelope interoperability on Android and PC.
