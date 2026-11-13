@@ -65,7 +65,8 @@ The native Kotlin/Compose app at `app/` keeps two deliberately separate views of
 | `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.5 local-draft, authenticated loopback bridge and symbolic-preview contract |
 | `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` | Android-to-Termux JPVR task/session bridge, API version, bounds and trust boundary |
 | `tools/jarvis_app/server.py` | Loopback-only Python local console backed by JPVR; separate from the native app |
-| `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 token persistence/rotation/authentication and reasoning-preview tests (11 authored, not run) |
+| `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 HTTP authentication and reasoning-preview tests (11 authored, not run) |
+| `tools/jarvis_app/test_auth.py` | Token digest storage, permissions, one-time bootstrap, rotation, malformed input and symlink rejection (7 authored, not run) |
 | `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
 
 | Path | Purpose |
@@ -504,7 +505,7 @@ Android repository tests:
 app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
 ```
 
-Nine Android local-repository tests and eleven Python console API tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
+Nine Android local-repository tests and eighteen Python console/API-auth tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
 
 ## Separate local PWA console
 
@@ -514,4 +515,4 @@ The Python local console can be started from the repository root:
 python3 -m tools.jarvis_app --port 8765
 ```
 
-On first startup, copy the one-time token from Termux into the PWA login panel or the Android app. Open `http://127.0.0.1:8765/` on the same device. The same running console serves both frontends and the JPVR-backed TaskSessionManager; Android SharedPreferences drafts remain separate. The service binds only to loopback. The eleven console tests are **AUTHORED, NOT RUN**.
+On first startup, copy the one-time token from Termux into the PWA login panel or the Android app. Open `http://127.0.0.1:8765/` on the same device. The same running console serves both frontends and the JPVR-backed TaskSessionManager; Android SharedPreferences drafts remain separate. The service binds only to loopback. The eighteen console/API-auth tests are **AUTHORED, NOT RUN**.
