@@ -12,6 +12,7 @@ This guide describes the existing Python local console for Linux/macOS and the c
 - Local JPVR task/session registry.
 - Separate JPVR shared workspace for conversations, explicit memories, task summaries and non-secret settings.
 - Authenticated workspace API V1 with revision-based conflict detection.
+- Encrypted `.jws` workspace export/import in the PWA, with merge preview, explicit confirmation and no silent overwrites.
 - Bounded symbolic reasoning preview using structured facts and actions.
 - Bearer-token protected state and mutation routes.
 
@@ -69,7 +70,7 @@ The default data and token-digest paths are under the current user's home direct
 - ~/.jarvis-ans100-alpha/workspace.jpvr (shared workspace/memory)
 - ~/.jarvis-ans100-alpha/local-console.jpvr.access-token
 
-The server creates and protects its private auth directory/files. Back up the data file only while the server is stopped, or use a future supported export operation. Do not manually edit JPVR bytes.
+The server creates and protects its private auth directory/files. Use the PWA's encrypted `.jws` export for shared workspace/memory transfer. The separate task/session file `local-console.jpvr` still requires a stopped-server backup; the `.jws` file does not contain that registry. Do not manually edit JPVR bytes.
 
 If the token is lost, stop the server and restart it with:
 
@@ -81,7 +82,7 @@ Use python3 instead of python on systems where that is the configured interprete
 
 The service binds to 127.0.0.1. Keep it that way. Do not expose it through 0.0.0.0, a LAN address, port forwarding, or a public tunnel. The current Bearer token protects local API access but is not a trusted human identity or permission to execute external actions.
 
-The PWA and Android Compose client use the same API contract when they connect to a compatible local service. Workspace routes are GET/POST `/api/workspace`, use Bearer authentication and compare-and-swap revisions, and are bounded to 16 MiB. On Termux, launch with `python3 -m tools.jarvis_app --port 8765 --platform android`; on a PC use `--platform desktop`. The Android client currently targets 127.0.0.1 on the phone itself; it does not connect to a PC-hosted service. The common workspace format is implemented, but cross-device pairing, encrypted transfer, merge and synchronization are not.
+The PWA and Android Compose client use the same API contract when they connect to a compatible local service. Workspace routes are GET/POST `/api/workspace`, use Bearer authentication and compare-and-swap revisions, and are bounded to 16 MiB. On Termux, launch with `python3 -m tools.jarvis_app --port 8765 --platform android`; on a PC use `--platform desktop`. The Android client currently targets 127.0.0.1 on the phone itself; it does not connect to a PC-hosted service. Manual encrypted `.jws` export/import is now implemented in both UIs and uses the shared workspace schema. See [Shared Workspace & Memory V1](JARVIS_SHARED_WORKSPACE_MEMORY_V1.md) for the transfer steps. Cross-device pairing and automatic synchronization are not implemented.
 
 ## Troubleshooting
 
