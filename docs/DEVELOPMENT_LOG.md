@@ -1687,3 +1687,26 @@ Added one further test to each focused module after reviewing the new path prote
 - `test_server.py` now has 14 methods; the new case verifies that a hard link to the JPVR data file is rejected as an auth path even during token rotation, without changing file bytes.
 
 The combined Python authentication/API inventory is now **24 methods AUTHORED, NOT RUN**. README, Android/bridge/local-console contracts and architecture §3.49 were updated to match. GitHub source readback only; no tests, imports/syntax execution, builds, APK/AAB, CI or device checks were run.
+
+## 2026-11-13 — Encrypted offline workspace transfer V1
+
+**Цель:** дать Android и Windows/desktop один переносимый формат памяти без облака, без открытия локального API в LAN и без автоматической перезаписи существующих данных.
+
+**Изменено:**
+- \`schemas/workspace/v1/encrypted-bundle.schema.json\` — зафиксирован envelope V1: PBKDF2-HMAC-SHA256, 310 000 итераций, случайная соль 16 байт, AES-256-GCM, nonce 12 байт, tag 128 бит и Base64-кодирование.
+- \`tools/jarvis_app/static/app.js\` и \`static/index.html\` — desktop PWA экспортирует \`.jws\` через WebCrypto и импортирует его после проверки GCM-тега, канонического workspace JSON, SHA-256, лимитов и схемы. Перед записью отображаются счётчики; пользователь может подтвердить или отменить импорт.
+- Android \`WorkspaceTransferCrypto.kt\` — добавлен соответствующий PBKDF2/AES-GCM codec с UTF-8 passphrase bytes, фиксированным AAD, ограничениями размера и очисткой временных byte/char buffers best-effort.
+- \`LocalRuntimeBridgeClient.kt\` — добавлены decrypt/validate, merge planning и CAS commit. Записи объединяются по стабильному ID, настройки по key; одинаковые записи пропускаются, конфликт оставляет локальную версию.
+- \`JarvisViewModel.kt\` и \`MainActivity.kt\` — подключён Android Storage Access Framework для \`.jws\` CreateDocument/OpenDocument; импорт разбит на preview и отдельное подтверждение. Изменение локальной ревизии между preview и commit приводит к отказу CAS, а не к перезаписи.
+- \`workspace_store.py\` и \`workspace.schema.json\` — числовые значения настроек ограничены JSON safe-integer диапазоном ±9,007,199,254,740,991 для одинакового представления в Python, JavaScript и Kotlin.
+- \`test_workspace_store.py\` — добавлен тест отклонения integer setting вне safe-integer диапазона; workspace-store inventory теперь 11 методов.
+- \`app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt\` — 4 instrumentation test cases: UTF-8 round-trip, фиксированный межплатформенный PBKDF2/AES-GCM fixture, неверная парольная фраза и изменение ciphertext.
+- Синхронизированы README, Android Runtime Bridge, Shared Workspace Memory и Cross-Platform Runtime docs.
+
+**Правило импорта:** workspace_id должен совпасть. Новые записи добавляются; одинаковые записи не дублируются; конфликты не перезаписывают локальную версию. Пароль не передаётся local API и не сохраняется. Файл и пароль нужно переносить разными каналами. Автоматической синхронизации, pairings и cloud transport нет.
+
+**Проверки:** GitHub source readback и статическая межфайловая проверка. Python workspace-store tests (11) и Android instrumentation crypto tests (4) — **AUTHORED, NOT RUN**. Не запускались Python tests, Kotlin/Gradle compile, Android build/APK/AAB, browser/device E2E, Windows 10/11 runtime verification, CI или GitHub Actions. Межплатформенный fixture ещё не подтверждён выполнением на обоих runtime.
+
+**Ограничения:** реализация существует на уровне исходного кода. Android SAF, криптография на реальном Android, desktop WebCrypto, round-trip между Android и desktop, обработка крупных файлов и реальный CAS-конфликт требуют runtime-проверки. Передача ручная; файлы на телефоне и PC остаются раздельными до импорта.
+
+**Следующий этап:** после разрешения пользователя выполнить отдельную проверку на Android и desktop без включения внешних действий; прежде этого — не заявлять runtime-совместимость как доказанную.
