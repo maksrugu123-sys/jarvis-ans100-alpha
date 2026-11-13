@@ -17,7 +17,6 @@ import org.jarvis.ans100.alpha.data.RuntimeAccessTokenStore
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
-import org.json.JSONObject
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import java.util.concurrent.Executors
 
@@ -175,21 +174,21 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun refreshWorkspace() {
-        workspaceRequest("Общая память загружена.") {
+        workspaceRequest("Локальная память загружена.") {
             runtimeClient.getWorkspace()
         }
     }
 
     fun addWorkspaceMemory(content: String, category: String) {
         val revision = mutableState.value.workspace.revision
-        workspaceRequest("Воспоминание сохранено в общей памяти.") {
+        workspaceRequest("Воспоминание сохранено в локальной памяти.") {
             runtimeClient.createMemory(content, category, revision)
         }
     }
 
     fun deleteWorkspaceMemory(memoryId: String) {
         val revision = mutableState.value.workspace.revision
-        workspaceRequest("Воспоминание удалено из общей памяти.") {
+        workspaceRequest("Воспоминание удалено из локальной памяти.") {
             runtimeClient.deleteMemory(memoryId, revision)
         }
     }
