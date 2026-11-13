@@ -141,7 +141,10 @@
         <input id="transfer-file" type="file" accept=".jws,application/json" hidden>
       </div>
       <div id="transfer-preview" class="transfer-preview" hidden></div>
-      <button id="transfer-confirm" class="wide-button" type="button" hidden>Объединить с локальной памятью</button>
+      <div class="transfer-actions">
+        <button id="transfer-confirm" type="button" hidden>Подтвердить объединение</button>
+        <button id="transfer-cancel" class="secondary-button" type="button" hidden>Отменить импорт</button>
+      </div>
       <p class="muted">Импорт не перезаписывает существующие записи: одинаковые ID пропускаются, конфликтующие записи остаются локальными. Перед импортом показывается предварительный результат.</p>
     </section>
 
