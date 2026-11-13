@@ -345,7 +345,8 @@ class LocalRuntimeBridgeClient {
             !Regex("^[a-f0-9]{32}$").matches(backup.optString("backup_id")) ||
             backup.opt("created_at") !is String ||
             runCatching { OffsetDateTime.parse(backup.optString("created_at")) }.isFailure ||
-            backup.opt("source_platform") !in setOf("desktop", "android")
+            backup.opt("source_platform") !is String ||
+            backup.optString("source_platform") !in setOf("desktop", "android")
         ) {
             throw RuntimeBridgeException("Резервная копия не соответствует схеме JARVIS V1.")
         }
