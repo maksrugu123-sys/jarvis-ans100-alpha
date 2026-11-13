@@ -34,7 +34,7 @@ The JPVR storage code now routes file operations through `tools/jpvr_reference/p
 - Windows opens JPVR descriptors in binary mode and uses seek-based positional reads/writes while the container lock is held.
 - The Python standard library has no portable Windows equivalent for POSIX parent-directory `fsync`; Windows currently flushes file contents, but the code does not claim an explicit directory-entry durability barrier.
 
-The seek-based I/O fallback has dedicated source tests. The Windows token-digest adapter now avoids applying POSIX chmod assumptions and relies on inherited Windows profile ACLs; the standard library code does not audit or harden those ACLs. **Neither Windows 10 nor Windows 11 has been executed or verified yet.** Until the full JPVR storage suite and a real Windows 10/11 smoke test pass, treat Windows runtime support as experimental and do not keep the only copy of important data in a Windows JPVR container.
+The seek-based I/O fallback has dedicated source tests, including a Windows-only cross-process region-lock regression. The token store also has a Windows-only regression for rotating legacy read-only digest files. These tests are authored but have not been run on Windows. The Windows token-digest adapter now avoids applying POSIX chmod assumptions and relies on inherited Windows profile ACLs; the standard library code does not audit or harden those ACLs. **Neither Windows 10 nor Windows 11 has been executed or verified yet.** Until the full JPVR storage suite and a real Windows 10/11 smoke test pass, treat Windows runtime support as experimental and do not keep the only copy of important data in a Windows JPVR container.
 
 ## Start on Windows 10 or Windows 11
 
