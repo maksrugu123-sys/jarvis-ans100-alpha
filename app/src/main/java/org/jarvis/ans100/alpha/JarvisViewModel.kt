@@ -207,6 +207,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addWorkspaceMemory(content: String, category: String) {
         pendingWorkspaceMerge = null
+        pendingWorkspaceRestore = null
         val revision = mutableState.value.workspace.revision
         workspaceRequest("Воспоминание сохранено в локальной памяти.") {
             runtimeClient.createMemory(content, category, revision)
@@ -270,6 +271,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         passphrase: CharArray,
         onReady: (ByteArray, Long) -> Unit,
     ) {
+        pendingWorkspaceMerge = null
+        pendingWorkspaceRestore = null
+        pendingWorkspaceBackupRevision = null
         val before = mutableState.value
         if (before.workspace.isBusy) {
             passphrase.fill('\u0000')
@@ -411,6 +415,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val expectedRevision = before.workspace.revision
+        pendingWorkspaceMerge = null
         pendingWorkspaceRestore = null
         mutableState.value = before.copy(
             workspace = before.workspace.copy(
@@ -557,6 +562,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun previewWorkspaceImport(uri: Uri, passphrase: CharArray) {
+        pendingWorkspaceRestore = null
         val before = mutableState.value
         if (before.workspace.isBusy) {
             passphrase.fill('\u0000')
@@ -698,6 +704,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteWorkspaceMemory(memoryId: String) {
         pendingWorkspaceMerge = null
+        pendingWorkspaceRestore = null
         val revision = mutableState.value.workspace.revision
         workspaceRequest("Воспоминание удалено из локальной памяти.") {
             runtimeClient.deleteMemory(memoryId, revision)
