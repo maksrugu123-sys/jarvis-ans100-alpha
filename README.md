@@ -40,7 +40,7 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 | `schemas/workspace/v1/encrypted-backup.schema.json` | Separate password-encrypted JWB backup envelope schema V1 |
 | `docs/JARVIS_WORKSPACE_BACKUP_RESTORE_V1.md` | Encrypted point-in-time workspace backup, explicit replacement restore, scope and JPVR recovery boundary |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCrypto.kt` | Android PBKDF2/AES-GCM codec for the portable encrypted workspace envelope (AUTHORED, NOT RUN) |
-| `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` | Android JWS/JWB crypto, cross-format separation, wrong-passphrase, tamper and passphrase-cleanup tests (9 authored, not run) |
+| `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` | Android JWS/JWB crypto, deterministic desktop-WebCrypto JWS and JWB fixtures, cross-format separation, wrong-passphrase, tamper and passphrase-cleanup tests (9 authored, not run) |
 | `tools/jpvr_reference/platform_io.py` | POSIX flock/pread/pwrite and conservative Windows msvcrt region locking plus binary seek-based positional I/O (Windows tests AUTHORED, NOT RUN) |
 | `tools/jpvr_reference/test_platform_io.py` | Seek-based I/O and same-process locking tests plus Windows-only cross-process region-lock test (5 authored, not run) |
 | `tools/neuron_runtime/test_workspace_store.py` | Shared workspace canonicalization, integrity, DATA/BLOB persistence, reopen and CAS tests (AUTHORED, NOT RUN) |
