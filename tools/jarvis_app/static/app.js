@@ -742,7 +742,10 @@ $("#transfer-file").addEventListener("change", async event => {
   $("#transfer-cancel").hidden = true;
   $("#transfer-preview").hidden = true;
   pendingTransfer = null;
-  if (!file) return;
+  if (!file) {
+    passwordInput.value = "";
+    return;
+  }
   try {
     if (file.size > 24 * 1024 * 1024) {
       throw new Error("Файл превышает допустимый размер 24 МиБ.");
