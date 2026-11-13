@@ -280,6 +280,18 @@ class LocalConsoleHttpTests(unittest.TestCase):
         initial = self.service.workspace_state()
         now = datetime.now(timezone.utc).isoformat()
         records = initial["workspace"]["records"]
+        records["conversations"].append({
+            "id": "restore-conversation-001",
+            "revision": 0,
+            "updated_at": now,
+            "title": "Large conversation",
+            "messages": [{
+                "id": "restore-message-001",
+                "role": "assistant",
+                "created_at": now,
+                "content": "x" * 70_000,
+            }],
+        })
         records["memories"].append({
             "id": "restore-memory-001",
             "revision": 0,
@@ -303,6 +315,10 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(
             [item["id"] for item in restored["workspace"]["records"]["memories"]],
             ["restore-memory-001"],
+        )
+        self.assertEqual(
+            len(restored["workspace"]["records"]["conversations"][0]["messages"][0]["content"]),
+            70_000,
         )
         current_revision = restored["revision"]
 
@@ -330,6 +346,35 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(stale.exception.code, 409)
         latest = self.service.workspace_state()
         self.assertEqual(latest["workspace"]["records"]["memories"], [])
+
+    def test_workspace_restore_rejects_foreign_identity_and_tampered_digest(self):
+        initial = self.service.workspace_state()
+        now = datetime.now(timezone.utc).isoformat()
+        foreign = json.loads(encode_workspace(WorkspaceSnapshot(
+            workspace_id="another-workspace",
+            revision=0,
+            exported_at=now,
+            source_platform="desktop",
+            records=initial["workspace"]["records"],
+        )))
+        with self.assertRaises(HTTPError) as wrong_identity:
+            self._post("/api/workspace/restore", {
+                "expected_revision": initial["revision"],
+                "workspace": foreign,
+            })
+        self.assertEqual(wrong_identity.exception.code, 409)
+
+        tampered = json.loads(json.dumps(initial["workspace"]))
+        tampered["integrity"]["digest"] = "0" * 64
+        with self.assertRaises(HTTPError) as invalid_digest:
+            self._post("/api/workspace/restore", {
+                "expected_revision": initial["revision"],
+                "workspace": tampered,
+            })
+        self.assertEqual(invalid_digest.exception.code, 400)
+        unchanged = self.service.workspace_state()
+        self.assertEqual(unchanged["revision"], initial["revision"])
+        self.assertEqual(unchanged["workspace"]["records"], initial["workspace"]["records"])
 
     def test_workspace_api_creates_and_deletes_explicit_memories(self):
         initial = self.service.workspace_state()
