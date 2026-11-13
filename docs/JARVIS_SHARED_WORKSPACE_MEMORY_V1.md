@@ -100,9 +100,9 @@ Fresh installations use the shared default workspace ID `jarvis-default`. An imp
 
 ## Important current boundary
 
-The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing and background sync remain future work. Encrypted offline export/import is now available in the desktop PWA and Android app through the Storage Access Framework. Both use the same envelope and preview/confirmation flow; neither platform overwrites local ID/key collisions. Do not expose the loopback service as a workaround.
+The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing and background sync remain future work. Encrypted offline export/import is now available in the desktop PWA and Android app through Android's Storage Access Framework and the desktop browser's file picker/download. Both use the same envelope and preview/confirmation flow; neither platform overwrites local ID/key collisions. Do not expose the loopback service as a workaround.
 
-The browser and Android memory screens manage explicitly entered records only. Automatic extraction from chat, semantic retrieval, ranking and conflict merging are not implemented.
+The browser and Android memory screens manage explicitly entered records only. Automatic extraction from chat, semantic retrieval, ranking and semantic conflict resolution are not implemented; ID/key collisions use a deterministic keep-local policy.
 
 The workspace is a durable data layer, not a conversational AI model. Natural-language chat, retrieval ranking, semantic memory extraction, embeddings and offline LLM inference are not implemented by this milestone.
 
