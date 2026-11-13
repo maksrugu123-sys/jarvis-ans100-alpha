@@ -11,7 +11,7 @@ import stat
 
 
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
-_DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\\n$")
+_DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\n$")
 
 
 class LocalConsoleAuthError(ValueError):
@@ -103,7 +103,7 @@ class LocalConsoleAuth:
             )
             with os.fdopen(descriptor, "w", encoding="ascii") as stream:
                 descriptor = None
-                stream.write("sha256:" + hex_digest + "\\n")
+                stream.write("sha256:" + hex_digest + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.path)
