@@ -58,7 +58,7 @@ The service remains loopback-only. Never expose it through LAN, `0.0.0.0`, a tun
 ## Verification
 
 - Python `tools/jarvis_app/test_server.py`: 18 methods total, including two restore-specific regression tests for large payload/full replacement/CAS/auth and foreign identity/tampered digest; AUTHORED, NOT RUN.
-- Android `WorkspaceTransferCryptoTest.kt`: 9 instrumentation methods, including backup/JWS domain separation, wrong-passphrase, ciphertext tamper and passphrase cleanup; AUTHORED, NOT RUN.
+- Android `WorkspaceTransferCryptoTest.kt`: 9 instrumentation methods, including a deterministic desktop-WebCrypto-compatible JWB ciphertext fixture, backup/JWS domain separation, wrong-passphrase, ciphertext tamper and passphrase cleanup; AUTHORED, NOT RUN.
 - Desktop WebCrypto backup/restore browser flow: source-level only, NOT RUN.
 - Android SAF write/read, Termux end-to-end restore, CAS race handling, Windows 10/11, browser download retention, large-file behavior and filesystem fault injection: NOT RUN.
 - No tests, builds, APK/AAB, CI or GitHub Actions were run for this source change.
