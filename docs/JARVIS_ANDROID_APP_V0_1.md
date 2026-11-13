@@ -1,6 +1,6 @@
 # JARVIS Android App V0.5 — authenticated JPVR bridge and symbolic preview
 
-**Статус:** Android Compose V0.5 adds local bearer-token pairing to the bounded JPVR task/session bridge and symbolic Reasoning Engine preview. It still has no task executor or trusted approval flow. Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests and twenty-four Python console/authentication tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
+**Статус:** Android Compose V0.5 adds local bearer-token pairing to the bounded JPVR task/session bridge, symbolic Reasoning Engine preview, shared-workspace memory UI, encrypted JWS merge transfer and encrypted JWB backup/restore. It still has no task executor or trusted approval flow. Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests, nine Android transfer/backup crypto instrumentation tests, eighteen Python console/API tests and eleven Python auth tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
 
 ## Project and compatibility
 
@@ -70,10 +70,23 @@ It then uses:
 - POST /api/tasks;
 - POST /api/sessions/{session_id}/status;
 - POST /api/tasks/{task_id}/cancel;
-- POST /api/reasoning/preview (bounded, non-mutating symbolic planning request).
+- POST /api/reasoning/preview (bounded, non-mutating symbolic planning request);
+- GET /api/workspace and POST /api/workspace (authenticated shared-workspace read/save with CAS);
+- POST /api/workspace/restore (authenticated full-workspace replacement with CAS, used only after local JWB decryption, validation, preview and explicit confirmation).
 
 Every state read and POST route except the public health check requires `Authorization: Bearer <token>`. Every successful mutation returns the committed backend state snapshot. Session status and task cancellation requests include expected revision. The server serializes state mutations and publishes them through JPVR compare-and-swap before returning the updated snapshot.
 
+## Shared workspace, encrypted transfer and backup
+
+The shared workspace is a separate JPVR file owned by the local Python console. Android and the desktop PWA use the same workspace V1 JSON/schema and revision contract. This data store is distinct from Android-local SharedPreferences drafts and from the Python task/session JPVR registry.
+
+- JWS is a merge-oriented manual transfer: records merge by stable ID and settings by key; conflicts keep destination values.
+- JWB is a password-encrypted point-in-time backup of the entire portable workspace. It uses a distinct envelope/AAD from JWS, PBKDF2-HMAC-SHA256 (310,000 rounds) and AES-256-GCM. Android uses the Storage Access Framework; backup/restore crypto logic is in app/src/main/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCrypto.kt.
+- Before restore, Android decrypts and validates the backup and both integrity digests locally, checks that the workspace ID matches, and shows counts for conversations, memories, task summaries and settings. The user must first save a separate backup of the current revision and acknowledge it, then explicitly confirm replacement.
+- The restore call uses POST /api/workspace/restore with the exact expected revision. The server independently validates the complete workspace and publishes by JPVR compare-and-swap; a stale revision fails instead of overwriting newer data. A failed/ambiguous operation must be refreshed and inspected, not blindly retried.
+- JWB does not include task/session JPVR records, Android-only drafts, authentication tokens, Android Keystore keys, app binaries or neuron/network checkpoints. It is not a raw JPVR backup and cannot repair a damaged workspace.jpvr that the local service cannot open. Preserve the original JPVR file and use the separate non-destructive JPVR recovery-copy reference workflow.
+
+Manual cross-device file movement is required. There is no pairing, LAN access or automatic synchronization. The loopback service remains bound to 127.0.0.1.
 ## Trust and capability boundary
 
 The native bridge has no endpoint or code path for shell, filesystem browsing, remote network, tool execution, approval grants or ActionExecutor. The backend capability flags remain false for external_actions, tool_execution and remote_access. Creating a task only creates a QUEUED lifecycle record; it does not execute it.
@@ -86,6 +99,7 @@ The native UI calls the structured `/api/reasoning/preview` endpoint, but does n
 
 - Android local repository tests: nine methods, AUTHORED, NOT RUN.
 - Android Keystore token-store instrumentation tests: seven methods, AUTHORED, NOT RUN.
-- Python local-console/API tests: fourteen methods; auth-file tests: ten methods; all AUTHORED, NOT RUN.
+- Android transfer/backup crypto instrumentation tests: nine methods, AUTHORED, NOT RUN.
+- Python local-console/API tests: eighteen methods; auth-file tests: eleven methods; all AUTHORED, NOT RUN.
 - GitHub readback/static source review only for this bridge batch.
 - Kotlin compilation, Gradle sync/build, APK/AAB, device installation, Compose UI tests, Python tests, Android/Termux end-to-end I/O and performance measurements: NOT RUN.
