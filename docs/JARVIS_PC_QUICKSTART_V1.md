@@ -31,10 +31,21 @@ The JPVR storage code now routes file operations through `tools/jpvr_reference/p
 
 - POSIX uses `flock` and native positional I/O.
 - Windows uses a one-byte `msvcrt` file-region lock. It deliberately serializes readers and writers instead of pretending Windows has the same shared-lock behavior.
-- Windows uses seek-based positional reads/writes while the container lock is held.
+- Windows opens JPVR descriptors in binary mode and uses seek-based positional reads/writes while the container lock is held.
 - The Python standard library has no portable Windows equivalent for POSIX parent-directory `fsync`; Windows currently flushes file contents, but the code does not claim an explicit directory-entry durability barrier.
 
-The seek-based I/O fallback has dedicated source tests. **Neither Windows 10 nor Windows 11 has been executed or verified yet.** Until the full JPVR storage suite and a real Windows 10/11 smoke test pass, treat Windows runtime support as experimental and do not keep the only copy of important data in a Windows JPVR container.
+The seek-based I/O fallback has dedicated source tests. The Windows token-digest adapter now avoids applying POSIX chmod assumptions and relies on inherited Windows profile ACLs; the standard library code does not audit or harden those ACLs. **Neither Windows 10 nor Windows 11 has been executed or verified yet.** Until the full JPVR storage suite and a real Windows 10/11 smoke test pass, treat Windows runtime support as experimental and do not keep the only copy of important data in a Windows JPVR container.
+
+## Start on Windows 10 or Windows 11
+
+Open PowerShell in the repository directory:
+
+    py -3 --version
+    py -3 -m tools.jarvis_app --port 8765 --platform desktop
+
+If the Python launcher is unavailable, use `python -m tools.jarvis_app --port 8765 --platform desktop` after confirming that `python` points to a supported Python 3 installation. Then open `http://127.0.0.1:8765/` in a browser on the same PC and enter the one-time token printed in PowerShell. Keep the terminal open while using JARVIS.
+
+The JPVR implementation is intended to use the same adapter on Windows 10 and 11, but neither OS has been run in this development environment. Before storing important information, verify that `%USERPROFILE%\\.jarvis-ans100-alpha` inherits a private ACL for the current Windows account. The application does not yet inspect or configure Windows ACL entries.
 
 ## Start on Linux or macOS
 
