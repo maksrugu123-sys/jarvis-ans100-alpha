@@ -422,3 +422,29 @@ __all__ += [
     "DurableExecutorLedgerError",
     "DurableIdempotencyExecutor",
 ]
+
+from .signed_approval import (
+    ApprovalTrustKey,
+    ApprovalTrustStore,
+    SignedApprovalEnvelope,
+    SignedApprovalError,
+    TrustedApprovalSafetyGate,
+    TrustKeyStatus,
+    canonical_approval_signing_bytes,
+    decode_signed_approval,
+    encode_signed_approval,
+    verify_signed_approval,
+)
+
+__all__ += [
+    "ApprovalTrustKey",
+    "ApprovalTrustStore",
+    "SignedApprovalEnvelope",
+    "SignedApprovalError",
+    "TrustedApprovalSafetyGate",
+    "TrustKeyStatus",
+    "canonical_approval_signing_bytes",
+    "decode_signed_approval",
+    "encode_signed_approval",
+    "verify_signed_approval",
+]
