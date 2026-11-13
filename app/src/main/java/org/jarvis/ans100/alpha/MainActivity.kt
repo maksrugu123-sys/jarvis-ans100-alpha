@@ -113,6 +113,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             }
         } else {
             bytes?.fill(0)
+            viewModel.cancelWorkspaceBackupSave()
         }
     }
     val restoreLauncher = rememberLauncherForActivityResult(
