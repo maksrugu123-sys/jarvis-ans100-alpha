@@ -19,6 +19,19 @@ class WorkspaceTransferCryptoTest {
     }
 
     @Test
+    fun decryptsPortableUtf8Pbkdf2AesGcmFixture() {
+        val fixture = """{"format":"jarvis.workspace.encrypted","version":{"major":1,"minor":0},"kdf":{"name":"PBKDF2-HMAC-SHA256","iterations":310000,"salt":"AAECAwQFBgcICQoLDA0ODw=="},"cipher":{"name":"AES-256-GCM","nonce":"EBESExQVFhcYGRob","tag_bits":128},"ciphertext":"mHokjsTxRYZTauZQwozmAcunh8cFx9Dc0Ta5iobquGL4INDqOpEbsaoZflSeNS9yLJpPiGYQ6Q6zjxbtlhuwFxiR57VoOg9JhRL+IaA4f8vc"}"""
+        val restored = WorkspaceTransferCrypto.decrypt(
+            fixture.toByteArray(StandardCharsets.UTF_8),
+            "парольная фраза 2026".toCharArray(),
+        )
+        assertEquals(
+            """{"format":"jarvis.workspace","message":"JARVIS transfer fixture"}""",
+            restored,
+        )
+    }
+
+    @Test
     fun wrongPassphraseIsRejected() {
         val bundle = WorkspaceTransferCrypto.encrypt(
             """{"format":"jarvis.workspace"}""",
