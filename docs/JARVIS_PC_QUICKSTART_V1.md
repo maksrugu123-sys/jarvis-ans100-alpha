@@ -10,6 +10,8 @@ This guide describes the existing Python local console for Linux/macOS and the c
 - Python local-console process.
 - Local browser/PWA interface.
 - Local JPVR task/session registry.
+- Separate JPVR shared workspace for conversations, explicit memories, task summaries and non-secret settings.
+- Authenticated workspace API V1 with revision-based conflict detection.
 - Bounded symbolic reasoning preview using structured facts and actions.
 - Bearer-token protected state and mutation routes.
 
@@ -39,7 +41,7 @@ The seek-based I/O fallback has dedicated source tests. **Neither Windows 10 nor
 Open a terminal in the repository directory:
 
     python3 --version
-    python3 -m tools.jarvis_app --port 8765
+    python3 -m tools.jarvis_app --port 8765 --platform desktop
 
 ## First launch
 
@@ -52,7 +54,8 @@ Open a terminal in the repository directory:
 
 The default data and token-digest paths are under the current user's home directory:
 
-- ~/.jarvis-ans100-alpha/local-console.jpvr
+- ~/.jarvis-ans100-alpha/local-console.jpvr (task/session lifecycle)
+- ~/.jarvis-ans100-alpha/workspace.jpvr (shared workspace/memory)
 - ~/.jarvis-ans100-alpha/local-console.jpvr.access-token
 
 The server creates and protects its private auth directory/files. Back up the data file only while the server is stopped, or use a future supported export operation. Do not manually edit JPVR bytes.
@@ -67,7 +70,7 @@ Use python3 instead of python on systems where that is the configured interprete
 
 The service binds to 127.0.0.1. Keep it that way. Do not expose it through 0.0.0.0, a LAN address, port forwarding, or a public tunnel. The current Bearer token protects local API access but is not a trusted human identity or permission to execute external actions.
 
-The PWA and Android Compose client use the same API contract when they connect to a compatible local service. The Android client currently targets 127.0.0.1 on the phone itself; it does not connect to a PC-hosted service. Cross-device pairing and synchronization are not implemented.
+The PWA and Android Compose client use the same API contract when they connect to a compatible local service. Workspace routes are GET/POST `/api/workspace`, use Bearer authentication and compare-and-swap revisions, and are bounded to 16 MiB. On Termux, launch with `python3 -m tools.jarvis_app --port 8765 --platform android`; on a PC use `--platform desktop`. The Android client currently targets 127.0.0.1 on the phone itself; it does not connect to a PC-hosted service. The common workspace format is implemented, but cross-device pairing, encrypted transfer, merge and synchronization are not.
 
 ## Troubleshooting
 
