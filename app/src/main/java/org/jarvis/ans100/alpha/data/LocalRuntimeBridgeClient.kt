@@ -324,23 +324,28 @@ class LocalRuntimeBridgeClient {
                 "format", "version", "workspace_id", "export_id", "exported_at",
                 "source_platform", "records", "integrity",
             ) ||
-            document.optString("format") != "jarvis.workspace" ||
+            document.opt("format") != "jarvis.workspace" ||
             document.optJSONObject("version")?.let {
                 it.keys().asSequence().toSet() == setOf("major", "minor") &&
-                    it.optInt("major", -1) == 1 && it.optInt("minor", -1) == 0
+                    it.opt("major") == 1 && it.opt("minor") == 0
             } != true ||
-            !validId(document.optString("workspace_id")) ||
-            !validId(document.optString("export_id")) ||
-            !validDate(document.optString("exported_at")) ||
-            document.optString("source_platform") !in setOf("desktop", "android")
+            document.opt("workspace_id") !is String ||
+            !validId(requiredText(document, "workspace_id", 128)) ||
+            document.opt("export_id") !is String ||
+            !validId(requiredText(document, "export_id", 128)) ||
+            document.opt("exported_at") !is String ||
+            !validDate(requiredText(document, "exported_at", 64)) ||
+            document.opt("source_platform") !is String ||
+            requiredText(document, "source_platform", 16) !in setOf("desktop", "android")
         ) {
             throw RuntimeBridgeException("Файл не соответствует схеме рабочего пространства V1.")
         }
         val integrity = document.optJSONObject("integrity")
             ?: throw RuntimeBridgeException("В файле отсутствует контрольная сумма.")
         if (integrity.keys().asSequence().toSet() != setOf("algorithm", "digest") ||
-            integrity.optString("algorithm") != "sha-256" ||
-            !Regex("^[a-f0-9]{64}$").matches(integrity.optString("digest"))) {
+            integrity.opt("algorithm") != "sha-256" ||
+            integrity.opt("digest") !is String ||
+            !Regex("^[a-f0-9]{64}$").matches(requiredText(integrity, "digest", 64))) {
             throw RuntimeBridgeException("Алгоритм или значение контрольной суммы не поддерживается.")
         }
         val unsigned = JSONObject(document.toString()).also { it.remove("integrity") }
@@ -397,7 +402,7 @@ class LocalRuntimeBridgeClient {
                             setOf("id", "revision", "updated_at", "title", "status"),
                         )
                         val title = requiredText(item, "title", 512)
-                        if (title.isBlank() || item.optString("status") !in setOf(
+                        if (title.isBlank() || requiredText(item, "status", 16) !in setOf(
                                 "queued", "running", "paused", "completed", "failed", "cancelled",
                             ) ||
                             (item.has("result_summary") && item.opt("result_summary") !is String) ||
