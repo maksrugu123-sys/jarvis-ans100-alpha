@@ -25,10 +25,10 @@ This is a shared product and data contract, not a claim that the current impleme
 | Android UI | Kotlin + Jetpack Compose under app/ | Native V0.5 source exists |
 | Android runtime connection | LocalRuntimeBridgeClient → 127.0.0.1:8765 | Requires a separate Python process on the same phone, currently typically Termux |
 | Neural runtime | Python NeuronRuntime / NetworkRuntime | Reference coordinators, not production mobile runtime |
-| Persistent storage | Python JPVR reference stores | No native Kotlin JPVR implementation or cross-device sync yet |
+| Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | No native Kotlin JPVR implementation or automatic cross-device sync yet |
 | Offline language model | No integrated production local model established | Offline natural-language conversation is not yet a delivered capability |
 
-The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists.
+The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists. The shared workspace JSON contract, JPVR workspace store, authenticated local API V1 and Android bridge methods are now present on `mobile-first-offline-v1`; the phone and PC still keep separate loopback-local files until explicit encrypted transfer/pairing is implemented.
 
 ## 3. Shared architecture
 
