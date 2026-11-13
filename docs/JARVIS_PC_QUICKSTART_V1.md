@@ -3,7 +3,7 @@
 **Status:** source-level desktop development entry point  
 **Date:** 2026-11-13
 
-This guide starts the existing Python local console on a POSIX PC (Linux or macOS). Windows support is currently blocked by the JPVR storage layer. It does not install a finished conversational assistant or a native desktop executable.
+This guide describes the existing Python local console for Linux/macOS and the current Windows 10/11 compatibility work. A cross-platform JPVR I/O adapter is now present in the source, but Windows execution has not yet been verified. This is not a claim of a finished Windows release, conversational assistant, or native desktop executable.
 
 ## What currently works at source level
 
@@ -23,9 +23,16 @@ Not yet delivered: integrated offline language model, full natural-language conv
 
 The repository's Python modules use modern Python syntax. The minimum supported Python version has not yet been formally declared or verified across Windows, macOS, and Linux. If startup fails, record the exact Python version and error instead of changing dependencies blindly.
 
-## Windows compatibility
+## Windows 10 and Windows 11 compatibility
 
-**Windows is not supported by the current JPVR file-backed runtime yet.** The storage implementation imports POSIX fcntl and uses positional file I/O APIs that are not available with the same semantics on standard Windows Python. Do not use the launch command below on Windows and do not replace the storage lock with a no-op. A Windows-safe locking and positional-I/O adapter must be implemented and verified first.
+The JPVR storage code now routes file operations through `tools/jpvr_reference/platform_io.py`:
+
+- POSIX uses `flock` and native positional I/O.
+- Windows uses a one-byte `msvcrt` file-region lock. It deliberately serializes readers and writers instead of pretending Windows has the same shared-lock behavior.
+- Windows uses seek-based positional reads/writes while the container lock is held.
+- The Python standard library has no portable Windows equivalent for POSIX parent-directory `fsync`; Windows currently flushes file contents, but the code does not claim an explicit directory-entry durability barrier.
+
+The seek-based I/O fallback has dedicated source tests. **Neither Windows 10 nor Windows 11 has been executed or verified yet.** Until the full JPVR storage suite and a real Windows 10/11 smoke test pass, treat Windows runtime support as experimental and do not keep the only copy of important data in a Windows JPVR container.
 
 ## Start on Linux or macOS
 
@@ -72,4 +79,4 @@ The PWA and Android Compose client use the same API contract when they connect t
 
 ## Verification status
 
-This is a documented launch procedure based on the current CLI source. It has not been executed or verified on Linux or macOS. Windows is not supported by the current JPVR storage implementation. No package, installer, desktop executable, build, test, or performance measurement is claimed.
+This is a documented launch procedure based on the current CLI source. It has not been executed or verified on Linux or macOS. Windows 10/11 support is experimental and has not been runtime-verified. No package, installer, desktop executable, build, test, or performance measurement is claimed.
