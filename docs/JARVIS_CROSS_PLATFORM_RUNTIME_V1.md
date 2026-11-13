@@ -28,7 +28,9 @@ This is a shared product and data contract, not a claim that the current impleme
 | Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | No native Kotlin JPVR implementation or automatic cross-device sync yet |
 | Offline language model | No integrated production local model established | Offline natural-language conversation is not yet a delivered capability |
 
-The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists. The shared workspace JSON contract, JPVR workspace store, authenticated local API V1 and Android bridge methods are now present on `mobile-first-offline-v1`; the phone and PC still keep separate loopback-local files until explicit encrypted transfer/pairing is implemented.
+The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists. The shared workspace JSON contract, JPVR workspace store, authenticated local API V1, Android Compose memory manager and desktop PWA memory manager are now present on `mobile-first-offline-v1`; both UIs support explicit-consent memory creation, search, listing and confirmed deletion. The phone and PC still keep separate loopback-local files until explicit encrypted transfer/pairing is implemented.
+
+The Python JPVR file layer now has a Windows adapter (`msvcrt` region locking, serialized seek-based positional I/O and binary-mode file descriptors) intended for Windows 10 and 11. Windows auth storage relies on inherited user-profile ACLs; the current standard-library implementation does not inspect or configure ACL entries. Neither Windows version has been runtime-tested, so Windows remains experimental until the platform-specific and full storage tests pass.
 
 ## 3. Shared architecture
 
@@ -99,7 +101,7 @@ Every call must carry a schema/version, request ID, bounded input size, deadline
 - Initial UI: existing PWA in a local browser.
 - Provide a one-command launcher and clear first-run data-directory selection in a later delivery phase.
 - Store data in a user-private application directory; never assume the repository checkout is the data directory.
-- Support Windows, Linux, and macOS only after path, permissions, locking, and packaging behavior are verified on each OS.
+- Windows 10/11 now have a source-level JPVR I/O and lock adapter; do not mark them supported until cross-process locking, storage, token rotation and full console tests pass on both OS versions. Linux/macOS still require their own path, permission, locking and packaging verification.
 - Use OS-protected secret storage where available; never write raw access tokens to logs.
 - Optional CPU acceleration is selected only when detected and explicitly enabled; CPU-only operation remains the baseline.
 - Desktop closing/restarting must not corrupt checkpoints or lose acknowledged writes.
