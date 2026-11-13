@@ -37,7 +37,7 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 | `tools/neuron_runtime/workspace_store.py` | Shared canonical desktop/Android workspace codec and CAS-protected JPVR memory store (AUTHORED, NOT RUN) |
 | `schemas/workspace/v1/encrypted-bundle.schema.json` | Strict envelope schema for password-encrypted offline workspace transfer V1 |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCrypto.kt` | Android PBKDF2/AES-GCM codec for the portable encrypted workspace envelope (AUTHORED, NOT RUN) |
-| `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` | Android encrypted bundle round-trip, UTF-8 interoperability fixture, wrong-passphrase and tamper tests (4 authored, not run) |
+| `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` | Android encrypted bundle round-trip, UTF-8 interoperability fixture, wrong-passphrase and tamper tests (6 authored, not run) |
 | `tools/jpvr_reference/platform_io.py` | POSIX flock/pread/pwrite and conservative Windows msvcrt region locking plus binary seek-based positional I/O (Windows tests AUTHORED, NOT RUN) |
 | `tools/jpvr_reference/test_platform_io.py` | Seek-based I/O and same-process locking tests plus Windows-only cross-process region-lock test (5 authored, not run) |
 | `tools/neuron_runtime/test_workspace_store.py` | Shared workspace canonicalization, integrity, DATA/BLOB persistence, reopen and CAS tests (AUTHORED, NOT RUN) |
