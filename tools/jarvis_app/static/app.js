@@ -457,6 +457,65 @@ async function deriveTransferKey(passphrase, salt) {
   );
 }
 
+function isTransferDateTime(value) {
+  return typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value));
+}
+
+function hasOnlyKeys(value, allowed, required) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return keys.every(key => allowed.includes(key)) &&
+    required.every(key => Object.hasOwn(value, key));
+}
+
+function validWorkspaceRecord(record, type) {
+  const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+  if (!record || typeof record !== "object" || Array.isArray(record) ||
+      !idPattern.test(record.id || "") ||
+      !Number.isInteger(record.revision) || record.revision < 0 ||
+      record.revision > 2147483647 || !isTransferDateTime(record.updated_at)) {
+    return false;
+  }
+  if (type === "memories") {
+    return hasOnlyKeys(record,
+      ["id", "revision", "updated_at", "content", "category", "user_approved"],
+      ["id", "revision", "updated_at", "content", "category", "user_approved"]) &&
+      record.user_approved === true && typeof record.content === "string" &&
+      record.content.trim().length > 0 && record.content.length <= 10000 &&
+      typeof record.category === "string" && record.category.length <= 64;
+  }
+  if (type === "tasks") {
+    return hasOnlyKeys(record,
+      ["id", "revision", "updated_at", "title", "status", "result_summary"],
+      ["id", "revision", "updated_at", "title", "status"]) &&
+      typeof record.title === "string" && record.title.trim().length > 0 &&
+      record.title.length <= 512 &&
+      ["queued", "running", "paused", "completed", "failed", "cancelled"].includes(record.status) &&
+      (!Object.hasOwn(record, "result_summary") ||
+        (typeof record.result_summary === "string" && record.result_summary.length <= 4000));
+  }
+  if (type === "conversations") {
+    if (!hasOnlyKeys(record,
+      ["id", "revision", "updated_at", "title", "messages"],
+      ["id", "revision", "updated_at", "title", "messages"]) ||
+      typeof record.title !== "string" || record.title.length > 160 ||
+      !Array.isArray(record.messages) || record.messages.length > 50000) return false;
+    const messageIds = new Set();
+    return record.messages.every(message =>
+      hasOnlyKeys(message, ["id", "role", "created_at", "content"],
+        ["id", "role", "created_at", "content"]) &&
+      idPattern.test(message.id || "") && !messageIds.has(message.id) &&
+      (messageIds.add(message.id), true) &&
+      ["user", "assistant", "system"].includes(message.role) &&
+      isTransferDateTime(message.created_at) &&
+      typeof message.content === "string" && message.content.length <= 100000
+    );
+  }
+  return false;
+}
+
 async function verifyPortableWorkspace(document) {
   if (!document || typeof document !== "object" || Array.isArray(document) ||
       Object.keys(document).sort().join(",") !==
@@ -497,16 +556,19 @@ async function verifyPortableWorkspace(document) {
   if (actual !== document.integrity.digest) {
     throw new Error("Контрольная сумма памяти не совпадает. Импорт отменён.");
   }
-  for (const memory of records.memories) {
-    if (!memory || memory.user_approved !== true ||
-        typeof memory.content !== "string" || !memory.content.trim() ||
-        memory.content.length > 10000) {
-      throw new Error("Воспоминание не прошло проверку согласия и содержимого.");
+  const recordIds = new Set();
+  for (const collection of ["conversations", "memories", "tasks"]) {
+    for (const record of records[collection]) {
+      if (!validWorkspaceRecord(record, collection) || recordIds.has(record.id)) {
+        throw new Error("Коллекция " + collection + " содержит некорректную запись или повторяющийся ID.");
+      }
+      recordIds.add(record.id);
     }
   }
   const settingKeys = new Set();
   for (const setting of records.settings) {
-    if (!setting || typeof setting.key !== "string" ||
+    if (!hasOnlyKeys(setting, ["key", "value"], ["key", "value"]) ||
+        typeof setting.key !== "string" ||
         !/^[a-z][a-z0-9._-]{0,63}$/.test(setting.key) ||
         settingKeys.has(setting.key)) {
       throw new Error("Настройки содержат недопустимые или повторяющиеся ключи.");
@@ -516,6 +578,11 @@ async function verifyPortableWorkspace(document) {
     if (/(password|passwd|secret|token|credential|api_key|private_key)/.test(normalized) ||
         normalized === "auth" || normalized.startsWith("auth_")) {
       throw new Error("Экспорт содержит запрещённый секретный параметр.");
+    }
+    const value = setting.value;
+    if (!(value === null || typeof value === "string" || typeof value === "boolean" ||
+        (typeof value === "number" && Number.isSafeInteger(value)))) {
+      throw new Error("Значение настройки не является переносимым JSON-типом.");
     }
   }
   return document;
