@@ -62,9 +62,35 @@ The service binds only to `127.0.0.1`. Do not expose it to a LAN, tunnel or publ
 - On Termux, launch with `--platform android`; on a PC use `--platform desktop`. This labels the platform that last wrote the snapshot.
 - Both adapters use the same workspace format and CAS revision. They do not yet merge concurrent edits automatically.
 
+## Encrypted offline transfer V1
+
+The desktop PWA now exports and imports a `.jws` envelope using browser WebCrypto. Android has a matching Kotlin cryptographic codec and focused JVM regression tests; Android document-picker/UI wiring and device verification remain pending.
+
+The interoperable envelope is JSON with exactly these fields:
+
+- `format`: `jarvis.workspace.encrypted`
+- `version`: `{ "major": 1, "minor": 0 }`
+- `kdf`: `PBKDF2-HMAC-SHA256`, exactly 310,000 iterations, random 16-byte salt encoded as standard Base64
+- `cipher`: `AES-256-GCM`, random 12-byte nonce, 128-bit tag
+- `ciphertext`: standard Base64 of ciphertext with the GCM tag appended
+
+The PBKDF2 input is the UTF-8 encoding of a user-entered passphrase (12–256 characters). AES-GCM additional authenticated data is the exact UTF-8 byte string `JARVIS-WORKSPACE-ENCRYPTED-V1`. The plaintext is the canonical UTF-8 JSON workspace document, limited to 16 MiB. The envelope is limited to 24 MiB. The passphrase is not stored or sent to the local API; UI code clears its input after each operation. The envelope exposes only algorithm parameters, random salt/nonce and ciphertext; workspace content and workspace identity remain encrypted.
+
+Import is a merge, never a replacement:
+
+- Workspace IDs must match.
+- Records are matched by stable record ID; settings are matched by key.
+- New records are appended.
+- Identical records are ignored.
+- Conflicting records are skipped, retaining the destination's local version.
+- The desktop UI displays the merge counts before the user confirms the write.
+- The final write uses the existing JPVR compare-and-swap revision. A stale revision fails rather than overwriting newer local state.
+
+A file transfer is a manual copy between devices. It does not enable LAN exposure, cloud sync, automatic pairing, or background synchronization. Keep the passphrase separate from the `.jws` file.
+
 ## Important current boundary
 
-The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing, encrypted transfer, conflict-aware import/export and background sync are future work. Do not expose the loopback service as a workaround.
+The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing and background sync remain future work. Encrypted offline export/import is now available in the desktop PWA; Android's matching crypto codec exists, but its document-picker UI is not yet wired. Do not expose the loopback service as a workaround.
 
 The browser and Android memory screens manage explicitly entered records only. Automatic extraction from chat, semantic retrieval, ranking and conflict merging are not implemented.
 
@@ -77,4 +103,4 @@ Focused tests are authored in:
 - `tools/neuron_runtime/test_workspace_store.py`
 - `tools/jarvis_app/test_server.py`
 
-They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Tests and Android builds have **NOT RUN** in this change set. UI behavior is source-reviewed only and still requires browser and device verification. The Python/Android implementation is source-level until those checks run on the target environments.
+They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Android transfer codec tests are authored but unexecuted; desktop transfer behavior is source-reviewed only. UI behavior is source-reviewed only and still requires browser and device verification. The Python/Android implementation is source-level until those checks run on the target environments.
