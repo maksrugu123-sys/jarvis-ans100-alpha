@@ -541,7 +541,7 @@ def create_http_server(
                 return
             path = urlsplit(self.path).path
             if path == "/api/health":
-                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "workspace_api_version": 1, "auth_required": True, "auth_scheme": "Bearer"})
+                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "workspace_api_version": 1, "platform": service.platform, "auth_required": True, "auth_scheme": "Bearer"})
                 return
             if path == "/api/state":
                 if not self._require_auth():
