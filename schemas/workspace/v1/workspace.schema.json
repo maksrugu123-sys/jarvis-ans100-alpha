@@ -32,8 +32,7 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     },
     "export_id": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      "const": "workspace-current"
     },
     "exported_at": {
       "type": "string",
