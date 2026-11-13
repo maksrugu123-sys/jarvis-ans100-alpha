@@ -44,7 +44,8 @@ This revokes the previous token and prints a replacement once. The PWA login kee
 | Read shared workspace | GET /api/workspace | Read conversations, explicit memories, task summaries and settings with workspace revision |
 | Save shared workspace | POST /api/workspace | Validate canonical workspace V1 and publish using expected_revision; stale writes return HTTP 409 |
 | Export encrypted workspace | Local read + Android AES-GCM codec | Read the local workspace and write a password-encrypted `.jws` document using the shared transfer envelope; no password reaches the API |
-| Import encrypted workspace | Android AES-GCM codec + POST /api/workspace | Decrypt locally, validate the workspace checksum, merge records by stable ID/settings by key without replacing local conflicts, then publish with CAS revision |
+| Preview encrypted workspace import | Android AES-GCM codec + GET /api/workspace | Decrypt locally, validate the canonical workspace and integrity, check workspace identity, and prepare merge counts without writing |
+| Confirm encrypted workspace import | POST /api/workspace | Merge by stable ID/settings key, keep destination values for conflicts, reseal the workspace and publish with CAS revision |
 
 Successful mutation responses include the updated state snapshot. The ViewModel makes requests on a dedicated single-thread executor and publishes results to UI state on the main thread.
 
@@ -58,7 +59,7 @@ The planner searches a bounded symbolic state space. Its output is not natural-l
 
 The local service maintains a second dedicated JPVR file, `workspace.jpvr`, separate from the task/session registry. The portable contract is `schemas/workspace/v1/workspace.schema.json`; the Python reference store is `tools/neuron_runtime/workspace_store.py`. Android `LocalRuntimeBridgeClient.getWorkspace()`, `saveWorkspace(document, expectedRevision)`, `createMemory(...)` and `deleteMemory(...)` use the same versioned JSON document and CAS revision. The Compose screen requires an explicit confirmation checkbox before creating a memory and a confirmation dialog before deleting one. Only explicit `user_approved: true` memory records are accepted; this marker is a data contract, not cryptographic proof of user approval. Secret-like settings are rejected.
 
-The phone's bridge still targets its own `127.0.0.1`; the PC service targets the PC's own loopback. Manual encrypted file transfer is now implemented in both Android and desktop PWA. The envelope uses PBKDF2-HMAC-SHA256 (310,000 rounds), AES-256-GCM, a random 16-byte salt, a random 12-byte nonce, a 128-bit tag and fixed AAD. The passphrase is not stored or sent to the service. Android import shows counts for added, identical and conflicting records before confirmation; both platforms keep existing records on ID/key collisions. Automatic pairing and background synchronization remain unimplemented. See [Shared Workspace & Memory V1](JARVIS_SHARED_WORKSPACE_MEMORY_V1.md).
+The phone's bridge still targets its own `127.0.0.1`; the PC service targets the PC's own loopback. Manual encrypted file transfer is now implemented in both Android and desktop PWA. The envelope uses PBKDF2-HMAC-SHA256 (310,000 rounds), AES-256-GCM, a random 16-byte salt, a random 12-byte nonce, a 128-bit tag and fixed AAD. The passphrase is not stored or sent to the service. Android and desktop import show counts for added, identical and conflicting records before confirmation; both platforms keep existing records on ID/key collisions. A changed destination revision invalidates the preview and the CAS write is rejected. Automatic pairing and background synchronization remain unimplemented. See [Shared Workspace & Memory V1](JARVIS_SHARED_WORKSPACE_MEMORY_V1.md).
 
 ## Failure and reconciliation
 
