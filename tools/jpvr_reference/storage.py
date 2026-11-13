@@ -67,7 +67,7 @@ class _DiskPageCatalog(Mapping[int, bytes]):
 
 
 class JPVRStorage:
-    """POSIX/Android file-backed JPVR store.
+    """Cross-platform file-backed JPVR store.
 
     Slot 0 starts at byte 0, slot 1 at byte 4096, and page N at N * 4096.
     """
