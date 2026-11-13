@@ -19,15 +19,28 @@ import javax.crypto.spec.SecretKeySpec
  */
 object WorkspaceTransferCrypto {
     private const val FORMAT = "jarvis.workspace.encrypted"
+    private const val BACKUP_FORMAT = "jarvis.workspace.backup.encrypted"
     private const val ITERATIONS = 310_000
     private const val MIN_PASSPHRASE_CHARS = 12
     private const val MAX_PASSPHRASE_CHARS = 256
     private const val MAX_PLAINTEXT_BYTES = 16 * 1024 * 1024
     private const val MAX_BUNDLE_BYTES = 24 * 1024 * 1024
     private val AAD = "JARVIS-WORKSPACE-ENCRYPTED-V1".toByteArray(StandardCharsets.UTF_8)
+    private val BACKUP_AAD = "JARVIS-WORKSPACE-BACKUP-ENCRYPTED-V1".toByteArray(StandardCharsets.UTF_8)
     private val random = SecureRandom()
 
-    fun encrypt(plaintext: String, passphrase: CharArray): ByteArray {
+    fun encrypt(plaintext: String, passphrase: CharArray): ByteArray =
+        encryptWithPurpose(plaintext, passphrase, FORMAT, AAD)
+
+    fun encryptBackup(plaintext: String, passphrase: CharArray): ByteArray =
+        encryptWithPurpose(plaintext, passphrase, BACKUP_FORMAT, BACKUP_AAD)
+
+    private fun encryptWithPurpose(
+        plaintext: String,
+        passphrase: CharArray,
+        format: String,
+        aad: ByteArray,
+    ): ByteArray {
         try {
             validatePassphrase(passphrase)
             val plainBytes = plaintext.toByteArray(StandardCharsets.UTF_8)
@@ -47,7 +60,7 @@ object WorkspaceTransferCrypto {
                             SecretKeySpec(keyBytes, "AES"),
                             GCMParameterSpec(128, nonce),
                         )
-                        cipher.updateAAD(AAD)
+                        cipher.updateAAD(aad)
                         cipher.doFinal(plainBytes)
                     } finally {
                         keyBytes.fill(0)
@@ -57,7 +70,7 @@ object WorkspaceTransferCrypto {
                 }
                 try {
                     val envelope = JSONObject()
-                        .put("format", FORMAT)
+                        .put("format", format)
                         .put("version", JSONObject().put("major", 1).put("minor", 0))
                         .put("kdf", JSONObject()
                             .put("name", "PBKDF2-HMAC-SHA256")
@@ -81,7 +94,18 @@ object WorkspaceTransferCrypto {
         }
     }
 
-    fun decrypt(bundleBytes: ByteArray, passphrase: CharArray): String {
+    fun decrypt(bundleBytes: ByteArray, passphrase: CharArray): String =
+        decryptWithPurpose(bundleBytes, passphrase, FORMAT, AAD)
+
+    fun decryptBackup(bundleBytes: ByteArray, passphrase: CharArray): String =
+        decryptWithPurpose(bundleBytes, passphrase, BACKUP_FORMAT, BACKUP_AAD)
+
+    private fun decryptWithPurpose(
+        bundleBytes: ByteArray,
+        passphrase: CharArray,
+        format: String,
+        aad: ByteArray,
+    ): String {
         try {
             validatePassphrase(passphrase)
             require(bundleBytes.isNotEmpty() && bundleBytes.size <= MAX_BUNDLE_BYTES) {
@@ -96,7 +120,7 @@ object WorkspaceTransferCrypto {
                 setOf("format", "version", "kdf", "cipher", "ciphertext")) {
                 "Поля зашифрованного файла не соответствуют формату."
             }
-            require(envelope.optString("format") == FORMAT) {
+            require(envelope.optString("format") == format) {
                 "Формат зашифрованного файла не поддерживается."
             }
             val version = envelope.optJSONObject("version")
@@ -136,7 +160,7 @@ object WorkspaceTransferCrypto {
                         SecretKeySpec(keyBytes, "AES"),
                         GCMParameterSpec(128, nonce),
                     )
-                    cipher.updateAAD(AAD)
+                    cipher.updateAAD(aad)
                     cipher.doFinal(ciphertext)
                 } catch (error: AEADBadTagException) {
                     throw IllegalArgumentException(
