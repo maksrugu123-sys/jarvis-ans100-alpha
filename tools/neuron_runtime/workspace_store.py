@@ -31,6 +31,7 @@ from tools.jpvr_reference.typed_transaction import (
 )
 
 _U64_MAX = (1 << 64) - 1
+_JSON_SAFE_INTEGER_MAX = (1 << 53) - 1
 _MAGIC = b"JWSP"
 _VERSION = 1
 _DESCRIPTOR = struct.Struct("<4sHHQ16sB7xQQQQI")
@@ -197,6 +198,11 @@ def encode_workspace(snapshot: WorkspaceSnapshot) -> bytes:
         value = setting["value"]
         if value is not None and not isinstance(value, (str, int, bool)):
             raise WorkspaceError("setting value must be text, integer, boolean, or null")
+        if (
+            isinstance(value, int) and not isinstance(value, bool)
+            and abs(value) > _JSON_SAFE_INTEGER_MAX
+        ):
+            raise WorkspaceError("integer setting values must be within the cross-platform JSON safe-integer range")
     body = _base_document(snapshot)
     digest = hashlib.sha256(_canonical(body)).hexdigest()
     body["integrity"] = {"algorithm": "sha-256", "digest": digest}
