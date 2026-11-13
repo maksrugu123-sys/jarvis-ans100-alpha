@@ -194,10 +194,8 @@ def encode_workspace(snapshot: WorkspaceSnapshot) -> bytes:
             raise WorkspaceError("credentials, tokens, and secrets are forbidden in portable workspace settings")
         setting_keys.add(key)
         value = setting["value"]
-        if value is not None and not isinstance(value, (str, int, float, bool)):
-            raise WorkspaceError("setting value must be a JSON scalar")
-        if isinstance(value, float) and (value != value or abs(value) == float("inf")):
-            raise WorkspaceError("setting value must be finite")
+        if value is not None and not isinstance(value, (str, int, bool)):
+            raise WorkspaceError("setting value must be text, integer, boolean, or null")
     body = _base_document(snapshot)
     digest = hashlib.sha256(_canonical(body)).hexdigest()
     body["integrity"] = {"algorithm": "sha-256", "digest": digest}
