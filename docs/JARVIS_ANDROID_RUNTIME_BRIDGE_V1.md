@@ -61,7 +61,7 @@ The planner searches a bounded symbolic state space. Its output is not natural-l
 
 ## Security boundary and non-goals
 
-API V2 requires possession of a random local bearer token for task/session state and every POST operation. The Termux process stores only the token's SHA-256 digest; the Android app encrypts the token with Android Keystore, while the PWA keeps it only for the current tab. A bearer token is still not a complete user identity system or a trusted approval: it does not prove that a human reviewed a particular plan, authorize a capability, or make an action safe.
+API V2 requires possession of a random local bearer token for task/session state and every POST operation. The Termux process stores only the token's SHA-256 digest; the Android app encrypts the token with Android Keystore, while the PWA keeps it only for the current tab. The auth directory/file must be owner-controlled; symlinked parent/file paths are rejected, and the auth path must not alias the JPVR data file. A bearer token is still not a complete user identity system or a trusted approval: it does not prove that a human reviewed a particular plan, authorize a capability, or make an action safe.
 
 The backend capability flags remain false for external actions, tool execution and remote access. The server is still bound only to 127.0.0.1; do not expose it to LAN/Internet. Host/Origin checks alone are not authentication, and other local apps may still reach the port, but state/mutations are rejected without the token. Do not use the API for external side effects or production trust decisions.
 
