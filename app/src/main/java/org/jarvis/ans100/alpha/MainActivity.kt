@@ -335,7 +335,7 @@ private fun WorkspaceMemoryPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                SectionHeading("Память JARVIS", "общая долговременная память JPVR")
+                SectionHeading("Память JARVIS", "локальная JPVR · единый формат PC/Android")
                 Text(
                     if (state.isLoaded) "REV ${state.revision}" else "НЕ ЗАГРУЖЕНА",
                     style = MaterialTheme.typography.labelSmall,
