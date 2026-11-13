@@ -23,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -97,6 +98,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onPreviewReasoning = viewModel::previewRuntimeReasoning,
                     onSaveAccessToken = viewModel::saveRuntimeAccessToken,
                     onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
+                )
+                WorkspaceMemoryPanel(
+                    state = ui.workspace,
+                    onRefresh = viewModel::refreshWorkspace,
+                    onAdd = viewModel::addWorkspaceMemory,
+                    onDelete = viewModel::deleteWorkspaceMemory,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -292,6 +299,197 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             onDelete = {
                 viewModel.deleteTask(selectedTask.id)
                 selectedTaskId = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun WorkspaceMemoryPanel(
+    state: RuntimeWorkspaceUiState,
+    onRefresh: () -> Unit,
+    onAdd: (String, String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    var content by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("general") }
+    var search by rememberSaveable { mutableStateOf("") }
+    var approved by rememberSaveable { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<RuntimeMemory?>(null) }
+    val visible = state.memories.filter {
+        search.isBlank() ||
+            it.content.contains(search.trim(), ignoreCase = true) ||
+            it.category.contains(search.trim(), ignoreCase = true)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                SectionHeading("Память JARVIS", "общая долговременная память JPVR")
+                Text(
+                    if (state.isLoaded) "REV ${state.revision}" else "НЕ ЗАГРУЖЕНА",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it.take(10_000) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Новое воспоминание") },
+                placeholder = { Text("Что JARVIS должен помнить?") },
+                minLines = 2,
+                maxLines = 4,
+                enabled = !state.isBusy && state.isLoaded,
+            )
+            OutlinedTextField(
+                value = category,
+                onValueChange = { category = it.take(64) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Категория") },
+                singleLine = true,
+                enabled = !state.isBusy && state.isLoaded,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = approved,
+                    onCheckedChange = { approved = it },
+                    enabled = !state.isBusy,
+                )
+                Text(
+                    "Я подтверждаю сохранение этого воспоминания",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Button(
+                onClick = {
+                    onAdd(content.trim(), category.trim())
+                    content = ""
+                    approved = false
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = state.isLoaded && !state.isBusy && approved &&
+                    content.isNotBlank() && category.isNotBlank(),
+            ) {
+                Text(if (state.isBusy) "Сохранение…" else "Сохранить воспоминание")
+            }
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it.take(120) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Поиск в памяти") },
+                singleLine = true,
+                enabled = state.isLoaded,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    if (state.isLoaded) "${visible.size} из ${state.memories.size} воспоминаний"
+                    else "Нужно подключить локальный сервис",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onRefresh, enabled = !state.isBusy) {
+                    Text("Обновить")
+                }
+            }
+            if (!state.error.isNullOrBlank()) {
+                Text(
+                    state.error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (!state.message.isNullOrBlank()) {
+                Text(
+                    state.message,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (!state.isLoaded) {
+                Text(
+                    "После подключения к Termux нажмите «Обновить», чтобы загрузить общую память.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (visible.isEmpty()) {
+                Text(
+                    if (state.memories.isEmpty()) "Воспоминаний пока нет."
+                    else "Поиск ничего не нашёл.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    items(visible.asReversed(), key = { it.id }) { memory ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(11.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Text(
+                                    memory.category,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(memory.content, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    memory.updatedAt,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                TextButton(
+                                    onClick = { deleteTarget = memory },
+                                    enabled = !state.isBusy,
+                                ) { Text("Удалить") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val target = deleteTarget
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Удалить воспоминание?") },
+            text = { Text("Запись будет удалена из общей памяти JARVIS. Это действие нельзя отменить.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(target.id)
+                    deleteTarget = null
+                }) { Text("Удалить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("Отмена") }
             },
         )
     }
