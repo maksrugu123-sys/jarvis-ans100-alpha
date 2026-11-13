@@ -70,6 +70,7 @@ const STATUS_LABELS = {
   completed: "Завершена", failed: "Ошибка", cancelled: "Отменена",
 };
 let currentState = null;
+let currentConversation = null;
 
 function statusLabel(status) {
   return STATUS_LABELS[status] || status;
@@ -1109,10 +1110,64 @@ $("#backup-restore-confirm").addEventListener("click", async event => {
   }
 });
 
+function renderConversation(state) {
+  currentConversation = state.conversation || null;
+  $("#chat-backend").textContent = state.backend_label || "Локальная модель не настроена.";
+  const button = $("#chat-send");
+  button.disabled = !(state.model_configured && state.runtime_available);
+  const root = $("#chat-messages");
+  root.replaceChildren();
+  const messages = currentConversation?.messages || [];
+  root.classList.toggle("empty", messages.length === 0);
+  if (!messages.length) {
+    root.textContent = button.disabled
+      ? "Модель не подключена. Установите litert-lm-api==0.17.1 и запустите консоль с --model <путь-к-файлу>."
+      : "История локального диалога пока пуста.";
+    return;
+  }
+  for (const message of messages.slice(-30)) {
+    const item = node("article", "chat-message " + message.role);
+    item.append(node("strong", "", message.role === "user" ? "Вы" : "JARVIS"));
+    item.append(node("p", "", message.content));
+    root.append(item);
+  }
+  root.scrollTop = root.scrollHeight;
+}
+
+async function refreshConversation() {
+  const state = await api("/api/conversation");
+  renderConversation(state);
+  return state;
+}
+
+$("#chat-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const input = $("#chat-input");
+  const button = $("#chat-send");
+  const text = input.value.trim();
+  if (!text || button.disabled) return;
+  button.disabled = true;
+  button.textContent = "Модель отвечает…";
+  try {
+    const before = await api("/api/conversation");
+    const result = await api("/api/conversation", {text, expected_revision: before.revision});
+    input.value = "";
+    renderConversation(result);
+    setNotice("Ответ создан локальной моделью и сохранён в workspace.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+    if (error.status === 409) {
+      try { await refreshConversation(); } catch { /* Preserve the revision conflict. */ }
+    }
+  } finally {
+    button.textContent = "Отправить локальной модели";
+  }
+});
 async function refresh() {
   const state = await api("/api/state");
   renderState(state);
   await refreshWorkspace();
+  await refreshConversation();
   return state;
 }
 

@@ -54,6 +54,20 @@
       <p class="muted">Если токен потерян, остановите консоль и запустите её с параметром <code>--rotate-token</code>. Старый токен после ротации перестанет работать.</p>
     </section>
 
+    <section class="panel local-chat-panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">LOCAL LLM · LITERT-LM</div><h2>Диалог JARVIS</h2></div>
+        <span class="tag">OFFLINE</span>
+      </div>
+      <p id="chat-backend" class="panel-copy">Проверка локальной модели…</p>
+      <div id="chat-messages" class="chat-messages empty">Пока нет сообщений.</div>
+      <form id="chat-form" class="stack-form">
+        <label for="chat-input">Сообщение</label>
+        <textarea id="chat-input" rows="2" maxlength="900" placeholder="Спросите что-нибудь…" required></textarea>
+        <button id="chat-send" class="wide-button" type="submit" disabled>Отправить локальной модели</button>
+      </form>
+      <p class="muted">Модель и история остаются в локальном workspace этого ПК. Автозагрузка модели, облачный ИИ и выполнение команд отключены.</p>
+    </section>
     <div class="columns">
       <section class="panel">
         <div class="panel-heading">

@@ -184,3 +184,11 @@ textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(109,214,1
   background:#101e2c; color:#d5e9ff; font-size:12px; line-height:1.6;
 }
 .transfer-panel .muted { display:block; margin-top:10px; }
+
+.local-chat-panel { margin-top: 1rem; }
+.chat-messages { display: grid; gap: .65rem; max-height: 26rem; overflow: auto; padding: .2rem; }
+.chat-message { border: 1px solid var(--border, #263241); border-radius: 12px; padding: .75rem; overflow-wrap: anywhere; }
+.chat-message.user { background: rgba(68, 128, 180, .12); }
+.chat-message.assistant { background: rgba(100, 150, 120, .10); }
+.chat-message p { margin: .4rem 0 0; white-space: pre-wrap; }
+.chat-messages.empty { color: var(--muted, #8c9aaa); }

@@ -17,6 +17,7 @@ import uuid
 from urllib.parse import urlsplit
 
 from .auth import LocalConsoleAuth, LocalConsoleAuthError
+from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
 
 from tools.jpvr_reference.storage import JPVRStorage
 from tools.neuron_runtime.reasoning_engine import (
@@ -127,6 +128,7 @@ class LocalConsoleService:
         rotate_token: bool = False,
         workspace_path: str | os.PathLike[str] | None = None,
         platform: str = "desktop",
+        model_path: str | os.PathLike[str] | None = None,
     ) -> None:
         default_path = Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr"
         self.data_path = (
@@ -143,6 +145,8 @@ class LocalConsoleService:
         if platform not in ("desktop", "android"):
             raise LocalConsoleError("platform must be desktop or android")
         self.platform = platform
+        self.local_inference = LiteRtLmLocalEngine(model_path) if model_path is not None else None
+        self._conversation_lock = threading.Lock()
         paths = (self.data_path, self.auth_path, self.workspace_path)
         try:
             resolved = [path.resolve(strict=False) for path in paths]
@@ -227,6 +231,8 @@ class LocalConsoleService:
         return self.auth.verify(token)
 
     def close(self) -> None:
+        if self.local_inference is not None:
+            self.local_inference.close()
         with self._lock:
             self.workspace_storage.close()
             self.storage.close()
@@ -273,6 +279,93 @@ class LocalConsoleService:
             self.workspace_store.save(candidate, expected_revision=expected_revision)
             self.workspace_snapshot, self.workspace_revision, _ = self.workspace_store.load()
             return self.workspace_state()
+
+    def conversation_state(self) -> dict[str, object]:
+        with self._lock:
+            payload = json.loads(encode_workspace(self.workspace_snapshot).decode("utf-8"))
+            record = next((item for item in payload["records"]["conversations"] if item["id"] == "jarvis-local-chat"), None)
+            configured = self.local_inference is not None
+            runtime_ready = configured and self.local_inference.runtime_available
+            if not configured:
+                label = "Модель не настроена · локальный чат отключён"
+            elif not runtime_ready:
+                label = "Файл модели указан, но пакет litert-lm-api==0.17.1 не установлен"
+            else:
+                label = self.local_inference.backend_label
+            return {
+                "revision": self.workspace_revision,
+                "conversation": record,
+                "model_configured": configured,
+                "runtime_available": runtime_ready,
+                "backend_label": label,
+            }
+
+    def send_conversation_message(self, text: object, expected_revision: object) -> dict[str, object]:
+        if self.local_inference is None:
+            raise LocalInferenceError("Укажите --model и установите litert-lm-api==0.17.1.")
+        if not self.local_inference.runtime_available:
+            raise LocalInferenceError("Установите пакет: pip install litert-lm-api==0.17.1")
+        if not isinstance(text, str):
+            raise LocalConsoleError("text должен быть строкой")
+        clean = text.strip()
+        if not clean or len(clean) > 900 or "\x00" in clean:
+            raise LocalConsoleError("Сообщение должно содержать от 1 до 900 символов")
+        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
+            raise LocalConsoleError("expected_revision должен быть целым числом")
+        with self._conversation_lock:
+            current = self.workspace_state()
+            if current["revision"] != expected_revision:
+                raise WorkspaceConflict("workspace revision changed; refresh and retry")
+            document = current["workspace"]
+            records = document["records"]
+            conversations = list(records["conversations"])
+            existing = next((item for item in conversations if item["id"] == "jarvis-local-chat"), None)
+            history = []
+            if existing is not None:
+                history = [
+                    {"role": item["role"], "content": item["content"]}
+                    for item in existing["messages"][-4:]
+                    if item["role"] in {"user", "assistant"}
+                ]
+            answer = self.local_inference.respond(clean, history)
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            messages = list(existing["messages"] if existing is not None else [])
+            if len(messages) > 49_998:
+                messages = messages[-49_998:]
+            messages.extend([
+                {"id": "message-" + uuid.uuid4().hex, "role": "user", "created_at": now, "content": clean},
+                {"id": "message-" + uuid.uuid4().hex, "role": "assistant", "created_at": now, "content": answer},
+            ])
+            old_revision = existing["revision"] if existing is not None else 0
+            if old_revision >= 2_147_483_647:
+                raise WorkspaceError("conversation revision limit reached")
+            updated = {
+                "id": "jarvis-local-chat",
+                "revision": old_revision + 1,
+                "updated_at": now,
+                "title": existing["title"] if existing is not None else clean[:160],
+                "messages": messages,
+            }
+            conversations = [item for item in conversations if item["id"] != "jarvis-local-chat"]
+            conversations.append(updated)
+            records["conversations"] = conversations
+            candidate = WorkspaceSnapshot(
+                workspace_id=document["workspace_id"],
+                revision=0,
+                exported_at=now,
+                source_platform=self.platform,
+                records=records,
+            )
+            canonical = json.loads(encode_workspace(candidate).decode("utf-8"))
+            saved = self.save_workspace(canonical, expected_revision)
+            result_record = next(item for item in saved["workspace"]["records"]["conversations"] if item["id"] == "jarvis-local-chat")
+            return {
+                "revision": saved["revision"],
+                "conversation": result_record,
+                "model_configured": True,
+                "runtime_available": True,
+                "backend_label": self.local_inference.backend_label,
+            }
 
     def _candidate(self) -> TaskSessionManager:
         try:
@@ -561,6 +654,11 @@ def create_http_server(
                     return
                 self._send(200, service.workspace_state())
                 return
+            if path == "/api/conversation":
+                if not self._require_auth():
+                    return
+                self._send(200, service.conversation_state())
+                return
             filename = _STATIC_FILES.get(path)
             if filename is None:
                 self._error(404, "Страница не найдена")
@@ -598,6 +696,11 @@ def create_http_server(
                     self._send(200, service.restore_workspace(
                         payload["workspace"], payload["expected_revision"]
                     ))
+                    return
+                if path == "/api/conversation":
+                    if set(payload) != {"text", "expected_revision"}:
+                        raise LocalConsoleError("ожидались поля text и expected_revision")
+                    self._send(200, service.send_conversation_message(payload["text"], payload["expected_revision"]))
                     return
                 if path == "/api/workspace":
                     if set(payload) != {"expected_revision", "workspace"}:
@@ -640,6 +743,8 @@ def create_http_server(
                 self._error(404, "Маршрут API не найден")
             except WorkspaceConflict as exc:
                 self._error(409, str(exc))
+            except LocalInferenceError as exc:
+                self._error(503, str(exc))
             except WorkspaceError as exc:
                 self._error(400, str(exc))
             except (LocalConsoleError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
@@ -657,6 +762,7 @@ def create_http_server(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="JARVIS local task console")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--model", type=Path, default=None, help="path to the optional local .litertlm model; no download is performed")
     parser.add_argument(
         "--data",
         type=Path,
@@ -689,6 +795,7 @@ def main(argv: list[str] | None = None) -> int:
     service = LocalConsoleService(
         args.data, args.auth_file, rotate_token=args.rotate_token,
         workspace_path=args.workspace_file, platform=args.platform,
+        model_path=args.model,
     )
     server = create_http_server(service, port=args.port)
     print(f"JARVIS Local Console: http://127.0.0.1:{server.server_port}/")
