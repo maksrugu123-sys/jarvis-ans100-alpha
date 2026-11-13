@@ -415,7 +415,7 @@ private fun WorkspaceMemoryPanel(
                 placeholder = { Text("Что JARVIS должен помнить?") },
                 minLines = 2,
                 maxLines = 4,
-                enabled = !state.isBusy && state.isLoaded,
+                enabled = !state.isBusy && state.isLoaded && state.importPreview == null,
             )
             OutlinedTextField(
                 value = category,
@@ -432,7 +432,7 @@ private fun WorkspaceMemoryPanel(
                 Checkbox(
                     checked = approved,
                     onCheckedChange = { approved = it },
-                    enabled = !state.isBusy,
+                    enabled = !state.isBusy && state.importPreview == null,
                 )
                 Text(
                     "Я подтверждаю сохранение этого воспоминания",
@@ -446,8 +446,8 @@ private fun WorkspaceMemoryPanel(
                     approved = false
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = state.isLoaded && !state.isBusy && approved &&
-                    content.isNotBlank() && category.isNotBlank(),
+                enabled = state.isLoaded && !state.isBusy && state.importPreview == null &&
+                    approved && content.isNotBlank() && category.isNotBlank(),
             ) {
                 Text(if (state.isBusy) "Сохранение…" else "Сохранить воспоминание")
             }
@@ -605,7 +605,7 @@ private fun WorkspaceMemoryPanel(
                                 )
                                 TextButton(
                                     onClick = { deleteTarget = memory },
-                                    enabled = !state.isBusy,
+                                    enabled = !state.isBusy && state.importPreview == null,
                                 ) { Text("Удалить") }
                             }
                         }
