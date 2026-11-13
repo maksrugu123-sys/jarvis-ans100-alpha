@@ -585,7 +585,9 @@ def create_http_server(
             if not self._require_auth():
                 return
             payload = self._read_json(
-                max_bytes=MAX_WORKSPACE_REQUEST_BYTES if path == "/api/workspace" else MAX_REQUEST_BYTES
+                max_bytes=MAX_WORKSPACE_REQUEST_BYTES
+                if path in {"/api/workspace", "/api/workspace/restore"}
+                else MAX_REQUEST_BYTES
             )
             if payload is None:
                 return
