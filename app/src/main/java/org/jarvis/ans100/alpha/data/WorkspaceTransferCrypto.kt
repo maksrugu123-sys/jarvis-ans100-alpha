@@ -213,8 +213,11 @@ object WorkspaceTransferCrypto {
         } catch (error: IllegalArgumentException) {
             throw IllegalArgumentException("Некорректное Base64-поле.", error)
         }
-        require(decoded.isNotEmpty() && decoded.size <= maximumBytes) {
-            "Размер Base64-поля недопустим."
+        require(
+            decoded.isNotEmpty() && decoded.size <= maximumBytes &&
+                encodeBase64(decoded) == value,
+        ) {
+            "Размер или каноническая кодировка Base64-поля недопустимы."
         }
         return decoded
     }
