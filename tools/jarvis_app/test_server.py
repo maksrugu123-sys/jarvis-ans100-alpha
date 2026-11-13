@@ -274,6 +274,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertTrue(payload["auth_required"])
         self.assertEqual(payload["auth_scheme"], "Bearer")
         self.assertEqual(payload["workspace_api_version"], 1)
+        self.assertEqual(payload["platform"], "desktop")
 
     def test_workspace_api_creates_and_deletes_explicit_memories(self):
         initial = self.service.workspace_state()
