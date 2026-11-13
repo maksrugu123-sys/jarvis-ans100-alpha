@@ -66,7 +66,7 @@ The service binds only to `127.0.0.1`. Do not expose it to a LAN, tunnel or publ
 
 The desktop PWA now exports and imports a `.jws` envelope using browser WebCrypto. Android now has a matching Kotlin cryptographic codec wired to the Storage Access Framework document picker; it imports with stable-ID/key merge semantics. The Android path has not been built or device-tested.
 
-The interoperable envelope is JSON with exactly these fields:
+The interoperable envelope is defined by `schemas/workspace/v1/encrypted-bundle.schema.json` and is JSON with exactly these fields:
 
 - `format`: `jarvis.workspace.encrypted`
 - `version`: `{ "major": 1, "minor": 0 }`
