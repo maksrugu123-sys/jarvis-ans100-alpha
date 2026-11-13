@@ -1634,3 +1634,16 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 - Тесты проверяют только локальный механизм хранения/проверки токена; они не утверждают, что bearer token является подтверждением личности человека или одобрением конкретного действия.
 
 **Проверки:** source readback/static inspection only. Новые 7 тестов AUTHORED / NOT RUN. Не запускались Python tests, Android build, APK/AAB, CI или GitHub Actions.
+
+
+## 2026-11-13 — Consolidated JARVIS project handoff
+
+**Цель:** сохранить сквозной контекст проекта и актуальные границы реализации в репозитории, чтобы дальнейшая работа могла продолжаться без потери архитектурных решений и без повторного объявления уже реализованных компонентов.
+
+**Добавлено:** docs/JARVIS_PROJECT_HANDOFF_2026-11-13.md — единая сводка направления проекта, neural/JPVR/task-session/reasoning/safety/task-loop слоёв, Android V0.5 и Python local console, trust boundaries, verification status, последовательности следующих этапов и рабочего протокола.
+
+**Зафиксировано:** Android V0.5 source включает API v2 Bearer auth, Android Keystore token envelope, PWA sign-in/out, JPVR task/session administration и bounded symbolic reasoning preview. Это source-level implementation; runtime auth, Android↔Termux I/O, Kotlin/Gradle, APK и device verification не подтверждены. Task Loop, trusted human approval, signed exact-action grants, trusted policy authority, downstream idempotency/reconciliation и neural runtime integration в Android остаются незавершёнными. Внешние действия должны оставаться выключенными.
+
+**Ограничение проверки:** документационная синхронизация и GitHub readback only. Тесты, сборки, APK/AAB, CI и GitHub Actions не запускались. Никаких новых runtime возможностей эта запись не создаёт.
+
+**Следующий этап:** следовать порядку в handoff: сначала тестируемость и закрытие auth/client gaps, затем trusted identity + signed exact-request approval, trusted policy/revocation и downstream reconciliation; только потом read-only Task Loop preview и строго ограниченный executor.
