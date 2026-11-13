@@ -239,6 +239,14 @@ class LocalConsoleService:
                 "workspace": json.loads(payload.decode("utf-8")),
             }
 
+    def restore_workspace(self, document: object, expected_revision: object) -> dict[str, object]:
+        """Replace the complete portable workspace after validation and a CAS check.
+
+        The caller must first create and retain an independent encrypted backup.
+        This endpoint does not merge records and never changes workspace identity.
+        """
+        return self.save_workspace(document, expected_revision)
+
     def save_workspace(self, document: object, expected_revision: object) -> dict[str, object]:
         if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
             raise WorkspaceError("expected_revision must be an integer")
@@ -582,6 +590,13 @@ def create_http_server(
             if payload is None:
                 return
             try:
+                if path == "/api/workspace/restore":
+                    if set(payload) != {"expected_revision", "workspace"}:
+                        raise WorkspaceError("ожидались поля expected_revision и workspace")
+                    self._send(200, service.restore_workspace(
+                        payload["workspace"], payload["expected_revision"]
+                    ))
+                    return
                 if path == "/api/workspace":
                     if set(payload) != {"expected_revision", "workspace"}:
                         raise WorkspaceError("ожидались поля expected_revision и workspace")
