@@ -80,6 +80,22 @@ data class RuntimeWorkspaceMergePlan(
     val conflictCount: Int,
 )
 
+data class RuntimeWorkspaceBackupExport(
+    val encryptedBytes: ByteArray,
+    val revision: Long,
+    val document: JSONObject,
+)
+
+data class RuntimeWorkspaceRestorePlan(
+    val expectedRevision: Long,
+    val workspace: JSONObject,
+    val backupCreatedAt: String,
+    val conversationCount: Int,
+    val memoryCount: Int,
+    val taskCount: Int,
+    val settingCount: Int,
+)
+
 data class RuntimeBridgeSnapshot(
     val managerId: String,
     val checkpointVersion: Long,
@@ -141,6 +157,23 @@ class LocalRuntimeBridgeClient {
         return decodeWorkspace(request(
             "POST",
             "/api/workspace",
+            JSONObject()
+                .put("expected_revision", expectedRevision)
+                .put("workspace", document),
+        ))
+    }
+
+    fun restoreWorkspace(
+        document: JSONObject,
+        expectedRevision: Long,
+    ): RuntimeWorkspaceSnapshot {
+        if (expectedRevision < 0L) {
+            throw RuntimeBridgeException("Ревизия восстановления недопустима.")
+        }
+        validateTransferDocument(document)
+        return decodeWorkspace(request(
+            "POST",
+            "/api/workspace/restore",
             JSONObject()
                 .put("expected_revision", expectedRevision)
                 .put("workspace", document),
@@ -217,6 +250,124 @@ class LocalRuntimeBridgeClient {
         }
         validateTransferDocument(imported)
         return imported
+    }
+
+    fun exportEncryptedWorkspaceBackup(passphrase: CharArray): RuntimeWorkspaceBackupExport {
+        val current = getWorkspace()
+        validateTransferDocument(current.document)
+        val backup = sealWorkspaceBackup(current.document)
+        val encrypted = WorkspaceTransferCrypto.encryptBackup(
+            canonicalJson(backup), passphrase,
+        )
+        return RuntimeWorkspaceBackupExport(
+            encryptedBytes = encrypted,
+            revision = current.revision,
+            document = JSONObject(current.document.toString()),
+        )
+    }
+
+    fun decryptWorkspaceBackupBundle(bundleBytes: ByteArray, passphrase: CharArray): JSONObject {
+        val plaintext = WorkspaceTransferCrypto.decryptBackup(bundleBytes, passphrase)
+        val backup = try {
+            JSONObject(plaintext)
+        } catch (error: Exception) {
+            throw RuntimeBridgeException("Резервная копия не содержит корректный JSON.")
+        }
+        if (canonicalJson(backup) != plaintext) {
+            throw RuntimeBridgeException("Резервная копия не соответствует каноническому JSON.")
+        }
+        validateWorkspaceBackup(backup)
+        return backup
+    }
+
+    fun prepareWorkspaceRestore(
+        backup: JSONObject,
+        expectedRevision: Long,
+    ): RuntimeWorkspaceRestorePlan {
+        validateWorkspaceBackup(backup)
+        val current = getWorkspace()
+        if (current.revision != expectedRevision) {
+            throw RuntimeBridgeException("Локальная память изменилась. Обновите её и создайте новый backup.")
+        }
+        val restored = backup.getJSONObject("workspace")
+        if (current.document.optString("workspace_id") != restored.optString("workspace_id")) {
+            throw RuntimeBridgeException("Backup относится к другому workspace_id. Замена запрещена.")
+        }
+        val records = restored.getJSONObject("records")
+        return RuntimeWorkspaceRestorePlan(
+            expectedRevision = expectedRevision,
+            workspace = JSONObject(restored.toString()),
+            backupCreatedAt = backup.getString("created_at"),
+            conversationCount = records.getJSONArray("conversations").length(),
+            memoryCount = records.getJSONArray("memories").length(),
+            taskCount = records.getJSONArray("tasks").length(),
+            settingCount = records.getJSONArray("settings").length(),
+        )
+    }
+
+    fun commitWorkspaceRestore(plan: RuntimeWorkspaceRestorePlan): RuntimeWorkspaceSnapshot {
+        if (plan.expectedRevision < 0L) {
+            throw RuntimeBridgeException("Ревизия восстановления недопустима.")
+        }
+        val replacement = JSONObject(plan.workspace.toString())
+        validateTransferDocument(replacement)
+        return restoreWorkspace(sealWorkspace(replacement), plan.expectedRevision)
+    }
+
+    private fun sealWorkspaceBackup(workspace: JSONObject): JSONObject {
+        val backup = JSONObject()
+            .put("format", "jarvis.workspace.backup")
+            .put("version", JSONObject().put("major", 1).put("minor", 0))
+            .put("backup_id", UUID.randomUUID().toString().replace("-", ""))
+            .put("created_at", Instant.now().toString())
+            .put("source_platform", "android")
+            .put("workspace", JSONObject(workspace.toString()))
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(canonicalJson(backup).toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        backup.put("integrity", JSONObject()
+            .put("algorithm", "sha-256")
+            .put("digest", digest))
+        return backup
+    }
+
+    private fun validateWorkspaceBackup(backup: JSONObject) {
+        if (backup.keys().asSequence().toSet() != setOf(
+                "format", "version", "backup_id", "created_at",
+                "source_platform", "workspace", "integrity",
+            ) ||
+            backup.opt("format") != "jarvis.workspace.backup" ||
+            backup.optJSONObject("version")?.let {
+                it.keys().asSequence().toSet() == setOf("major", "minor") &&
+                    it.opt("major") == 1 && it.opt("minor") == 0
+            } != true ||
+            backup.opt("backup_id") !is String ||
+            !Regex("^[a-f0-9]{32}$").matches(backup.optString("backup_id")) ||
+            backup.opt("created_at") !is String ||
+            runCatching { OffsetDateTime.parse(backup.optString("created_at")) }.isFailure ||
+            backup.opt("source_platform") !in setOf("desktop", "android")
+        ) {
+            throw RuntimeBridgeException("Резервная копия не соответствует схеме JARVIS V1.")
+        }
+        val workspace = backup.optJSONObject("workspace")
+            ?: throw RuntimeBridgeException("В резервной копии отсутствует workspace.")
+        validateTransferDocument(workspace)
+        val integrity = backup.optJSONObject("integrity")
+            ?: throw RuntimeBridgeException("В резервной копии отсутствует checksum.")
+        if (integrity.keys().asSequence().toSet() != setOf("algorithm", "digest") ||
+            integrity.opt("algorithm") != "sha-256" ||
+            integrity.opt("digest") !is String ||
+            !Regex("^[a-f0-9]{64}$").matches(integrity.optString("digest"))
+        ) {
+            throw RuntimeBridgeException("Алгоритм или checksum backup не поддерживается.")
+        }
+        val unsigned = JSONObject(backup.toString()).also { it.remove("integrity") }
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(canonicalJson(unsigned).toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        if (actual != integrity.optString("digest")) {
+            throw RuntimeBridgeException("Контрольная сумма резервной копии не совпадает.")
+        }
     }
 
     fun prepareWorkspaceMerge(
