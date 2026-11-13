@@ -1,7 +1,7 @@
 """Focused security regression tests for local-console bearer authentication."""
 from __future__ import annotations
 
-import os
+import hashlib
 from pathlib import Path
 import re
 import tempfile
@@ -25,7 +25,7 @@ class LocalConsoleAuthTests(unittest.TestCase):
         self.assertRegex(token, re.compile(r"^[A-Za-z0-9_-]{43}$"))
         self.assertTrue(auth.verify(token))
         self.assertEqual(self.path.read_text(encoding="ascii"),
-                         "sha256:" + __import__("hashlib").sha256(token.encode("ascii")).hexdigest() + "\n")
+                         "sha256:" + hashlib.sha256(token.encode("ascii")).hexdigest() + "\n")
         self.assertNotIn(token, self.path.read_text(encoding="ascii"))
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.path.parent.stat().st_mode & 0o777, 0o700)
