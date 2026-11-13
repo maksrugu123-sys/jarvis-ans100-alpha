@@ -1679,3 +1679,11 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничения:** реальные AES-GCM/Android Keystore assertions остаются непроверенными до запуска instrumentation suite на Android API 29+ устройстве/эмуляторе. UI flows и полное соединение с Termux также не проверены. Внешние действия остаются выключенными.
 
 **Следующий шаг:** пользователь может отдельно разрешить запуск instrumentation tests/build; до этого оставлять результат как AUTHORED, NOT RUN.
+
+### Local-console authentication regression inventory follow-up
+
+Added one further test to each focused module after reviewing the new path protections:
+- `test_auth.py` now has 10 methods; the new case verifies that an existing owner-controlled digest and parent directory with broad permissions are repaired to 0600/0700 before use.
+- `test_server.py` now has 14 methods; the new case verifies that a hard link to the JPVR data file is rejected as an auth path even during token rotation, without changing file bytes.
+
+The combined Python authentication/API inventory is now **24 methods AUTHORED, NOT RUN**. README, Android/bridge/local-console contracts and architecture §3.49 were updated to match. GitHub source readback only; no tests, imports/syntax execution, builds, APK/AAB, CI or device checks were run.
