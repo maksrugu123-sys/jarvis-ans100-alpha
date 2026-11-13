@@ -419,6 +419,292 @@ $("#memory-refresh").addEventListener("click", async event => {
   finally { button.disabled = false; }
 });
 
+
+
+const TRANSFER_AAD = new TextEncoder().encode("JARVIS-WORKSPACE-ENCRYPTED-V1");
+const TRANSFER_ITERATIONS = 310000;
+const TRANSFER_MAX_PLAINTEXT = 16 * 1024 * 1024;
+let pendingTransfer = null;
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value, maximum) {
+  if (typeof value !== "string" || value.length > maximum * 2) {
+    throw new Error("Зашифрованный файл имеет недопустимый размер.");
+  }
+  let binary;
+  try { binary = atob(value); }
+  catch { throw new Error("Файл содержит некорректные Base64-данные."); }
+  if (!binary.length || binary.length > maximum) {
+    throw new Error("Размер данных в файле недопустим.");
+  }
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+async function deriveTransferKey(passphrase, salt) {
+  const material = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations: TRANSFER_ITERATIONS },
+    material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+  );
+}
+
+async function verifyPortableWorkspace(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document) ||
+      document.format !== "jarvis.workspace" ||
+      !document.version || document.version.major !== 1 ||
+      document.version.minor !== 0 ||
+      typeof document.workspace_id !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(document.workspace_id) ||
+      !["desktop", "android"].includes(document.source_platform) ||
+      !document.records || Object.keys(document.records).sort().join(",") !==
+        "conversations,memories,settings,tasks" ||
+      !document.integrity || document.integrity.algorithm !== "sha-256" ||
+      typeof document.integrity.digest !== "string" ||
+      !/^[a-f0-9]{64}$/.test(document.integrity.digest)) {
+    throw new Error("В файле нет поддерживаемого рабочего пространства JARVIS V1.");
+  }
+  const records = document.records;
+  for (const [name, maximum] of [
+    ["conversations", 10000], ["memories", 10000], ["tasks", 10000], ["settings", 1000],
+  ]) {
+    if (!Array.isArray(records[name]) || records[name].length > maximum) {
+      throw new Error("Коллекция " + name + " не прошла проверку размера.");
+    }
+  }
+  const unsigned = JSON.parse(JSON.stringify(document));
+  delete unsigned.integrity;
+  const digest = await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(canonicalJson(unsigned))
+  );
+  const actual = Array.from(new Uint8Array(digest), byte =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+  if (actual !== document.integrity.digest) {
+    throw new Error("Контрольная сумма памяти не совпадает. Импорт отменён.");
+  }
+  for (const memory of records.memories) {
+    if (!memory || memory.user_approved !== true ||
+        typeof memory.content !== "string" || !memory.content.trim() ||
+        memory.content.length > 10000) {
+      throw new Error("Воспоминание не прошло проверку согласия и содержимого.");
+    }
+  }
+  const settingKeys = new Set();
+  for (const setting of records.settings) {
+    if (!setting || typeof setting.key !== "string" ||
+        !/^[a-z][a-z0-9._-]{0,63}$/.test(setting.key) ||
+        settingKeys.has(setting.key)) {
+      throw new Error("Настройки содержат недопустимые или повторяющиеся ключи.");
+    }
+    settingKeys.add(setting.key);
+    const normalized = setting.key.replace(/[.-]/g, "_");
+    if (/(password|passwd|secret|token|credential|api_key|private_key)/.test(normalized) ||
+        normalized === "auth" || normalized.startsWith("auth_")) {
+      throw new Error("Экспорт содержит запрещённый секретный параметр.");
+    }
+  }
+  return document;
+}
+
+async function encryptWorkspaceDocument(document, passphrase) {
+  const plaintext = new TextEncoder().encode(canonicalJson(document));
+  if (!plaintext.length || plaintext.length > TRANSFER_MAX_PLAINTEXT) {
+    throw new Error("Рабочее пространство превышает лимит переносимого файла 16 МиБ.");
+  }
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveTransferKey(passphrase, salt);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce, additionalData: TRANSFER_AAD, tagLength: 128 },
+    key, plaintext
+  );
+  return {
+    format: "jarvis.workspace.encrypted",
+    version: { major: 1, minor: 0 },
+    kdf: { name: "PBKDF2-HMAC-SHA256", iterations: TRANSFER_ITERATIONS, salt: bytesToBase64(salt) },
+    cipher: { name: "AES-256-GCM", nonce: bytesToBase64(nonce), tag_bits: 128 },
+    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+  };
+}
+
+async function decryptWorkspaceBundle(bundle, passphrase) {
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle) ||
+      Object.keys(bundle).sort().join(",") !== "cipher,ciphertext,format,kdf,version" ||
+      bundle.format !== "jarvis.workspace.encrypted" ||
+      !bundle.version || bundle.version.major !== 1 || bundle.version.minor !== 0 ||
+      !bundle.kdf || bundle.kdf.name !== "PBKDF2-HMAC-SHA256" ||
+      bundle.kdf.iterations !== TRANSFER_ITERATIONS ||
+      !bundle.cipher || bundle.cipher.name !== "AES-256-GCM" ||
+      bundle.cipher.tag_bits !== 128) {
+    throw new Error("Формат зашифрованного файла не поддерживается.");
+  }
+  const salt = base64ToBytes(bundle.kdf.salt, 16);
+  const nonce = base64ToBytes(bundle.cipher.nonce, 12);
+  if (salt.length !== 16 || nonce.length !== 12) {
+    throw new Error("Параметры шифрования имеют неверную длину.");
+  }
+  const ciphertext = base64ToBytes(bundle.ciphertext, TRANSFER_MAX_PLAINTEXT + 16);
+  if (ciphertext.length < 17) throw new Error("Зашифрованные данные слишком короткие.");
+  const key = await deriveTransferKey(passphrase, salt);
+  let plaintext;
+  try {
+    plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: nonce, additionalData: TRANSFER_AAD, tagLength: 128 },
+      key, ciphertext
+    );
+  } catch {
+    throw new Error("Не удалось расшифровать файл. Проверьте пароль или целостность файла.");
+  }
+  if (plaintext.byteLength > TRANSFER_MAX_PLAINTEXT) {
+    throw new Error("Расшифрованное рабочее пространство превышает лимит 16 МиБ.");
+  }
+  let document;
+  try { document = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(plaintext)); }
+  catch { throw new Error("Расшифрованные данные не являются корректным UTF-8 JSON."); }
+  return verifyPortableWorkspace(document);
+}
+
+function planWorkspaceMerge(localDocument, importedDocument) {
+  if (localDocument.workspace_id !== importedDocument.workspace_id) {
+    throw new Error("Файл относится к другому workspace_id. Объединение запрещено.");
+  }
+  const result = JSON.parse(JSON.stringify(localDocument.records));
+  const summary = { added: 0, identical: 0, conflicts: 0 };
+  for (const collection of ["conversations", "memories", "tasks"]) {
+    const existing = new Map(result[collection].map(item => [item.id, item]));
+    for (const item of importedDocument.records[collection]) {
+      const old = existing.get(item.id);
+      if (!old) {
+        result[collection].push(item);
+        existing.set(item.id, item);
+        summary.added++;
+      } else if (canonicalJson(old) === canonicalJson(item)) {
+        summary.identical++;
+      } else {
+        summary.conflicts++;
+      }
+    }
+  }
+  const settings = new Map(result.settings.map(item => [item.key, item]));
+  for (const item of importedDocument.records.settings) {
+    const old = settings.get(item.key);
+    if (!old) {
+      result.settings.push(item);
+      settings.set(item.key, item);
+      summary.added++;
+    } else if (canonicalJson(old) === canonicalJson(item)) {
+      summary.identical++;
+    } else {
+      summary.conflicts++;
+    }
+  }
+  return { records: result, summary };
+}
+
+function renderTransferPreview(plan) {
+  const box = $("#transfer-preview");
+  box.hidden = false;
+  box.textContent = "Будет добавлено: " + plan.added +
+    " · уже совпадает: " + plan.identical +
+    " · конфликтов (останутся локальные версии): " + plan.conflicts;
+  $("#transfer-confirm").hidden = plan.added === 0;
+}
+
+$("#transfer-export").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  const passwordInput = $("#transfer-passphrase");
+  const passphrase = passwordInput.value;
+  if (passphrase.length < 12) {
+    setNotice("Для экспорта нужна парольная фраза длиной не менее 12 символов.", "error");
+    return;
+  }
+  button.disabled = true;
+  try {
+    const workspace = await refreshWorkspace();
+    await verifyPortableWorkspace(workspace.document);
+    const bundle = await encryptWorkspaceDocument(workspace.document, passphrase);
+    const blob = new Blob([JSON.stringify(bundle)], { type: "application/vnd.jarvis.workspace+json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = node("a");
+    anchor.href = url;
+    anchor.download = "jarvis-workspace-" + new Date().toISOString().slice(0, 10) + ".jws";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice("Зашифрованный файл создан. Храните пароль отдельно от файла.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    passwordInput.value = "";
+    button.disabled = false;
+  }
+});
+
+$("#transfer-choose").addEventListener("click", () => $("#transfer-file").click());
+$("#transfer-file").addEventListener("change", async event => {
+  const file = event.target.files && event.target.files[0];
+  const passwordInput = $("#transfer-passphrase");
+  const passphrase = passwordInput.value;
+  $("#transfer-confirm").hidden = true;
+  $("#transfer-preview").hidden = true;
+  pendingTransfer = null;
+  if (!file) return;
+  try {
+    if (file.size > 24 * 1024 * 1024) {
+      throw new Error("Файл превышает допустимый размер 24 МиБ.");
+    }
+    if (passphrase.length < 12) {
+      throw new Error("Для импорта введите парольную фразу длиной не менее 12 символов.");
+    }
+    const bundle = JSON.parse(await file.text());
+    const imported = await decryptWorkspaceBundle(bundle, passphrase);
+    const local = currentWorkspace || await refreshWorkspace();
+    const plan = planWorkspaceMerge(local.document, imported);
+    pendingTransfer = imported;
+    renderTransferPreview(plan.summary);
+    setNotice("Файл расшифрован и проверен. Изменения ещё не внесены.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    passwordInput.value = "";
+    event.target.value = "";
+  }
+});
+
+$("#transfer-confirm").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  if (!pendingTransfer) return;
+  button.disabled = true;
+  try {
+    const imported = pendingTransfer;
+    let finalPlan = null;
+    await writeWorkspace(document => {
+      finalPlan = planWorkspaceMerge(document, imported);
+      document.records = finalPlan.records;
+    });
+    pendingTransfer = null;
+    $("#transfer-preview").hidden = true;
+    button.hidden = true;
+    setNotice("Перенос завершён: добавлено " + finalPlan.summary.added +
+      ", совпадений " + finalPlan.summary.identical +
+      ", конфликтов без перезаписи " + finalPlan.summary.conflicts + ".", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
 async function refresh() {
   const state = await api("/api/state");
   renderState(state);
