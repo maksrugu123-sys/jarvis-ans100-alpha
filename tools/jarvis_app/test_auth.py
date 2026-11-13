@@ -83,5 +83,35 @@ class LocalConsoleAuthTests(unittest.TestCase):
         self.assertTrue(auth.verify(token))
 
 
+    def test_symlink_parent_directory_is_rejected_without_chmodding_target(self):
+        real_parent = self.root / "real-private"
+        real_parent.mkdir(mode=0o755)
+        original_mode = real_parent.stat().st_mode & 0o777
+        alias = self.root / "parent-alias"
+        try:
+            alias.symlink_to(real_parent, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("directory symlinks are unavailable on this platform")
+
+        with self.assertRaises(LocalConsoleAuthError):
+            LocalConsoleAuth(alias / "access-token")
+
+        self.assertEqual(real_parent.stat().st_mode & 0o777, original_mode)
+
+    def test_dangling_symlink_is_not_treated_as_a_missing_token_file(self):
+        self.path.parent.mkdir(mode=0o700, parents=True)
+        missing_target = self.root / "not-created"
+        try:
+            self.path.symlink_to(missing_target)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks are unavailable on this platform")
+
+        with self.assertRaises(LocalConsoleAuthError):
+            LocalConsoleAuth(self.path)
+
+        self.assertTrue(self.path.is_symlink())
+        self.assertFalse(missing_target.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
