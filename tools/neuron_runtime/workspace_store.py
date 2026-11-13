@@ -190,7 +190,12 @@ def encode_workspace(snapshot: WorkspaceSnapshot) -> bytes:
         key = setting["key"]
         if not isinstance(key, str) or not _SETTING_PATTERN.fullmatch(key) or key in setting_keys:
             raise WorkspaceError("setting key is invalid or duplicated")
-        if any(part in key for part in _SECRET_SETTING_PARTS):
+        normalized_key = key.replace("-", "_").replace(".", "_")
+        if (
+            any(part in normalized_key for part in _SECRET_SETTING_PARTS)
+            or normalized_key == "auth"
+            or normalized_key.startswith("auth_")
+        ):
             raise WorkspaceError("credentials, tokens, and secrets are forbidden in portable workspace settings")
         setting_keys.add(key)
         value = setting["value"]
