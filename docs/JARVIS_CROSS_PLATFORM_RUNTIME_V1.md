@@ -28,7 +28,7 @@ This is a shared product and data contract, not a claim that the current impleme
 | Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | No native Kotlin JPVR implementation or automatic cross-device sync yet |
 | Offline language model | No integrated production local model established | Offline natural-language conversation is not yet a delivered capability |
 
-The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists. The shared workspace JSON contract, JPVR workspace store, authenticated local API V1, Android Compose memory manager and desktop PWA memory manager are now present on `mobile-first-offline-v1`; both UIs support explicit-consent memory creation, search, listing and confirmed deletion. The phone and PC still keep separate loopback-local files until explicit encrypted transfer/pairing is implemented.
+The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists. The shared workspace JSON contract, JPVR workspace store, authenticated local API V1, Android Compose memory manager and desktop PWA memory manager are present on `mobile-first-offline-v1`; both UIs support explicit-consent memory creation, search, listing and confirmed deletion. Manual encrypted `.jws` transfer is implemented on both platforms; the phone and PC still keep separate loopback-local files until the user explicitly moves a file between them.
 
 The Python JPVR file layer now has a Windows adapter (`msvcrt` region locking, serialized seek-based positional I/O and binary-mode file descriptors) intended for Windows 10 and 11. Windows auth storage relies on inherited user-profile ACLs; the current standard-library implementation does not inspect or configure ACL entries. Neither Windows version has been runtime-tested, so Windows remains experimental until the platform-specific and full storage tests pass.
 
@@ -140,7 +140,7 @@ Automatic live sync is a later optional feature. First deliver explicit export/i
 
 ### Initial portable schema
 
-The first machine-readable contract is [workspace.schema.json](../schemas/workspace/v1/workspace.schema.json). It defines version 1 bundles for conversations, explicitly user-approved memories, task summaries, and non-secret settings. It is a schema only: import/export code, migration handling, encryption, and cross-language fixtures are not implemented yet.
+The portable data contract is [workspace.schema.json](../schemas/workspace/v1/workspace.schema.json); the encrypted file envelope is [encrypted-bundle.schema.json](../schemas/workspace/v1/encrypted-bundle.schema.json). Desktop PWA and Android source implement encrypted export/import with the same PBKDF2/AES-GCM parameters, canonical workspace validation, stable-ID/key merge and explicit confirmation. Cross-platform fixture and device verification remain pending; automatic pairing and live sync are not implemented.
 
 Canonical integrity rule for implementations: construct the bundle object without the integrity.digest member, serialize as UTF-8 JSON with lexicographically sorted object keys, no insignificant whitespace, and no non-finite numeric values; calculate lowercase SHA-256 over those bytes and place the hexadecimal result in integrity.digest. Array order is preserved and must be deterministic (records sorted by stable ID; messages kept in conversation order). Validators must enforce both schema limits and an implementation-level total byte limit before allocating/importing records.
 
@@ -193,7 +193,7 @@ The capability registry reports actual limits and active backends. A PC may use 
 
 ### Batch 4 — Shared data contract
 
-- Specify and implement portable workspace export/import.
+- Portable workspace export/import uses the shared canonical workspace V1 document.
 - Add cross-language golden fixtures consumed by Python and Kotlin.
 - Verify deterministic encoding, integrity checks, size bounds, migrations, and conflict handling.
 
@@ -213,7 +213,7 @@ The capability registry reports actual limits and active backends. A PC may use 
 ### Batch 7 — Optional pairing and sync
 
 - Pair devices with explicit user approval.
-- Add encrypted transfer and conflict-aware import.
+- Encrypted `.jws` transfer and conflict-aware import are implemented at source level on desktop and Android; runtime verification remains pending.
 - Keep sync optional; offline use must continue if pairing or transport is unavailable.
 
 ### Batch 8 — Native desktop packaging and voice
