@@ -83,6 +83,20 @@ class LocalConsoleAuthTests(unittest.TestCase):
         self.assertTrue(auth.verify(token))
 
 
+
+    def test_existing_directory_and_digest_permissions_are_repaired(self):
+        first = LocalConsoleAuth(self.path)
+        token = first.bootstrap_token
+        self.path.parent.chmod(0o755)
+        self.path.chmod(0o644)
+
+        reopened = LocalConsoleAuth(self.path)
+
+        self.assertTrue(reopened.verify(token))
+        self.assertEqual(self.path.parent.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+
+
     def test_symlink_parent_directory_is_rejected_without_chmodding_target(self):
         real_parent = self.root / "real-private"
         real_parent.mkdir(mode=0o755)
