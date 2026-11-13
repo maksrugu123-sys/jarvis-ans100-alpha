@@ -136,6 +136,15 @@ Never sync raw credentials, access tokens, private keys, Android Keystore materi
 
 Automatic live sync is a later optional feature. First deliver explicit export/import and prove round-trip compatibility. Do not expose the local console on 0.0.0.0 or the LAN as a shortcut to synchronization.
 
+### Initial portable schema
+
+The first machine-readable contract is [workspace.schema.json](../schemas/workspace/v1/workspace.schema.json). It defines version 1 bundles for conversations, explicitly user-approved memories, task summaries, and non-secret settings. It is a schema only: import/export code, migration handling, encryption, and cross-language fixtures are not implemented yet.
+
+Canonical integrity rule for implementations: construct the bundle object without the integrity.digest member, serialize as UTF-8 JSON with lexicographically sorted object keys, no insignificant whitespace, and no non-finite numeric values; calculate lowercase SHA-256 over those bytes and place the hexadecimal result in integrity.digest. Array order is preserved and must be deterministic (records sorted by stable ID; messages kept in conversation order). Validators must enforce both schema limits and an implementation-level total byte limit before allocating/importing records.
+
+Unknown major versions must be rejected. A newer minor version may only be accepted when all unknown fields are explicitly documented as safely ignorable; with the current additionalProperties=false schema, strict rejection is the default. Credentials, tokens, keys, approvals, and device permissions are not portable settings and must be rejected by import implementations.
+
+
 ## 8. Resource profiles
 
 Both platforms expose the same profile names but may choose different budgets based on measured hardware:
