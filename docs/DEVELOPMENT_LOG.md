@@ -1624,3 +1624,13 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 
 - Added a Task Loop integration test that injects `PersistentPolicySafetyGate` and `DurableIdempotencyExecutor` together. It runs a bounded read-only two-step plan, then checks both executor results are durably recorded and the policy snapshot stays at the expected record version.
 - Task Loop focused inventory is now 22 methods, AUTHORED / NOT RUN. The new integration test has not been executed.
+
+## 2026-11-13 — Local Console Authentication Regression Coverage
+
+**Цель:** добавить отдельные регрессионные проверки к bearer-token механизму, который защищает Android/PWA bridge API v2.
+
+**Добавлено:**
+- `tools/jarvis_app/test_auth.py` — 7 focused tests: одноразовая выдача токена, хранение только SHA-256 digest, права 0700/0600, повторное открытие без повторной выдачи, ротация и отзыв старого токена, отказ для malformed token/digest, запрет symlink auth-файла и точная проверка токена.
+- Тесты проверяют только локальный механизм хранения/проверки токена; они не утверждают, что bearer token является подтверждением личности человека или одобрением конкретного действия.
+
+**Проверки:** source readback/static inspection only. Новые 7 тестов AUTHORED / NOT RUN. Не запускались Python tests, Android build, APK/AAB, CI или GitHub Actions.
