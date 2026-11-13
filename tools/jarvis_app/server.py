@@ -173,8 +173,39 @@ class LocalConsoleService:
             self.checkpoint_version = loaded.descriptor.record_version
 
         try:
+            self.workspace_storage = JPVRStorage.open(self.workspace_path, recover_tail=True)
+        except FileNotFoundError:
+            try:
+                self.workspace_storage = JPVRStorage.create(self.workspace_path)
+            except FileExistsError:
+                self.workspace_storage = JPVRStorage.open(self.workspace_path, recover_tail=True)
+        self.workspace_store = JPVRWorkspaceStore(self.workspace_storage)
+        try:
+            self.workspace_snapshot, self.workspace_revision, _ = self.workspace_store.load()
+        except WorkspaceNotFound:
+            initial_workspace = WorkspaceSnapshot(
+                workspace_id="jarvis-default",
+                revision=0,
+                exported_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                source_platform=self.platform,
+                records={"conversations": [], "memories": [], "tasks": [], "settings": []},
+            )
+            try:
+                self.workspace_store.save(initial_workspace, expected_revision=0)
+                self.workspace_snapshot, self.workspace_revision, _ = self.workspace_store.load()
+            except (WorkspaceError, OSError, ValueError) as exc:
+                self.workspace_storage.close()
+                self.storage.close()
+                raise LocalConsoleError("cannot initialize the shared JARVIS workspace") from exc
+        except (WorkspaceError, OSError, ValueError) as exc:
+            self.workspace_storage.close()
+            self.storage.close()
+            raise LocalConsoleError("cannot restore the shared JARVIS workspace") from exc
+
+        try:
             self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
         except LocalConsoleAuthError as exc:
+            self.workspace_storage.close()
             self.storage.close()
             raise LocalConsoleError("cannot initialize local-console authentication") from exc
         self.bootstrap_token = self.auth.bootstrap_token
@@ -184,7 +215,43 @@ class LocalConsoleService:
 
     def close(self) -> None:
         with self._lock:
+            self.workspace_storage.close()
             self.storage.close()
+
+    def workspace_state(self) -> dict[str, object]:
+        with self._lock:
+            payload = encode_workspace(self.workspace_snapshot)
+            return {
+                "revision": self.workspace_revision,
+                "workspace": json.loads(payload.decode("utf-8")),
+            }
+
+    def save_workspace(self, document: object, expected_revision: object) -> dict[str, object]:
+        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
+            raise WorkspaceError("expected_revision must be an integer")
+        if not isinstance(document, dict):
+            raise WorkspaceError("workspace must be a JSON object")
+        try:
+            canonical = json.dumps(
+                document, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"), allow_nan=False,
+            ).encode("utf-8")
+            decoded = decode_workspace(canonical)
+        except (TypeError, ValueError, UnicodeEncodeError) as exc:
+            raise WorkspaceError("workspace document is invalid") from exc
+        with self._lock:
+            if decoded.workspace_id != self.workspace_snapshot.workspace_id:
+                raise WorkspaceConflict("workspace_id cannot be changed through this endpoint")
+            candidate = WorkspaceSnapshot(
+                workspace_id=decoded.workspace_id,
+                revision=0,
+                exported_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                source_platform=self.platform,
+                records=decoded.records,
+            )
+            self.workspace_store.save(candidate, expected_revision=expected_revision)
+            self.workspace_snapshot, self.workspace_revision, _ = self.workspace_store.load()
+            return self.workspace_state()
 
     def _candidate(self) -> TaskSessionManager:
         try:
