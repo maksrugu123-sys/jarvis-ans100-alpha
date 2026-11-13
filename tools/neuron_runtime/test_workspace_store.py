@@ -62,6 +62,15 @@ class WorkspaceCodecTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "secrets are forbidden"):
             encode_workspace(snapshot)
 
+    def test_portable_integer_settings_reject_values_outside_js_safe_range(self):
+        snapshot = empty_snapshot()
+        snapshot.records["settings"].append({
+            "key": "counter",
+            "value": 9_007_199_254_740_992,
+        })
+        with self.assertRaisesRegex(WorkspaceError, "safe-integer"):
+            encode_workspace(snapshot)
+
     def test_payload_tampering_fails_integrity(self):
         raw = encode_workspace(empty_snapshot())
         tampered = raw.replace(b"shared-workspace", b"other-workspace")
