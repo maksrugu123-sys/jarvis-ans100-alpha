@@ -35,7 +35,12 @@ def lock_file(fd: int, kind: int) -> None:
     else:
         import fcntl
 
-        fcntl.flock(fd, kind)
+        if kind == 1:
+            fcntl.flock(fd, fcntl.LOCK_SH)
+        elif kind == 2:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        else:
+            raise ValueError("unknown JPVR lock mode")
 
 
 def unlock_file(fd: int) -> None:
