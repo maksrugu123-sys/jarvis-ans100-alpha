@@ -146,6 +146,24 @@
         <button id="transfer-cancel" class="secondary-button" type="button" hidden>Отменить импорт</button>
       </div>
       <p class="muted">Импорт не перезаписывает существующие записи: одинаковые ID пропускаются, конфликтующие записи остаются локальными. Перед импортом показывается предварительный результат.</p>
+      <div class="divider"></div>
+      <h3>Резервная копия и восстановление</h3>
+      <p class="panel-copy">Файл .jwb — это зашифрованная точная копия общей памяти. Восстановление ЗАМЕНЯЕТ её содержимое. Перед этим обязательно сохраните отдельную копию текущей ревизии.</p>
+      <div class="transfer-actions">
+        <button id="backup-export" type="button">Сохранить backup .jwb</button>
+        <button id="backup-restore-choose" class="secondary-button" type="button">Выбрать .jwb для восстановления</button>
+        <input id="backup-file" type="file" accept=".jwb,application/json,application/octet-stream" hidden>
+      </div>
+      <label id="backup-ack-row" class="memory-consent" hidden>
+        <input id="backup-ack" type="checkbox">
+        Я сохранил отдельный backup текущей ревизии и понимаю, что восстановление заменит всю общую память.
+      </label>
+      <div id="backup-preview" class="transfer-preview" hidden></div>
+      <div class="transfer-actions">
+        <button id="backup-restore-confirm" type="button" hidden disabled>Заменить память из backup</button>
+        <button id="backup-restore-cancel" class="secondary-button" type="button" hidden>Отменить восстановление</button>
+      </div>
+      <p class="muted">.jwb содержит только общую переносимую память, но не JPVR-файл задач/сессий, черновики Android, токены, ключи или нейронные checkpoint. При повреждении самого JPVR-файла сначала сохраните оригинал и используйте отдельную проверку JPVR recovery.</p>
     </section>
 
     <section class="panel reasoning-panel">
