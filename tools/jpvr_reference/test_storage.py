@@ -11,6 +11,7 @@ from .index import IndexNode
 from .manifest import INDEX_ROOT_NAMES, Manifest, PageRef, decode_manifest_page, encode_manifest_page
 from .transaction import assemble_transaction
 from .typed_transaction import IndexMutationInput, IndexPageInput, TypedTransactionRequest, build_typed_transaction
+from .platform_io import read_at, write_all_at
 from .storage import JPVRCommitUncertainError, JPVRStorage
 
 
@@ -107,8 +108,8 @@ class JPVRStorageTests(unittest.TestCase):
     def corrupt(self, offset):
         fd = os.open(self.path, os.O_RDWR)
         try:
-            old = os.pread(fd, 1, offset)
-            os.pwrite(fd, bytes((old[0] ^ 0x80,)), offset)
+            old = read_at(fd, 1, offset)
+            write_all_at(fd, bytes((old[0] ^ 0x80,)), offset)
             os.fsync(fd)
         finally:
             os.close(fd)
@@ -121,11 +122,11 @@ class JPVRStorageTests(unittest.TestCase):
         fd = os.open(self.path, os.O_RDONLY)
         try:
             self.assertEqual(
-                decode_superblock(os.pread(fd, SUPERBLOCK_SIZE, 0), expected_slot_id=0),
+                decode_superblock(read_at(fd, SUPERBLOCK_SIZE, 0), expected_slot_id=0),
                 genesis_superblock(0),
             )
             self.assertEqual(
-                decode_superblock(os.pread(fd, SUPERBLOCK_SIZE, PAGE_SIZE), expected_slot_id=1),
+                decode_superblock(read_at(fd, SUPERBLOCK_SIZE, PAGE_SIZE), expected_slot_id=1),
                 genesis_superblock(1),
             )
         finally:
@@ -180,7 +181,7 @@ class JPVRStorageTests(unittest.TestCase):
             store.commit(plan)
         fd = os.open(self.path, os.O_RDWR)
         try:
-            os.pwrite(fd, bytes(PAGE_SIZE), 11 * PAGE_SIZE)
+            write_all_at(fd, bytes(PAGE_SIZE), 11 * PAGE_SIZE)
             os.fsync(fd)
         finally:
             os.close(fd)
@@ -239,7 +240,7 @@ class JPVRStorageTests(unittest.TestCase):
         fd = os.open(self.path, os.O_RDWR)
         try:
             other = genesis_superblock(1, UUID_OTHER)
-            os.pwrite(fd, encode_superblock(other), PAGE_SIZE)
+            write_all_at(fd, encode_superblock(other), PAGE_SIZE)
             os.fsync(fd)
         finally:
             os.close(fd)
