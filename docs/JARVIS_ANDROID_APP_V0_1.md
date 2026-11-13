@@ -99,7 +99,7 @@ The native UI calls the structured `/api/reasoning/preview` endpoint, but does n
 
 - Android local repository tests: nine methods, AUTHORED, NOT RUN.
 - Android Keystore token-store instrumentation tests: seven methods, AUTHORED, NOT RUN.
-- Android transfer/backup crypto instrumentation tests: nine methods, AUTHORED, NOT RUN.
+- Android transfer/backup crypto instrumentation tests: nine methods, including deterministic desktop-WebCrypto-compatible JWS and JWB fixtures, AUTHORED, NOT RUN.
 - Python local-console/API tests: eighteen methods; auth-file tests: eleven methods; all AUTHORED, NOT RUN.
 - GitHub readback/static source review only for this bridge batch.
 - Kotlin compilation, Gradle sync/build, APK/AAB, device installation, Compose UI tests, Python tests, Android/Termux end-to-end I/O and performance measurements: NOT RUN.
