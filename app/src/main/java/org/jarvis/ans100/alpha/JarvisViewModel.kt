@@ -18,6 +18,7 @@ import org.jarvis.ans100.alpha.data.RuntimeAccessTokenStore
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
+import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
@@ -39,6 +40,12 @@ data class RuntimeMemory(
     val updatedAt: String,
 )
 
+data class RuntimeWorkspaceImportPreview(
+    val addedCount: Int,
+    val identicalCount: Int,
+    val conflictCount: Int,
+)
+
 data class RuntimeWorkspaceUiState(
     val revision: Long = 0L,
     val memories: List<RuntimeMemory> = emptyList(),
@@ -46,6 +53,7 @@ data class RuntimeWorkspaceUiState(
     val isBusy: Boolean = false,
     val error: String? = null,
     val message: String? = null,
+    val importPreview: RuntimeWorkspaceImportPreview? = null,
 )
 
 data class JarvisUiState(
@@ -64,6 +72,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val runtimeClient = LocalRuntimeBridgeClient()
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
     private val runtimeExecutor = Executors.newSingleThreadExecutor()
+    @Volatile private var pendingWorkspaceMerge: RuntimeWorkspaceMergePlan? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mutableState = MutableStateFlow(JarvisUiState())
     val state: StateFlow<JarvisUiState> = mutableState.asStateFlow()
@@ -237,7 +246,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun importWorkspace(uri: Uri, passphrase: CharArray) {
+    fun previewWorkspaceImport(uri: Uri, passphrase: CharArray) {
         val before = mutableState.value
         if (before.workspace.isBusy) {
             passphrase.fill('\u0000')
@@ -249,13 +258,17 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 workspace = before.workspace.copy(
                     error = "Сначала подключите Termux и обновите локальную память.",
                     message = null,
+                    importPreview = null,
                 ),
             )
             return
         }
         val expectedRevision = before.workspace.revision
+        pendingWorkspaceMerge = null
         mutableState.value = before.copy(
-            workspace = before.workspace.copy(isBusy = true, error = null, message = null),
+            workspace = before.workspace.copy(
+                isBusy = true, error = null, message = null, importPreview = null,
+            ),
         )
         runtimeExecutor.execute {
             try {
@@ -275,9 +288,52 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         output.toByteArray()
                     } ?: throw IllegalArgumentException("Не удалось открыть выбранный файл.")
-                val snapshot = runtimeClient.importEncryptedWorkspace(
-                    bytes, passphrase, expectedRevision,
-                )
+                val imported = runtimeClient.decryptWorkspaceBundle(bytes, passphrase)
+                val plan = runtimeClient.prepareWorkspaceMerge(imported, expectedRevision)
+                pendingWorkspaceMerge = plan
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = null,
+                            message = "Файл расшифрован. Проверьте сводку и подтвердите импорт.",
+                            importPreview = RuntimeWorkspaceImportPreview(
+                                plan.addedCount,
+                                plan.identicalCount,
+                                plan.conflictCount,
+                            ),
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                passphrase.fill('\u0000')
+                pendingWorkspaceMerge = null
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = error.message ?: "Предпросмотр импорта не выполнен.",
+                            message = null,
+                            importPreview = null,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun confirmWorkspaceImport() {
+        val plan = pendingWorkspaceMerge ?: return
+        val before = mutableState.value
+        if (before.workspace.isBusy || before.workspace.importPreview == null) return
+        mutableState.value = before.copy(
+            workspace = before.workspace.copy(isBusy = true, error = null, message = null),
+        )
+        runtimeExecutor.execute {
+            try {
+                val snapshot = runtimeClient.commitWorkspaceMerge(plan)
                 val array = snapshot.document.getJSONObject("records").getJSONArray("memories")
                 val memories = (0 until array.length()).map { index ->
                     val item = array.getJSONObject(index)
@@ -288,6 +344,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         updatedAt = item.getString("updated_at"),
                     )
                 }
+                pendingWorkspaceMerge = null
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
@@ -296,24 +353,37 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             memories = memories,
                             isLoaded = true,
                             isBusy = false,
-                            message = "Импорт выполнен. Существующие записи не перезаписывались.",
+                            message = "Импорт выполнен. Добавлено ${plan.addedCount}, совпадений ${plan.identicalCount}, конфликтов без перезаписи ${plan.conflictCount}.",
                         ),
                     )
                 }
             } catch (error: Exception) {
-                passphrase.fill('\u0000')
+                pendingWorkspaceMerge = null
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
                         workspace = current.workspace.copy(
                             isBusy = false,
-                            error = error.message ?: "Импорт памяти не выполнен.",
+                            error = error.message ?: "Подтверждение импорта не выполнено.",
                             message = null,
+                            importPreview = null,
                         ),
                     )
                 }
             }
         }
+    }
+
+    fun cancelWorkspaceImport() {
+        pendingWorkspaceMerge = null
+        val current = mutableState.value
+        mutableState.value = current.copy(
+            workspace = current.workspace.copy(
+                error = null,
+                message = "Импорт отменён. Локальная память не изменена.",
+                importPreview = null,
+            ),
+        )
     }
 
     fun deleteWorkspaceMemory(memoryId: String) {
