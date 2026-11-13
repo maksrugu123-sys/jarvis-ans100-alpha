@@ -6,9 +6,8 @@ import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
-import javax.crypto.SecretKeyFactory
+import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
@@ -159,15 +158,37 @@ object WorkspaceTransferCrypto {
     }
 
     private fun deriveKey(passphrase: CharArray, salt: ByteArray): ByteArray {
-        val spec = PBEKeySpec(passphrase, salt, ITERATIONS, 256)
-        return try {
-            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-                .generateSecret(spec).encoded
+        // Match WebCrypto exactly: PBKDF2 consumes UTF-8 passphrase bytes.
+        val passwordBytes = String(passphrase).toByteArray(StandardCharsets.UTF_8)
+        val block = ByteArray(salt.size + 4)
+        salt.copyInto(block)
+        block[block.lastIndex] = 1
+        val mac = Mac.getInstance("HmacSHA256")
+        try {
+            mac.init(SecretKeySpec(passwordBytes, "HmacSHA256"))
+            var u = mac.doFinal(block)
+            val derived = u.copyOf()
+            try {
+                repeat(ITERATIONS - 1) {
+                    val next = mac.doFinal(u)
+                    u.fill(0)
+                    u = next
+                    for (index in derived.indices) {
+                        derived[index] = (derived[index].toInt() xor u[index].toInt()).toByte()
+                    }
+                }
+                return derived
+            } catch (error: Exception) {
+                derived.fill(0)
+                throw error
+            } finally {
+                u.fill(0)
+            }
         } finally {
-            spec.clearPassword()
+            passwordBytes.fill(0)
+            block.fill(0)
         }
     }
-
     private fun encodeBase64(bytes: ByteArray): String =
         Base64.getEncoder().encodeToString(bytes)
 
