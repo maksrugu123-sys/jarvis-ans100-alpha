@@ -4,7 +4,7 @@
 
 The repository has entered the first executable Python reference-orchestration stage. It is still not a production neural runtime, an integrated JPVR-001 prototype, or a finished assistant.
 
-**Platform direction:** PC + Android, local-first and offline-capable. The current implementation boundaries and staged migration are documented in [JARVIS Cross-Platform Runtime V1](docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md) and [JARVIS Mobile-First Offline Runtime V1](docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md), and [JARVIS PC Quick Start V1](docs/JARVIS_PC_QUICKSTART_V1.md), and the [portable workspace schema V1](schemas/workspace/v1/workspace.schema.json). These are architecture and launch targets, not claims that offline conversation or cross-device sync is already implemented.
+**Platform direction:** PC + Android, local-first and offline-capable. The current implementation boundaries and staged migration are documented in [JARVIS Cross-Platform Runtime V1](docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md) and [JARVIS Mobile-First Offline Runtime V1](docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md), and [JARVIS PC Quick Start V1](docs/JARVIS_PC_QUICKSTART_V1.md), the [portable workspace schema V1](schemas/workspace/v1/workspace.schema.json), and the [Shared Workspace & Memory V1](docs/JARVIS_SHARED_WORKSPACE_MEMORY_V1.md). These are architecture and launch targets, not claims that offline conversation or cross-device sync is already implemented.
 
 ## Current status — 13 November 2026
 
@@ -34,6 +34,9 @@ The repository has entered the first executable Python reference-orchestration s
 The native Kotlin/Compose app at `app/` keeps two deliberately separate views of state. Android-only drafts remain in bounded app-private SharedPreferences (32 sessions, 500 drafts, 240 characters/title). The loopback bridge connects to the Python Termux console at `127.0.0.1:8765`, reads the authoritative TaskSessionManager/JPVR snapshot, creates backend sessions/tasks, changes session status, and cancels queued tasks. Android V0.5 also exposes the bounded `POST /api/reasoning/preview` route and authenticates all state/mutation requests with a local Bearer token. The token is encrypted using Android Keystore; the console stores only its SHA-256 digest. The preview does not change the queue or JPVR checkpoint and does not execute actions. The app still does not invoke Task Loop, a trusted approval provider, ActionExecutor or external tools; a created QUEUED task is not an executing task. Android build/install/device verification has **NOT RUN**. Contract: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md) and [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md).
 
 ## Repository map
+| `tools/neuron_runtime/workspace_store.py` | Shared canonical desktop/Android workspace codec and CAS-protected JPVR memory store (AUTHORED, NOT RUN) |
+| `tools/neuron_runtime/test_workspace_store.py` | Shared workspace canonicalization, integrity, DATA/BLOB persistence, reopen and CAS tests (AUTHORED, NOT RUN) |
+| `docs/JARVIS_SHARED_WORKSPACE_MEMORY_V1.md` | Platform-neutral workspace format, JPVR durability, local API and current cross-device sync boundary |
 | `tools/neuron_runtime/task_session.py` | Bounded task/session lifecycle registry and canonical snapshot codec (not durable JPVR storage) |
 | `tools/neuron_runtime/test_task_session.py` | Task/session lifecycle, CAS, idempotency, capacity and snapshot tests |
 | `docs/JARVIS_TASK_SESSION_LIFECYCLE_V1.md` | Task/session lifecycle V1 contract and limitations |
@@ -59,7 +62,7 @@ The native Kotlin/Compose app at `app/` keeps two deliberately separate views of
 | `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` | StateFlow UI model for local drafts and asynchronous loopback runtime requests |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDraftRepository.kt` | Bounded versioned Android-only draft/session codec and repository |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesDraftStorage.kt` | App-private durable storage adapter for the local draft repository |
-| `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` | Bounded API v2 Bearer-authenticated loopback client for JPVR lifecycle APIs and symbolic reasoning preview |
+| `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` | API v2 Bearer-authenticated loopback client for JPVR lifecycle, symbolic reasoning preview and shared workspace V1 |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/RuntimeAccessTokenStore.kt` | AES-GCM token storage using Android Keystore |
 | `tools/jarvis_app/auth.py` | Digest-only bearer token storage, file permissions and constant-time verification |
 | `app/src/main/res/xml/network_security_config.xml` | Deny cleartext by default; allow only loopback for the local runtime bridge |
@@ -67,7 +70,7 @@ The native Kotlin/Compose app at `app/` keeps two deliberately separate views of
 | `app/src/androidTest/java/org/jarvis/ans100/alpha/data/RuntimeAccessTokenStoreTest.kt` | Android Keystore AES-GCM token persistence, non-exportability, corruption and revocation tests (7 authored, not run) |
 | `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.5 local-draft, authenticated loopback bridge and symbolic-preview contract |
 | `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` | Android-to-Termux JPVR task/session bridge, API version, bounds and trust boundary |
-| `tools/jarvis_app/server.py` | Loopback-only Python local console backed by JPVR; separate from the native app |
+| `tools/jarvis_app/server.py` | Loopback-only Python local console with separate task/session and shared-workspace JPVR stores; authenticated workspace API V1 |
 | `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 auth coverage for every POST route and reasoning-preview tests (14 authored, not run) |
 | `tools/jarvis_app/test_auth.py` | Token digest storage, owner-only permissions, one-time bootstrap, rotation, malformed input and symlink-parent/file rejection (10 authored, not run) |
 | `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
