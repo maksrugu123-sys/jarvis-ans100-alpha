@@ -216,7 +216,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         mutableState.value = before.copy(
-            workspace = before.workspace.copy(isBusy = true, error = null, message = null),
+            workspace = before.workspace.copy(
+                isBusy = true, error = null, message = null, importPreview = null,
+            ),
         )
         runtimeExecutor.execute {
             try {
