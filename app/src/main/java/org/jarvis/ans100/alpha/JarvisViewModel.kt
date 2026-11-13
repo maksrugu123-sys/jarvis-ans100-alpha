@@ -185,12 +185,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun refreshWorkspace() {
+        pendingWorkspaceMerge = null
         workspaceRequest("Локальная память загружена.") {
             runtimeClient.getWorkspace()
         }
     }
 
     fun addWorkspaceMemory(content: String, category: String) {
+        pendingWorkspaceMerge = null
         val revision = mutableState.value.workspace.revision
         workspaceRequest("Воспоминание сохранено в локальной памяти.") {
             runtimeClient.createMemory(content, category, revision)
@@ -387,6 +389,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun deleteWorkspaceMemory(memoryId: String) {
+        pendingWorkspaceMerge = null
         val revision = mutableState.value.workspace.revision
         workspaceRequest("Воспоминание удалено из локальной памяти.") {
             runtimeClient.deleteMemory(memoryId, revision)
