@@ -504,7 +504,7 @@ def create_http_server(
                 return False
             return True
 
-        def _read_json(self) -> dict[str, object] | None:
+        def _read_json(self, *, max_bytes: int = MAX_REQUEST_BYTES) -> dict[str, object] | None:
             if self.headers.get_content_type() != "application/json":
                 self._error(415, "Ожидался Content-Type: application/json")
                 return None
@@ -513,8 +513,8 @@ def create_http_server(
                 length = int(raw_length) if raw_length is not None else -1
             except ValueError:
                 length = -1
-            if not 0 <= length <= MAX_REQUEST_BYTES:
-                self._error(413 if length > MAX_REQUEST_BYTES else 400, "Размер запроса недопустим")
+            if not 0 <= length <= max_bytes:
+                self._error(413 if length > max_bytes else 400, "Размер запроса недопустим")
                 return None
             try:
                 value = json.loads(
@@ -537,12 +537,17 @@ def create_http_server(
                 return
             path = urlsplit(self.path).path
             if path == "/api/health":
-                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "auth_required": True, "auth_scheme": "Bearer"})
+                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "workspace_api_version": 1, "auth_required": True, "auth_scheme": "Bearer"})
                 return
             if path == "/api/state":
                 if not self._require_auth():
                     return
                 self._send(200, service.state())
+                return
+            if path == "/api/workspace":
+                if not self._require_auth():
+                    return
+                self._send(200, service.workspace_state())
                 return
             filename = _STATIC_FILES.get(path)
             if filename is None:
@@ -567,10 +572,19 @@ def create_http_server(
             path = urlsplit(self.path).path
             if not self._require_auth():
                 return
-            payload = self._read_json()
+            payload = self._read_json(
+                max_bytes=MAX_WORKSPACE_REQUEST_BYTES if path == "/api/workspace" else MAX_REQUEST_BYTES
+            )
             if payload is None:
                 return
             try:
+                if path == "/api/workspace":
+                    if set(payload) != {"expected_revision", "workspace"}:
+                        raise WorkspaceError("ожидались поля expected_revision и workspace")
+                    self._send(200, service.save_workspace(
+                        payload["workspace"], payload["expected_revision"]
+                    ))
+                    return
                 if path == "/api/sessions":
                     if set(payload) != {"title"}:
                         raise LocalConsoleError("ожидалось поле title")
@@ -603,6 +617,10 @@ def create_http_server(
                     self._send(200, service.preview_reasoning(payload))
                     return
                 self._error(404, "Маршрут API не найден")
+            except WorkspaceConflict as exc:
+                self._error(409, str(exc))
+            except WorkspaceError as exc:
+                self._error(400, str(exc))
             except (LocalConsoleError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
                 self._error(400, str(exc))
             except Exception:
@@ -624,6 +642,18 @@ def main(argv: list[str] | None = None) -> int:
         default=Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr",
     )
     parser.add_argument(
+        "--workspace-file",
+        type=Path,
+        default=None,
+        help="path for the shared desktop/Android workspace JPVR file",
+    )
+    parser.add_argument(
+        "--platform",
+        choices=("desktop", "android"),
+        default="desktop",
+        help="platform label written to the shared workspace snapshot",
+    )
+    parser.add_argument(
         "--auth-file",
         type=Path,
         default=None,
@@ -635,10 +665,14 @@ def main(argv: list[str] | None = None) -> int:
         help="revoke the previous token and print a new one-time token",
     )
     args = parser.parse_args(argv)
-    service = LocalConsoleService(args.data, args.auth_file, rotate_token=args.rotate_token)
+    service = LocalConsoleService(
+        args.data, args.auth_file, rotate_token=args.rotate_token,
+        workspace_path=args.workspace_file, platform=args.platform,
+    )
     server = create_http_server(service, port=args.port)
     print(f"JARVIS Local Console: http://127.0.0.1:{server.server_port}/")
-    print(f"JPVR data: {service.data_path}")
+    print(f"JPVR task/session data: {service.data_path}")
+    print(f"JPVR shared workspace: {service.workspace_path}")
     print(f"Access-token digest: {service.auth_path}")
     if service.bootstrap_token:
         print("ANDROID / PWA ACCESS TOKEN (shown only once; save it in the client):")
