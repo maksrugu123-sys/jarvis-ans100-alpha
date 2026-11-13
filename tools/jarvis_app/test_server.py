@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 import os
 import tempfile
 import threading
@@ -15,6 +16,7 @@ from tools.jarvis_app.server import (
     create_http_server,
 )
 from tools.neuron_runtime.task_session import TaskConflict, TaskStatus
+from tools.neuron_runtime.workspace_store import WorkspaceSnapshot, encode_workspace
 
 
 class LocalConsoleServiceTests(unittest.TestCase):
@@ -271,6 +273,50 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(payload["api_version"], 2)
         self.assertTrue(payload["auth_required"])
         self.assertEqual(payload["auth_scheme"], "Bearer")
+        self.assertEqual(payload["workspace_api_version"], 1)
+
+    def test_workspace_api_creates_and_deletes_explicit_memories(self):
+        initial = self.service.workspace_state()
+        records = initial["workspace"]["records"]
+        now = datetime.now(timezone.utc).isoformat()
+        records["memories"].append({
+            "id": "memory-api-test-001",
+            "revision": 0,
+            "updated_at": now,
+            "content": "The user explicitly approved this test memory.",
+            "category": "test",
+            "user_approved": True,
+        })
+        created_document = json.loads(encode_workspace(WorkspaceSnapshot(
+            workspace_id="jarvis-default",
+            revision=0,
+            exported_at=now,
+            source_platform="desktop",
+            records=records,
+        )))
+        status, created = self._post("/api/workspace", {
+            "expected_revision": initial["revision"],
+            "workspace": created_document,
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(len(created["workspace"]["records"]["memories"]), 1)
+
+        delete_records = created["workspace"]["records"]
+        delete_records["memories"] = []
+        delete_time = datetime.now(timezone.utc).isoformat()
+        delete_document = json.loads(encode_workspace(WorkspaceSnapshot(
+            workspace_id="jarvis-default",
+            revision=0,
+            exported_at=delete_time,
+            source_platform="desktop",
+            records=delete_records,
+        )))
+        status, deleted = self._post("/api/workspace", {
+            "expected_revision": created["revision"],
+            "workspace": delete_document,
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(deleted["workspace"]["records"]["memories"], [])
 
     def test_http_requires_a_valid_bearer_token_for_state_and_mutations(self):
         with self.assertRaises(HTTPError) as missing:
