@@ -127,6 +127,24 @@
       <div id="memories" class="record-list empty">Загрузка общей памяти…</div>
     </section>
 
+    <section class="panel transfer-panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">OFFLINE TRANSFER V1</div><h2>Зашифрованный перенос</h2></div>
+        <span class="tag">AES-256-GCM</span>
+      </div>
+      <p class="panel-copy">Переносите рабочее пространство между Android и Windows через файл. Пароль не сохраняется и не отправляется на сервер. Используйте длинную уникальную парольную фразу.</p>
+      <label for="transfer-passphrase">Парольная фраза (не менее 12 символов)</label>
+      <input id="transfer-passphrase" type="password" minlength="12" maxlength="256" autocomplete="new-password" placeholder="Введите парольную фразу">
+      <div class="transfer-actions">
+        <button id="transfer-export" type="button">Создать зашифрованный файл</button>
+        <button id="transfer-choose" class="secondary-button" type="button">Выбрать файл для импорта</button>
+        <input id="transfer-file" type="file" accept=".jws,application/json" hidden>
+      </div>
+      <div id="transfer-preview" class="transfer-preview" hidden></div>
+      <button id="transfer-confirm" class="wide-button" type="button" hidden>Объединить с локальной памятью</button>
+      <p class="muted">Импорт не перезаписывает существующие записи: одинаковые ID пропускаются, конфликтующие записи остаются локальными. Перед импортом показывается предварительный результат.</p>
+    </section>
+
     <section class="panel reasoning-panel">
       <div class="panel-heading">
         <div><div class="eyebrow">REASONING ENGINE V0.1</div><h2>Проверка плана</h2></div>
