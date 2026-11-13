@@ -73,7 +73,7 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 | `tools/jarvis_app/server.py` | Loopback-only Python local console with separate task/session and shared-workspace JPVR stores; authenticated workspace API V1 |
 | `tools/jarvis_app/static/index.html`, `app.js`, `styles.css` | Desktop PWA shared-memory manager: explicit consent, search, list, create and confirmed delete |
 | `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 auth coverage for every POST route and reasoning-preview tests (14 authored, not run) |
-| `tools/jarvis_app/test_auth.py` | Token digest storage, owner-only permissions, one-time bootstrap, rotation, malformed input and symlink-parent/file rejection (10 authored, not run) |
+| `tools/jarvis_app/test_auth.py` | Token digest storage, owner-only permissions, one-time bootstrap, rotation, malformed input and symlink-parent/file rejection (11 authored, not run) |
 | `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
 
 | docs/JARVIS_PROJECT_HANDOFF_2026-11-13.md | Consolidated project handoff: architecture/status, Android V0.5 boundaries, verification truth, safety gates and ordered next steps |
@@ -513,7 +513,7 @@ Android repository tests:
 app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
 ```
 
-Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests and twenty-six Python console/API-auth tests and ten shared workspace-store tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
+Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests and twenty-seven Python console/API-auth tests and ten shared workspace-store tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
 
 ## Separate local PWA console
 
