@@ -448,7 +448,7 @@ private fun WorkspaceMemoryPanel(
     onConfirmRestore: () -> Unit,
     onCancelRestore: () -> Unit,
 ) {
-    var confirmRestore by remember { mutableStateOf(false) }
+    var confirmRestore by remember(state.restorePreview) { mutableStateOf(false) }
     var content by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("general") }
     var search by rememberSaveable { mutableStateOf("") }
