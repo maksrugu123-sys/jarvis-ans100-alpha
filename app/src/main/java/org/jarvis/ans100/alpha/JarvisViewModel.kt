@@ -8,6 +8,11 @@ import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.jarvis.ans100.alpha.data.LocalConversationCoordinator
+import org.jarvis.ans100.alpha.data.LocalConversationMessage
+import org.jarvis.ans100.alpha.data.LocalConversationRepository
+import org.jarvis.ans100.alpha.data.LocalFallbackResponseEngine
+import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
 import org.jarvis.ans100.alpha.data.LocalDraftException
 import org.jarvis.ans100.alpha.data.LocalDraftRepository
 import org.jarvis.ans100.alpha.data.LocalDraftState
@@ -22,6 +27,13 @@ import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
+
+data class LocalConversationUiState(
+    val messages: List<LocalConversationMessage> = emptyList(),
+    val isBusy: Boolean = false,
+    val error: String? = null,
+    val backendLabel: String = "Локальный базовый ответчик · без LLM",
+)
 
 data class RuntimeBridgeUiState(
     val isBusy: Boolean = false,
@@ -74,11 +86,18 @@ data class JarvisUiState(
     val storageReady: Boolean = true,
     val runtime: RuntimeBridgeUiState = RuntimeBridgeUiState(),
     val workspace: RuntimeWorkspaceUiState = RuntimeWorkspaceUiState(),
+    val conversation: LocalConversationUiState = LocalConversationUiState(),
 )
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = LocalDraftRepository(
         SharedPreferencesDraftStorage(application.applicationContext),
+    )
+    private val conversationCoordinator = LocalConversationCoordinator(
+        LocalConversationRepository(
+            SharedPreferencesConversationStorage(application.applicationContext),
+        ),
+        LocalFallbackResponseEngine(),
     )
     private val runtimeClient = LocalRuntimeBridgeClient()
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
@@ -105,6 +124,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         reload()
+        reloadConversation()
     }
 
     fun saveRuntimeAccessToken(value: String) {
@@ -180,6 +200,100 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 notice = error.message ?: "Не удалось прочитать локальные данные.",
                 storageReady = false,
             )
+        }
+    }
+
+    fun reloadConversation() {
+        try {
+            val messages = conversationCoordinator.history()
+            mutableState.value = mutableState.value.copy(
+                conversation = mutableState.value.conversation.copy(
+                    messages = messages,
+                    error = null,
+                ),
+            )
+        } catch (error: Exception) {
+            mutableState.value = mutableState.value.copy(
+                conversation = mutableState.value.conversation.copy(
+                    error = error.message ?: "Не удалось восстановить локальный диалог.",
+                ),
+            )
+        }
+    }
+
+    fun sendConversationMessage(value: String) {
+        val clean = value.trim()
+        if (clean.isEmpty()) return
+        val before = mutableState.value
+        if (before.conversation.isBusy) return
+        if (clean.length > LocalConversationRepository.MAX_MESSAGE_CHARS) {
+            mutableState.value = before.copy(
+                conversation = before.conversation.copy(
+                    error = "Сообщение не должно превышать 4 000 символов.",
+                ),
+            )
+            return
+        }
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(isBusy = true, error = null),
+        )
+        runtimeExecutor.execute {
+            try {
+                val messages = conversationCoordinator.send(clean)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            messages = messages,
+                            isBusy = false,
+                            error = null,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            error = error.message ?: "Локальный ответ не сохранён.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearConversation() {
+        val before = mutableState.value
+        if (before.conversation.isBusy || before.conversation.messages.isEmpty()) return
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(isBusy = true, error = null),
+        )
+        runtimeExecutor.execute {
+            try {
+                conversationCoordinator.clear()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            messages = emptyList(),
+                            isBusy = false,
+                            error = null,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            error = error.message ?: "Не удалось очистить историю диалога.",
+                        ),
+                    )
+                }
+            }
         }
     }
 

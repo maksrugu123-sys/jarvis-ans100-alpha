@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.jarvis.ans100.alpha.data.ConversationRole
 import org.jarvis.ans100.alpha.data.LocalSession
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.LocalTaskDraft
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     val ui by viewModel.state.collectAsState()
+    var conversationInput by rememberSaveable { mutableStateOf("") }
     var sessionTitle by rememberSaveable { mutableStateOf("") }
     var taskTitle by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf("") }
@@ -161,6 +163,16 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             ) {
                 Header()
                 SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
+                ConversationPanel(
+                    state = ui.conversation,
+                    input = conversationInput,
+                    onInputChange = { conversationInput = it.take(4_000) },
+                    onSend = { message ->
+                        viewModel.sendConversationMessage(message)
+                        conversationInput = ""
+                    },
+                    onClear = viewModel::clearConversation,
+                )
                 RuntimeBridgePanel(
                     state = ui.runtime,
                     onConnect = viewModel::connectRuntime,
@@ -1575,3 +1587,157 @@ private fun runtimeStatusLabel(status: String): String = when (status) {
     "cancelled" -> "отменена"
     else -> status
 }
+
+@Composable
+private fun ConversationPanel(
+    state: LocalConversationUiState,
+    input: String,
+    onInputChange: (String) -> Unit,
+    onSend: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    var showClearConfirmation by remember { mutableStateOf(false) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    SectionHeading("Диалог JARVIS", "локально · без Termux и интернета")
+                    Text(
+                        state.backendLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (state.messages.isNotEmpty()) {
+                    TextButton(
+                        onClick = { showClearConfirmation = true },
+                        enabled = !state.isBusy,
+                    ) {
+                        Text("Очистить")
+                    }
+                }
+            }
+            if (state.messages.isEmpty()) {
+                Text(
+                    "Напиши «Привет» или команду /help. История хранится в данных приложения на этом телефоне.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    state.messages.takeLast(8).forEach { message ->
+                        val userMessage = message.role == ConversationRole.USER
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (userMessage) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                            ),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Text(
+                                    if (userMessage) "Вы" else "JARVIS",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    message.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 8,
+                                )
+                            }
+                        }
+                    }
+                    if (state.messages.size > 8) {
+                        Text(
+                            "Показаны последние 8 сообщений из ${state.messages.size}.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            if (state.isBusy) {
+                Text(
+                    "Локальный ответчик обрабатывает сообщение…",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            state.error?.let { error ->
+                Text(
+                    error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = onInputChange,
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Сообщение JARVIS") },
+                    maxLines = 3,
+                    enabled = !state.isBusy,
+                )
+                Button(
+                    onClick = { onSend(input) },
+                    enabled = input.isNotBlank() && !state.isBusy,
+                ) {
+                    Text("Отправить")
+                }
+            }
+            Text(
+                "Это базовый ответчик, не языковая модель. Неподдерживаемые вопросы будут обозначены честно; действия не исполняются.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    if (showClearConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirmation = false },
+            title = { Text("Очистить локальный диалог?") },
+            text = { Text("История на этом телефоне будет удалена. Общая память PC/JPVR не изменится.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearConfirmation = false
+                        onClear()
+                    },
+                ) {
+                    Text("Удалить историю")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmation = false }) {
+                    Text("Отмена")
+                }
+            },
+        )
+    }
+}
+

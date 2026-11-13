@@ -1793,3 +1793,31 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Cross-platform signature interoperability and Python cryptography availability on the target Termux/Python environment have not been measured.
 
 **Следующий этап:** design and implement secure approver enrollment/key provisioning and signed trust-store updates with rotation, revocation and anti-rollback; only after that integrate the Android user-confirmation signer and test signed envelope interoperability on Android and PC.
+
+
+## 2026-11-13 — Android in-process local conversation foundation V0.1
+
+**Objective:** begin delivering a usable Android-local JARVIS interaction that does not depend on Termux, a loopback Python server or internet; keep the response backend replaceable and disclose that a real offline LLM is not yet connected.
+
+**Added:**
+- app/src/main/java/org/jarvis/ans100/alpha/data/LocalConversationRuntime.kt — USER/ASSISTANT message domain, strict bounded V1 history codec, repository, LocalResponseEngine interface, deterministic LocalFallbackResponseEngine and LocalConversationCoordinator.
+- app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesConversationStorage.kt — app-private durable history adapter.
+- app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationRuntimeTest.kt — eight focused tests (AUTHORED, NOT RUN).
+- docs/JARVIS_ANDROID_IN_PROCESS_CONVERSATION_V0_1.md — implementation contract and explicit limitations.
+
+**Changed:**
+- JarvisViewModel.kt — load/send/clear conversation operations, StateFlow state and background-executor dispatch.
+- MainActivity.kt — local conversation panel, explicit no-LLM backend label and confirmed local-history deletion.
+- docs/JARVIS_ARCHITECTURE.md — new §3.54.
+- docs/JARVIS_PROJECT_HANDOFF_2026-11-13.md — next-stage priority changed from signer infrastructure to local model + cross-platform conversation continuity.
+- README.md and AGENTS.md — status, file map and current Android boundary corrected.
+
+**Behavior and limits:**
+- Android local chat path is independent of the Termux bridge and network. It supports deterministic greetings, /help and /status; unsupported prompts explicitly disclose that an LLM is not installed.
+- History is bounded to 120 messages, 4,000 characters per message and 1 MiB encoded state. Exchanges are persisted as complete user/assistant pairs; invalid persisted data is rejected.
+- Android-local chat is separate from the shared Python/JPVR workspace and is not yet included in .jws/.jwb, the PC PWA or cross-device sync. It is app-private but not separately encrypted by this feature.
+- No neural-runtime integration, model download, voice, natural-language task parsing or action execution was added. External actions remain disabled.
+
+**Verification:** current branch/file readback, static source inspection, and final GitHub readback only. The eight Kotlin tests are **AUTHORED, NOT RUN**. Gradle sync/build, APK/AAB, Android compilation/install, Termux-to-app or airplane-mode runtime checks, performance/RAM/battery measurements, Python tests, CI and GitHub Actions are **NOT RUN**. No build or test command was issued.
+
+**Next meaningful step:** evaluate a real compact offline model on the target phone and implement one backend behind LocalResponseEngine; then unify portable conversation history with the PC workspace contract.

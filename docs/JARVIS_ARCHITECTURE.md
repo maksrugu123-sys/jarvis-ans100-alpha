@@ -4472,3 +4472,22 @@ Task Loop can now pass either legacy `ApprovalGrant` or `SignedApprovalEnvelope`
 - Source readback is not cryptographic runtime verification. The 16 signed-approval tests are AUTHORED, NOT RUN; no Ed25519 test, import, Android Keystore, Termux, desktop, build, CI or security audit was executed.
 
 **Next:** implement platform signers and authenticated trust-root enrollment/update/revocation, then test signature interoperability and rollback/revocation on Android and PC before connecting any action executor.
+
+
+### 3.54. Android In-Process Conversation Runtime V0.1
+
+**Статус:** IMPLEMENTED at source level. Android-local text dialog and bounded history are separated from the optional Termux bridge. Eight Kotlin/JUnit tests are AUTHORED, NOT RUN. Contract: docs/JARVIS_ANDROID_IN_PROCESS_CONVERSATION_V0_1.md.
+
+The native Compose screen now calls JarvisViewModel → LocalConversationCoordinator → LocalConversationRepository and an injected LocalResponseEngine. SharedPreferencesConversationStorage persists a strict V1 snapshot in app-private preferences. Local send/reload/clear operations are performed on the existing background executor. This path does not call LocalRuntimeBridgeClient, open a socket or require Termux or network access.
+
+The current LocalFallbackResponseEngine is intentionally limited to greetings, /help and /status; other prompts receive an explicit message that no language model is integrated. It is not an LLM, natural-language parser, ANS-100 runtime, symbolic planner or Task Loop. No external actions are performed. The UI discloses this limitation and allows explicit deletion of local conversation history.
+
+The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,000 characters per message and 1 MiB encoded state. It requires alternating USER/ASSISTANT messages, unique IDs, positive non-decreasing timestamps, strict UTF-8/Base64URL decoding and full-pair publication. A failed SharedPreferences commit raises an error and does not report the exchange as saved.
+
+**Important storage boundary:** this V0.1 chat history is separate from the Python/JPVR shared workspace and Android-only draft store. It is not yet included in .jws or .jwb, visible in the PC PWA or synchronized. The local history uses app-private storage but is not separately encrypted by this feature. Portable cross-platform conversation integration is a required next stage.
+
+**Tests:** app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationRuntimeTest.kt contains eight methods covering exchange persistence/reopen, 120-message retention, blank/oversized input, failed commit, corrupted history, clear, honest fallback capability reporting and injected-engine coordination. Status: AUTHORED, NOT RUN.
+
+**Verification:** GitHub source readback and static cross-file inspection only. Gradle sync/build, Kotlin tests, APK/AAB, emulator/device install, airplane-mode behavior, performance/RAM/battery measurements, CI and GitHub Actions are NOT RUN.
+
+**Next:** evaluate an actual offline language model on the user's Android device and implement it behind LocalResponseEngine; then connect Android conversations to the shared PC/Android workspace contract. Do not spend the next stage expanding signer/enrollment/security infrastructure: the current user-facing priority is a working local assistant. Keep external actions disabled until separately prioritized and all required safety guarantees are independently verified.
