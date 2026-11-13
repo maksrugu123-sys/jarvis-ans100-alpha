@@ -84,7 +84,7 @@ The native Android screen can request a non-mutating Reasoning Engine preview, b
 ## Verification status
 
 - Android local repository tests: 9 methods, AUTHORED, NOT RUN.
-- Android encrypted workspace transfer/backup tests: 9 methods, including a deterministic UTF-8 interoperability fixture, separate backup AAD/format, wrong-passphrase/tamper rejection and passphrase-buffer cleanup, AUTHORED, NOT RUN.
+- Android encrypted workspace transfer/backup tests: 9 methods, including deterministic desktop-WebCrypto-compatible JWS and JWB fixtures, separate backup AAD/format, wrong-passphrase/tamper rejection and passphrase-buffer cleanup, AUTHORED, NOT RUN.
 - Android Keystore token-store instrumentation tests: 7 methods, AUTHORED, NOT RUN.
 - Python local-console/API tests: 18 methods in `test_server.py`; auth-file tests: 11 methods in `test_auth.py`; workspace-store tests: 11 methods; all AUTHORED, NOT RUN. Android Compose and desktop PWA memory-manager UI have not been browser/device-tested.
 - GitHub source readback/static inspection only.
