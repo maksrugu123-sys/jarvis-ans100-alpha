@@ -543,3 +543,21 @@ python3 -m tools.jarvis_app --port 8765
 ```
 
 On first startup, copy the one-time token from Termux into the PWA login panel or the Android app. Open `http://127.0.0.1:8765/` on the same device. The same running console serves both frontends and the JPVR-backed TaskSessionManager; Android SharedPreferences drafts remain separate. The service binds only to loopback. The console/API-auth and workspace endpoint tests are **AUTHORED, NOT RUN**. The desktop PWA memory UI is source-level only; browser verification has not been run.
+
+## Offline local LLM (opt-in)
+
+JARVIS now has source-level adapters for one optional local model on Android and desktop/PWA. Both paths use the same LiteRT-LM model artifact: `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm` from the [Qwen3-0.6B INT4 model repository](https://huggingface.co/litert-community/Qwen3-0.6B-int4). The file is about 347 MB and is **not** included in the APK or repository. You must obtain it separately.
+
+**Android:** open the JARVIS conversation panel and choose **Выбрать модель**, then select the exact `.litertlm` file in Android's file picker. The app copies it to private app storage. It does not download the model. The runtime uses CPU, a 1,280-token context ceiling and a 96-token output ceiling. Loading is refused when Android reports low memory or less than 1,280 MiB available; this is only a guardrail, not an assurance that the model fits every phone.
+
+**Desktop/PWA:** install the optional runtime with `python3 -m pip install -r requirements-litert-lm.txt`, then start the local console with:
+
+```sh
+python3 -m tools.jarvis_app --model /absolute/path/qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm
+```
+
+LiteRT-LM 0.17.1 is pinned on both platforms. The short no-think model is a compact first inference target, not a high-capability reasoning model. Russian quality, first-load time, speed, RAM and heat have not been measured on the target phone or PC.
+
+The desktop chat persists in `records.conversations` in the portable workspace. Android chat still uses app-private SharedPreferences and is **not yet copied into JWS/JWB**; histories do not sync automatically between PC and Android. A manual cross-platform conversation transfer step remains.
+
+No network fallback, model auto-download, tools, shell access or external action execution is enabled. Voice inference is not included.

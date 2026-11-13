@@ -57,3 +57,21 @@ The PWA is one local frontend. The Compose application is a separate native fron
 Run: `python3 -m unittest tools.jarvis_app.test_server -v` and `python3 -m unittest tools.jarvis_app.test_auth -v`.
 
 Eighteen `test_server.py` methods cover session lifecycle/CAS, authenticated routes, workspace CRUD/save and restore, full replacement, large request bodies, stale revisions, foreign workspace identity, invalid integrity digest and foreign-Origin rejection. Eleven `test_auth.py` methods cover one-time token generation, digest-only persistence, restrictive owner-only permissions, reopen/rotation, malformed tokens/digests, exact token matching, symlink-parent/file rejection and legacy permission repair. Tests are AUTHORED, NOT RUN. No Python tests, Android build/APK, browser/device check, Termux end-to-end test, CI or GitHub Actions run was performed for the current Android bridge batch.
+
+
+## Optional local model conversation
+
+The desktop/PWA console has an optional local chat using LiteRT-LM Python API 0.17.1. The matching Android and desktop model artifact is the no-think Qwen3-0.6B INT4 file `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm` (about 347 MB), obtained separately from `https://huggingface.co/litert-community/Qwen3-0.6B-int4`.
+
+Install the optional runtime and pass the model path when starting the console:
+
+```sh
+python3 -m pip install -r requirements-litert-lm.txt
+python3 -m tools.jarvis_app --model /absolute/path/qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm
+```
+
+Without `--model`, the chat panel reports that generation is unavailable. With a model configured, authenticated GET/POST `/api/conversation` expose the portable conversation and append user/assistant turns using the caller's exact workspace revision. The write is performed through workspace compare-and-swap; conflicting mutations are rejected with HTTP 409. The Python runtime is loaded only on first inference and is pinned to 0.17.1; incompatible versions are rejected.
+
+The chat uses CPU, 1,280 context tokens, 96 output tokens and four prior messages. It registers no tools and disables automatic tool calling. The response is stored in `records.conversations` inside the desktop workspace. Android app-private conversation history is still separate and is not automatically synchronized.
+
+The model is not downloaded, cloud fallback is not configured, and the console continues to bind only to loopback. Inference, PWA browser behavior, memory use, model quality and runtime compatibility have not been tested in this change.

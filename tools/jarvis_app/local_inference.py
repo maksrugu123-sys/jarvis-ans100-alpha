@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 import threading
 from typing import Any, Callable
@@ -10,6 +11,7 @@ MODEL_FILE_NAME = "qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm"
 MIB = 1024 * 1024
 MIN_MODEL_BYTES = 300 * MIB
 MAX_MODEL_BYTES = 400 * MIB
+RUNTIME_VERSION = "0.17.1"
 MAX_CONTEXT_TOKENS = 1280
 MAX_OUTPUT_TOKENS = 96
 MAX_PROMPT_CHARS = 900
@@ -57,8 +59,11 @@ class LiteRtLmLocalEngine:
         if self._runtime_loader is not None:
             return True
         try:
-            return importlib.util.find_spec("litert_lm") is not None
-        except (ImportError, ModuleNotFoundError, ValueError):
+            return (
+                importlib.util.find_spec("litert_lm") is not None
+                and package_version("litert-lm-api") == RUNTIME_VERSION
+            )
+        except (ImportError, ModuleNotFoundError, PackageNotFoundError, ValueError):
             return False
 
     @property
@@ -72,11 +77,19 @@ class LiteRtLmLocalEngine:
             self._runtime = self._runtime_loader()
             return self._runtime
         try:
+            installed = package_version("litert-lm-api")
+        except PackageNotFoundError as exc:
+            raise LocalInferenceError(
+                "Не найден LiteRT-LM Python API. Установите: pip install -r requirements-litert-lm.txt"
+            ) from exc
+        if installed != RUNTIME_VERSION:
+            raise LocalInferenceError(
+                "Для этой модели нужна версия litert-lm-api==0.17.1; установлен пакет " + installed + "."
+            )
+        try:
             import litert_lm
         except ImportError as exc:
-            raise LocalInferenceError(
-                "Не найден LiteRT-LM Python API. Установите: pip install litert-lm-api==0.17.1"
-            ) from exc
+            raise LocalInferenceError("Пакет установлен, но модуль litert_lm недоступен.") from exc
         self._runtime = litert_lm
         return litert_lm
 

@@ -104,3 +104,19 @@ The near-term priority is the first usable local assistant, not completion of th
 The project has progressed beyond a neural research notebook: it has bounded Python reference components for neuron/network coordination, JPVR persistence, task/session lifecycle, symbolic reasoning, safety checks and task orchestration, a source-level Ed25519 exact-request approval verifier with a strict envelope contract, and an Android source-level frontend with an authenticated loopback registry/preview bridge plus a separate in-process basic conversation path and bounded local history.
 
 It is NOT yet the first complete JARVIS assistant. The largest blockers for a usable assistant are a real offline language model, shared Android/PC conversation continuity, in-process memory/reasoning integration, measured Android runtime cost, and actual build/device verification. External-action trust, signing, downstream idempotency and reconciliation remain dormant prerequisites only if the user later prioritizes external actions.
+
+## LiteRT-LM offline chat milestone — 13 November 2026
+
+Added an opt-in local inference path for Android and desktop/PWA using the same Qwen3-0.6B INT4 no-think LiteRT-LM artifact.
+
+- Model file: `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm` (about 347 MB), obtained separately from `https://huggingface.co/litert-community/Qwen3-0.6B-int4`.
+- Android: dependency `litertlm-android:0.17.1`, Kotlin plugins 2.3.10, explicit Storage Access Framework selection, private app copy, CPU backend, 1,280-token engine cap, 96-token answer cap, four-message short history and a 1,280 MiB available-memory guard.
+- Desktop/PWA: optional `litert-lm-api==0.17.1`, CLI `--model`, lazily initialized CPU Engine, authenticated `/api/conversation` GET/POST and compare-and-swap persistence in the workspace.
+- The Python and Android paths do not register tools or enable automatic tool calling. No cloud fallback or automatic model download is present.
+- `tools/jarvis_app/test_local_inference.py` was authored for a fake-runtime adapter check; **AUTHORED, NOT RUN**.
+- Android SharedPreferences conversation storage is still separate from portable workspace. Desktop chat is workspace-backed; cross-platform history transfer and live sync are not implemented.
+- This is a source change only. No Python tests, Android build, Gradle sync, APK, device inference, browser/PWA check, CI or GitHub Actions were run. Model compatibility, Russian output quality, runtime memory, speed and thermal behavior remain unverified.
+
+### Runtime caution
+
+The selected model is intentionally small and no-think: it may give short direct answers but does not provide strong multi-step reasoning. The Android memory check is not a guarantee against out-of-memory termination. The model must be manually selected on Android; the desktop process must be started with `--model` and the optional Python package installed. Do not call this a fully validated JARVIS release yet.

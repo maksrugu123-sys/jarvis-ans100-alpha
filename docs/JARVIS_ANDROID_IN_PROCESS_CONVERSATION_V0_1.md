@@ -60,3 +60,18 @@ No Gradle sync/build, APK/AAB, Kotlin test, emulator run, Android device run, of
 4. Keep the existing Python console/PC PWA useful as a desktop path; align conversation schema and backend identity rather than inventing a second unrelated conversation format.
 
 External actions, shell access, arbitrary filesystem operations and remote access remain disabled and are not part of this stage.
+
+
+## LiteRT-LM opt-in inference backend
+
+The conversation coordinator now uses an optional `LocalResponseEngine` implementation backed by LiteRT-LM Android 0.17.1. Kotlin Gradle plugins are pinned to 2.3.10 to satisfy the published runtime metadata. Model loading and generation are restricted to a dedicated single-thread executor.
+
+Use the exact no-think Qwen3-0.6B INT4 artifact `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm` (about 347 MB) from `https://huggingface.co/litert-community/Qwen3-0.6B-int4`. The app does not download or bundle model weights. Select the file from the Android document picker; it is copied into app-private `files/models/` storage after filename, size, free-space and copy-length checks.
+
+The first integration is CPU-only, with a 1,280-token engine context ceiling, 96-token output ceiling, four prior messages capped at 320 characters each, and a 900-character input limit. Before model initialization Android must report at least 1,280 MiB available and not be in low-memory state. This is not an OOM guarantee and may prevent use on phones with little free RAM. If the model file is absent, only the deterministic fallback remains available.
+
+No tools are registered, automatic tool calling is disabled, and the system instruction states that the model has no access to network, files, apps or external actions. Voice is not part of this backend.
+
+The phone conversation continues to use app-private SharedPreferences. It is not yet connected to portable workspace conversations and does not currently move to PC through JWS/JWB. Cross-device transfer is a separate unfinished stage.
+
+No Gradle sync, build, test, model initialization or inference was run for this integration. API signatures were checked against LiteRT-LM documentation/source, but compile/runtime compatibility remains unverified.
