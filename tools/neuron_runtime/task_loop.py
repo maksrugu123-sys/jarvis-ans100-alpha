@@ -24,6 +24,7 @@ from .permission_safety_gate import (
     RequestedBudget,
     SafetyPolicy,
 )
+from .signed_approval import SignedApprovalEnvelope
 from .reasoning_engine import (
     PlanStatus,
     PlanningAction,
@@ -303,10 +304,10 @@ class JARVISTaskLoop:
             raise TaskLoopError("action_bindings must exactly cover every planning action")
         if approvals is not None:
             if not isinstance(approvals, Mapping):
-                raise TaskLoopError("approvals must map step IDs to ApprovalGrant objects")
+                raise TaskLoopError("approvals must map step IDs to approval grant objects")
             if any(
                 not isinstance(step_id, str) or not _ID.fullmatch(step_id)
-                or not isinstance(grant, ApprovalGrant)
+                or not isinstance(grant, (ApprovalGrant, SignedApprovalEnvelope))
                 for step_id, grant in approvals.items()
             ):
                 raise TaskLoopError("approvals contains an invalid step ID or grant")
