@@ -107,6 +107,27 @@ class LocalConsoleServiceTests(unittest.TestCase):
             self.assertEqual(stream.read(), before)
 
 
+
+    def test_hard_link_auth_path_cannot_alias_jpvr_file_during_rotation(self):
+        alias_path = os.path.join(self.temp.name, "auth-hard-link")
+        try:
+            os.link(self.data_path, alias_path)
+        except (OSError, NotImplementedError):
+            self.skipTest("hard links are unavailable on this filesystem")
+        with open(self.data_path, "rb") as stream:
+            before = stream.read()
+
+        with self.assertRaisesRegex(LocalConsoleError, "different files"):
+            LocalConsoleService(
+                self.data_path,
+                alias_path,
+                rotate_token=True,
+            )
+
+        with open(self.data_path, "rb") as stream:
+            self.assertEqual(stream.read(), before)
+
+
     def test_reasoning_preview_returns_plan_without_changing_jpvr_state(self):
         version_before = self.service.checkpoint_version
         payload = {
