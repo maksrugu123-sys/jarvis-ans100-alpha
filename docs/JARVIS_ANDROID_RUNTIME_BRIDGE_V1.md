@@ -1,6 +1,6 @@
 # JARVIS Android Runtime Bridge V1
 
-**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 bridge methods for shared Workspace API V1, consent-based memory management, and encrypted `.jws` import/export through the Storage Access Framework. Four encrypted-transfer Android instrumentation tests are authored. End-to-end tests, Android build and device verification NOT RUN. The Compose UI is source-level only. This remains a registry/memory bridge, not tool execution.
+**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 bridge methods for shared Workspace API V1, consent-based memory management, encrypted `.jws` merge transfer, and separate encrypted `.jwb` workspace backup/restore through the Storage Access Framework. Nine transfer/backup Android instrumentation tests are authored. End-to-end tests, Android build and device verification NOT RUN. The Compose UI is source-level only. This remains a registry/memory bridge, not tool execution.
 
 ## Ownership
 
@@ -46,6 +46,7 @@ This revokes the previous token and prints a replacement once. The PWA login kee
 | Export encrypted workspace | Local read + Android AES-GCM codec | Read the local workspace and write a password-encrypted `.jws` document using the shared transfer envelope; no password reaches the API |
 | Preview encrypted workspace import | Android AES-GCM codec + GET /api/workspace | Decrypt locally, validate the canonical workspace and integrity, check workspace identity, and prepare merge counts without writing |
 | Confirm encrypted workspace import | POST /api/workspace | Merge by stable ID/settings key, keep destination values for conflicts, reseal the workspace and publish with CAS revision |
+| Restore encrypted workspace backup | POST /api/workspace/restore | Replace the complete portable workspace only after local .jwb decryption/validation, current-backup acknowledgement, preview and exact CAS revision check |
 
 Successful mutation responses include the updated state snapshot. The ViewModel makes requests on a dedicated single-thread executor and publishes results to UI state on the main thread.
 
@@ -59,7 +60,9 @@ The planner searches a bounded symbolic state space. Its output is not natural-l
 
 The local service maintains a second dedicated JPVR file, `workspace.jpvr`, separate from the task/session registry. The portable contract is `schemas/workspace/v1/workspace.schema.json`; the Python reference store is `tools/neuron_runtime/workspace_store.py`. Android `LocalRuntimeBridgeClient.getWorkspace()`, `saveWorkspace(document, expectedRevision)`, `createMemory(...)` and `deleteMemory(...)` use the same versioned JSON document and CAS revision. The Compose screen requires an explicit confirmation checkbox before creating a memory and a confirmation dialog before deleting one. Only explicit `user_approved: true` memory records are accepted; this marker is a data contract, not cryptographic proof of user approval. Secret-like settings are rejected.
 
-The phone's bridge still targets its own `127.0.0.1`; the PC service targets the PC's own loopback. Manual encrypted file transfer is now implemented in both Android and desktop PWA. The envelope uses PBKDF2-HMAC-SHA256 (310,000 rounds), AES-256-GCM, a random 16-byte salt, a random 12-byte nonce, a 128-bit tag and fixed AAD. The passphrase is not stored or sent to the service. Android and desktop import show counts for added, identical and conflicting records before confirmation; both platforms keep existing records on ID/key collisions. A changed destination revision invalidates the preview and the CAS write is rejected. Automatic pairing and background synchronization remain unimplemented. See [Shared Workspace & Memory V1](JARVIS_SHARED_WORKSPACE_MEMORY_V1.md).
+The phone's bridge still targets its own `127.0.0.1`; the PC service targets the PC's own loopback. Manual encrypted file transfer is now implemented in both Android and desktop PWA. The envelope uses PBKDF2-HMAC-SHA256 (310,000 rounds), AES-256-GCM, a random 16-byte salt, a random 12-byte nonce, a 128-bit tag and fixed AAD. The passphrase is not stored or sent to the service. Android and desktop import show counts for added, identical and conflicting records before confirmation; both platforms keep existing records on ID/key collisions. A changed destination revision invalidates the preview and the CAS write is rejected. Automatic pairing and background synchronization remain unimplemented.
+
+A separate `.jwb` backup is not a merge: it contains a versioned wrapper around the complete portable workspace, protected with PBKDF2-HMAC-SHA256 (310,000 rounds), AES-256-GCM and backup-specific AAD. Restore decrypts and validates both nested workspace and backup SHA-256 digests locally, requires the same workspace ID, shows collection counts, and replaces the complete workspace only after the user confirms that a separate backup of the current revision has been saved. The server independently validates the full document and publishes with CAS through `POST /api/workspace/restore`; stale revisions return HTTP 409. The backup file does not contain the separate task/session registry, Android drafts, credentials/tokens, Keystore keys, or neural checkpoints. If the underlying JPVR file is corrupt, .jwb restore cannot open it; preserve the original and use the separate non-destructive JPVR recovery-copy reference procedure. See [Workspace Backup & Restore V1](JARVIS_WORKSPACE_BACKUP_RESTORE_V1.md).
 
 ## Failure and reconciliation
 
@@ -81,8 +84,8 @@ The native Android screen can request a non-mutating Reasoning Engine preview, b
 ## Verification status
 
 - Android local repository tests: 9 methods, AUTHORED, NOT RUN.
-- Android encrypted workspace transfer tests: 4 methods, including a deterministic UTF-8 PBKDF2/AES-GCM interoperability fixture, AUTHORED, NOT RUN.
+- Android encrypted workspace transfer/backup tests: 9 methods, including a deterministic UTF-8 interoperability fixture, separate backup AAD/format, wrong-passphrase/tamper rejection and passphrase-buffer cleanup, AUTHORED, NOT RUN.
 - Android Keystore token-store instrumentation tests: 7 methods, AUTHORED, NOT RUN.
-- Python local-console/API tests: 16 methods in `test_server.py`; auth-file tests: 11 methods in `test_auth.py`; workspace-store tests: 11 methods; all AUTHORED, NOT RUN. Android Compose and desktop PWA memory-manager UI have not been browser/device-tested.
+- Python local-console/API tests: 18 methods in `test_server.py`; auth-file tests: 11 methods in `test_auth.py`; workspace-store tests: 11 methods; all AUTHORED, NOT RUN. Android Compose and desktop PWA memory-manager UI have not been browser/device-tested.
 - GitHub source readback/static inspection only.
 - Kotlin compilation, Gradle sync/build, APK/AAB, Android install/UI tests, Android-to-Termux end-to-end I/O, Python tests, browser/device transfer verification, performance and security testing: NOT RUN.
