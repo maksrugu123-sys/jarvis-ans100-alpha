@@ -45,12 +45,20 @@ class LocalConsoleAuth:
                 raise LocalConsoleAuthError(
                     "authentication parent must be a real directory, not a symlink"
                 )
-            if hasattr(os, "geteuid") and metadata.st_uid != os.geteuid():
-                raise LocalConsoleAuthError(
-                    "authentication directory has an unexpected owner"
-                )
-            if metadata.st_mode & 0o077:
-                os.chmod(self.path.parent, 0o700)
+            if os.name == "nt":
+                attributes = getattr(metadata, "st_file_attributes", 0)
+                reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+                if attributes & reparse_flag:
+                    raise LocalConsoleAuthError(
+                        "authentication parent must not be a Windows reparse point"
+                    )
+            else:
+                if hasattr(os, "geteuid") and metadata.st_uid != os.geteuid():
+                    raise LocalConsoleAuthError(
+                        "authentication directory has an unexpected owner"
+                    )
+                if metadata.st_mode & 0o077:
+                    os.chmod(self.path.parent, 0o700)
         except LocalConsoleAuthError:
             raise
         except OSError as exc:
@@ -61,19 +69,36 @@ class LocalConsoleAuth:
     def _open_existing_file(self) -> int:
         descriptor = None
         try:
+            before = self.path.lstat()
+            if stat.S_ISLNK(before.st_mode):
+                raise LocalConsoleAuthError(
+                    "authentication path must not be a symlink"
+                )
+            if os.name == "nt":
+                attributes = getattr(before, "st_file_attributes", 0)
+                reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+                if attributes & reparse_flag:
+                    raise LocalConsoleAuthError(
+                        "authentication path must not be a Windows reparse point"
+                    )
             flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
             descriptor = os.open(self.path, flags)
             metadata = os.fstat(descriptor)
+            if not os.path.samestat(before, metadata):
+                raise LocalConsoleAuthError(
+                    "authentication file changed while it was being opened"
+                )
             if not stat.S_ISREG(metadata.st_mode):
                 raise LocalConsoleAuthError(
                     "authentication path must be a regular file"
                 )
-            if hasattr(os, "geteuid") and metadata.st_uid != os.geteuid():
-                raise LocalConsoleAuthError(
-                    "authentication file has an unexpected owner"
-                )
-            if metadata.st_mode & 0o077:
-                os.fchmod(descriptor, 0o600)
+            if os.name != "nt":
+                if hasattr(os, "geteuid") and metadata.st_uid != os.geteuid():
+                    raise LocalConsoleAuthError(
+                        "authentication file has an unexpected owner"
+                    )
+                if metadata.st_mode & 0o077:
+                    os.fchmod(descriptor, 0o600)
             return descriptor
         except LocalConsoleAuthError:
             if descriptor is not None:
@@ -106,6 +131,10 @@ class LocalConsoleAuth:
                 stream.write("sha256:" + hex_digest + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
+            if os.name == "nt" and self.path.exists():
+                # Older builds may have marked the digest read-only via
+                # chmod(0o600); Windows chmod controls that attribute, not ACLs.
+                os.chmod(self.path, stat.S_IREAD | stat.S_IWRITE)
             os.replace(temporary, self.path)
 
             # Persist the directory entry where supported; the file itself was
