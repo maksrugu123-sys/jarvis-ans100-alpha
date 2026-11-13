@@ -268,9 +268,155 @@ function renderState(state) {
     }
   }
 }
+
+let currentWorkspace = null;
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  if (value !== null && typeof value === "object") {
+    return "{" + Object.keys(value).sort().map(key =>
+      JSON.stringify(key) + ":" + canonicalJson(value[key])
+    ).join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+async function sealWorkspace(document) {
+  delete document.integrity;
+  const bytes = new TextEncoder().encode(canonicalJson(document));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), byte =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+  document.integrity = { algorithm: "sha-256", digest: hex };
+  return document;
+}
+
+function renderMemories() {
+  const root = $("#memories");
+  if (!root || !currentWorkspace) return;
+  root.replaceChildren();
+  const records = currentWorkspace.document.records.memories || [];
+  const query = $("#memory-search").value.trim().toLocaleLowerCase();
+  const visible = records.filter(item =>
+    (item.content + " " + item.category).toLocaleLowerCase().includes(query)
+  ).slice().reverse();
+  $("#memory-revision").textContent = "REV " + currentWorkspace.revision;
+  $("#memory-counts").textContent = visible.length + " из " + records.length + " воспоминаний";
+  if (!visible.length) {
+    root.append(node("p", "empty", records.length ? "Совпадений не найдено." : "Память пока пуста."));
+    return;
+  }
+  for (const memory of visible) {
+    const card = node("article", "record-card");
+    const heading = node("div", "record-heading");
+    heading.append(node("strong", "", memory.category || "general"));
+    heading.append(node("span", "tag", "Подтверждено"));
+    card.append(heading);
+    card.append(node("p", "memory-content", memory.content));
+    card.append(node("small", "muted", "Обновлено: " + memory.updated_at + " · " + memory.id));
+    const remove = node("button", "text-button", "Удалить воспоминание");
+    remove.type = "button";
+    remove.addEventListener("click", () => deleteMemory(memory.id, remove));
+    card.append(remove);
+    root.append(card);
+  }
+}
+
+async function refreshWorkspace() {
+  const result = await api("/api/workspace");
+  if (!result.workspace || !Number.isSafeInteger(result.revision)) {
+    throw new Error("Сервис вернул некорректную версию общей памяти.");
+  }
+  currentWorkspace = { revision: result.revision, document: result.workspace };
+  renderMemories();
+  return currentWorkspace;
+}
+
+async function writeWorkspace(mutator) {
+  if (!currentWorkspace) await refreshWorkspace();
+  const baseRevision = currentWorkspace.revision;
+  const document = JSON.parse(JSON.stringify(currentWorkspace.document));
+  mutator(document);
+  document.exported_at = new Date().toISOString();
+  await sealWorkspace(document);
+  try {
+    const result = await api("/api/workspace", {
+      expected_revision: baseRevision,
+      workspace: document,
+    });
+    currentWorkspace = { revision: result.revision, document: result.workspace };
+    renderMemories();
+    return currentWorkspace;
+  } catch (error) {
+    if (error.status === 409) await refreshWorkspace();
+    throw error;
+  }
+}
+
+async function deleteMemory(memoryId, button) {
+  if (!window.confirm("Удалить это воспоминание из общей памяти JARVIS?")) return;
+  button.disabled = true;
+  try {
+    await writeWorkspace(document => {
+      document.records.memories = document.records.memories.filter(item => item.id !== memoryId);
+    });
+    setNotice("Воспоминание удалено из общей памяти.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+    button.disabled = false;
+  }
+}
+
+$("#memory-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const content = $("#memory-content").value.trim();
+  const category = $("#memory-category").value.trim();
+  if (!content || !category || !$("#memory-approval").checked) {
+    setNotice("Подтвердите сохранение и заполните содержимое и категорию.", "error");
+    return;
+  }
+  const submit = event.submitter;
+  if (submit) submit.disabled = true;
+  try {
+    await writeWorkspace(document => {
+      if (document.records.memories.length >= 10000) {
+        throw new Error("Достигнут лимит в 10 000 воспоминаний.");
+      }
+      document.records.memories.push({
+        id: crypto.randomUUID().replaceAll("-", ""),
+        revision: 0,
+        updated_at: new Date().toISOString(),
+        content,
+        category,
+        user_approved: true,
+      });
+    });
+    $("#memory-content").value = "";
+    $("#memory-approval").checked = false;
+    setNotice("Воспоминание сохранено в JPVR.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+});
+
+$("#memory-search").addEventListener("input", renderMemories);
+$("#memory-refresh").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await refreshWorkspace();
+    setNotice("Общая память обновлена.", "success");
+  } catch (error) { setNotice(error.message, "error"); }
+  finally { button.disabled = false; }
+});
+
 async function refresh() {
   const state = await api("/api/state");
   renderState(state);
+  await refreshWorkspace();
   return state;
 }
 
@@ -401,7 +547,7 @@ async function enterConsole(token) {
     const health = await api("/api/health");
     if (health.api_schema !== "jarvis.local-console" ||
         health.api_version !== 2 || health.auth_required !== true ||
-        health.auth_scheme !== "Bearer") {
+        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1) {
       throw new Error("Версия локальной консоли не поддерживается.");
     }
     await refresh();
@@ -435,7 +581,7 @@ async function boot() {
     const health = await api("/api/health");
     if (health.api_schema !== "jarvis.local-console" ||
         health.api_version !== 2 || health.auth_required !== true ||
-        health.auth_scheme !== "Bearer") {
+        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1) {
       throw new Error("Сервер не поддерживает защищённый API v2.");
     }
     if (accessToken) {
