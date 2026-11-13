@@ -525,8 +525,7 @@ async function verifyPortableWorkspace(document) {
       document.version.major !== 1 || document.version.minor !== 0 ||
       typeof document.workspace_id !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(document.workspace_id) ||
-      typeof document.export_id !== "string" ||
-      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(document.export_id) ||
+      document.export_id !== "workspace-current" ||
       typeof document.exported_at !== "string" || !Number.isFinite(Date.parse(document.exported_at)) ||
       !["desktop", "android"].includes(document.source_platform) ||
       !document.records || Object.keys(document.records).sort().join(",") !==
