@@ -63,6 +63,11 @@ data class RuntimeReasoningPreviewResult(
     val notice: String,
 )
 
+data class RuntimeWorkspaceSnapshot(
+    val revision: Long,
+    val document: JSONObject,
+)
+
 data class RuntimeBridgeSnapshot(
     val managerId: String,
     val checkpointVersion: Long,
@@ -100,7 +105,8 @@ class LocalRuntimeBridgeClient {
             requiredString(health, "api_schema") != "jarvis.local-console" ||
             requiredInt(health, "api_version") != 2 ||
             !health.optBoolean("auth_required", false) ||
-            requiredString(health, "auth_scheme") != "Bearer"
+            requiredString(health, "auth_scheme") != "Bearer" ||
+            requiredInt(health, "workspace_api_version") != 1
         ) {
             throw RuntimeBridgeException("Локальный сервис не подтвердил готовность JPVR.")
         }
@@ -109,6 +115,25 @@ class LocalRuntimeBridgeClient {
 
     fun refresh(): RuntimeBridgeSnapshot =
         decodeState(request("GET", "/api/state"))
+
+    fun getWorkspace(): RuntimeWorkspaceSnapshot =
+        decodeWorkspace(request("GET", "/api/workspace"))
+
+    fun saveWorkspace(
+        document: JSONObject,
+        expectedRevision: Long,
+    ): RuntimeWorkspaceSnapshot {
+        if (expectedRevision < 0L) {
+            throw RuntimeBridgeException("Версия общей памяти не может быть отрицательной.")
+        }
+        return decodeWorkspace(request(
+            "POST",
+            "/api/workspace",
+            JSONObject()
+                .put("expected_revision", expectedRevision)
+                .put("workspace", document),
+        ))
+    }
 
     fun createSession(title: String): RuntimeBridgeSnapshot =
         postState("/api/sessions", JSONObject().put("title", title))
@@ -255,6 +280,19 @@ class LocalRuntimeBridgeClient {
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun decodeWorkspace(json: JSONObject): RuntimeWorkspaceSnapshot {
+        val revision = requiredLong(json, "revision")
+        val document = json.optJSONObject("workspace")
+            ?: throw RuntimeBridgeException("Сервис вернул общую память без документа workspace.")
+        if (document.optString("format") != "jarvis.workspace" ||
+            document.optJSONObject("version")?.optInt("major", -1) != 1 ||
+            document.optJSONObject("integrity")?.optString("algorithm") != "sha-256"
+        ) {
+            throw RuntimeBridgeException("Версия или контрольная сумма общей памяти не поддерживается.")
+        }
+        return RuntimeWorkspaceSnapshot(revision, document)
     }
 
     private fun decodeState(json: JSONObject): RuntimeBridgeSnapshot {
@@ -460,9 +498,9 @@ class LocalRuntimeBridgeClient {
         const val BASE_URL = "http://127.0.0.1:8765"
         val ACCESS_TOKEN_PATTERN = Regex("^[A-Za-z0-9_-]{43}$")
         const val CONNECT_TIMEOUT_MS = 1_800
-        const val READ_TIMEOUT_MS = 2_500
-        const val MAX_REQUEST_BYTES = 64 * 1024
-        const val MAX_RESPONSE_BYTES = 256 * 1024
+        const val READ_TIMEOUT_MS = 10_000
+        const val MAX_REQUEST_BYTES = 16 * 1024 * 1024
+        const val MAX_RESPONSE_BYTES = 16 * 1024 * 1024
         const val MAX_ERROR_CHARS = 240
         const val MAX_FIELD_CHARS = 1024
         const val MAX_SESSIONS = 4096
