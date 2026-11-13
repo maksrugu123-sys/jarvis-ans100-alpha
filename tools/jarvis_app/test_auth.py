@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 import re
 import tempfile
@@ -27,8 +28,9 @@ class LocalConsoleAuthTests(unittest.TestCase):
         self.assertEqual(self.path.read_text(encoding="ascii"),
                          "sha256:" + hashlib.sha256(token.encode("ascii")).hexdigest() + "\n")
         self.assertNotIn(token, self.path.read_text(encoding="ascii"))
-        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
-        self.assertEqual(self.path.parent.stat().st_mode & 0o777, 0o700)
+        if os.name != "nt":
+            self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(self.path.parent.stat().st_mode & 0o777, 0o700)
 
     def test_existing_digest_does_not_reveal_bootstrap_token_again(self):
         first = LocalConsoleAuth(self.path)
@@ -84,6 +86,7 @@ class LocalConsoleAuthTests(unittest.TestCase):
 
 
 
+    @unittest.skipIf(os.name == "nt", "Windows ACLs are inherited and are not represented by POSIX mode bits")
     def test_existing_directory_and_digest_permissions_are_repaired(self):
         first = LocalConsoleAuth(self.path)
         token = first.bootstrap_token
@@ -97,6 +100,7 @@ class LocalConsoleAuthTests(unittest.TestCase):
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
 
 
+    @unittest.skipIf(os.name == "nt", "Windows reparse-point policy is covered by Windows-specific checks")
     def test_symlink_parent_directory_is_rejected_without_chmodding_target(self):
         real_parent = self.root / "real-private"
         real_parent.mkdir(mode=0o755)
