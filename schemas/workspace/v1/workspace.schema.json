@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-ans100.invalid/schemas/workspace/v1/workspace.schema.json",
+  "title": "JARVIS Portable Workspace Bundle V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "workspace_id",
+    "export_id",
+    "exported_at",
+    "source_platform",
+    "records",
+    "integrity"
+  ],
+  "properties": {
+    "format": {
+      "const": "jarvis.workspace"
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor"],
+      "properties": {
+        "major": { "const": 1 },
+        "minor": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "export_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_platform": {
+      "enum": ["desktop", "android"]
+    },
+    "records": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversations", "memories", "tasks", "settings"],
+      "properties": {
+        "conversations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conversation" },
+          "maxItems": 10000
+        },
+        "memories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/memory" },
+          "maxItems": 10000
+        },
+        "tasks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/task" },
+          "maxItems": 10000
+        },
+        "settings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/setting" },
+          "maxItems": 1000
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "digest"],
+      "properties": {
+        "algorithm": { "const": "sha-256" },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "updated_at", "title", "messages"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "title": { "type": "string", "maxLength": 160 },
+        "messages": {
+          "type": "array",
+          "maxItems": 50000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "role", "created_at", "content"],
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "role": { "enum": ["user", "assistant", "system"] },
+              "created_at": { "type": "string", "format": "date-time" },
+              "content": { "type": "string", "maxLength": 100000 }
+            }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "updated_at", "content", "category", "user_approved"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "content": { "type": "string", "minLength": 1, "maxLength": 10000 },
+        "category": { "type": "string", "maxLength": 64 },
+        "user_approved": { "const": true }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "updated_at", "title", "status"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "status": {
+          "enum": ["queued", "running", "paused", "completed", "failed", "cancelled"]
+        },
+        "result_summary": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "setting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+        },
+        "value": {
+          "type": ["string", "number", "integer", "boolean", "null"]
+        }
+      }
+    }
+  }
+}
