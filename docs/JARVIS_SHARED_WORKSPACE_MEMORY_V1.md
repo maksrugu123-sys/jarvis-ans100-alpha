@@ -90,7 +90,7 @@ A file transfer is a manual copy between devices. It does not enable LAN exposur
 
 ## Important current boundary
 
-The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing and background sync remain future work. Encrypted offline export/import is now available in the desktop PWA; Android's matching crypto codec exists, but its document-picker UI is not yet wired. Do not expose the loopback service as a workaround.
+The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing and background sync remain future work. Encrypted offline export/import is now available in the desktop PWA and Android app through the Storage Access Framework. Both use the same envelope; Android merges without overwriting local ID/key collisions, while the desktop PWA previews merge counts. Do not expose the loopback service as a workaround.
 
 The browser and Android memory screens manage explicitly entered records only. Automatic extraction from chat, semantic retrieval, ranking and conflict merging are not implemented.
 
@@ -103,4 +103,4 @@ Focused tests are authored in:
 - `tools/neuron_runtime/test_workspace_store.py`
 - `tools/jarvis_app/test_server.py`
 
-They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Four Android transfer codec tests are authored but unexecuted; both desktop and Android UI behavior remain source-reviewed only. UI behavior is source-reviewed only and still requires browser and device verification. The Python/Android implementation is source-level until those checks run on the target environments.
+They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Four Android instrumentation transfer codec tests are authored but unexecuted; both desktop and Android UI behavior remain source-reviewed only and still require browser/device verification. The Python/Android implementation is source-level until those checks run on the target environments.
