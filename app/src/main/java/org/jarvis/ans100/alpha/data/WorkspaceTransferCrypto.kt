@@ -1,9 +1,9 @@
 package org.jarvis.ans100.alpha.data
 
-import android.util.Base64
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
+import java.util.Base64
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
@@ -169,14 +169,14 @@ object WorkspaceTransferCrypto {
     }
 
     private fun encodeBase64(bytes: ByteArray): String =
-        Base64.encodeToString(bytes, Base64.NO_WRAP)
+        Base64.getEncoder().encodeToString(bytes)
 
     private fun decodeBase64(value: String, maximumBytes: Int): ByteArray {
         require(value.length <= maximumBytes * 2) {
             "Base64-поле превышает допустимый размер."
         }
         val decoded = try {
-            Base64.decode(value, Base64.DEFAULT)
+            Base64.getDecoder().decode(value)
         } catch (error: IllegalArgumentException) {
             throw IllegalArgumentException("Некорректное Base64-поле.", error)
         }
