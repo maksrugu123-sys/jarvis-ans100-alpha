@@ -700,6 +700,7 @@ function renderTransferPreview(plan) {
     " · уже совпадает: " + plan.identical +
     " · конфликтов (останутся локальные версии): " + plan.conflicts;
   $("#transfer-confirm").hidden = plan.added === 0;
+  $("#transfer-cancel").hidden = false;
 }
 
 $("#transfer-export").addEventListener("click", async event => {
@@ -739,6 +740,7 @@ $("#transfer-file").addEventListener("change", async event => {
   const passwordInput = $("#transfer-passphrase");
   const passphrase = passwordInput.value;
   $("#transfer-confirm").hidden = true;
+  $("#transfer-cancel").hidden = true;
   $("#transfer-preview").hidden = true;
   pendingTransfer = null;
   if (!file) return;
@@ -764,6 +766,14 @@ $("#transfer-file").addEventListener("change", async event => {
   }
 });
 
+$("#transfer-cancel").addEventListener("click", () => {
+  pendingTransfer = null;
+  $("#transfer-preview").hidden = true;
+  $("#transfer-confirm").hidden = true;
+  $("#transfer-cancel").hidden = true;
+  setNotice("Импорт отменён. Локальная память не изменена.", "info");
+});
+
 $("#transfer-confirm").addEventListener("click", async event => {
   const button = event.currentTarget;
   if (!pendingTransfer) return;
@@ -778,6 +788,7 @@ $("#transfer-confirm").addEventListener("click", async event => {
     pendingTransfer = null;
     $("#transfer-preview").hidden = true;
     button.hidden = true;
+    $("#transfer-cancel").hidden = true;
     setNotice("Перенос завершён: добавлено " + finalPlan.summary.added +
       ", совпадений " + finalPlan.summary.identical +
       ", конфликтов без перезаписи " + finalPlan.summary.conflicts + ".", "success");
