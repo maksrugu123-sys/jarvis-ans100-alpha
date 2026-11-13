@@ -1,6 +1,6 @@
 # JARVIS Task Loop V0.1
 
-**Статус:** реализован как ограниченный последовательный Python reference coordinator; 20 focused tests AUTHORED, NOT RUN. Он связывает TaskSessionManager, ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Это ещё не автономный помощник, production NCC или Android-приложение.
+**Статус:** реализован как ограниченный последовательный Python reference coordinator; 22 focused tests AUTHORED, NOT RUN. Он связывает TaskSessionManager, ReasoningEngine, PermissionSafetyGate и внедряемый ActionExecutor. Это ещё не автономный помощник, production NCC или Android-приложение.
 
 ## Основной проход
 
