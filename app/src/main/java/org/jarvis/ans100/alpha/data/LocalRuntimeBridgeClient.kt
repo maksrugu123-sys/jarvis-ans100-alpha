@@ -72,6 +72,14 @@ data class RuntimeWorkspaceSnapshot(
     val document: JSONObject,
 )
 
+data class RuntimeWorkspaceMergePlan(
+    val expectedRevision: Long,
+    val mergedDocument: JSONObject,
+    val addedCount: Int,
+    val identicalCount: Int,
+    val conflictCount: Int,
+)
+
 data class RuntimeBridgeSnapshot(
     val managerId: String,
     val checkpointVersion: Long,
@@ -203,6 +211,9 @@ class LocalRuntimeBridgeClient {
             JSONObject(plaintext)
         } catch (error: Exception) {
             throw RuntimeBridgeException("Расшифрованный файл не содержит JSON workspace.")
+        }
+        if (canonicalJson(imported) != plaintext) {
+            throw RuntimeBridgeException("JSON workspace не соответствует каноническому формату.")
         }
         validateTransferDocument(imported)
         return imported
@@ -358,10 +369,12 @@ class LocalRuntimeBridgeClient {
             for (index in 0 until array.length()) {
                 val item = array.optJSONObject(index)
                     ?: throw RuntimeBridgeException("Запись $collection должна быть объектом.")
-                val id = requiredText(item, "id", 128)
-                if (!validId(id) || !recordIds.add(id) || !validRevision(item) ||
-                    !validDate(requiredText(item, "updated_at", 64))) {
-                    throw RuntimeBridgeException("Идентификатор, ревизия или дата записи $collection некорректны.")
+                if (collection != "settings") {
+                    val id = requiredText(item, "id", 128)
+                    if (!validId(id) || !recordIds.add(id) || !validRevision(item) ||
+                        !validDate(requiredText(item, "updated_at", 64))) {
+                        throw RuntimeBridgeException("Идентификатор, ревизия или дата записи $collection некорректны.")
+                    }
                 }
                 when (collection) {
                     "memories" -> {
