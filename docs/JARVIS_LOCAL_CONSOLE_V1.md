@@ -1,6 +1,6 @@
 # JARVIS Local Console V1
 
-**Статус:** loopback-only Python console on HTTP + PWA web UI with API v2 bearer-token authentication. The same protected API is consumed by the native Android Compose client; both interfaces operate on the same Python TaskSessionManager and JPVR checkpoint. Fourteen service/API tests and ten focused auth-file tests are AUTHORED, NOT RUN. The console remains a reference task/session manager with a non-mutating symbolic planner preview, not a production executor.
+**Статус:** loopback-only Python console on HTTP + PWA web UI with API v2 bearer-token authentication. The same protected API is consumed by the native Android Compose client; both interfaces operate on the same Python TaskSessionManager and JPVR checkpoint. Eighteen service/API tests and eleven focused auth-file tests are AUTHORED, NOT RUN. Workspace API also supports authenticated CAS save and explicitly confirmed full replacement restore for encrypted JWB backups. The console remains a reference task/session manager with a non-mutating symbolic planner preview, not a production executor.
 
 ## Start on Android / Termux
 
@@ -23,6 +23,8 @@ The native Compose application also connects to http://127.0.0.1:8765; launch on
 - Cancel QUEUED tasks with expected-revision checks.
 - Read sessions, tasks, recent lifecycle events and checkpoint version.
 - Structured Reasoning Engine preview from caller-supplied facts/actions. The preview is non-mutating and does not alter the task/session checkpoint or execute actions.
+- Shared workspace memory CRUD uses a separate JPVR file and compare-and-swap revisions.
+- Authenticated workspace restore accepts only a validated complete workspace at the caller's exact revision; it never merges or changes workspace identity.
 - PWA static assets are cached; API responses are not cached.
 
 ## Versioned API contract
@@ -36,6 +38,9 @@ GET /api/health returns status, storage, api_schema = "jarvis.local-console", ap
 - POST /api/sessions/{session_id}/status — protected JSON object with status and expected_revision.
 - POST /api/tasks/{task_id}/cancel — protected JSON object with expected_revision.
 - POST /api/reasoning/preview — protected bounded structured ReasoningProblem payload.
+- GET /api/workspace — protected portable workspace and revision.
+- POST /api/workspace — protected workspace save with compare-and-swap.
+- POST /api/workspace/restore — protected full-workspace replacement with compare-and-swap; use only after local JWB validation, separate-current-backup acknowledgement and explicit preview/confirmation.
 
 Mutating POST routes require exact JSON fields. Mutations are serialized under the service lock, applied to a detached candidate manager and published through JPVR compare-and-swap before the in-memory manager reference is replaced. Failed commits do not publish the candidate state.
 
@@ -51,4 +56,4 @@ The PWA is one local frontend. The Compose application is a separate native fron
 
 Run: `python3 -m unittest tools.jarvis_app.test_server -v` and `python3 -m unittest tools.jarvis_app.test_auth -v`.
 
-Fourteen `test_server.py` methods cover session pause/resume/close and revision flow, close blocked by a non-terminal task, no-op status update, token persistence and rotation/revocation, JPVR/auth-file collision rejection, HTTP session status, versioned health contract, missing/invalid/valid bearer-token access to state, authentication on every POST route, service-level reasoning preview and checkpoint non-mutation, duplicate-fact rejection, HTTP reasoning-preview response and foreign-Origin rejection. Ten `test_auth.py` methods cover one-time token generation, digest-only persistence, restrictive owner-only permissions, reopen/rotation, malformed tokens/digests, exact token matching and symlink-parent/file rejection and legacy permission repair. Tests are AUTHORED, NOT RUN. No Python tests, Android build/APK, browser/device check, Termux end-to-end test, CI or GitHub Actions run was performed for the current Android bridge batch.
+Eighteen `test_server.py` methods cover session lifecycle/CAS, authenticated routes, workspace CRUD/save and restore, full replacement, large request bodies, stale revisions, foreign workspace identity, invalid integrity digest and foreign-Origin rejection. Eleven `test_auth.py` methods cover one-time token generation, digest-only persistence, restrictive owner-only permissions, reopen/rotation, malformed tokens/digests, exact token matching, symlink-parent/file rejection and legacy permission repair. Tests are AUTHORED, NOT RUN. No Python tests, Android build/APK, browser/device check, Termux end-to-end test, CI or GitHub Actions run was performed for the current Android bridge batch.
