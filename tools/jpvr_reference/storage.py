@@ -25,6 +25,7 @@ LOCK_EXCLUSIVE = 2
 
 SUPERBLOCK_AREA_BYTES = 2 * SUPERBLOCK_SIZE
 FIRST_DATA_PAGE_NO = 2
+_BINARY_FLAG = getattr(os, "O_BINARY", 0)
 
 
 class JPVRCommitUncertainError(OSError):
@@ -91,7 +92,7 @@ class JPVRStorage:
             if container_uuid is None
             else _fixed_bytes("container_uuid", container_uuid, 16)
         )
-        fd = os.open(target, os.O_RDWR | os.O_CREAT | os.O_EXCL, file_mode)
+        fd = os.open(target, os.O_RDWR | os.O_CREAT | os.O_EXCL | _BINARY_FLAG, file_mode)
         locked = False
         try:
             lock_file(fd, LOCK_EXCLUSIVE)
@@ -129,7 +130,7 @@ class JPVRStorage:
         if not isinstance(recover_tail, bool) or not isinstance(verify_index_trees, bool):
             raise JPVRFormatError("open options must be bool")
         target = os.path.abspath(os.fspath(path))
-        store = cls(os.open(target, os.O_RDWR), target, verify_index_trees=verify_index_trees)
+        store = cls(os.open(target, os.O_RDWR | _BINARY_FLAG), target, verify_index_trees=verify_index_trees)
         try:
             with store._locked(LOCK_EXCLUSIVE):
                 size = os.fstat(store._fd).st_size
