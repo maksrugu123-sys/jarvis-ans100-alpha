@@ -96,7 +96,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
         if (uri != null && passphrase != null) {
             viewModel.importWorkspace(uri, passphrase)
         } else {
-            passphrase?.fill('\\u0000')
+            passphrase?.fill('\u0000')
         }
     }
 
