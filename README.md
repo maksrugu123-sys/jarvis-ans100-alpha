@@ -519,7 +519,7 @@ Android repository tests:
 app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
 ```
 
-Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests and twenty-seven Python console/API-auth tests and ten shared workspace-store tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
+Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests and twenty-seven Python console/API-auth tests and eleven shared workspace-store tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
 
 ## Separate local PWA console
 
