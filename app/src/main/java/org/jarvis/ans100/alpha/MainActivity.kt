@@ -1703,7 +1703,7 @@ private fun ConversationPanel(
             }
             if (state.isBusy) {
                 Text(
-                    "Локальный ответчик обрабатывает сообщение…",
+                    "Локальная модель загружается или формирует ответ…",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

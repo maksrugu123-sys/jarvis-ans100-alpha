@@ -71,6 +71,7 @@ const STATUS_LABELS = {
 };
 let currentState = null;
 let currentConversation = null;
+let conversationReady = false;
 
 function statusLabel(status) {
   return STATUS_LABELS[status] || status;
@@ -1114,7 +1115,8 @@ function renderConversation(state) {
   currentConversation = state.conversation || null;
   $("#chat-backend").textContent = state.backend_label || "Локальная модель не настроена.";
   const button = $("#chat-send");
-  button.disabled = !(state.model_configured && state.runtime_available);
+  conversationReady = Boolean(state.model_configured && state.runtime_available);
+  button.disabled = !conversationReady;
   const root = $("#chat-messages");
   root.replaceChildren();
   const messages = currentConversation?.messages || [];
@@ -1160,6 +1162,7 @@ $("#chat-form").addEventListener("submit", async event => {
       try { await refreshConversation(); } catch { /* Preserve the revision conflict. */ }
     }
   } finally {
+    button.disabled = !conversationReady;
     button.textContent = "Отправить локальной модели";
   }
 });

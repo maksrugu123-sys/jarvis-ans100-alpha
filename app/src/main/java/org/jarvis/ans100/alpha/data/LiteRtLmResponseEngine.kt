@@ -23,7 +23,6 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val clean = prompt.trim()
         if (clean.length > MAX_PROMPT_CHARS) throw LocalConversationException("Ограничение компактной модели — " + MAX_PROMPT_CHARS + " символов на запрос.")
         val file = modelStore.installedFile() ?: return fallback.respond(clean, recentHistory)
-        checkMemory()
         val activeEngine = getEngine(file)
         val initial = recentHistory.takeLast(MAX_HISTORY).map { item ->
             val text = item.text.take(MAX_HISTORY_CHARS)
@@ -65,7 +64,8 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val path = file.absolutePath
         val existing = engine
         if (existing != null && loadedPath == path) return existing
-        closeEngine()
+        if (existing != null) closeEngine()
+        checkMemory()
         val candidate = Engine(EngineConfig(modelPath = path, backend = Backend.CPU(), maxNumTokens = 1280, cacheDir = appContext.cacheDir.absolutePath))
         // Do not close an Engine if initialize throws; the runtime marks it uninitialized.
         candidate.initialize()
