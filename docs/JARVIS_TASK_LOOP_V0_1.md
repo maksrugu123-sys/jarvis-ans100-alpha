@@ -25,6 +25,10 @@ TaskLoopStatus.WAITING — это результат orchestration-вызова,
 
 Для каждого шага approval передаётся в approvals по ключу step-000001, step-000002 и т. д. Approval одного шага не разрешает другой шаг.
 
+Task Loop принимает в approvals либо legacy `ApprovalGrant`, либо `SignedApprovalEnvelope`. При подключении `TrustedApprovalSafetyGate` разрешение обязательно должно быть подписанным: plain grant отклоняется. Подписанный V1 включает полный grant, approver/key IDs, UTC issue/expiry timestamps и Ed25519 signature над domain-separated canonical payload. Для trusted gate аргумент `now_ns` обязан быть UTC Unix nanoseconds; monotonic clock использовать нельзя. Подробности: [Signed Approval V1 schema](../schemas/approval/v1/signed-approval.schema.json) и [Permission & Safety Gate V1](JARVIS_PERMISSION_SAFETY_GATE_V1.md).
+
+Это пока verifier contract, а не полноценный approval UX: подпись проверяется локально через optional Python package `cryptography`, но создание ключа, Android Keystore enrollment, explicit user-authenticated signing, desktop signer, secure trust-root provisioning, signed trust-store updates и rollback-resistant revocation ещё не реализованы. Android/PWA не создают и не отправляют такие envelopes. Неподписанный reference Gate не является безопасной заменой TrustedApprovalSafetyGate.
+
 ## Durable per-step intent/result и восстановление
 
 Каждый action step представлен детерминированной дочерней TaskRecord в том же TaskSessionManager и том же JPVR checkpoint, что и родительская задача. ID и idempotency key дочерней записи выводятся из manager/task/plan/step identity. Записи связываются с родителем, планом, шагом и action через ограниченные input_refs.
@@ -51,7 +55,7 @@ Lifecycle snapshot фиксируется при входе родительск
 
 - Natural-language parsing, task decomposition из свободного текста и генерация безопасных action bindings.
 - Встроенные браузер/файловые/системные инструменты, credentials, сеть или UI approval provider.
-- Подлинная identity authentication и подпись/проверка approval grants. Отдельный локальный CAS policy/revocation reference registry добавлен в tools/neuron_runtime/policy_registry.py; его можно подключить как JARVISTaskLoop(permission_gate=PersistentPolicySafetyGate(registry)). Это не identity service и не защищает от подделки caller-supplied ApprovalGrant.
+- Trusted approval provider/UX и private-key signing ещё не реализованы. Source-level Ed25519 verifier и TrustedApprovalSafetyGate добавлены в tools/neuron_runtime/signed_approval.py; они требуют заранее pinned trust snapshot, который пока не имеет secure provisioning, signed updates, rollback protection или durable key revocation. Android/PWA не интегрированы, а legacy unsigned Gate остаётся reference-only.
 - Production downstream idempotency guarantees, authoritative trusted reconciliation provider, scheduler leases, concurrent workers, общая atomic transaction с внешним side effect, production NCC и multi-host coordination. Local SQLite DurableIdempotencyExecutor — reference wrapper, а не end-to-end exactly-once system.
 - Реальное enforcement CPU/RAM/time quota внутри executor, Android sandbox и resource measurements.
 - Persistence самого ReasoningResult/plan; plan детерминированно пересчитывается по caller-supplied input.
