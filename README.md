@@ -63,6 +63,10 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 | `docs/JARVIS_PERSISTENT_POLICY_REGISTRY_V1.md` | Local policy/revocation registry V1 contract and limitations |
 | `tools/neuron_runtime/test_permission_safety_gate.py` | Permission gate allow/deny, approval binding and budget tests (26 authored, not run) |
 | `docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md` | Permission & Safety Gate V1 trust boundary and contract |
+| `tools/neuron_runtime/signed_approval.py` | Strict Ed25519 signed-envelope decoder, pinned-key verifier and TrustedApprovalSafetyGate (source-level) |
+| `tools/neuron_runtime/test_signed_approval.py` | Signed approval signature, tamper, key trust, expiry, clock-skew and JSON-contract tests (16 authored, not run) |
+| `schemas/approval/v1/signed-approval.schema.json` | Portable signed exact-request approval envelope V1 schema |
+| `requirements-trusted-approval.txt` | Optional Python cryptography dependency for Ed25519 verification |
 | `tools/neuron_runtime/task_loop.py` | Bounded sequential reasoning-authorized task orchestration with injected executor |
 | `tools/neuron_runtime/test_task_loop.py` | Task Loop execution, approval, recovery, and combined persistent policy/executor ledger integration tests (22 authored, not run) |
 | `docs/JARVIS_TASK_LOOP_V0_1.md` | Task Loop V0.1 flow, durable child-step ledger, idempotency and recovery limits |
@@ -491,10 +495,10 @@ TaskSessionManager now has a versioned JPVR DATA/BLOB adapter and a CAS-protecte
 Run the focused contract tests (authored, not run):
 
 ```sh
-python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
+python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v\npython3 -m unittest tools.neuron_runtime.test_signed_approval -v
 ```
 
-The deny-by-default gate binds each action to the current manager/task/session revisions, exact capability and scope, effect class, resource budget, retry index, policy digest and (when required) a step-specific expiring approval. It never invokes a tool. Approval records are caller-supplied and are not cryptographically authenticated; runtime quota enforcement and a trusted approval provider remain future work. Twenty-six tests are AUTHORED, NOT RUN. Contract: [Permission & Safety Gate V1](docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md).
+The deny-by-default gate binds each action to current manager/task/session revisions, exact capability/scope, effect, resource budget, retry index and policy digest. A new source-level Ed25519 verifier and TrustedApprovalSafetyGate verify signed exact-request envelopes against a pinned in-memory approver-key snapshot; the trusted variant rejects legacy unsigned grants. The envelope schema and optional cryptography dependency are recorded in the repository. This is not yet a production identity service: Android Keystore signing/enrollment, desktop signer, authenticated trust-root provisioning, signed key rotation/revocation and rollback protection remain unimplemented. Android/PWA do not yet use the verifier, and external actions remain disabled. The legacy gate's 26 tests and the new 16 signed-approval tests are AUTHORED, NOT RUN. Contract: [Permission & Safety Gate V1](docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md) and [architecture §3.53](docs/JARVIS_ARCHITECTURE.md#353-signed-exact-request-approval-verification-v1).
 
 ## JARVIS Task Loop V0.1
 
