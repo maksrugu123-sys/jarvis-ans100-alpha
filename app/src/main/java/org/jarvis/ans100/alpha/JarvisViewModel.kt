@@ -2,6 +2,7 @@ package org.jarvis.ans100.alpha
 
 import android.app.Application
 import android.os.Handler
+import android.net.Uri
 import android.os.Looper
 import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,7 @@ import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
 data class RuntimeBridgeUiState(
@@ -183,6 +185,134 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val revision = mutableState.value.workspace.revision
         workspaceRequest("Воспоминание сохранено в локальной памяти.") {
             runtimeClient.createMemory(content, category, revision)
+        }
+    }
+
+    fun exportWorkspace(passphrase: CharArray, onReady: (ByteArray) -> Unit) {
+        val before = mutableState.value
+        if (before.workspace.isBusy) {
+            passphrase.fill('\u0000')
+            return
+        }
+        if (!before.runtime.hasAccessToken) {
+            passphrase.fill('\u0000')
+            mutableState.value = before.copy(
+                workspace = before.workspace.copy(
+                    error = "Сначала сохраните токен доступа из Termux.",
+                    message = null,
+                ),
+            )
+            return
+        }
+        mutableState.value = before.copy(
+            workspace = before.workspace.copy(isBusy = true, error = null, message = null),
+        )
+        runtimeExecutor.execute {
+            try {
+                val bundle = runtimeClient.exportEncryptedWorkspace(passphrase)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = null,
+                            message = "Зашифрованный файл подготовлен. Выберите место сохранения.",
+                        ),
+                    )
+                    onReady(bundle)
+                }
+            } catch (error: Exception) {
+                passphrase.fill('\u0000')
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = error.message ?: "Экспорт памяти не выполнен.",
+                            message = null,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun importWorkspace(uri: Uri, passphrase: CharArray) {
+        val before = mutableState.value
+        if (before.workspace.isBusy) {
+            passphrase.fill('\u0000')
+            return
+        }
+        if (!before.runtime.hasAccessToken || !before.workspace.isLoaded) {
+            passphrase.fill('\u0000')
+            mutableState.value = before.copy(
+                workspace = before.workspace.copy(
+                    error = "Сначала подключите Termux и обновите локальную память.",
+                    message = null,
+                ),
+            )
+            return
+        }
+        val expectedRevision = before.workspace.revision
+        mutableState.value = before.copy(
+            workspace = before.workspace.copy(isBusy = true, error = null, message = null),
+        )
+        runtimeExecutor.execute {
+            try {
+                val bytes = getApplication<Application>().contentResolver
+                    .openInputStream(uri)?.use { input ->
+                        val output = ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        var total = 0
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            if (total > 24 * 1024 * 1024) {
+                                throw IllegalArgumentException("Файл превышает лимит 24 МиБ.")
+                            }
+                            output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    } ?: throw IllegalArgumentException("Не удалось открыть выбранный файл.")
+                val snapshot = runtimeClient.importEncryptedWorkspace(
+                    bytes, passphrase, expectedRevision,
+                )
+                val array = snapshot.document.getJSONObject("records").getJSONArray("memories")
+                val memories = (0 until array.length()).map { index ->
+                    val item = array.getJSONObject(index)
+                    RuntimeMemory(
+                        id = item.getString("id"),
+                        content = item.getString("content"),
+                        category = item.getString("category"),
+                        updatedAt = item.getString("updated_at"),
+                    )
+                }
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = RuntimeWorkspaceUiState(
+                            revision = snapshot.revision,
+                            memories = memories,
+                            isLoaded = true,
+                            isBusy = false,
+                            message = "Импорт выполнен. Существующие записи не перезаписывались.",
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                passphrase.fill('\u0000')
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = error.message ?: "Импорт памяти не выполнен.",
+                            message = null,
+                        ),
+                    )
+                }
+            }
         }
     }
 
