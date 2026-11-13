@@ -1741,6 +1741,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 
 **Следующий этап:** получить отдельное разрешение на focused runtime/device/browser verification of JWB/JWS and bridge behavior. After evidence, continue with trusted approver identity, signed exact-request grants, trusted policy/revocation source and downstream idempotency/reconciliation. Keep all external actions disabled.
 
+## 2026-11-13 — Deterministic desktop-to-Android JWB interoperability fixture
+
+**Цель:** дополнить JWB crypto coverage проверкой фиксированного envelope, созданного по desktop WebCrypto contract, а не только Android self-round-trip и cross-format rejection.
+
+**Изменено:**
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` — существующий `encryptedBackupUsesSeparateEnvelopeAndReadsPortableWebCryptoFixture` теперь дополнительно расшифровывает детерминированный desktop-compatible JWB fixture с UTF-8 русским содержимым, PBKDF2-HMAC-SHA256/310,000, фиксированными salt/nonce и backup AAD `JARVIS-WORKSPACE-BACKUP-ENCRYPTED-V1`; проверяется точное каноническое plaintext содержимое и оба SHA-256 digest.
+- Число Android transfer/backup instrumentation methods не изменилось: **9**. Добавлен ещё один вектор в уже существующий метод.
+- README, Android App, Android Runtime Bridge, Cross-Platform Runtime и Workspace Backup & Restore docs указывают на JWS/JWB fixture coverage.
+
+**Проверки:** GitHub readback/static review only. Девять Android instrumentation methods остаются **AUTHORED, NOT RUN**. Сам fixture vector был подготовлен локальным коротким криптографическим генератором для фиксированных входов; это не запуск Android test и не browser runtime verification. Kotlin/Gradle, Android device, desktop browser, Python tests, builds, CI и GitHub Actions не запускались.
+
+**Ограничения:** cross-platform behavior остаётся source-level до фактического запуска этого fixture в Android instrumentation и до независимого browser WebCrypto round-trip на desktop. Внешние действия JARVIS остаются выключенными.
+
 
 ### Backup/restore hardening follow-up — 13 November 2026
 
