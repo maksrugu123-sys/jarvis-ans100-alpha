@@ -59,6 +59,7 @@ Verifier проверяет key ID и approver binding, active/revoked status, v
 
 ```sh
 python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
+python3 -m unittest tools.neuron_runtime.test_signed_approval -v
 ```
 
 26 тестовых методов legacy Gate покрывают allow/deny-by-default, exact scopes/effects, каждый resource ceiling, retries, stale task/session revisions, paused/closed states, чистоту authorize(), обязательные approvals, истечение grant, повторное использование для другого intent, смену policy version/digest, manager binding и retry-index binding. Новые 16 методов `test_signed_approval.py` покрывают Ed25519 signature binding, tampering, key identity/status/validity, expiry/clock skew, strict JSON parsing и запрет unsigned grants в trusted gate; они AUTHORED, NOT RUN. Дополнительные 17 тестов test_policy_registry.py покрывают disk round-trip, permissions, CAS, monotonic policy versions, idempotent revocation, повреждённые записи и интеграцию subclass с Task Loop. Все группы AUTHORED, NOT RUN. Ed25519/runtime verification не запускалась.
