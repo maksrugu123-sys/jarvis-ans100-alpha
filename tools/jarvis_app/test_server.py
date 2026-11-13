@@ -221,6 +221,43 @@ class LocalConsoleHttpTests(unittest.TestCase):
             created["revision"] + 1,
         )
 
+    def test_workspace_endpoint_supports_authenticated_cas_round_trip(self):
+        initial = self.service.workspace_state()
+        status, saved = self._post(
+            "/api/workspace",
+            {
+                "expected_revision": initial["revision"],
+                "workspace": initial["workspace"],
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(saved["revision"], initial["revision"] + 1)
+        self.assertEqual(saved["workspace"]["workspace_id"], "jarvis-default")
+
+        request = Request(
+            self.base_url + "/api/workspace",
+            headers={"Authorization": "Bearer " + self.token},
+        )
+        with urlopen(request, timeout=3) as response:
+            restored = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(restored["revision"], saved["revision"])
+
+        stale = Request(
+            self.base_url + "/api/workspace",
+            data=json.dumps({
+                "expected_revision": initial["revision"],
+                "workspace": initial["workspace"],
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + self.token,
+            },
+            method="POST",
+        )
+        with self.assertRaises(HTTPError) as conflict:
+            urlopen(stale, timeout=3)
+        self.assertEqual(conflict.exception.code, 409)
+
     def test_health_advertises_versioned_android_bridge_contract(self):
         with urlopen(self.base_url + "/api/health", timeout=3) as response:
             payload = json.loads(response.read().decode("utf-8"))
