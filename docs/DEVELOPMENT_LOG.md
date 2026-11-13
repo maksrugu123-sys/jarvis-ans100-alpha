@@ -1647,3 +1647,20 @@ Tests after these edits: NOT RUN. User must pull and rerun focused tests, then f
 **Ограничение проверки:** документационная синхронизация и GitHub readback only. Тесты, сборки, APK/AAB, CI и GitHub Actions не запускались. Никаких новых runtime возможностей эта запись не создаёт.
 
 **Следующий этап:** следовать порядку в handoff: сначала тестируемость и закрытие auth/client gaps, затем trusted identity + signed exact-request approval, trusted policy/revocation и downstream reconciliation; только потом read-only Task Loop preview и строго ограниченный executor.
+
+## 2026-11-13 — Local console authentication path hardening
+
+**Цель:** закрыть ошибки работы с файловой системой вокруг bearer-token digest и гарантировать, что ротация токена не может перезаписать JPVR-файл при совпадении путей.
+
+**Изменено:**
+- `tools/jarvis_app/auth.py` — проверка owner/type родительского каталога; отказ от symlink/dangling-symlink для каталога и digest-файла; чтение через file descriptor с `O_NOFOLLOW` где поддерживается и проверками `fstat`; исправление слишком широких прав; fsync digest и best-effort fsync каталога после atomic replace.
+- `tools/jarvis_app/server.py` — preflight сравнение resolved paths и existing file identity для JPVR data/auth paths; одинаковый файл и hard-link alias отклоняются до открытия JPVR storage, включая `--rotate-token`.
+- `tools/jarvis_app/test_auth.py` — добавлены 2 регрессионных теста для symlink-parent и dangling-symlink rejection; всего 9 тестов.
+- `tools/jarvis_app/test_server.py` — добавлены 2 регрессионных теста: data/auth path collision cannot overwrite JPVR; every POST endpoint rejects a missing token before processing; всего 13 тестов.
+- Обновлены `README.md`, `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`, `docs/JARVIS_LOCAL_CONSOLE_V1.md` и архитектура §3.49.
+
+**Проверки:** GitHub source readback/static cross-file review only. 22 Python auth/API tests are **AUTHORED, NOT RUN**. Не запускались Python tests/import/syntax execution, filesystem fault injection, Android Keystore/device tests, Android↔Termux end-to-end networking, Gradle/build/APK/AAB, CI или GitHub Actions.
+
+**Ограничения:** локальный bearer token остаётся только transport access control, не удостоверяет человека и не является approval. Проверки владельца/прав/симлинков не защищают файлы от злонамеренного владельца того же Android UID; directory fsync является best-effort для совместимости файловых систем. Android Keystore и токенизация не проверялись runtime. Внешние действия, Task Loop и ActionExecutor остаются выключенными.
+
+**Следующий шаг:** добавить тесты Android token store в подходящем instrumentation harness и проверить полный authenticated bridge на Termux/Android без включения side effects.
