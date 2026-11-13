@@ -197,11 +197,7 @@ class LocalRuntimeBridgeClient {
         return WorkspaceTransferCrypto.encrypt(canonicalJson(current.document), passphrase)
     }
 
-    fun importEncryptedWorkspace(
-        bundleBytes: ByteArray,
-        passphrase: CharArray,
-        expectedRevision: Long,
-    ): RuntimeWorkspaceSnapshot {
+    fun decryptWorkspaceBundle(bundleBytes: ByteArray, passphrase: CharArray): JSONObject {
         val plaintext = WorkspaceTransferCrypto.decrypt(bundleBytes, passphrase)
         val imported = try {
             JSONObject(plaintext)
@@ -209,9 +205,17 @@ class LocalRuntimeBridgeClient {
             throw RuntimeBridgeException("Расшифрованный файл не содержит JSON workspace.")
         }
         validateTransferDocument(imported)
+        return imported
+    }
+
+    fun prepareWorkspaceMerge(
+        imported: JSONObject,
+        expectedRevision: Long,
+    ): RuntimeWorkspaceMergePlan {
+        validateTransferDocument(imported)
         val current = getWorkspace()
         if (current.revision != expectedRevision) {
-            throw RuntimeBridgeException("Локальная память изменилась. Обновите её и повторите импорт.")
+            throw RuntimeBridgeException("Локальная память изменилась. Обновите её и повторите предпросмотр.")
         }
         if (current.document.optString("workspace_id") != imported.optString("workspace_id")) {
             throw RuntimeBridgeException("Файл относится к другому workspace_id.")
@@ -219,6 +223,9 @@ class LocalRuntimeBridgeClient {
         val merged = JSONObject(current.document.toString())
         val targetRecords = merged.getJSONObject("records")
         val sourceRecords = imported.getJSONObject("records")
+        var added = 0
+        var identical = 0
+        var conflicts = 0
         for (collection in listOf("conversations", "memories", "tasks")) {
             val target = targetRecords.getJSONArray(collection)
             val source = sourceRecords.getJSONArray(collection)
@@ -233,8 +240,12 @@ class LocalRuntimeBridgeClient {
                 if (existing == null) {
                     target.put(item)
                     byId[item.getString("id")] = item
+                    added++
+                } else if (canonicalJson(existing) == canonicalJson(item)) {
+                    identical++
+                } else {
+                    conflicts++
                 }
-                // Identical IDs are left untouched. Conflicting content keeps the local record.
             }
         }
         val targetSettings = targetRecords.getJSONArray("settings")
@@ -246,15 +257,57 @@ class LocalRuntimeBridgeClient {
         }
         for (index in 0 until sourceSettings.length()) {
             val item = sourceSettings.getJSONObject(index)
-            if (!settingByKey.containsKey(item.getString("key"))) {
+            val existing = settingByKey[item.getString("key")]
+            if (existing == null) {
                 targetSettings.put(item)
                 settingByKey[item.getString("key")] = item
+                added++
+            } else if (canonicalJson(existing) == canonicalJson(item)) {
+                identical++
+            } else {
+                conflicts++
             }
         }
-        return saveWorkspace(sealWorkspace(merged), expectedRevision)
+        return RuntimeWorkspaceMergePlan(
+            expectedRevision = expectedRevision,
+            mergedDocument = merged,
+            addedCount = added,
+            identicalCount = identical,
+            conflictCount = conflicts,
+        )
+    }
+
+    fun commitWorkspaceMerge(plan: RuntimeWorkspaceMergePlan): RuntimeWorkspaceSnapshot {
+        if (plan.expectedRevision < 0L) {
+            throw RuntimeBridgeException("Ревизия импорта недопустима.")
+        }
+        validateTransferDocument(plan.mergedDocument)
+        return saveWorkspace(sealWorkspace(plan.mergedDocument), plan.expectedRevision)
     }
 
     private fun validateTransferDocument(document: JSONObject) {
+        fun exactKeys(value: JSONObject, allowed: Set<String>, required: Set<String>) {
+            val keys = value.keys().asSequence().toSet()
+            if (!keys.containsAll(required) || keys.any { it !in allowed }) {
+                throw RuntimeBridgeException("Поля импортируемого workspace не соответствуют схеме.")
+            }
+        }
+        fun requiredText(value: JSONObject, key: String, maximum: Int): String {
+            val text = value.opt(key)
+            if (text !is String || text.length > maximum) {
+                throw RuntimeBridgeException("Поле $key имеет недопустимое значение.")
+            }
+            return text
+        }
+        fun validId(value: String): Boolean =
+            Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$").matches(value)
+        fun validDate(value: String): Boolean =
+            runCatching { OffsetDateTime.parse(value) }.isSuccess
+        fun validRevision(value: JSONObject): Boolean {
+            val raw = value.opt("revision")
+            return (raw is Int || raw is Long) &&
+                (raw as Number).toLong() in 0..2_147_483_647L
+        }
         if (document.keys().asSequence().toSet() != setOf(
                 "format", "version", "workspace_id", "export_id", "exported_at",
                 "source_platform", "records", "integrity",
@@ -264,11 +317,9 @@ class LocalRuntimeBridgeClient {
                 it.keys().asSequence().toSet() == setOf("major", "minor") &&
                     it.optInt("major", -1) == 1 && it.optInt("minor", -1) == 0
             } != true ||
-            !Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-                .matches(document.optString("workspace_id")) ||
-            !Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-                .matches(document.optString("export_id")) ||
-            runCatching { OffsetDateTime.parse(document.optString("exported_at")) }.isFailure ||
+            !validId(document.optString("workspace_id")) ||
+            !validId(document.optString("export_id")) ||
+            !validDate(document.optString("exported_at")) ||
             document.optString("source_platform") !in setOf("desktop", "android")
         ) {
             throw RuntimeBridgeException("Файл не соответствует схеме рабочего пространства V1.")
@@ -278,7 +329,7 @@ class LocalRuntimeBridgeClient {
         if (integrity.keys().asSequence().toSet() != setOf("algorithm", "digest") ||
             integrity.optString("algorithm") != "sha-256" ||
             !Regex("^[a-f0-9]{64}$").matches(integrity.optString("digest"))) {
-            throw RuntimeBridgeException("Алгоритм контрольной суммы не поддерживается.")
+            throw RuntimeBridgeException("Алгоритм или значение контрольной суммы не поддерживается.")
         }
         val unsigned = JSONObject(document.toString()).also { it.remove("integrity") }
         val actual = MessageDigest.getInstance("SHA-256")
@@ -289,18 +340,118 @@ class LocalRuntimeBridgeClient {
         }
         val records = document.optJSONObject("records")
             ?: throw RuntimeBridgeException("В файле отсутствуют коллекции записей.")
-        if (records.keys().asSequence().toSet() !=
-            setOf("conversations", "memories", "tasks", "settings")) {
-            throw RuntimeBridgeException("Набор коллекций рабочего пространства некорректен.")
-        }
-        for ((name, maximum) in listOf(
+        exactKeys(
+            records,
+            setOf("conversations", "memories", "tasks", "settings"),
+            setOf("conversations", "memories", "tasks", "settings"),
+        )
+        val recordIds = HashSet<String>()
+        for ((collection, maximum) in listOf(
             "conversations" to 10_000, "memories" to 10_000,
             "tasks" to 10_000, "settings" to 1_000,
         )) {
-            val array = records.optJSONArray(name)
-                ?: throw RuntimeBridgeException("Коллекция $name должна быть массивом.")
+            val array = records.optJSONArray(collection)
+                ?: throw RuntimeBridgeException("Коллекция $collection должна быть массивом.")
             if (array.length() > maximum) {
-                throw RuntimeBridgeException("Коллекция $name превышает лимит.")
+                throw RuntimeBridgeException("Коллекция $collection превышает лимит.")
+            }
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index)
+                    ?: throw RuntimeBridgeException("Запись $collection должна быть объектом.")
+                val id = requiredText(item, "id", 128)
+                if (!validId(id) || !recordIds.add(id) || !validRevision(item) ||
+                    !validDate(requiredText(item, "updated_at", 64))) {
+                    throw RuntimeBridgeException("Идентификатор, ревизия или дата записи $collection некорректны.")
+                }
+                when (collection) {
+                    "memories" -> {
+                        exactKeys(
+                            item,
+                            setOf("id", "revision", "updated_at", "content", "category", "user_approved"),
+                            setOf("id", "revision", "updated_at", "content", "category", "user_approved"),
+                        )
+                        val content = requiredText(item, "content", 10_000)
+                        val category = requiredText(item, "category", 64)
+                        if (content.isBlank() || item.opt("user_approved") != true || category.length > 64) {
+                            throw RuntimeBridgeException("Воспоминание не прошло проверку согласия и содержимого.")
+                        }
+                    }
+                    "tasks" -> {
+                        exactKeys(
+                            item,
+                            setOf("id", "revision", "updated_at", "title", "status", "result_summary"),
+                            setOf("id", "revision", "updated_at", "title", "status"),
+                        )
+                        val title = requiredText(item, "title", 512)
+                        if (title.isBlank() || item.optString("status") !in setOf(
+                                "queued", "running", "paused", "completed", "failed", "cancelled",
+                            ) ||
+                            (item.has("result_summary") && item.opt("result_summary") !is String) ||
+                            (item.opt("result_summary") is String &&
+                                item.optString("result_summary").length > 4_000)
+                        ) {
+                            throw RuntimeBridgeException("Задача не прошла проверку схемы.")
+                        }
+                    }
+                    "conversations" -> {
+                        exactKeys(
+                            item,
+                            setOf("id", "revision", "updated_at", "title", "messages"),
+                            setOf("id", "revision", "updated_at", "title", "messages"),
+                        )
+                        if (requiredText(item, "title", 160).length > 160) {
+                            throw RuntimeBridgeException("Название диалога превышает лимит.")
+                        }
+                        val messages = item.optJSONArray("messages")
+                            ?: throw RuntimeBridgeException("Сообщения диалога должны быть массивом.")
+                        if (messages.length() > 50_000) {
+                            throw RuntimeBridgeException("Диалог содержит слишком много сообщений.")
+                        }
+                        val messageIds = HashSet<String>()
+                        for (messageIndex in 0 until messages.length()) {
+                            val message = messages.optJSONObject(messageIndex)
+                                ?: throw RuntimeBridgeException("Сообщение должно быть объектом.")
+                            exactKeys(
+                                message,
+                                setOf("id", "role", "created_at", "content"),
+                                setOf("id", "role", "created_at", "content"),
+                            )
+                            val messageId = requiredText(message, "id", 128)
+                            val role = requiredText(message, "role", 16)
+                            val createdAt = requiredText(message, "created_at", 64)
+                            val content = requiredText(message, "content", 100_000)
+                            if (!validId(messageId) || !messageIds.add(messageId) ||
+                                role !in setOf("user", "assistant", "system") ||
+                                !validDate(createdAt) || content.length > 100_000
+                            ) {
+                                throw RuntimeBridgeException("Сообщение диалога не прошло проверку.")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        val settings = records.getJSONArray("settings")
+        val settingKeys = HashSet<String>()
+        for (index in 0 until settings.length()) {
+            val setting = settings.optJSONObject(index)
+                ?: throw RuntimeBridgeException("Настройка должна быть объектом.")
+            exactKeys(setting, setOf("key", "value"), setOf("key", "value"))
+            val key = requiredText(setting, "key", 64)
+            val normalized = key.replace("-", "_").replace(".", "_")
+            if (!Regex("^[a-z][a-z0-9._-]{0,63}$").matches(key) ||
+                !settingKeys.add(key) ||
+                listOf("password", "passwd", "secret", "token", "credential", "api_key", "private_key")
+                    .any { normalized.contains(it) } ||
+                normalized == "auth" || normalized.startsWith("auth_")
+            ) {
+                throw RuntimeBridgeException("Ключ настройки недопустим или содержит секрет.")
+            }
+            val value = setting.opt("value")
+            val portable = value == JSONObject.NULL || value is String || value is Boolean ||
+                (value is Int || value is Long)
+            if (!portable) {
+                throw RuntimeBridgeException("Значение настройки не является переносимым типом.")
             }
         }
     }
