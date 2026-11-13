@@ -7,6 +7,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.time.Instant
+import java.util.UUID
 
 data class RuntimeSessionSnapshot(
     val sessionId: String,
@@ -133,6 +136,84 @@ class LocalRuntimeBridgeClient {
                 .put("expected_revision", expectedRevision)
                 .put("workspace", document),
         ))
+    }
+
+    fun createMemory(
+        content: String,
+        category: String,
+        expectedRevision: Long,
+    ): RuntimeWorkspaceSnapshot {
+        val cleanContent = content.trim()
+        val cleanCategory = category.trim()
+        if (cleanContent.isEmpty() || cleanContent.length > 10_000) {
+            throw RuntimeBridgeException("Воспоминание должно содержать от 1 до 10 000 символов.")
+        }
+        if (cleanCategory.isEmpty() || cleanCategory.length > 64) {
+            throw RuntimeBridgeException("Категория должна содержать от 1 до 64 символов.")
+        }
+        val current = getWorkspace()
+        val document = JSONObject(current.document.toString())
+        val memories = document.getJSONObject("records").getJSONArray("memories")
+        if (memories.length() >= 10_000) {
+            throw RuntimeBridgeException("Достигнут лимит в 10 000 воспоминаний.")
+        }
+        memories.put(JSONObject()
+            .put("id", UUID.randomUUID().toString().replace("-", ""))
+            .put("revision", 0)
+            .put("updated_at", Instant.now().toString())
+            .put("content", cleanContent)
+            .put("category", cleanCategory)
+            .put("user_approved", true))
+        return saveWorkspace(sealWorkspace(document), expectedRevision)
+    }
+
+    fun deleteMemory(memoryId: String, expectedRevision: Long): RuntimeWorkspaceSnapshot {
+        if (!Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$").matches(memoryId)) {
+            throw RuntimeBridgeException("Идентификатор воспоминания некорректен.")
+        }
+        val current = getWorkspace()
+        val document = JSONObject(current.document.toString())
+        val records = document.getJSONObject("records")
+        val oldMemories = records.getJSONArray("memories")
+        val retained = JSONArray()
+        var removed = false
+        for (index in 0 until oldMemories.length()) {
+            val item = oldMemories.getJSONObject(index)
+            if (item.optString("id") == memoryId) {
+                removed = true
+            } else {
+                retained.put(item)
+            }
+        }
+        if (!removed) throw RuntimeBridgeException("Воспоминание уже отсутствует в общей памяти.")
+        records.put("memories", retained)
+        return saveWorkspace(sealWorkspace(document), expectedRevision)
+    }
+
+    private fun sealWorkspace(document: JSONObject): JSONObject {
+        document.put("exported_at", Instant.now().toString())
+        document.put("source_platform", "android")
+        document.remove("integrity")
+        val canonical = canonicalJson(document).toByteArray(StandardCharsets.UTF_8)
+        val digest = MessageDigest.getInstance("SHA-256").digest(canonical)
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        document.put("integrity", JSONObject()
+            .put("algorithm", "sha-256")
+            .put("digest", digest))
+        return document
+    }
+
+    private fun canonicalJson(value: Any?): String = when (value) {
+        null, JSONObject.NULL -> "null"
+        is JSONObject -> value.keys().asSequence().toList().sorted().joinToString(
+            prefix = "{", postfix = "}",
+        ) { key -> JSONObject.quote(key) + ":" + canonicalJson(value.get(key)) }
+        is JSONArray -> (0 until value.length()).joinToString(
+            prefix = "[", postfix = "]",
+        ) { index -> canonicalJson(value.get(index)) }
+        is String -> JSONObject.quote(value)
+        is Number, is Boolean -> value.toString()
+        else -> throw RuntimeBridgeException("Общая память содержит неподдерживаемый JSON-тип.")
     }
 
     fun createSession(title: String): RuntimeBridgeSnapshot =
