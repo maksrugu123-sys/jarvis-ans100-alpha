@@ -1,6 +1,6 @@
 # JARVIS Android Runtime Bridge V1
 
-**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 and bridge methods for shared Workspace API V1. End-to-end tests, Android build and device verification NOT RUN. This remains a registry/memory bridge, not tool execution.
+**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 bridge methods for shared Workspace API V1, and a Compose memory manager for consent-based create/search/list/delete. End-to-end tests, Android build and device verification NOT RUN. The Compose memory UI is source-level only. This remains a registry/memory bridge, not tool execution.
 
 ## Ownership
 
@@ -54,7 +54,7 @@ The planner searches a bounded symbolic state space. Its output is not natural-l
 
 ## Shared workspace and memory V1
 
-The local service maintains a second dedicated JPVR file, `workspace.jpvr`, separate from the task/session registry. The portable contract is `schemas/workspace/v1/workspace.schema.json`; the Python reference store is `tools/neuron_runtime/workspace_store.py`. Android `LocalRuntimeBridgeClient.getWorkspace()` and `saveWorkspace(document, expectedRevision)` use the same versioned JSON document and CAS revision. Only explicit `user_approved: true` memory records are accepted; this marker is a data contract, not cryptographic proof of user approval. Secret-like settings are rejected.
+The local service maintains a second dedicated JPVR file, `workspace.jpvr`, separate from the task/session registry. The portable contract is `schemas/workspace/v1/workspace.schema.json`; the Python reference store is `tools/neuron_runtime/workspace_store.py`. Android `LocalRuntimeBridgeClient.getWorkspace()`, `saveWorkspace(document, expectedRevision)`, `createMemory(...)` and `deleteMemory(...)` use the same versioned JSON document and CAS revision. The Compose screen requires an explicit confirmation checkbox before creating a memory and a confirmation dialog before deleting one. Only explicit `user_approved: true` memory records are accepted; this marker is a data contract, not cryptographic proof of user approval. Secret-like settings are rejected.
 
 The phone's bridge still targets its own `127.0.0.1`; the PC service targets the PC's own loopback. Shared format/API compatibility is implemented, but automatic PC↔phone transfer, encrypted pairing, merge and background synchronization are not. See [Shared Workspace & Memory V1](JARVIS_SHARED_WORKSPACE_MEMORY_V1.md).
 
