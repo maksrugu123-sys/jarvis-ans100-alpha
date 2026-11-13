@@ -71,6 +71,9 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var transferPassphrase by remember { mutableStateOf("") }
     var pendingImportPassphrase by remember { mutableStateOf<CharArray?>(null) }
     var pendingExportBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingBackupExportBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingBackupExportRevision by remember { mutableStateOf<Long?>(null) }
+    var pendingRestorePassphrase by remember { mutableStateOf<CharArray?>(null) }
     val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.jarvis.workspace+json"),
@@ -86,6 +89,41 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
         } else {
             bytes?.fill(0)
             pendingExportBytes = null
+        }
+    }
+    val backupExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.jarvis.workspace-backup+json"),
+    ) { uri: Uri? ->
+        val bytes = pendingBackupExportBytes
+        val revision = pendingBackupExportRevision
+        pendingBackupExportBytes = null
+        pendingBackupExportRevision = null
+        if (uri != null && bytes != null && revision != null) {
+            try {
+                val output = context.contentResolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("Не удалось открыть файл backup для записи.")
+                output.use { it.write(bytes) }
+                viewModel.markWorkspaceBackupSaved(revision)
+            } catch (error: Exception) {
+                viewModel.markWorkspaceBackupSaveFailed(
+                    error.message ?: "Не удалось сохранить файл backup.",
+                )
+            } finally {
+                bytes.fill(0)
+            }
+        } else {
+            bytes?.fill(0)
+        }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        val passphrase = pendingRestorePassphrase
+        pendingRestorePassphrase = null
+        if (uri != null && passphrase != null) {
+            viewModel.previewWorkspaceRestore(uri, passphrase)
+        } else {
+            passphrase?.fill('\u0000')
         }
     }
     val importLauncher = rememberLauncherForActivityResult(
@@ -163,6 +201,35 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     },
                     onConfirmImport = viewModel::confirmWorkspaceImport,
                     onCancelImport = viewModel::cancelWorkspaceImport,
+                    onExportBackup = { phrase ->
+                        transferPassphrase = ""
+                        viewModel.exportWorkspaceBackup(phrase.toCharArray()) { bytes, revision ->
+                            pendingBackupExportBytes = bytes
+                            pendingBackupExportRevision = revision
+                            backupExportLauncher.launch(
+                                "jarvis-workspace-backup-" +
+                                    java.time.LocalDate.now().toString() + ".jwb",
+                            )
+                        }
+                    },
+                    onChooseRestore = { phrase ->
+                        if (phrase.length >= 12 &&
+                            ui.workspace.backupRevision == ui.workspace.revision &&
+                            ui.workspace.restoreBackupAcknowledged
+                        ) {
+                            pendingRestorePassphrase = phrase.toCharArray()
+                            transferPassphrase = ""
+                            restoreLauncher.launch(arrayOf(
+                                "application/vnd.jarvis.workspace-backup+json",
+                                "application/json",
+                                "application/octet-stream",
+                                "*/*",
+                            ))
+                        }
+                    },
+                    onBackupAcknowledgement = viewModel::setRestoreBackupAcknowledged,
+                    onConfirmRestore = viewModel::confirmWorkspaceRestore,
+                    onCancelRestore = viewModel::cancelWorkspaceRestore,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -375,7 +442,13 @@ private fun WorkspaceMemoryPanel(
     onChooseImport: () -> Unit,
     onConfirmImport: () -> Unit,
     onCancelImport: () -> Unit,
+    onExportBackup: (String) -> Unit,
+    onChooseRestore: (String) -> Unit,
+    onBackupAcknowledgement: (Boolean) -> Unit,
+    onConfirmRestore: () -> Unit,
+    onCancelRestore: () -> Unit,
 ) {
+    var confirmRestore by remember { mutableStateOf(false) }
     var content by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("general") }
     var search by rememberSaveable { mutableStateOf("") }
@@ -482,10 +555,103 @@ private fun WorkspaceMemoryPanel(
                 ) { Text("Импорт .jws") }
             }
             Text(
-                "Импорт объединяет записи по ID и не перезаписывает локальные версии. Пароль не сохраняется. Передайте файл и пароль отдельно.",
+                "Импорт .jws объединяет записи по ID и не перезаписывает локальные версии. Пароль не сохраняется.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                "Резервная копия .jwb",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { onExportBackup(transferPassphrase) },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.isLoaded && !state.isBusy && transferPassphrase.length >= 12,
+                ) { Text("Сохранить .jwb") }
+                OutlinedButton(
+                    onClick = { onChooseRestore(transferPassphrase) },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.isLoaded && !state.isBusy &&
+                        transferPassphrase.length >= 12 &&
+                        state.backupRevision == state.revision &&
+                        state.restoreBackupAcknowledged,
+                ) { Text("Выбрать backup") }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = state.restoreBackupAcknowledged,
+                    onCheckedChange = onBackupAcknowledgement,
+                    enabled = !state.isBusy && state.backupRevision != null &&
+                        state.backupRevision == state.revision,
+                )
+                Text(
+                    "Я сохранил отдельный backup текущей ревизии и понимаю, что восстановление заменит всю общую память.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (state.backupRevision == state.revision && state.backupRevision != null) {
+                Text(
+                    "Отдельная копия подтверждена для REV ${state.backupRevision}. Любое изменение памяти аннулирует подтверждение.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                "В .jwb входит только общая память. Задачи/сессии JPVR, черновики Android, ключи, токены и нейронные checkpoint не включены.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            state.restorePreview?.let { preview ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            "Предпросмотр восстановления — ЗАМЕНА",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text("Дата backup: ${preview.backupCreatedAt}")
+                        Text("Диалоги: ${preview.conversationCount}")
+                        Text("Воспоминания: ${preview.memoryCount}")
+                        Text("Сводки задач: ${preview.taskCount}")
+                        Text("Настройки: ${preview.settingCount}")
+                        Text(
+                            "Все четыре коллекции текущей памяти будут заменены выбранной копией. Перед продолжением сохраните и подтвердите отдельный backup текущей ревизии.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { confirmRestore = true },
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.isBusy &&
+                                    state.backupRevision == state.revision &&
+                                    state.restoreBackupAcknowledged,
+                            ) { Text("Заменить память") }
+                            OutlinedButton(
+                                onClick = onCancelRestore,
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.isBusy,
+                            ) { Text("Отмена") }
+                        }
+                    }
+                }
+            }
             state.importPreview?.let { preview ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -614,6 +780,27 @@ private fun WorkspaceMemoryPanel(
                 }
             }
         }
+    }
+
+    if (confirmRestore && state.restorePreview != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRestore = false },
+            title = { Text("Заменить всю общую память?") },
+            text = {
+                Text(
+                    "Текущие диалоги, воспоминания, сводки задач и настройки будут заменены данными из .jwb. Отдельный backup текущей ревизии подтверждён.",
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    confirmRestore = false
+                    onConfirmRestore()
+                }) { Text("Подтвердить замену") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRestore = false }) { Text("Назад") }
+            },
+        )
     }
 
     val target = deleteTarget
