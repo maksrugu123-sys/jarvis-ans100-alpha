@@ -331,8 +331,7 @@ class LocalRuntimeBridgeClient {
             } != true ||
             document.opt("workspace_id") !is String ||
             !validId(requiredText(document, "workspace_id", 128)) ||
-            document.opt("export_id") !is String ||
-            !validId(requiredText(document, "export_id", 128)) ||
+            document.opt("export_id") != "workspace-current" ||
             document.opt("exported_at") !is String ||
             !validDate(requiredText(document, "exported_at", 64)) ||
             document.opt("source_platform") !is String ||
