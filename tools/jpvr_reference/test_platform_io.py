@@ -1,9 +1,10 @@
 """Tests for the seek-based positional I/O fallback used on Windows."""
 import os
 import tempfile
+import threading
 import unittest
 
-from .platform_io import read_at_seek, write_all_at_seek
+from .platform_io import lock_file, read_at_seek, unlock_file, write_all_at_seek
 
 
 class SeekBasedIOTests(unittest.TestCase):
@@ -26,6 +27,33 @@ class SeekBasedIOTests(unittest.TestCase):
             fd = stream.fileno()
             write_all_at_seek(fd, b"", 0)
             self.assertEqual(read_at_seek(fd, 0, 0), b"")
+
+    def test_multiple_handles_are_serialized_inside_one_process(self):
+        with tempfile.TemporaryFile() as stream:
+            first_fd = stream.fileno()
+            second_fd = os.dup(first_fd)
+            attempted = threading.Event()
+            acquired = threading.Event()
+
+            def contender():
+                attempted.set()
+                lock_file(second_fd, 2)
+                try:
+                    acquired.set()
+                finally:
+                    unlock_file(second_fd)
+
+            lock_file(first_fd, 2)
+            worker = threading.Thread(target=contender)
+            try:
+                worker.start()
+                self.assertTrue(attempted.wait(1))
+                self.assertFalse(acquired.wait(0.05))
+            finally:
+                unlock_file(first_fd)
+            worker.join(2)
+            os.close(second_fd)
+            self.assertTrue(acquired.is_set())
 
 
 if __name__ == "__main__":
