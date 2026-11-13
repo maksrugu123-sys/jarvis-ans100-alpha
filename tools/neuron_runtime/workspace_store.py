@@ -39,7 +39,7 @@ _SCHEMA_ID = 0x31
 _SCHEMA_VERSION = 1
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SETTING_PATTERN = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
-_SECRET_SETTING_PARTS = ("password", "passwd", "secret", "token", "credential", "api_key", "private_key", "auth")
+_SECRET_SETTING_PARTS = ("password", "passwd", "secret", "token", "credential", "api_key", "private_key")
 
 
 class WorkspaceError(ValueError):
@@ -71,10 +71,6 @@ class WorkspaceCheckpoint:
     storage_kind: str
     generation: int
     commit_page_no: int
-
-
-def _utc_now() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def _check_id(value, name):
