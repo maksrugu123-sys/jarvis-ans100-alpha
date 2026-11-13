@@ -4,7 +4,6 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
-import fcntl
 import os
 import threading
 import tempfile
@@ -17,6 +16,11 @@ from .index import decode_index_page
 from .manifest import INDEX_ROOT_NAMES, decode_manifest_page
 from .transaction import TransactionAssemblyPlan, validate_transaction_assembly_plan
 from .typed_transaction import TypedTransactionBuildPlan
+from .platform_io import fsync_parent, lock_file, read_at, unlock_file, write_all_at
+
+
+LOCK_SHARED = 1
+LOCK_EXCLUSIVE = 2
 
 
 SUPERBLOCK_AREA_BYTES = 2 * SUPERBLOCK_SIZE
@@ -90,14 +94,14 @@ class JPVRStorage:
         fd = os.open(target, os.O_RDWR | os.O_CREAT | os.O_EXCL, file_mode)
         locked = False
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            lock_file(fd, LOCK_EXCLUSIVE)
             locked = True
             os.ftruncate(fd, SUPERBLOCK_AREA_BYTES)
             for slot in (0, 1):
                 block = Superblock(identifier, 0, 0, 0, 1, bytes(16), slot)
                 cls._pwrite_all(fd, encode_superblock(block), slot * SUPERBLOCK_SIZE)
             os.fsync(fd)
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            unlock_file(fd)
             locked = False
             cls._fsync_parent(target)
             store = cls(fd, target)
@@ -106,7 +110,7 @@ class JPVRStorage:
         except Exception:
             if locked:
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    unlock_file(fd)
                 except OSError:
                     pass
             os.close(fd)
@@ -127,7 +131,7 @@ class JPVRStorage:
         target = os.path.abspath(os.fspath(path))
         store = cls(os.open(target, os.O_RDWR), target, verify_index_trees=verify_index_trees)
         try:
-            with store._locked(fcntl.LOCK_EX):
+            with store._locked(LOCK_EXCLUSIVE):
                 size = os.fstat(store._fd).st_size
                 if size < SUPERBLOCK_AREA_BYTES:
                     raise JPVRFormatError("container is shorter than the two Superblock slots")
@@ -146,37 +150,17 @@ class JPVRStorage:
 
     @staticmethod
     def _fsync_parent(path: str) -> None:
-        parent = os.path.dirname(path) or "."
-        fd = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+        fsync_parent(path)
 
     @staticmethod
     def _pwrite_all(fd: int, data: bytes, offset: int) -> None:
-        view = memoryview(data)
-        done = 0
-        while done < len(view):
-            try:
-                count = os.pwrite(fd, view[done:], offset + done)
-            except InterruptedError:
-                continue
-            if count <= 0:
-                raise OSError("short write to JPVR container")
-            done += count
+        write_all_at(fd, data, offset)
 
     def _pread_exact(self, offset: int, size: int) -> bytes:
-        result = bytearray()
-        while len(result) < size:
-            try:
-                part = os.pread(self._fd, size - len(result), offset + len(result))
-            except InterruptedError:
-                continue
-            if not part:
-                raise JPVRFormatError("unexpected end of JPVR container")
-            result.extend(part)
-        return bytes(result)
+        result = read_at(self._fd, size, offset)
+        if len(result) != size:
+            raise JPVRFormatError("unexpected end of JPVR container")
+        return result
 
     def _ensure_open(self) -> None:
         if self._fd < 0:
@@ -186,11 +170,11 @@ class JPVRStorage:
     def _locked(self, kind: int):
         with self._mutex:
             self._ensure_open()
-            fcntl.flock(self._fd, kind)
+            lock_file(self._fd, kind)
             try:
                 yield
             finally:
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                unlock_file(self._fd)
 
     @staticmethod
     def _offset(page_no: int) -> int:
@@ -265,13 +249,13 @@ class JPVRStorage:
 
     def get_superblock(self) -> Superblock:
         """Refresh and return the currently selected durable root."""
-        with self._locked(fcntl.LOCK_SH):
+        with self._locked(LOCK_SHARED):
             self._superblock = self._select_active_unlocked()
             return self._superblock
 
     def read_page(self, page_no: int) -> bytes:
         """Read one page and validate its envelope CRCs and physical page number."""
-        with self._locked(fcntl.LOCK_SH):
+        with self._locked(LOCK_SHARED):
             active = self._select_active_unlocked()
             encoded = self._read_page_unlocked(
                 page_no, tail=active.durable_tail_page_no,
@@ -405,7 +389,7 @@ class JPVRStorage:
         else:
             raise JPVRFormatError("commit requires a transaction assembly or typed build plan")
 
-        with self._locked(fcntl.LOCK_EX):
+        with self._locked(LOCK_EXCLUSIVE):
             current = self._select_active_unlocked()
             file_size = os.fstat(self._fd).st_size
             committed_size = (current.durable_tail_page_no + 1) * PAGE_SIZE
@@ -463,7 +447,7 @@ class JPVRStorage:
         else:
             raise JPVRFormatError("verify_index_trees must be bool or None")
 
-        with self._locked(fcntl.LOCK_SH):
+        with self._locked(LOCK_SHARED):
             active = self._select_active_unlocked()
             file_size = os.fstat(self._fd).st_size
             catalog = _DiskPageCatalog(
@@ -512,7 +496,7 @@ class JPVRStorage:
         if not basename:
             raise JPVRFormatError("recovery destination must name a file")
 
-        with self._locked(fcntl.LOCK_SH):
+        with self._locked(LOCK_SHARED):
             active = self._select_active_unlocked()
             source_size = os.fstat(self._fd).st_size
             catalog = _DiskPageCatalog(
@@ -612,7 +596,7 @@ class JPVRStorage:
                 for page_no in range(2, tail + 1):
                     offset = self._offset(page_no)
                     expected = self._pread_exact(offset, PAGE_SIZE)
-                    actual = os.pread(temp_fd, PAGE_SIZE, offset)
+                    actual = read_at(temp_fd, PAGE_SIZE, offset)
                     if len(actual) != PAGE_SIZE or actual != expected:
                         raise OSError(f"recovery-copy page {page_no} readback mismatch")
                     decode_page(actual, expected_page_no=page_no)
@@ -627,7 +611,7 @@ class JPVRStorage:
                 os.fsync(temp_fd)
 
                 for slot in (0, 1):
-                    encoded = os.pread(temp_fd, SUPERBLOCK_SIZE, slot * SUPERBLOCK_SIZE)
+                    encoded = read_at(temp_fd, SUPERBLOCK_SIZE, slot * SUPERBLOCK_SIZE)
                     decoded = decode_superblock(encoded, expected_slot_id=slot)
                     if decoded != slot_blocks[slot]:
                         raise OSError(f"recovery-copy Superblock slot {slot} readback mismatch")
@@ -692,7 +676,7 @@ class JPVRStorage:
         """
         if isinstance(max_pages, bool) or not isinstance(max_pages, int) or max_pages < 0:
             raise JPVRFormatError("max_pages must be a non-negative integer")
-        with self._locked(fcntl.LOCK_SH):
+        with self._locked(LOCK_SHARED):
             active = self._select_active_unlocked()
             page_count = max(0, active.durable_tail_page_no - 1)
             if page_count > max_pages:
