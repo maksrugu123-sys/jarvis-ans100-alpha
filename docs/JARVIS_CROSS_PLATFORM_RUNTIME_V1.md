@@ -136,7 +136,7 @@ The portable workspace/transfer contract includes:
 
 Never sync raw credentials, access tokens, private keys, Android Keystore material, or device-specific permission grants. A device must independently authorize sensitive capabilities.
 
-Manual encrypted export/import is implemented at source level on both platforms; cross-platform round-trip verification is still pending. Automatic live sync is a later optional feature. Do not expose the local console on 0.0.0.0 or the LAN as a shortcut to synchronization.
+Manual encrypted export/import is implemented at source level on both platforms; Android uses the Storage Access Framework and desktop uses browser file selection/download. Cross-platform round-trip verification is still pending. Automatic live sync is a later optional feature. Do not expose the local console on 0.0.0.0 or the LAN as a shortcut to synchronization.
 
 ### Initial portable schema
 
