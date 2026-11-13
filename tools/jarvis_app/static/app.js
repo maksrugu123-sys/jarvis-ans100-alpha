@@ -795,7 +795,15 @@ $("#transfer-confirm").addEventListener("click", async event => {
       ", совпадений " + finalPlan.summary.identical +
       ", конфликтов без перезаписи " + finalPlan.summary.conflicts + ".", "success");
   } catch (error) {
-    setNotice(error.message, "error");
+    if (error.status === 409) {
+      pendingTransfer = null;
+      $("#transfer-preview").hidden = true;
+      $("#transfer-confirm").hidden = true;
+      $("#transfer-cancel").hidden = true;
+      setNotice("Локальная память изменилась после предпросмотра. Обновите память и выберите файл заново.", "error");
+    } else {
+      setNotice(error.message, "error");
+    }
   } finally {
     button.disabled = false;
   }
