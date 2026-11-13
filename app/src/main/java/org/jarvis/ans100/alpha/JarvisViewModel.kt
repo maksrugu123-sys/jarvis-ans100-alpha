@@ -46,6 +46,14 @@ data class RuntimeWorkspaceImportPreview(
     val conflictCount: Int,
 )
 
+data class RuntimeWorkspaceRestorePreview(
+    val backupCreatedAt: String,
+    val conversationCount: Int,
+    val memoryCount: Int,
+    val taskCount: Int,
+    val settingCount: Int,
+)
+
 data class RuntimeWorkspaceUiState(
     val revision: Long = 0L,
     val memories: List<RuntimeMemory> = emptyList(),
@@ -54,6 +62,9 @@ data class RuntimeWorkspaceUiState(
     val error: String? = null,
     val message: String? = null,
     val importPreview: RuntimeWorkspaceImportPreview? = null,
+    val backupRevision: Long? = null,
+    val restoreBackupAcknowledged: Boolean = false,
+    val restorePreview: RuntimeWorkspaceRestorePreview? = null,
 )
 
 data class JarvisUiState(
@@ -73,6 +84,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
     private val runtimeExecutor = Executors.newSingleThreadExecutor()
     @Volatile private var pendingWorkspaceMerge: RuntimeWorkspaceMergePlan? = null
+    @Volatile private var pendingWorkspaceRestore: org.jarvis.ans100.alpha.data.RuntimeWorkspaceRestorePlan? = null
+    @Volatile private var pendingWorkspaceBackupRevision: Long? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mutableState = MutableStateFlow(JarvisUiState())
     val state: StateFlow<JarvisUiState> = mutableState.asStateFlow()
@@ -186,6 +199,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshWorkspace() {
         pendingWorkspaceMerge = null
+        pendingWorkspaceRestore = null
         workspaceRequest("Локальная память загружена.") {
             runtimeClient.getWorkspace()
         }
@@ -249,6 +263,284 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
+
+
+    fun exportWorkspaceBackup(
+        passphrase: CharArray,
+        onReady: (ByteArray, Long) -> Unit,
+    ) {
+        val before = mutableState.value
+        if (before.workspace.isBusy) {
+            passphrase.fill('\u0000')
+            return
+        }
+        if (!before.runtime.hasAccessToken || !before.workspace.isLoaded) {
+            passphrase.fill('\u0000')
+            mutableState.value = before.copy(
+                workspace = before.workspace.copy(
+                    error = "Сначала подключите Termux и обновите локальную память.",
+                    message = null,
+                ),
+            )
+            return
+        }
+        mutableState.value = before.copy(
+            workspace = before.workspace.copy(
+                isBusy = true, error = null, message = null,
+                importPreview = null, restorePreview = null,
+            ),
+        )
+        runtimeExecutor.execute {
+            try {
+                val backup = runtimeClient.exportEncryptedWorkspaceBackup(passphrase)
+                val memoryArray = backup.document.getJSONObject("records").getJSONArray("memories")
+                val memories = (0 until memoryArray.length()).map { index ->
+                    val item = memoryArray.getJSONObject(index)
+                    RuntimeMemory(
+                        id = item.getString("id"),
+                        content = item.getString("content"),
+                        category = item.getString("category"),
+                        updatedAt = item.getString("updated_at"),
+                    )
+                }
+                pendingWorkspaceBackupRevision = backup.revision
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            revision = backup.revision,
+                            memories = memories,
+                            isLoaded = true,
+                            isBusy = false,
+                            backupRevision = null,
+                            restoreBackupAcknowledged = false,
+                            restorePreview = null,
+                            error = null,
+                            message = "Резервная копия подготовлена. Выберите место сохранения .jwb.",
+                        ),
+                    )
+                    onReady(backup.encryptedBytes, backup.revision)
+                }
+            } catch (error: Exception) {
+                passphrase.fill('\u0000')
+                pendingWorkspaceBackupRevision = null
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = error.message ?: "Экспорт резервной копии не выполнен.",
+                            message = null,
+                            backupRevision = null,
+                            restoreBackupAcknowledged = false,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun markWorkspaceBackupSaved(revision: Long) {
+        val current = mutableState.value
+        val pendingRevision = pendingWorkspaceBackupRevision
+        pendingWorkspaceBackupRevision = null
+        if (pendingRevision != revision || current.workspace.revision != revision) {
+            mutableState.value = current.copy(
+                workspace = current.workspace.copy(
+                    backupRevision = null,
+                    restoreBackupAcknowledged = false,
+                    error = "Память изменилась во время сохранения backup. Обновите данные и создайте копию заново.",
+                    message = null,
+                ),
+            )
+            return
+        }
+        mutableState.value = current.copy(
+            workspace = current.workspace.copy(
+                backupRevision = revision,
+                restoreBackupAcknowledged = false,
+                error = null,
+                message = "Backup .jwb сохранён для REV $revision. Подтвердите, что файл находится отдельно.",
+            ),
+        )
+    }
+
+    fun setRestoreBackupAcknowledged(checked: Boolean) {
+        val current = mutableState.value.workspace
+        val allowed = current.backupRevision != null &&
+            current.backupRevision == current.revision &&
+            current.isLoaded && !current.isBusy
+        mutableState.value = mutableState.value.copy(
+            workspace = current.copy(restoreBackupAcknowledged = checked && allowed),
+        )
+    }
+
+    fun previewWorkspaceRestore(uri: Uri, passphrase: CharArray) {
+        val before = mutableState.value
+        val backupRevision = before.workspace.backupRevision
+        if (before.workspace.isBusy) {
+            passphrase.fill('\u0000')
+            return
+        }
+        if (!before.runtime.hasAccessToken || !before.workspace.isLoaded ||
+            backupRevision == null || backupRevision != before.workspace.revision ||
+            !before.workspace.restoreBackupAcknowledged
+        ) {
+            passphrase.fill('\u0000')
+            mutableState.value = before.copy(
+                workspace = before.workspace.copy(
+                    error = "Сначала сохраните отдельный backup текущей ревизии и подтвердите это.",
+                    message = null,
+                    restorePreview = null,
+                ),
+            )
+            return
+        }
+        val expectedRevision = before.workspace.revision
+        pendingWorkspaceRestore = null
+        mutableState.value = before.copy(
+            workspace = before.workspace.copy(
+                isBusy = true, error = null, message = null, restorePreview = null,
+            ),
+        )
+        runtimeExecutor.execute {
+            try {
+                val bytes = getApplication<Application>().contentResolver
+                    .openInputStream(uri)?.use { input ->
+                        val output = ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        var total = 0
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            if (total > 24 * 1024 * 1024) {
+                                throw IllegalArgumentException("Файл backup превышает лимит 24 МиБ.")
+                            }
+                            output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    } ?: throw IllegalArgumentException("Не удалось открыть выбранный backup.")
+                val backup = runtimeClient.decryptWorkspaceBackupBundle(bytes, passphrase)
+                val plan = runtimeClient.prepareWorkspaceRestore(backup, expectedRevision)
+                pendingWorkspaceRestore = plan
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = null,
+                            message = "Backup расшифрован и проверен. Проверьте сводку и подтвердите замену.",
+                            restorePreview = RuntimeWorkspaceRestorePreview(
+                                plan.backupCreatedAt,
+                                plan.conversationCount,
+                                plan.memoryCount,
+                                plan.taskCount,
+                                plan.settingCount,
+                            ),
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                passphrase.fill('\u0000')
+                pendingWorkspaceRestore = null
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = error.message ?: "Проверка backup не выполнена.",
+                            message = null,
+                            restorePreview = null,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun confirmWorkspaceRestore() {
+        val plan = pendingWorkspaceRestore ?: return
+        val before = mutableState.value
+        if (before.workspace.isBusy || before.workspace.restorePreview == null ||
+            before.workspace.backupRevision != plan.expectedRevision ||
+            before.workspace.revision != plan.expectedRevision ||
+            !before.workspace.restoreBackupAcknowledged
+        ) {
+            pendingWorkspaceRestore = null
+            mutableState.value = before.copy(
+                workspace = before.workspace.copy(
+                    backupRevision = null,
+                    restoreBackupAcknowledged = false,
+                    restorePreview = null,
+                    error = "Ревизия или подтверждение backup изменились. Повторите подготовку восстановления.",
+                    message = null,
+                ),
+            )
+            return
+        }
+        mutableState.value = before.copy(
+            workspace = before.workspace.copy(isBusy = true, error = null, message = null),
+        )
+        runtimeExecutor.execute {
+            try {
+                val snapshot = runtimeClient.commitWorkspaceRestore(plan)
+                val array = snapshot.document.getJSONObject("records").getJSONArray("memories")
+                val memories = (0 until array.length()).map { index ->
+                    val item = array.getJSONObject(index)
+                    RuntimeMemory(
+                        id = item.getString("id"),
+                        content = item.getString("content"),
+                        category = item.getString("category"),
+                        updatedAt = item.getString("updated_at"),
+                    )
+                }
+                pendingWorkspaceRestore = null
+                pendingWorkspaceBackupRevision = null
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = RuntimeWorkspaceUiState(
+                            revision = snapshot.revision,
+                            memories = memories,
+                            isLoaded = true,
+                            isBusy = false,
+                            message = "Память восстановлена из .jwb. Проверьте содержимое; сохраните новую копию.",
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                pendingWorkspaceRestore = null
+                pendingWorkspaceBackupRevision = null
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            backupRevision = null,
+                            restoreBackupAcknowledged = false,
+                            restorePreview = null,
+                            error = (error.message ?: "Восстановление не выполнено.") +
+                                " Обновите память перед следующей попыткой и не повторяйте запрос вслепую.",
+                            message = null,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelWorkspaceRestore() {
+        pendingWorkspaceRestore = null
+        val current = mutableState.value.workspace
+        mutableState.value = mutableState.value.copy(
+            workspace = current.copy(
+                restorePreview = null,
+                error = null,
+                message = "Восстановление отменено. Локальная память не изменена.",
+            ),
+        )
     }
 
     fun previewWorkspaceImport(uri: Uri, passphrase: CharArray) {
@@ -589,6 +881,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             isLoaded = true,
                             isBusy = false,
                             message = successMessage,
+                            backupRevision = current.workspace.backupRevision
+                                ?.takeIf { it == snapshot.revision },
+                            restoreBackupAcknowledged = current.workspace.restoreBackupAcknowledged &&
+                                current.workspace.backupRevision == snapshot.revision,
                         ),
                     )
                 }
