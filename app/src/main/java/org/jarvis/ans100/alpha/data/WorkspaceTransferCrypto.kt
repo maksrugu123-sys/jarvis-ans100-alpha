@@ -28,52 +28,61 @@ object WorkspaceTransferCrypto {
     private val random = SecureRandom()
 
     fun encrypt(plaintext: String, passphrase: CharArray): ByteArray {
-        validatePassphrase(passphrase)
         try {
+            validatePassphrase(passphrase)
             val plainBytes = plaintext.toByteArray(StandardCharsets.UTF_8)
             require(plainBytes.isNotEmpty() && plainBytes.size <= MAX_PLAINTEXT_BYTES) {
                 "Рабочее пространство превышает лимит 16 МиБ."
             }
             val salt = ByteArray(16).also(random::nextBytes)
             val nonce = ByteArray(12).also(random::nextBytes)
-            val keyBytes = deriveKey(passphrase, salt)
-            val ciphertext = try {
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(
-                    Cipher.ENCRYPT_MODE,
-                    SecretKeySpec(keyBytes, "AES"),
-                    GCMParameterSpec(128, nonce),
-                )
-                cipher.updateAAD(AAD)
-                cipher.doFinal(plainBytes)
+            try {
+                val ciphertext = try {
+                    val keyBytes = deriveKey(passphrase, salt)
+                    try {
+                        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                        cipher.init(
+                            Cipher.ENCRYPT_MODE,
+                            SecretKeySpec(keyBytes, "AES"),
+                            GCMParameterSpec(128, nonce),
+                        )
+                        cipher.updateAAD(AAD)
+                        cipher.doFinal(plainBytes)
+                    } finally {
+                        keyBytes.fill(0)
+                    }
+                } finally {
+                    plainBytes.fill(0)
+                }
+                try {
+                    val envelope = JSONObject()
+                        .put("format", FORMAT)
+                        .put("version", JSONObject().put("major", 1).put("minor", 0))
+                        .put("kdf", JSONObject()
+                            .put("name", "PBKDF2-HMAC-SHA256")
+                            .put("iterations", ITERATIONS)
+                            .put("salt", encodeBase64(salt)))
+                        .put("cipher", JSONObject()
+                            .put("name", "AES-256-GCM")
+                            .put("nonce", encodeBase64(nonce))
+                            .put("tag_bits", 128))
+                        .put("ciphertext", encodeBase64(ciphertext))
+                    return envelope.toString().toByteArray(StandardCharsets.UTF_8)
+                } finally {
+                    ciphertext.fill(0)
+                }
             } finally {
-                keyBytes.fill(0)
-                plainBytes.fill(0)
+                salt.fill(0)
+                nonce.fill(0)
             }
-            val envelope = JSONObject()
-                .put("format", FORMAT)
-                .put("version", JSONObject().put("major", 1).put("minor", 0))
-                .put("kdf", JSONObject()
-                    .put("name", "PBKDF2-HMAC-SHA256")
-                    .put("iterations", ITERATIONS)
-                    .put("salt", encodeBase64(salt)))
-                .put("cipher", JSONObject()
-                    .put("name", "AES-256-GCM")
-                    .put("nonce", encodeBase64(nonce))
-                    .put("tag_bits", 128))
-                .put("ciphertext", encodeBase64(ciphertext))
-            salt.fill(0)
-            nonce.fill(0)
-            ciphertext.fill(0)
-            return envelope.toString().toByteArray(StandardCharsets.UTF_8)
         } finally {
             passphrase.fill('\u0000')
         }
     }
 
     fun decrypt(bundleBytes: ByteArray, passphrase: CharArray): String {
-        validatePassphrase(passphrase)
         try {
+            validatePassphrase(passphrase)
             require(bundleBytes.isNotEmpty() && bundleBytes.size <= MAX_BUNDLE_BYTES) {
                 "Размер зашифрованного файла недопустим."
             }
@@ -117,22 +126,25 @@ object WorkspaceTransferCrypto {
             require(ciphertext.size in 17..(MAX_PLAINTEXT_BYTES + 16)) {
                 "Размер зашифрованных данных недопустим."
             }
-            val keyBytes = deriveKey(passphrase, salt)
             val plaintext = try {
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(
-                    Cipher.DECRYPT_MODE,
-                    SecretKeySpec(keyBytes, "AES"),
-                    GCMParameterSpec(128, nonce),
-                )
-                cipher.updateAAD(AAD)
-                cipher.doFinal(ciphertext)
-            } catch (error: AEADBadTagException) {
-                throw IllegalArgumentException(
-                    "Пароль неверен или файл повреждён.", error,
-                )
+                val keyBytes = deriveKey(passphrase, salt)
+                try {
+                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                    cipher.init(
+                        Cipher.DECRYPT_MODE,
+                        SecretKeySpec(keyBytes, "AES"),
+                        GCMParameterSpec(128, nonce),
+                    )
+                    cipher.updateAAD(AAD)
+                    cipher.doFinal(ciphertext)
+                } catch (error: AEADBadTagException) {
+                    throw IllegalArgumentException(
+                        "Пароль неверен или файл повреждён.", error,
+                    )
+                } finally {
+                    keyBytes.fill(0)
+                }
             } finally {
-                keyBytes.fill(0)
                 salt.fill(0)
                 nonce.fill(0)
                 ciphertext.fill(0)
