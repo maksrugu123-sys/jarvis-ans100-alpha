@@ -35,6 +35,7 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 
 ## Repository map
 | `tools/neuron_runtime/workspace_store.py` | Shared canonical desktop/Android workspace codec and CAS-protected JPVR memory store (AUTHORED, NOT RUN) |
+| `tools/jpvr_reference/platform_io.py` | POSIX flock/pread/pwrite and conservative Windows msvcrt region locking plus binary seek-based positional I/O (Windows tests AUTHORED, NOT RUN) |
 | `tools/neuron_runtime/test_workspace_store.py` | Shared workspace canonicalization, integrity, DATA/BLOB persistence, reopen and CAS tests (AUTHORED, NOT RUN) |
 | `docs/JARVIS_SHARED_WORKSPACE_MEMORY_V1.md` | Platform-neutral workspace format, JPVR durability, local API and current cross-device sync boundary |
 | `tools/neuron_runtime/task_session.py` | Bounded task/session lifecycle registry and canonical snapshot codec (not durable JPVR storage) |
@@ -372,7 +373,7 @@ python3 -m unittest tools.jpvr_reference.test_storage -v
 
 Create or reopen a container with `JPVRStorage.create(path)` / `JPVRStorage.open(path)`. Use `load_snapshot(max_pages=4096)` to obtain one active Superblock and its materialized bounded catalog under a single shared lock, or `load_page_catalog(max_pages=4096)` when only the catalog is needed. Submit a `TypedTransactionBuildPlan` to `store.commit(plan)`. The default catalog cap is 4096 pages (16 MiB encoded bytes plus Python mapping overhead); increase it only after considering available RAM.
 
-Storage commits append every immutable transaction page and call `fsync` before writing the inactive Superblock slot. The new slot is synced and re-read before success is returned. A `JPVRCommitUncertainError` means publication began but its final outcome could not be confirmed: reopen the file and inspect `active_commit_id` before retrying. Contract and failure model: [JPVR_STORAGE_ENGINE_V1.md](docs/JPVR_STORAGE_ENGINE_V1.md). This is a POSIX/Android reference implementation; it does not provide automatic prefix rollback, compaction, CQE event delivery, or a guarantee against hardware that falsely reports completed flushes.
+Storage commits append every immutable transaction page and call `fsync` before writing the inactive Superblock slot. The new slot is synced and re-read before success is returned. A `JPVRCommitUncertainError` means publication began but its final outcome could not be confirmed: reopen the file and inspect `active_commit_id` before retrying. Contract and failure model: [JPVR_STORAGE_ENGINE_V1.md](docs/JPVR_STORAGE_ENGINE_V1.md). The Python reference now routes file locking and positional I/O through a POSIX/Windows adapter; the Windows path is source-level only and has not been run on Windows 10/11. The Android app still reaches this Python reference through Termux. It does not provide automatic prefix rollback, compaction, CQE event delivery, or a guarantee against hardware that falsely reports completed flushes.
 
 
 ## JPVR historical recovery scanner
