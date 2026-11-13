@@ -63,11 +63,11 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 | `tools/neuron_runtime/task_loop.py` | Bounded sequential reasoning-authorized task orchestration with injected executor |
 | `tools/neuron_runtime/test_task_loop.py` | Task Loop execution, approval, recovery, and combined persistent policy/executor ledger integration tests (22 authored, not run) |
 | `docs/JARVIS_TASK_LOOP_V0_1.md` | Task Loop V0.1 flow, durable child-step ledger, idempotency and recovery limits |
-| `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` | Russian Compose dashboard for local drafts, JPVR task/session administration and non-executing symbolic-plan preview |
+| `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` | Russian Compose dashboard, JPVR task/session administration, reasoning preview and SAF encrypted workspace transfer UI |
 | `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` | StateFlow UI model for local drafts and asynchronous loopback runtime requests |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDraftRepository.kt` | Bounded versioned Android-only draft/session codec and repository |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/SharedPreferencesDraftStorage.kt` | App-private durable storage adapter for the local draft repository |
-| `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` | API v2 Bearer-authenticated loopback client for JPVR lifecycle, symbolic reasoning preview and shared workspace memory CRUD |
+| `app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt` | API v2 loopback client for JPVR lifecycle, workspace validation, merge preview/commit and memory CRUD |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/RuntimeAccessTokenStore.kt` | AES-GCM token storage using Android Keystore |
 | `tools/jarvis_app/auth.py` | Digest-only bearer token storage, file permissions and constant-time verification |
 | `app/src/main/res/xml/network_security_config.xml` | Deny cleartext by default; allow only loopback for the local runtime bridge |
