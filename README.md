@@ -4,7 +4,7 @@
 
 The repository has entered the first executable Python reference-orchestration stage. It is still not a production neural runtime, an integrated JPVR-001 prototype, or a finished assistant.
 
-**Platform direction:** PC + Android, local-first and offline-capable. The current implementation boundaries and staged migration are documented in [JARVIS Cross-Platform Runtime V1](docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md) and [JARVIS Mobile-First Offline Runtime V1](docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md), and [JARVIS PC Quick Start V1](docs/JARVIS_PC_QUICKSTART_V1.md), the [portable workspace schema V1](schemas/workspace/v1/workspace.schema.json), and the [Shared Workspace & Memory V1](docs/JARVIS_SHARED_WORKSPACE_MEMORY_V1.md). These are architecture and launch targets, not claims that offline conversation or cross-device sync is already implemented.
+**Platform direction:** PC + Android, local-first and offline-capable. The current implementation boundaries and staged migration are documented in [JARVIS Cross-Platform Runtime V1](docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md) and [JARVIS Mobile-First Offline Runtime V1](docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md), and [JARVIS PC Quick Start V1](docs/JARVIS_PC_QUICKSTART_V1.md), the [portable workspace schema V1](schemas/workspace/v1/workspace.schema.json), [encrypted bundle schema V1](schemas/workspace/v1/encrypted-bundle.schema.json), and the [Shared Workspace & Memory V1](docs/JARVIS_SHARED_WORKSPACE_MEMORY_V1.md). These are architecture and launch targets, not claims that offline conversation or cross-device sync is already implemented.
 
 ## Current status — 13 November 2026
 
@@ -35,6 +35,7 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 
 ## Repository map
 | `tools/neuron_runtime/workspace_store.py` | Shared canonical desktop/Android workspace codec and CAS-protected JPVR memory store (AUTHORED, NOT RUN) |
+| `schemas/workspace/v1/encrypted-bundle.schema.json` | Strict envelope schema for password-encrypted offline workspace transfer V1 |
 | `app/src/main/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCrypto.kt` | Android PBKDF2/AES-GCM codec for the portable encrypted workspace envelope (AUTHORED, NOT RUN) |
 | `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` | Android encrypted bundle round-trip, UTF-8 interoperability fixture, wrong-passphrase and tamper tests (4 authored, not run) |
 | `tools/jpvr_reference/platform_io.py` | POSIX flock/pread/pwrite and conservative Windows msvcrt region locking plus binary seek-based positional I/O (Windows tests AUTHORED, NOT RUN) |
