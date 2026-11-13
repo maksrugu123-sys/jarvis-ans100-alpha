@@ -33,6 +33,8 @@ data class LocalConversationUiState(
     val isBusy: Boolean = false,
     val error: String? = null,
     val backendLabel: String = "Локальный базовый ответчик · без LLM",
+    val modelInstalled: Boolean = false,
+    val modelStatus: String = "Модель не установлена.",
 )
 
 data class RuntimeBridgeUiState(
@@ -93,11 +95,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val repository = LocalDraftRepository(
         SharedPreferencesDraftStorage(application.applicationContext),
     )
+    private val modelStore = LiteRtLmModelStore(application.applicationContext)
+    private val conversationResponseEngine = LiteRtLmResponseEngine(
+        application.applicationContext, modelStore,
+    )
+    private val conversationExecutor = Executors.newSingleThreadExecutor()
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
         ),
-        LocalFallbackResponseEngine(),
+        conversationResponseEngine,
     )
     private val runtimeClient = LocalRuntimeBridgeClient()
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
@@ -210,6 +217,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 conversation = mutableState.value.conversation.copy(
                     messages = messages,
                     error = null,
+                    backendLabel = conversationCoordinator.backendLabel,
+                    modelInstalled = modelStore.installedFile() != null,
+                    modelStatus = modelStore.statusMessage(),
                 ),
             )
         } catch (error: Exception) {
@@ -218,6 +228,68 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     error = error.message ?: "Не удалось восстановить локальный диалог.",
                 ),
             )
+        }
+    }
+
+    fun importConversationModel(uri: Uri) {
+        val before = mutableState.value
+        if (before.conversation.isBusy) return
+        mutableState.value = before.copy(conversation = before.conversation.copy(isBusy = true, error = null))
+        conversationExecutor.execute {
+            try {
+                conversationResponseEngine.reset()
+                modelStore.importModel(uri)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(conversation = current.conversation.copy(
+                        isBusy = false,
+                        backendLabel = conversationCoordinator.backendLabel,
+                        modelInstalled = modelStore.installedFile() != null,
+                        modelStatus = modelStore.statusMessage(),
+                        error = null,
+                    ))
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(conversation = current.conversation.copy(
+                        isBusy = false,
+                        modelStatus = modelStore.statusMessage(),
+                        error = error.message ?: "Не удалось установить локальную модель.",
+                    ))
+                }
+            }
+        }
+    }
+
+    fun removeConversationModel() {
+        val before = mutableState.value
+        if (before.conversation.isBusy) return
+        mutableState.value = before.copy(conversation = before.conversation.copy(isBusy = true, error = null))
+        conversationExecutor.execute {
+            try {
+                conversationResponseEngine.reset()
+                if (!modelStore.deleteModel()) throw IllegalStateException("Не удалось удалить файл модели.")
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(conversation = current.conversation.copy(
+                        isBusy = false,
+                        backendLabel = conversationCoordinator.backendLabel,
+                        modelInstalled = false,
+                        modelStatus = modelStore.statusMessage(),
+                        error = null,
+                    ))
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(conversation = current.conversation.copy(
+                        isBusy = false,
+                        modelStatus = modelStore.statusMessage(),
+                        error = error.message ?: "Не удалось удалить локальную модель.",
+                    ))
+                }
+            }
         }
     }
 
@@ -237,7 +309,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         mutableState.value = before.copy(
             conversation = before.conversation.copy(isBusy = true, error = null),
         )
-        runtimeExecutor.execute {
+        conversationExecutor.execute {
             try {
                 val messages = conversationCoordinator.send(clean)
                 mainHandler.post {
@@ -270,7 +342,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         mutableState.value = before.copy(
             conversation = before.conversation.copy(isBusy = true, error = null),
         )
-        runtimeExecutor.execute {
+        conversationExecutor.execute {
             try {
                 conversationCoordinator.clear()
                 mainHandler.post {
@@ -1118,6 +1190,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        conversationExecutor.execute { conversationResponseEngine.close() }
+        conversationExecutor.shutdown()
         runtimeExecutor.shutdownNow()
         super.onCleared()
     }

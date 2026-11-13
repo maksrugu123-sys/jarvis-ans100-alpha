@@ -129,6 +129,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             passphrase?.fill('\u0000')
         }
     }
+    val modelLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) viewModel.importConversationModel(uri)
+    }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
@@ -172,6 +177,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         conversationInput = ""
                     },
                     onClear = viewModel::clearConversation,
+                    onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
+                    onRemoveModel = viewModel::removeConversationModel,
                 )
                 RuntimeBridgePanel(
                     state = ui.runtime,
@@ -1595,6 +1602,8 @@ private fun ConversationPanel(
     onInputChange: (String) -> Unit,
     onSend: (String) -> Unit,
     onClear: () -> Unit,
+    onSelectModel: () -> Unit,
+    onRemoveModel: () -> Unit,
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
     Card(
@@ -1627,6 +1636,21 @@ private fun ConversationPanel(
                         enabled = !state.isBusy,
                     ) {
                         Text("Очистить")
+                    }
+                }
+            }
+            Text(
+                state.modelStatus,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onSelectModel, enabled = !state.isBusy) {
+                    Text("Выбрать модель")
+                }
+                if (state.modelInstalled) {
+                    TextButton(onClick = onRemoveModel, enabled = !state.isBusy) {
+                        Text("Удалить модель")
                     }
                 }
             }
@@ -1711,7 +1735,11 @@ private fun ConversationPanel(
                 }
             }
             Text(
-                "Это базовый ответчик, не языковая модель. Неподдерживаемые вопросы будут обозначены честно; действия не исполняются.",
+                if (state.modelInstalled) {
+                    "Ответы создаются локальной моделью. Инструменты и выполнение действий отключены."
+                } else {
+                    "Без установленной модели доступен только базовый ответчик. Выберите файл Qwen3 .litertlm; загрузка из сети не выполняется."
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
