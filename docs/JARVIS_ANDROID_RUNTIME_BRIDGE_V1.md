@@ -71,6 +71,6 @@ The native Android screen can request a non-mutating Reasoning Engine preview, b
 
 - Android local repository tests: 9 methods, AUTHORED, NOT RUN.
 - Android Keystore token-store instrumentation tests: 7 methods, AUTHORED, NOT RUN.
-- Python local-console/API tests: 13 methods in `test_server.py`; auth-file tests: 9 methods in `test_auth.py`; all AUTHORED, NOT RUN.
+- Python local-console/API tests: 14 methods in `test_server.py`; auth-file tests: 10 methods in `test_auth.py`; all AUTHORED, NOT RUN.
 - GitHub source readback/static inspection only.
 - Kotlin compilation, Gradle sync/build, APK/AAB, Android install/UI tests, Android-to-Termux end-to-end I/O, Python tests, performance and security testing: NOT RUN.
