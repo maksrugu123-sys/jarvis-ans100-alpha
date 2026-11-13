@@ -1,6 +1,6 @@
 # JARVIS Android Runtime Bridge V1
 
-**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 bridge methods for shared Workspace API V1, consent-based memory management, and encrypted `.jws` import/export through the Storage Access Framework. Four encrypted-transfer JVM tests are authored. End-to-end tests, Android build and device verification NOT RUN. The Compose UI is source-level only. This remains a registry/memory bridge, not tool execution.
+**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 bridge methods for shared Workspace API V1, consent-based memory management, and encrypted `.jws` import/export through the Storage Access Framework. Four encrypted-transfer Android instrumentation tests are authored. End-to-end tests, Android build and device verification NOT RUN. The Compose UI is source-level only. This remains a registry/memory bridge, not tool execution.
 
 ## Ownership
 
