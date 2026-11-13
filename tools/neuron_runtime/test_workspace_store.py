@@ -56,6 +56,12 @@ class WorkspaceCodecTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "unique"):
             encode_workspace(snapshot)
 
+    def test_portable_settings_reject_secret_like_keys(self):
+        snapshot = empty_snapshot()
+        snapshot.records["settings"].append({"key": "access_token", "value": "must-not-export"})
+        with self.assertRaisesRegex(WorkspaceError, "secrets are forbidden"):
+            encode_workspace(snapshot)
+
     def test_payload_tampering_fails_integrity(self):
         raw = encode_workspace(empty_snapshot())
         tampered = raw.replace(b"shared-workspace", b"other-workspace")
