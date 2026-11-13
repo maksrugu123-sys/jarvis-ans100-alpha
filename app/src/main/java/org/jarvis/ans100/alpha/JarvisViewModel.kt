@@ -366,6 +366,19 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    fun markWorkspaceBackupSaveFailed(message: String) {
+        pendingWorkspaceBackupRevision = null
+        val current = mutableState.value
+        mutableState.value = current.copy(
+            workspace = current.workspace.copy(
+                backupRevision = null,
+                restoreBackupAcknowledged = false,
+                error = message,
+                message = null,
+            ),
+        )
+    }
+
     fun setRestoreBackupAcknowledged(checked: Boolean) {
         val current = mutableState.value.workspace
         val allowed = current.backupRevision != null &&
