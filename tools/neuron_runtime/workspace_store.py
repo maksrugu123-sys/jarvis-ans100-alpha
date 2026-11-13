@@ -24,6 +24,7 @@ from tools.jpvr_reference.data import decode_data_page
 from tools.jpvr_reference.manifest import decode_manifest_page
 from tools.jpvr_reference.records import MAX_LOGICAL_RECORD_BYTES, MAX_SMALL_RECORD_PAYLOAD
 from tools.jpvr_reference.storage import JPVRStorage
+from tools.neuron_runtime.jpvr_store import JPVRNeuronCheckpointStore
 from tools.jpvr_reference.typed_transaction import (
     BlobRecordInput, CheckpointPageInput, DataRecordInput,
     TypedTransactionRequest, build_typed_transaction,
@@ -96,7 +97,7 @@ def _base_document(snapshot: WorkspaceSnapshot) -> dict:
         "format": "jarvis.workspace",
         "version": {"major": 1, "minor": 0},
         "workspace_id": snapshot.workspace_id,
-        "export_id": f"revision-{snapshot.revision}",
+        "export_id": "workspace-current",
         "exported_at": snapshot.exported_at,
         "source_platform": snapshot.source_platform,
         "records": snapshot.records,
@@ -287,31 +288,12 @@ class JPVRWorkspaceStore:
         revision, object_id, kind, first, count, generation, length, checksum = desc
         if generation != page.commit_generation:
             raise WorkspaceError("workspace checkpoint generation mismatch")
-        if object_id != _object_id(self._workspace_id_from_record(active, catalog, first, count, kind, page)):
-            raise WorkspaceError("workspace checkpoint identity mismatch")
         payload = self._read_payload(catalog, page, desc)
         decoded = decode_workspace(payload)
+        if object_id != _object_id(decoded.workspace_id):
+            raise WorkspaceError("workspace checkpoint identity mismatch")
+        self._verify_source_commit(active, catalog, page, generation)
         return active, decoded, revision, payload
-
-    def _workspace_id_from_record(self, active, catalog, first, count, kind, checkpoint):
-        # The workspace ID is inside the integrity-protected payload. This helper
-        # extracts it only after checking record framing; full integrity follows.
-        if kind == "DATA":
-            data = decode_data_page(catalog[first], expected_page_no=first)
-            matches = [r for r in data.records if r.record_type == _RECORD_TYPE and r.schema_id == _SCHEMA_ID and r.schema_version == _SCHEMA_VERSION]
-            if len(matches) != 1:
-                raise WorkspaceError("workspace DATA record is missing or ambiguous")
-            try:
-                obj = json.loads(matches[0].payload.decode("utf-8"))
-                return obj["workspace_id"]
-            except Exception as exc:
-                raise WorkspaceError("workspace record identity is unreadable") from exc
-        pages = [catalog[n] for n in range(first, first + count)]
-        blob = decode_blob_pages(tuple(pages), expected_first_page_no=first)
-        try:
-            return json.loads(blob.payload.decode("utf-8"))["workspace_id"]
-        except Exception as exc:
-            raise WorkspaceError("workspace BLOB identity is unreadable") from exc
 
     def _read_payload(self, catalog, checkpoint, desc):
         revision, object_id, kind, first, count, generation, length, checksum = desc
@@ -333,6 +315,42 @@ class JPVRWorkspaceStore:
             raise WorkspaceError("workspace payload length or CRC mismatch")
         return payload
 
+    @staticmethod
+    def _verify_source_commit(active, catalog, checkpoint, expected_generation):
+        page_no = active.active_commit_page_no
+        generation = active.generation
+        visited = set()
+        while page_no:
+            if page_no in visited:
+                raise WorkspaceError("workspace COMMIT chain contains a cycle")
+            visited.add(page_no)
+            raw = catalog.get(page_no)
+            if raw is None:
+                raise WorkspaceError("workspace COMMIT history page is missing")
+            commit = decode_commit_page(raw, expected_page_no=page_no)
+            if commit.record.generation != generation:
+                raise WorkspaceError("workspace COMMIT history is discontinuous")
+            if generation == expected_generation:
+                source_manifest_raw = catalog.get(commit.record.manifest_ref.page_no)
+                if source_manifest_raw is None:
+                    raise WorkspaceError("workspace source MANIFEST is missing")
+                source_manifest = decode_manifest_page(
+                    source_manifest_raw, expected_page_no=commit.record.manifest_ref.page_no
+                )
+                if (
+                    commit.transaction_id != checkpoint.transaction_id
+                    or source_manifest.transaction_id != commit.transaction_id
+                    or source_manifest.manifest.checkpoint_page_no == 0
+                    or commit.record.durable_tail_page_no != page_no
+                ):
+                    raise WorkspaceError("workspace checkpoint is not published by its source COMMIT")
+                return
+            previous = commit.record.previous_commit_ref
+            if previous is None or previous.expected_commit_generation != generation - 1:
+                break
+            page_no, generation = previous.page_no, generation - 1
+        raise WorkspaceError("workspace checkpoint source COMMIT is not an ancestor of active state")
+
     def load(self, *, max_pages=4096):
         active, snapshot, revision, _ = self._snapshot(max_pages)
         return snapshot, revision, active
@@ -347,11 +365,26 @@ class JPVRWorkspaceStore:
             active, catalog = self.storage.load_snapshot(max_pages=max_pages)
         except JPVRFormatError as exc:
             raise WorkspaceError(str(exc)) from exc
+        if active.generation == 0:
+            if max_pages < 9:
+                raise WorkspaceError("initial JPVR INDEX setup requires max_pages >= 9")
+            JPVRNeuronCheckpointStore(self.storage)._initialize_indexes(active, catalog)
+            active, catalog = self.storage.load_snapshot(max_pages=max_pages)
         previous_revision = 0
-        if active.generation:
-            current, previous_revision, _ = self.load(max_pages=max_pages)
+        if active.generation > 1:
+            try:
+                current, previous_revision, _ = self.load(max_pages=max_pages)
+            except WorkspaceNotFound as exc:
+                raise WorkspaceConflict("JPVR file contains no workspace checkpoint") from exc
             if current.workspace_id != workspace_id:
-                raise WorkspaceConflict("JPVR workspace file belongs to another workspace_id")
+                raise WorkspaceConflict("JPVR file belongs to another workspace_id")
+        elif active.generation == 1:
+            commit = decode_commit_page(catalog[active.active_commit_page_no], expected_page_no=active.active_commit_page_no)
+            manifest = decode_manifest_page(catalog[commit.record.manifest_ref.page_no], expected_page_no=commit.record.manifest_ref.page_no).manifest
+            if manifest.checkpoint_page_no:
+                current, previous_revision, _ = self.load(max_pages=max_pages)
+                if current.workspace_id != workspace_id:
+                    raise WorkspaceConflict("JPVR file belongs to another workspace_id")
         if expected_revision is not None:
             if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision != previous_revision:
                 raise WorkspaceConflict(f"expected revision {expected_revision}, current revision is {previous_revision}")
