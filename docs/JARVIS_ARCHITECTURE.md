@@ -1,7 +1,7 @@
 # JARVIS ANS-100 Alpha — архитектура и журнал решений
 
 **Статус документа:** рабочая спецификация и журнал согласованных проектных решений  
-**Дата последнего обновления:** 12 ноября 2026 года  
+**Дата последнего обновления:** 13 ноября 2026 года  
 **Репозиторий:** `maksrugu123-sys/jarvis-ans100-alpha` (Private)  
 **Основная ветка:** `main`
 
@@ -4388,16 +4388,17 @@ Next: implement trusted approver identity and exact-request signed grants; conne
 
 **Статус:** IMPLEMENTED in the Python local console and native Android/PWA clients as API v2 source code. Static GitHub readback only; authentication, cryptography, HTTP rejection, Android Keystore behavior and device integration have NOT been runtime-tested. Contract: `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` and `docs/JARVIS_LOCAL_CONSOLE_V1.md`.
 
-The local console now protects `GET /api/state` and every `POST /api/*` route with a single `Authorization: Bearer <token>` credential. `GET /api/health` remains public and returns the API schema/version and required authentication mode without exposing session/task state. The service still binds exclusively to `127.0.0.1`; this is not remote authentication.
+The local console protects `GET /api/state` and every `POST /api/*` route with a single `Authorization: Bearer <token>` credential. `GET /api/health` remains public and returns the API schema/version and required authentication mode without exposing session/task state. The service still binds exclusively to `127.0.0.1`; this is not remote authentication.
 
 On first start, the console generates a 256-bit random token encoded as 43 Base64URL characters and prints it once. The token digest is stored as SHA-256 in a separate owner-only file with mode 0600; its parent directory is restricted to 0700. The original token is not persisted by the Python service. `--rotate-token` creates a replacement and invalidates the digest accepted by a newly started service process. The Android client encrypts the token using AES-GCM with a non-exportable Android Keystore key and persists only the encrypted envelope in app-private preferences. The PWA stores the token only in the active tab's sessionStorage and removes it after a 401 response.
 
+**Authentication file hardening:** `LocalConsoleAuth` rejects a symlinked or non-directory parent, verifies the parent/file owner, opens an existing digest using `O_NOFOLLOW` where supported, checks the opened file descriptor rather than relying on a prior path lookup, and repairs overly broad file/directory permissions to 0600/0700. A dangling symlink is not treated as a missing file. The digest file is fsynced before atomic replacement and its parent directory is fsynced where supported. `LocalConsoleService` resolves and compares the JPVR data path and auth path, including existing hard links, before opening the storage engine; using the same file for both is rejected even with `--rotate-token`, preventing accidental JPVR overwrite.
+
 This mechanism proves possession of a local API secret, not the identity of a human approver. It has no user accounts, device enrollment/allowlist, trusted approval signatures, per-approver grants or production threat model. A separate local policy/revocation reference store now exists in §3.50, but it is not an authenticated policy authority or signed-grant verifier. Anyone who obtains the bearer token can access the permitted local registry APIs until the token is rotated. The local API remains non-secret registry administration plus a non-mutating symbolic preview; capability flags for external actions, tool execution and remote access remain false.
 
-**Tests authored:** `tools/jarvis_app/test_server.py` contains 11 methods, including token persistence, restrictive file mode, rotation/revocation and HTTP deny/allow checks. Status: AUTHORED / NOT RUN. Android local token-store/UI tests have not yet been authored. No Python tests, cryptographic runtime checks, Android tests, builds, APK/AAB, CI or GitHub Actions were run.
+**Tests authored:** `tools/jarvis_app/test_server.py` contains 13 methods, including JPVR/auth-path collision rejection and denial of every POST route without a token. `tools/jarvis_app/test_auth.py` contains 9 methods for one-time token/digest behavior, permissions, rotation, malformed inputs and symlinked/dangling path rejection. Status: AUTHORED / NOT RUN. Android local token-store/UI tests have not yet been authored. No Python tests, cryptographic runtime checks, Android tests, builds, APK/AAB, CI or GitHub Actions were run.
 
-**Next gate:** author focused tests for auth-file corruption/permissions, Android token-store behavior and end-to-end API access; run them on an authorized device. Then implement trusted approver identity and signed exact-request grants. Do not route preview plans to Task Loop or ActionExecutor yet.
-
+**Next gate:** test Android Keystore token persistence and the authenticated Android-to-Termux flow on-device. Then implement trusted approver identity and signed exact-request grants. Do not route preview plans to Task Loop or ActionExecutor yet.
 
 ### 3.50. Persistent Safety Policy Registry V1 — local CAS reference
 
