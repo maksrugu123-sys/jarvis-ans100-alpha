@@ -274,6 +274,7 @@ function renderState(state) {
 }
 
 let currentWorkspace = null;
+let consolePlatform = "desktop";
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
@@ -343,6 +344,7 @@ async function writeWorkspace(mutator) {
   const document = JSON.parse(JSON.stringify(currentWorkspace.document));
   mutator(document);
   document.exported_at = new Date().toISOString();
+  document.source_platform = consolePlatform;
   await sealWorkspace(document);
   try {
     const result = await api("/api/workspace", {
@@ -551,9 +553,11 @@ async function enterConsole(token) {
     const health = await api("/api/health");
     if (health.api_schema !== "jarvis.local-console" ||
         health.api_version !== 2 || health.auth_required !== true ||
-        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1) {
+        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1 ||
+        !["desktop", "android"].includes(health.platform)) {
       throw new Error("Версия локальной консоли не поддерживается.");
     }
+    consolePlatform = health.platform;
     await refresh();
     sessionStorage.setItem("jarvis.console.access.v2", accessToken);
     unlockConsole();
@@ -585,7 +589,8 @@ async function boot() {
     const health = await api("/api/health");
     if (health.api_schema !== "jarvis.local-console" ||
         health.api_version !== 2 || health.auth_required !== true ||
-        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1) {
+        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1 ||
+        !["desktop", "android"].includes(health.platform)) {
       throw new Error("Сервер не поддерживает защищённый API v2.");
     }
     if (accessToken) {
