@@ -1700,7 +1700,7 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - \`JarvisViewModel.kt\` и \`MainActivity.kt\` — подключён Android Storage Access Framework для \`.jws\` CreateDocument/OpenDocument; импорт разбит на preview и отдельное подтверждение. Изменение локальной ревизии между preview и commit приводит к отказу CAS, а не к перезаписи.
 - \`workspace_store.py\` и \`workspace.schema.json\` — числовые значения настроек ограничены JSON safe-integer диапазоном ±9,007,199,254,740,991 для одинакового представления в Python, JavaScript и Kotlin.
 - \`test_workspace_store.py\` — добавлен тест отклонения integer setting вне safe-integer диапазона; workspace-store inventory теперь 11 методов.
-- \`app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt\` — 4 instrumentation test cases: UTF-8 round-trip, фиксированный межплатформенный PBKDF2/AES-GCM fixture, неверная парольная фраза и изменение ciphertext.
+- \`app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt\` — 4 instrumentation test cases: UTF-8 round-trip, фиксированный PBKDF2/AES-GCM fixture с полным каноническим workspace V1 и проверяемым SHA-256, неверная парольная фраза и изменение ciphertext.
 - Синхронизированы README, Android Runtime Bridge, Shared Workspace Memory и Cross-Platform Runtime docs.
 
 **Правило импорта:** workspace_id должен совпасть. Новые записи добавляются; одинаковые записи не дублируются; конфликты не перезаписывают локальную версию. Пароль не передаётся local API и не сохраняется. Файл и пароль нужно переносить разными каналами. Автоматической синхронизации, pairings и cloud transport нет.
