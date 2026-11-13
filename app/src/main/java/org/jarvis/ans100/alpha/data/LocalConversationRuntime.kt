@@ -275,6 +275,8 @@ class LocalConversationCoordinator(
     private val repository: LocalConversationRepository,
     private val responseEngine: LocalResponseEngine,
 ) {
+    val backendLabel: String get() = responseEngine.backendLabel
+
     fun history(): List<LocalConversationMessage> = repository.load()
 
     fun send(prompt: String): List<LocalConversationMessage> {
