@@ -459,6 +459,8 @@ async function deriveTransferKey(passphrase, salt) {
 
 async function verifyPortableWorkspace(document) {
   if (!document || typeof document !== "object" || Array.isArray(document) ||
+      Object.keys(document).sort().join(",") !==
+        "export_id,exported_at,format,integrity,records,source_platform,version,workspace_id" ||
       document.format !== "jarvis.workspace" ||
       !document.version || Object.keys(document.version).sort().join(",") !== "major,minor" ||
       document.version.major !== 1 || document.version.minor !== 0 ||
