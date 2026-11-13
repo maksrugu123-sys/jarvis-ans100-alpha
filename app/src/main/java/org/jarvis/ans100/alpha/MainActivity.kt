@@ -522,7 +522,8 @@ private fun WorkspaceMemoryPanel(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = state.isLoaded && !state.isBusy && state.importPreview == null &&
-                    approved && content.isNotBlank() && category.isNotBlank(),
+                    state.restorePreview == null && approved &&
+                    content.isNotBlank() && category.isNotBlank(),
             ) {
                 Text(if (state.isBusy) "Сохранение…" else "Сохранить воспоминание")
             }
