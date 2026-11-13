@@ -64,7 +64,7 @@ The service binds only to `127.0.0.1`. Do not expose it to a LAN, tunnel or publ
 
 ## Encrypted offline transfer V1
 
-The desktop PWA now exports and imports a `.jws` envelope using browser WebCrypto. Android has a matching Kotlin cryptographic codec and focused JVM regression tests; Android document-picker/UI wiring and device verification remain pending.
+The desktop PWA now exports and imports a `.jws` envelope using browser WebCrypto. Android now has a matching Kotlin cryptographic codec wired to the Storage Access Framework document picker; it imports with stable-ID/key merge semantics. The Android path has not been built or device-tested.
 
 The interoperable envelope is JSON with exactly these fields:
 
@@ -103,4 +103,4 @@ Focused tests are authored in:
 - `tools/neuron_runtime/test_workspace_store.py`
 - `tools/jarvis_app/test_server.py`
 
-They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Android transfer codec tests are authored but unexecuted; desktop transfer behavior is source-reviewed only. UI behavior is source-reviewed only and still requires browser and device verification. The Python/Android implementation is source-level until those checks run on the target environments.
+They cover canonical round-trip, tamper detection, explicit memory approval, secret-like setting rejection, DATA/BLOB persistence, reopen, CAS conflicts and authenticated API access. Python tests, Android tests and Android builds have **NOT RUN** in this change set. Four Android transfer codec tests are authored but unexecuted; both desktop and Android UI behavior remain source-reviewed only. UI behavior is source-reviewed only and still requires browser and device verification. The Python/Android implementation is source-level until those checks run on the target environments.
