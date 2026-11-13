@@ -1,8 +1,11 @@
 package org.jarvis.ans100.alpha
 
 import android.os.Bundle
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -64,6 +68,37 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var taskTitle by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf("") }
     var selectedTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+    var transferPassphrase by remember { mutableStateOf("") }
+    var pendingImportPassphrase by remember { mutableStateOf<CharArray?>(null) }
+    var pendingExportBytes by remember { mutableStateOf<ByteArray?>(null) }
+    val context = LocalContext.current
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.jarvis.workspace+json"),
+    ) { uri: Uri? ->
+        val bytes = pendingExportBytes
+        if (uri != null && bytes != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            } finally {
+                bytes.fill(0)
+                pendingExportBytes = null
+            }
+        } else {
+            bytes?.fill(0)
+            pendingExportBytes = null
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        val passphrase = pendingImportPassphrase
+        pendingImportPassphrase = null
+        if (uri != null && passphrase != null) {
+            viewModel.importWorkspace(uri, passphrase)
+        } else {
+            passphrase?.fill('\\u0000')
+        }
+    }
 
     val selectedSession = ui.data.sessions.firstOrNull {
         it.id == ui.selectedSessionId
@@ -104,6 +139,28 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onRefresh = viewModel::refreshWorkspace,
                     onAdd = viewModel::addWorkspaceMemory,
                     onDelete = viewModel::deleteWorkspaceMemory,
+                    transferPassphrase = transferPassphrase,
+                    onPassphraseChange = { transferPassphrase = it.take(256) },
+                    onExport = { phrase ->
+                        transferPassphrase = ""
+                        viewModel.exportWorkspace(phrase.toCharArray()) { bytes ->
+                            pendingExportBytes = bytes
+                            exportLauncher.launch("jarvis-workspace-" +
+                                java.time.LocalDate.now().toString() + ".jws")
+                        }
+                    },
+                    onChooseImport = {
+                        if (transferPassphrase.length >= 12) {
+                            pendingImportPassphrase = transferPassphrase.toCharArray()
+                            transferPassphrase = ""
+                            importLauncher.launch(arrayOf(
+                                "application/vnd.jarvis.workspace+json",
+                                "application/json",
+                                "application/octet-stream",
+                                "*/*",
+                            ))
+                        }
+                    },
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -310,6 +367,10 @@ private fun WorkspaceMemoryPanel(
     onRefresh: () -> Unit,
     onAdd: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    transferPassphrase: String,
+    onPassphraseChange: (String) -> Unit,
+    onExport: (String) -> Unit,
+    onChooseImport: () -> Unit,
 ) {
     var content by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("general") }
@@ -386,6 +447,40 @@ private fun WorkspaceMemoryPanel(
             ) {
                 Text(if (state.isBusy) "Сохранение…" else "Сохранить воспоминание")
             }
+            Text(
+                "Зашифрованный перенос между устройствами",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            OutlinedTextField(
+                value = transferPassphrase,
+                onValueChange = onPassphraseChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Парольная фраза · минимум 12 символов") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                enabled = !state.isBusy,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { onExport(transferPassphrase) },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.isLoaded && !state.isBusy && transferPassphrase.length >= 12,
+                ) { Text("Экспорт .jws") }
+                OutlinedButton(
+                    onClick = onChooseImport,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.isLoaded && !state.isBusy && transferPassphrase.length >= 12,
+                ) { Text("Импорт .jws") }
+            }
+            Text(
+                "Импорт объединяет записи по ID и не перезаписывает локальные версии. Пароль не сохраняется. Передайте файл и пароль отдельно.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it.take(120) },
