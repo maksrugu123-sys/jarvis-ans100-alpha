@@ -190,6 +190,113 @@ class LocalRuntimeBridgeClient {
         return saveWorkspace(sealWorkspace(document), expectedRevision)
     }
 
+    fun exportEncryptedWorkspace(passphrase: CharArray): ByteArray {
+        val current = getWorkspace()
+        validateTransferDocument(current.document)
+        return WorkspaceTransferCrypto.encrypt(canonicalJson(current.document), passphrase)
+    }
+
+    fun importEncryptedWorkspace(
+        bundleBytes: ByteArray,
+        passphrase: CharArray,
+        expectedRevision: Long,
+    ): RuntimeWorkspaceSnapshot {
+        val plaintext = WorkspaceTransferCrypto.decrypt(bundleBytes, passphrase)
+        val imported = try {
+            JSONObject(plaintext)
+        } catch (error: Exception) {
+            throw RuntimeBridgeException("Расшифрованный файл не содержит JSON workspace.")
+        }
+        validateTransferDocument(imported)
+        val current = getWorkspace()
+        if (current.revision != expectedRevision) {
+            throw RuntimeBridgeException("Локальная память изменилась. Обновите её и повторите импорт.")
+        }
+        if (current.document.optString("workspace_id") != imported.optString("workspace_id")) {
+            throw RuntimeBridgeException("Файл относится к другому workspace_id.")
+        }
+        val merged = JSONObject(current.document.toString())
+        val targetRecords = merged.getJSONObject("records")
+        val sourceRecords = imported.getJSONObject("records")
+        for (collection in listOf("conversations", "memories", "tasks")) {
+            val target = targetRecords.getJSONArray(collection)
+            val source = sourceRecords.getJSONArray(collection)
+            val byId = HashMap<String, JSONObject>()
+            for (index in 0 until target.length()) {
+                val item = target.getJSONObject(index)
+                byId[item.getString("id")] = item
+            }
+            for (index in 0 until source.length()) {
+                val item = source.getJSONObject(index)
+                val existing = byId[item.getString("id")]
+                if (existing == null) {
+                    target.put(item)
+                    byId[item.getString("id")] = item
+                }
+                // Identical IDs are left untouched. Conflicting content keeps the local record.
+            }
+        }
+        val targetSettings = targetRecords.getJSONArray("settings")
+        val sourceSettings = sourceRecords.getJSONArray("settings")
+        val settingByKey = HashMap<String, JSONObject>()
+        for (index in 0 until targetSettings.length()) {
+            val item = targetSettings.getJSONObject(index)
+            settingByKey[item.getString("key")] = item
+        }
+        for (index in 0 until sourceSettings.length()) {
+            val item = sourceSettings.getJSONObject(index)
+            if (!settingByKey.containsKey(item.getString("key"))) {
+                targetSettings.put(item)
+                settingByKey[item.getString("key")] = item
+            }
+        }
+        return saveWorkspace(sealWorkspace(merged), expectedRevision)
+    }
+
+    private fun validateTransferDocument(document: JSONObject) {
+        if (document.keys().asSequence().toSet() != setOf(
+                "format", "version", "workspace_id", "export_id", "exported_at",
+                "source_platform", "records", "integrity",
+            ) ||
+            document.optString("format") != "jarvis.workspace" ||
+            document.optJSONObject("version")?.optInt("major", -1) != 1 ||
+            document.optJSONObject("version")?.optInt("minor", -1) != 0 ||
+            !Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+                .matches(document.optString("workspace_id")) ||
+            document.optString("source_platform") !in setOf("desktop", "android")
+        ) {
+            throw RuntimeBridgeException("Файл не соответствует схеме рабочего пространства V1.")
+        }
+        val integrity = document.optJSONObject("integrity")
+            ?: throw RuntimeBridgeException("В файле отсутствует контрольная сумма.")
+        if (integrity.optString("algorithm") != "sha-256") {
+            throw RuntimeBridgeException("Алгоритм контрольной суммы не поддерживается.")
+        }
+        val unsigned = JSONObject(document.toString()).also { it.remove("integrity") }
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(canonicalJson(unsigned).toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        if (actual != integrity.optString("digest")) {
+            throw RuntimeBridgeException("Контрольная сумма рабочего пространства не совпадает.")
+        }
+        val records = document.optJSONObject("records")
+            ?: throw RuntimeBridgeException("В файле отсутствуют коллекции записей.")
+        if (records.keys().asSequence().toSet() !=
+            setOf("conversations", "memories", "tasks", "settings")) {
+            throw RuntimeBridgeException("Набор коллекций рабочего пространства некорректен.")
+        }
+        for ((name, maximum) in listOf(
+            "conversations" to 10_000, "memories" to 10_000,
+            "tasks" to 10_000, "settings" to 1_000,
+        )) {
+            val array = records.optJSONArray(name)
+                ?: throw RuntimeBridgeException("Коллекция $name должна быть массивом.")
+            if (array.length() > maximum) {
+                throw RuntimeBridgeException("Коллекция $name превышает лимит.")
+            }
+        }
+    }
+
     private fun sealWorkspace(document: JSONObject): JSONObject {
         document.put("exported_at", Instant.now().toString())
         document.put("source_platform", "android")
