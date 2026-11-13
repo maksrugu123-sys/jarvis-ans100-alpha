@@ -121,11 +121,28 @@ class LocalConsoleService:
         rotate_token: bool = False,
     ) -> None:
         default_path = Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr"
-        self.data_path = Path(data_path) if data_path is not None else default_path
+        self.data_path = (
+            Path(data_path).expanduser() if data_path is not None else default_path
+        )
         self.auth_path = (
-            Path(auth_path) if auth_path is not None
+            Path(auth_path).expanduser() if auth_path is not None
             else self.data_path.with_name(self.data_path.name + ".access-token")
         )
+        try:
+            same_path = (
+                self.data_path.resolve(strict=False)
+                == self.auth_path.resolve(strict=False)
+            )
+            if not same_path and self.data_path.exists() and self.auth_path.exists():
+                same_path = os.path.samefile(self.data_path, self.auth_path)
+        except (OSError, RuntimeError) as exc:
+            raise LocalConsoleError(
+                "cannot validate separate JPVR and authentication paths"
+            ) from exc
+        if same_path:
+            raise LocalConsoleError(
+                "JPVR data and authentication digest must use different files"
+            )
         self._lock = threading.RLock()
         self.data_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 
