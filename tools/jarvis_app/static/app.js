@@ -441,8 +441,8 @@ function base64ToBytes(value, maximum) {
   let binary;
   try { binary = atob(value); }
   catch { throw new Error("Файл содержит некорректные Base64-данные."); }
-  if (!binary.length || binary.length > maximum) {
-    throw new Error("Размер данных в файле недопустим.");
+  if (!binary.length || binary.length > maximum || btoa(binary) !== value) {
+    throw new Error("Размер или кодировка данных в файле недопустимы.");
   }
   return Uint8Array.from(binary, character => character.charCodeAt(0));
 }
@@ -460,14 +460,18 @@ async function deriveTransferKey(passphrase, salt) {
 async function verifyPortableWorkspace(document) {
   if (!document || typeof document !== "object" || Array.isArray(document) ||
       document.format !== "jarvis.workspace" ||
-      !document.version || document.version.major !== 1 ||
-      document.version.minor !== 0 ||
+      !document.version || Object.keys(document.version).sort().join(",") !== "major,minor" ||
+      document.version.major !== 1 || document.version.minor !== 0 ||
       typeof document.workspace_id !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(document.workspace_id) ||
+      typeof document.export_id !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(document.export_id) ||
+      typeof document.exported_at !== "string" || !Number.isFinite(Date.parse(document.exported_at)) ||
       !["desktop", "android"].includes(document.source_platform) ||
       !document.records || Object.keys(document.records).sort().join(",") !==
         "conversations,memories,settings,tasks" ||
-      !document.integrity || document.integrity.algorithm !== "sha-256" ||
+      !document.integrity || Object.keys(document.integrity).sort().join(",") !== "algorithm,digest" ||
+      document.integrity.algorithm !== "sha-256" ||
       typeof document.integrity.digest !== "string" ||
       !/^[a-f0-9]{64}$/.test(document.integrity.digest)) {
     throw new Error("В файле нет поддерживаемого рабочего пространства JARVIS V1.");
@@ -540,11 +544,13 @@ async function decryptWorkspaceBundle(bundle, passphrase) {
   if (!bundle || typeof bundle !== "object" || Array.isArray(bundle) ||
       Object.keys(bundle).sort().join(",") !== "cipher,ciphertext,format,kdf,version" ||
       bundle.format !== "jarvis.workspace.encrypted" ||
-      !bundle.version || bundle.version.major !== 1 || bundle.version.minor !== 0 ||
-      !bundle.kdf || bundle.kdf.name !== "PBKDF2-HMAC-SHA256" ||
+      !bundle.version || Object.keys(bundle.version).sort().join(",") !== "major,minor" ||
+      bundle.version.major !== 1 || bundle.version.minor !== 0 ||
+      !bundle.kdf || Object.keys(bundle.kdf).sort().join(",") !== "iterations,name,salt" ||
+      bundle.kdf.name !== "PBKDF2-HMAC-SHA256" ||
       bundle.kdf.iterations !== TRANSFER_ITERATIONS ||
-      !bundle.cipher || bundle.cipher.name !== "AES-256-GCM" ||
-      bundle.cipher.tag_bits !== 128) {
+      !bundle.cipher || Object.keys(bundle.cipher).sort().join(",") !== "name,nonce,tag_bits" ||
+      bundle.cipher.name !== "AES-256-GCM" || bundle.cipher.tag_bits !== 128) {
     throw new Error("Формат зашифрованного файла не поддерживается.");
   }
   const salt = base64ToBytes(bundle.kdf.salt, 16);
