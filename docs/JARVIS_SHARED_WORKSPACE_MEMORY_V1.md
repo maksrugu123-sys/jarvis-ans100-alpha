@@ -88,6 +88,16 @@ Import is a merge, never a replacement:
 
 A file transfer is a manual copy between devices. It does not enable LAN exposure, cloud sync, automatic pairing, or background synchronization. Keep the passphrase separate from the `.jws` file.
 
+## Manual transfer procedure
+
+1. On the source device, open the JARVIS memory panel and choose **Export .jws**. Enter a passphrase of at least 12 characters and save the generated file.
+2. Copy the `.jws` file to the destination device using a transfer method you trust. Do not put the passphrase in the same folder/message as the file.
+3. On the destination device, connect its own local JARVIS runtime, choose **Import .jws**, select the file and enter the same passphrase.
+4. Review the preview: new records will be added; identical records are skipped; conflicting IDs/keys retain the destination's local version.
+5. Confirm to commit the merge to the destination's local JPVR workspace. Cancel leaves the destination unchanged.
+
+Fresh installations use the shared default workspace ID `jarvis-default`. An import from a different workspace ID is rejected. Re-importing the same file is idempotent for records already imported. Export does not delete anything from the source device, and import does not change the source file.
+
 ## Important current boundary
 
 The Android app currently connects to `127.0.0.1:8765` on the phone. The PC service also binds to its own loopback. Therefore the shared format and API are implemented, but a PC and phone do not automatically see each other's local file. Cross-device pairing and background sync remain future work. Encrypted offline export/import is now available in the desktop PWA and Android app through the Storage Access Framework. Both use the same envelope and preview/confirmation flow; neither platform overwrites local ID/key collisions. Do not expose the loopback service as a workaround.
