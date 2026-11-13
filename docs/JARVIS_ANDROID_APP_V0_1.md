@@ -1,6 +1,6 @@
 # JARVIS Android App V0.5 — authenticated JPVR bridge and symbolic preview
 
-**Статус:** Android Compose V0.5 adds local bearer-token pairing to the bounded JPVR task/session bridge and symbolic Reasoning Engine preview. It still has no task executor or trusted approval flow. Nine Android local-repository tests and twenty-two Python console/authentication tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
+**Статус:** Android Compose V0.5 adds local bearer-token pairing to the bounded JPVR task/session bridge and symbolic Reasoning Engine preview. It still has no task executor or trusted approval flow. Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests and twenty-two Python console/authentication tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
 
 ## Project and compatibility
 
@@ -85,6 +85,7 @@ The native UI calls the structured `/api/reasoning/preview` endpoint, but does n
 ## Verification
 
 - Android local repository tests: nine methods, AUTHORED, NOT RUN.
+- Android Keystore token-store instrumentation tests: seven methods, AUTHORED, NOT RUN.
 - Python local-console/API tests: thirteen methods; auth-file tests: nine methods; all AUTHORED, NOT RUN.
 - GitHub readback/static source review only for this bridge batch.
 - Kotlin compilation, Gradle sync/build, APK/AAB, device installation, Compose UI tests, Python tests, Android/Termux end-to-end I/O and performance measurements: NOT RUN.
