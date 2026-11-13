@@ -259,17 +259,24 @@ class LocalRuntimeBridgeClient {
                 "source_platform", "records", "integrity",
             ) ||
             document.optString("format") != "jarvis.workspace" ||
-            document.optJSONObject("version")?.optInt("major", -1) != 1 ||
-            document.optJSONObject("version")?.optInt("minor", -1) != 0 ||
+            document.optJSONObject("version")?.let {
+                it.keys().asSequence().toSet() == setOf("major", "minor") &&
+                    it.optInt("major", -1) == 1 && it.optInt("minor", -1) == 0
+            } != true ||
             !Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
                 .matches(document.optString("workspace_id")) ||
+            !Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+                .matches(document.optString("export_id")) ||
+            runCatching { Instant.parse(document.optString("exported_at")) }.isFailure ||
             document.optString("source_platform") !in setOf("desktop", "android")
         ) {
             throw RuntimeBridgeException("Файл не соответствует схеме рабочего пространства V1.")
         }
         val integrity = document.optJSONObject("integrity")
             ?: throw RuntimeBridgeException("В файле отсутствует контрольная сумма.")
-        if (integrity.optString("algorithm") != "sha-256") {
+        if (integrity.keys().asSequence().toSet() != setOf("algorithm", "digest") ||
+            integrity.optString("algorithm") != "sha-256" ||
+            !Regex("^[a-f0-9]{64}$").matches(integrity.optString("digest"))) {
             throw RuntimeBridgeException("Алгоритм контрольной суммы не поддерживается.")
         }
         val unsigned = JSONObject(document.toString()).also { it.remove("integrity") }
