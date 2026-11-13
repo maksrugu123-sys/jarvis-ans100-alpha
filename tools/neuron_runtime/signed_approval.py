@@ -11,7 +11,6 @@ from dataclasses import dataclass, replace, fields
 from enum import Enum
 import json
 import re
-from typing import Callable
 
 from .permission_safety_gate import (
     ApprovalGrant,
@@ -292,7 +291,6 @@ def verify_signed_approval(
     trust_store: ApprovalTrustStore,
     *,
     now_utc_ns: int,
-    signature_verifier: Callable[[bytes, bytes, bytes], bool] | None = None,
 ) -> ApprovalGrant:
     """Verify key trust, identity, bounded UTC validity and Ed25519 signature."""
     if not isinstance(envelope, SignedApprovalEnvelope):
@@ -315,13 +313,9 @@ def verify_signed_approval(
         raise SignedApprovalError("approval_issued_in_future", "approval issue time is too far in the future")
     if now >= envelope.expires_at_utc_ns:
         raise SignedApprovalError("approval_expired", "approval has expired")
-    verifier = signature_verifier or _verify_ed25519
-    try:
-        valid = verifier(key.public_key, canonical_approval_signing_bytes(envelope), envelope.signature)
-    except SignedApprovalError:
-        raise
-    except Exception as exc:
-        raise SignedApprovalError("approval_signature_unavailable", "signature verifier failed closed") from exc
+    valid = _verify_ed25519(
+        key.public_key, canonical_approval_signing_bytes(envelope), envelope.signature
+    )
     if valid is not True:
         raise SignedApprovalError("approval_signature_invalid", "approval signature verification failed")
     return envelope.grant
