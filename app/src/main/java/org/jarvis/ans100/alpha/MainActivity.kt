@@ -488,7 +488,8 @@ private fun WorkspaceMemoryPanel(
                 placeholder = { Text("Что JARVIS должен помнить?") },
                 minLines = 2,
                 maxLines = 4,
-                enabled = !state.isBusy && state.isLoaded && state.importPreview == null,
+                enabled = !state.isBusy && state.isLoaded &&
+                    state.importPreview == null && state.restorePreview == null,
             )
             OutlinedTextField(
                 value = category,
@@ -496,7 +497,7 @@ private fun WorkspaceMemoryPanel(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Категория") },
                 singleLine = true,
-                enabled = !state.isBusy && state.isLoaded,
+                enabled = !state.isBusy && state.isLoaded && state.restorePreview == null,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -505,7 +506,8 @@ private fun WorkspaceMemoryPanel(
                 Checkbox(
                     checked = approved,
                     onCheckedChange = { approved = it },
-                    enabled = !state.isBusy && state.importPreview == null,
+                    enabled = !state.isBusy && state.importPreview == null &&
+                        state.restorePreview == null,
                 )
                 Text(
                     "Я подтверждаю сохранение этого воспоминания",
@@ -546,12 +548,13 @@ private fun WorkspaceMemoryPanel(
                     onClick = { onExport(transferPassphrase) },
                     modifier = Modifier.weight(1f),
                     enabled = state.isLoaded && !state.isBusy && state.importPreview == null &&
-                        transferPassphrase.length >= 12,
+                        state.restorePreview == null && transferPassphrase.length >= 12,
                 ) { Text("Экспорт .jws") }
                 OutlinedButton(
                     onClick = onChooseImport,
                     modifier = Modifier.weight(1f),
-                    enabled = state.isLoaded && !state.isBusy && transferPassphrase.length >= 12,
+                    enabled = state.isLoaded && !state.isBusy && state.restorePreview == null &&
+                        transferPassphrase.length >= 12,
                 ) { Text("Импорт .jws") }
             }
             Text(
@@ -571,13 +574,14 @@ private fun WorkspaceMemoryPanel(
                 OutlinedButton(
                     onClick = { onExportBackup(transferPassphrase) },
                     modifier = Modifier.weight(1f),
-                    enabled = state.isLoaded && !state.isBusy && transferPassphrase.length >= 12,
+                    enabled = state.isLoaded && !state.isBusy && state.restorePreview == null &&
+                        transferPassphrase.length >= 12,
                 ) { Text("Сохранить .jwb") }
                 OutlinedButton(
                     onClick = { onChooseRestore(transferPassphrase) },
                     modifier = Modifier.weight(1f),
-                    enabled = state.isLoaded && !state.isBusy &&
-                        transferPassphrase.length >= 12 &&
+                    enabled = state.isLoaded && !state.isBusy && state.importPreview == null &&
+                        state.restorePreview == null && transferPassphrase.length >= 12 &&
                         state.backupRevision == state.revision &&
                         state.restoreBackupAcknowledged,
                 ) { Text("Выбрать backup") }
@@ -681,7 +685,8 @@ private fun WorkspaceMemoryPanel(
                             Button(
                                 onClick = onConfirmImport,
                                 modifier = Modifier.weight(1f),
-                                enabled = !state.isBusy && preview.addedCount > 0,
+                                enabled = !state.isBusy && state.restorePreview == null &&
+                                    preview.addedCount > 0,
                             ) { Text("Подтвердить импорт") }
                             OutlinedButton(
                                 onClick = onCancelImport,
@@ -772,7 +777,8 @@ private fun WorkspaceMemoryPanel(
                                 )
                                 TextButton(
                                     onClick = { deleteTarget = memory },
-                                    enabled = !state.isBusy && state.importPreview == null,
+                                    enabled = !state.isBusy && state.importPreview == null &&
+                                        state.restorePreview == null,
                                 ) { Text("Удалить") }
                             }
                         }
