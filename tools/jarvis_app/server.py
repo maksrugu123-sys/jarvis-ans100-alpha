@@ -33,6 +33,10 @@ from tools.neuron_runtime.task_session import (
     TaskSessionManager,
     TaskStatus,
 )
+from tools.neuron_runtime.workspace_store import (
+    JPVRWorkspaceStore, WorkspaceConflict, WorkspaceError, WorkspaceNotFound,
+    WorkspaceSnapshot, decode_workspace, encode_workspace,
+)
 from tools.neuron_runtime.task_session_store import (
     JPVRTaskSessionCheckpointError,
     JPVRTaskSessionCheckpointNotFound,
