@@ -820,7 +820,7 @@ $("#transfer-export").addEventListener("click", async event => {
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     setNotice("Зашифрованный файл создан. Храните пароль отдельно от файла.", "success");
   } catch (error) {
     setNotice(error.message, "error");
@@ -928,7 +928,7 @@ $("#backup-export").addEventListener("click", async event => {
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     backupSavedRevision = workspace.revision;
     pendingRestore = null;
     $("#backup-ack").checked = false;
@@ -1075,6 +1075,8 @@ $("#backup-restore-confirm").addEventListener("click", async event => {
         if (canonicalJson(currentWorkspace.document.records) === canonicalJson(plan.workspace.records)) {
           pendingRestore = null;
           backupSavedRevision = null;
+          $("#backup-ack").checked = false;
+          $("#backup-ack-row").hidden = true;
           $("#backup-preview").hidden = true;
           $("#backup-restore-confirm").hidden = true;
           $("#backup-restore-cancel").hidden = true;
