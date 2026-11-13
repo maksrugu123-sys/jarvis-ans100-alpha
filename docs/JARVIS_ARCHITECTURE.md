@@ -4381,7 +4381,7 @@ The server reports `external_actions=false`, `tool_execution=false`, `remote_acc
 
 Eighteen Python console/API test methods, eleven Python auth test methods and nine Android local repository test methods are AUTHORED, NOT RUN. The separate transfer/backup crypto instrumentation suite contains nine tests; the Keystore token-store suite contains seven. GitHub readback/static source inspection only. Kotlin compile, Gradle sync/build, APK/AAB, device install, Android↔Termux I/O, Python tests, UI tests, performance and security checks are NOT RUN.
 
-Next: implement trusted approver identity and exact-request signed grants; connect the local policy registry (§3.50) to a trusted key/revocation source; connect the executor ledger (§3.51) to downstream provider idempotency and a trusted reconciler. Add Android token-store tests and verify the authenticated Android-to-Termux flow on-device. The Bearer token remains transport access only. Keep external actions disabled until these independent contracts are implemented and verified.
+Next: after the user explicitly authorizes execution, run the Android Keystore/authenticated bridge and desktop/Android backup/restore verification suites, including the JWB cross-platform fixture, CAS race and failure/reconciliation cases. Then implement trusted approver identity and exact-request signed grants; connect the local policy registry (§3.50) to a trusted key/revocation source; connect the executor ledger (§3.51) to downstream provider idempotency and a trusted reconciler. The Bearer token remains transport access only. Keep external actions disabled until these independent contracts are implemented and verified.
 
 
 ### 3.49. Local-console bearer authentication V1
