@@ -94,7 +94,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
         val passphrase = pendingImportPassphrase
         pendingImportPassphrase = null
         if (uri != null && passphrase != null) {
-            viewModel.importWorkspace(uri, passphrase)
+            viewModel.previewWorkspaceImport(uri, passphrase)
         } else {
             passphrase?.fill('\u0000')
         }
@@ -161,6 +161,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             ))
                         }
                     },
+                    onConfirmImport = viewModel::confirmWorkspaceImport,
+                    onCancelImport = viewModel::cancelWorkspaceImport,
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -371,6 +373,8 @@ private fun WorkspaceMemoryPanel(
     onPassphraseChange: (String) -> Unit,
     onExport: (String) -> Unit,
     onChooseImport: () -> Unit,
+    onConfirmImport: () -> Unit,
+    onCancelImport: () -> Unit,
 ) {
     var content by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("general") }
@@ -481,6 +485,46 @@ private fun WorkspaceMemoryPanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            state.importPreview?.let { preview ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            "Предпросмотр импорта",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text("Новых записей: ${preview.addedCount}")
+                        Text("Уже совпадают: ${preview.identicalCount}")
+                        Text("Конфликтов без перезаписи: ${preview.conflictCount}")
+                        Text(
+                            "Локальные версии конфликтующих записей сохранятся.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onConfirmImport,
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.isBusy && preview.addedCount > 0,
+                            ) { Text("Подтвердить импорт") }
+                            OutlinedButton(
+                                onClick = onCancelImport,
+                                modifier = Modifier.weight(1f),
+                                enabled = !state.isBusy,
+                            ) { Text("Отмена") }
+                        }
+                    }
+                }
+            }
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it.take(120) },
