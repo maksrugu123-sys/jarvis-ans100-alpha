@@ -118,9 +118,9 @@ Every call must carry a schema/version, request ID, bounded input size, deadline
 
 ## 7. Portable workspace and cross-device data
 
-PC and Android must eventually exchange a versioned portable workspace bundle. The bundle must not be a raw copy of the JPVR file because JPVR is currently a Python reference storage implementation and its internal file format is not yet a cross-platform interchange guarantee.
+PC and Android exchange data through a versioned portable workspace bundle. The `.jws` file is not a raw copy of the JPVR file because JPVR is currently a Python reference storage implementation and its internal file format is not a cross-platform interchange guarantee.
 
-The portable bundle contract must include:
+The portable workspace/transfer contract includes:
 
 - explicit format name and major/minor version;
 - workspace ID and export ID;
@@ -128,15 +128,15 @@ The portable bundle contract must include:
 - records for conversations, explicit memories, tasks, and settings;
 - stable record IDs and per-record revision/version;
 - canonical UTF-8 serialization, deterministic ordering, and integrity checksum;
-- optional authenticated encryption for transfer/storage;
+- authenticated AES-256-GCM encryption for portable transfer files; the workspace remains plaintext only inside the authenticated local application process;
 - strict size/count limits and validation before import;
-- conflict policy: preserve both conflicting revisions or require user resolution; never silently overwrite newer data;
+- V1 conflict policy: retain the destination's local record, skip a differing imported record with the same stable ID/key, and show the conflict count before confirmation; keep the source `.jws` unchanged for manual resolution; never silently overwrite;
 - import preview and explicit user confirmation;
-- atomic publication: validate into a temporary workspace, then commit as one operation.
+- validate the complete merged workspace before one revision-checked JPVR publication;
 
 Never sync raw credentials, access tokens, private keys, Android Keystore material, or device-specific permission grants. A device must independently authorize sensitive capabilities.
 
-Automatic live sync is a later optional feature. First deliver explicit export/import and prove round-trip compatibility. Do not expose the local console on 0.0.0.0 or the LAN as a shortcut to synchronization.
+Manual encrypted export/import is implemented at source level on both platforms; cross-platform round-trip verification is still pending. Automatic live sync is a later optional feature. Do not expose the local console on 0.0.0.0 or the LAN as a shortcut to synchronization.
 
 ### Initial portable schema
 
