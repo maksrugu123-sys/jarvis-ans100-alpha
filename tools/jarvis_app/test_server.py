@@ -222,6 +222,10 @@ class LocalConsoleHttpTests(unittest.TestCase):
         )
 
     def test_workspace_endpoint_supports_authenticated_cas_round_trip(self):
+        with self.assertRaises(HTTPError) as missing_auth:
+            urlopen(self.base_url + "/api/workspace", timeout=3)
+        self.assertEqual(missing_auth.exception.code, 401)
+
         initial = self.service.workspace_state()
         status, saved = self._post(
             "/api/workspace",
