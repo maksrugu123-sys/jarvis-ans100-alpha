@@ -46,6 +46,36 @@ class WorkspaceTransferCryptoTest {
     }
 
     @Test
+    fun passphraseBuffersAreClearedAfterEncryptionAndDecryption() {
+        val encryptionPassphrase = passphrase.toCharArray()
+        val bundle = WorkspaceTransferCrypto.encrypt(
+            """{"format":"jarvis.workspace"}""",
+            encryptionPassphrase,
+        )
+        assertEquals(true, encryptionPassphrase.all { it == '\u0000' })
+
+        val decryptionPassphrase = passphrase.toCharArray()
+        WorkspaceTransferCrypto.decrypt(bundle, decryptionPassphrase)
+        assertEquals(true, decryptionPassphrase.all { it == '\u0000' })
+    }
+
+    @Test
+    fun unsupportedEnvelopeFieldsAreRejected() {
+        val bundle = WorkspaceTransferCrypto.encrypt(
+            """{"format":"jarvis.workspace"}""",
+            passphrase.toCharArray(),
+        )
+        val envelope = JSONObject(String(bundle, StandardCharsets.UTF_8))
+            .put("unexpected", true)
+        expectIllegalArgument {
+            WorkspaceTransferCrypto.decrypt(
+                envelope.toString().toByteArray(StandardCharsets.UTF_8),
+                passphrase.toCharArray(),
+            )
+        }
+    }
+
+    @Test
     fun authenticatedCiphertextTamperingIsRejected() {
         val bundle = WorkspaceTransferCrypto.encrypt(
             """{"format":"jarvis.workspace"}""",
