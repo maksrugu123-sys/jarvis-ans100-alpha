@@ -23,13 +23,13 @@ class WorkspaceTransferCryptoTest {
 
     @Test
     fun decryptsPortableUtf8Pbkdf2AesGcmFixture() {
-        val fixture = """{"format":"jarvis.workspace.encrypted","version":{"major":1,"minor":0},"kdf":{"name":"PBKDF2-HMAC-SHA256","iterations":310000,"salt":"AAECAwQFBgcICQoLDA0ODw=="},"cipher":{"name":"AES-256-GCM","nonce":"EBESExQVFhcYGRob","tag_bits":128},"ciphertext":"mHokjsTxRYZTauZQwozmAcunh8cFx9Dc0Ta5iobquGL4INDqOpEbsaoZflSeNS9yLJpPiGYQ6Q6zjxbtlhuwFxiR57VoOg9JhRL+IaA4f8vc"}"""
+        val fixture = """{"format":"jarvis.workspace.encrypted","version":{"major":1,"minor":0},"kdf":{"name":"PBKDF2-HMAC-SHA256","iterations":310000,"salt":"AAECAwQFBgcICQoLDA0ODw=="},"cipher":{"name":"AES-256-GCM","nonce":"EBESExQVFhcYGRob","tag_bits":128},"ciphertext":"mHonmcbzVoYuOaAYmdznB8rig9gWz8aB0yCu2s+moSWncdT1L9xT54U8c2OjRDUkbMsTzS1EqgPk1Tqo0VPlBV8Xjxo/T6kyTbe3vixWpDk7nLiXJZ1vSqF8n1hclMB/Mdnp3KXu7UXAgufgU21a4PdWKwiZ3jsEMhurn94jPAMhn2Ngc8c1uWX3lbb5vgipEjTYVMfCBN/bYNXFXScQtT8T/Z1Np5cV7Nebiji0OLOp9tJj9c5kXpZMEH4audghl6zCtsJZJZHqH5QmMEm47Wh6Y97/FELgCd6F+KtN8BXJfaJD2vmRRhX0mrc25+A1Z/KVRecFdDd8PrvZ8JgCGGe8XATx6f4X73NSfzPRx3uDFRAbGIcIuSryFdobQeUAY1Odi5XyHUD42kF+UwUI9PFKUQ/QdcLxb/H9hF/UbPlsq3RcgzsPianAlT2oR+Nkmn/rzBECjZ1tk6+wgvwlL6MH+J+xZ2NCBlaBIm7DtnDGx3Um8iUyxecr6m2wvOdcV/dvgz0CjQ1e"}"""
         val restored = WorkspaceTransferCrypto.decrypt(
             fixture.toByteArray(StandardCharsets.UTF_8),
             "парольная фраза 2026".toCharArray(),
         )
         assertEquals(
-            """{"format":"jarvis.workspace","message":"JARVIS transfer fixture"}""",
+            """{"export_id":"workspace-current","exported_at":"2026-11-13T12:00:00+00:00","format":"jarvis.workspace","integrity":{"algorithm":"sha-256","digest":"fc1b712d4a6df7207c9474170f3c55fb08b4cc7f33e4967e76b23c27b24e7e7c"},"records":{"conversations":[],"memories":[],"settings":[],"tasks":[]},"source_platform":"desktop","version":{"major":1,"minor":0},"workspace_id":"jarvis-default"}""",
             restored,
         )
     }
