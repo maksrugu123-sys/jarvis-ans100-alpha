@@ -16,6 +16,8 @@ import org.jarvis.ans100.alpha.data.RuntimeBridgeSnapshot
 import org.jarvis.ans100.alpha.data.RuntimeAccessTokenStore
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
+import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
+import org.json.JSONObject
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import java.util.concurrent.Executors
 
@@ -29,12 +31,29 @@ data class RuntimeBridgeUiState(
     val hasAccessToken: Boolean = false,
 )
 
+data class RuntimeMemory(
+    val id: String,
+    val content: String,
+    val category: String,
+    val updatedAt: String,
+)
+
+data class RuntimeWorkspaceUiState(
+    val revision: Long = 0L,
+    val memories: List<RuntimeMemory> = emptyList(),
+    val isLoaded: Boolean = false,
+    val isBusy: Boolean = false,
+    val error: String? = null,
+    val message: String? = null,
+)
+
 data class JarvisUiState(
     val data: LocalDraftState = LocalDraftState(),
     val selectedSessionId: String? = null,
     val notice: String? = null,
     val storageReady: Boolean = true,
     val runtime: RuntimeBridgeUiState = RuntimeBridgeUiState(),
+    val workspace: RuntimeWorkspaceUiState = RuntimeWorkspaceUiState(),
 )
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
@@ -105,6 +124,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             runtimeClient.setAccessToken(null)
             mutableState.value = mutableState.value.copy(
                 runtime = RuntimeBridgeUiState(message = "Токен доступа удалён."),
+                workspace = RuntimeWorkspaceUiState(),
             )
         } catch (error: Exception) {
             mutableState.value = mutableState.value.copy(
@@ -144,11 +164,33 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         runtimeRequest("Подключено к локальной JPVR-консоли JARVIS.") {
             runtimeClient.connect()
         }
+        refreshWorkspace()
     }
 
     fun refreshRuntime() {
         runtimeRequest("Состояние JARVIS обновлено.") {
             runtimeClient.refresh()
+        }
+        refreshWorkspace()
+    }
+
+    fun refreshWorkspace() {
+        workspaceRequest("Общая память загружена.") {
+            runtimeClient.getWorkspace()
+        }
+    }
+
+    fun addWorkspaceMemory(content: String, category: String) {
+        val revision = mutableState.value.workspace.revision
+        workspaceRequest("Воспоминание сохранено в общей памяти.") {
+            runtimeClient.createMemory(content, category, revision)
+        }
+    }
+
+    fun deleteWorkspaceMemory(memoryId: String) {
+        val revision = mutableState.value.workspace.revision
+        workspaceRequest("Воспоминание удалено из общей памяти.") {
+            runtimeClient.deleteMemory(memoryId, revision)
         }
     }
 
@@ -297,6 +339,65 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearNotice() {
         mutableState.value = mutableState.value.copy(notice = null)
+    }
+
+    private fun workspaceRequest(
+        successMessage: String,
+        operation: () -> RuntimeWorkspaceSnapshot,
+    ) {
+        val before = mutableState.value
+        if (before.workspace.isBusy) return
+        if (!before.runtime.hasAccessToken) {
+            mutableState.value = before.copy(
+                workspace = before.workspace.copy(
+                    error = "Сначала сохраните токен доступа из Termux.",
+                    message = null,
+                ),
+            )
+            return
+        }
+        mutableState.value = before.copy(
+            workspace = before.workspace.copy(isBusy = true, error = null, message = null),
+        )
+        runtimeExecutor.execute {
+            try {
+                val snapshot = operation()
+                val records = snapshot.document.getJSONObject("records")
+                val array = records.getJSONArray("memories")
+                val memories = (0 until array.length()).map { index ->
+                    val item = array.getJSONObject(index)
+                    RuntimeMemory(
+                        id = item.getString("id"),
+                        content = item.getString("content"),
+                        category = item.getString("category"),
+                        updatedAt = item.getString("updated_at"),
+                    )
+                }
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = RuntimeWorkspaceUiState(
+                            revision = snapshot.revision,
+                            memories = memories,
+                            isLoaded = true,
+                            isBusy = false,
+                            message = successMessage,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        workspace = current.workspace.copy(
+                            isBusy = false,
+                            error = error.message ?: "Операция с общей памятью не выполнена.",
+                            message = null,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     private fun runtimeRequest(
