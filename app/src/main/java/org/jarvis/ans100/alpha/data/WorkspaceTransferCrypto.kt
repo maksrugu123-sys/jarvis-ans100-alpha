@@ -142,45 +142,55 @@ object WorkspaceTransferCrypto {
                 cipherMetadata.length() == 3) {
                 "Параметры AES-GCM не поддерживаются."
             }
-            val salt = decodeBase64(kdf.getString("salt"), 16)
-            val nonce = decodeBase64(cipherMetadata.getString("nonce"), 12)
-            require(salt.size == 16 && nonce.size == 12) {
-                "Длина соли или nonce неверна."
-            }
-            val ciphertext = decodeBase64(envelope.getString("ciphertext"), MAX_PLAINTEXT_BYTES + 16)
-            require(ciphertext.size in 17..(MAX_PLAINTEXT_BYTES + 16)) {
-                "Размер зашифрованных данных недопустим."
-            }
-            val plaintext = try {
-                val keyBytes = deriveKey(passphrase, salt)
-                try {
-                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                    cipher.init(
-                        Cipher.DECRYPT_MODE,
-                        SecretKeySpec(keyBytes, "AES"),
-                        GCMParameterSpec(128, nonce),
-                    )
-                    cipher.updateAAD(aad)
-                    cipher.doFinal(ciphertext)
-                } catch (error: AEADBadTagException) {
-                    throw IllegalArgumentException(
-                        "Пароль неверен или файл повреждён.", error,
-                    )
-                } finally {
-                    keyBytes.fill(0)
-                }
-            } finally {
-                salt.fill(0)
-                nonce.fill(0)
-                ciphertext.fill(0)
-            }
+            var saltBytes: ByteArray? = null
+            var nonceBytes: ByteArray? = null
+            var ciphertextBytes: ByteArray? = null
             try {
-                require(plaintext.size <= MAX_PLAINTEXT_BYTES) {
-                    "Расшифрованные данные превышают лимит 16 МиБ."
+                val salt = decodeBase64(kdf.getString("salt"), 16)
+                saltBytes = salt
+                val nonce = decodeBase64(cipherMetadata.getString("nonce"), 12)
+                nonceBytes = nonce
+                require(salt.size == 16 && nonce.size == 12) {
+                    "Длина соли или nonce неверна."
                 }
-                return String(plaintext, StandardCharsets.UTF_8)
+                val ciphertext = decodeBase64(
+                    envelope.getString("ciphertext"), MAX_PLAINTEXT_BYTES + 16,
+                )
+                ciphertextBytes = ciphertext
+                require(ciphertext.size in 17..(MAX_PLAINTEXT_BYTES + 16)) {
+                    "Размер зашифрованных данных недопустим."
+                }
+                val plaintext = try {
+                    val keyBytes = deriveKey(passphrase, salt)
+                    try {
+                        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                        cipher.init(
+                            Cipher.DECRYPT_MODE,
+                            SecretKeySpec(keyBytes, "AES"),
+                            GCMParameterSpec(128, nonce),
+                        )
+                        cipher.updateAAD(aad)
+                        cipher.doFinal(ciphertext)
+                    } catch (error: AEADBadTagException) {
+                        throw IllegalArgumentException(
+                            "Пароль неверен или файл повреждён.", error,
+                        )
+                    } finally {
+                        keyBytes.fill(0)
+                    }
+                }
+                try {
+                    require(plaintext.size <= MAX_PLAINTEXT_BYTES) {
+                        "Расшифрованные данные превышают лимит 16 МиБ."
+                    }
+                    return String(plaintext, StandardCharsets.UTF_8)
+                } finally {
+                    plaintext.fill(0)
+                }
             } finally {
-                plaintext.fill(0)
+                saltBytes?.fill(0)
+                nonceBytes?.fill(0)
+                ciphertextBytes?.fill(0)
             }
         } finally {
             passphrase.fill('\u0000')
@@ -238,11 +248,11 @@ object WorkspaceTransferCrypto {
         } catch (error: IllegalArgumentException) {
             throw IllegalArgumentException("Некорректное Base64-поле.", error)
         }
-        require(
-            decoded.isNotEmpty() && decoded.size <= maximumBytes &&
-                encodeBase64(decoded) == value,
+        if (decoded.isEmpty() || decoded.size > maximumBytes ||
+            encodeBase64(decoded) != value
         ) {
-            "Размер или каноническая кодировка Base64-поля недопустимы."
+            decoded.fill(0)
+            throw IllegalArgumentException("Размер или каноническая кодировка Base64-поля недопустимы.")
         }
         return decoded
     }
