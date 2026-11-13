@@ -22,7 +22,8 @@ These instructions apply to every AI assistant, coding agent, and automated cont
 ## 3. Git and change permissions
 
 - The user has authorized creating commits and pushing project changes to GitHub without asking for confirmation for each ordinary documentation or code change.
-- The current working branch for this repository is `main`. Fetch/read the latest `main` before editing; use the latest file/blob SHA for updates. Do not overwrite a newer change based on a stale SHA.
+- The current user-authorized working branch is `mobile-first-offline-v1`. Fetch/read the latest state of this branch before editing; use the latest file/blob SHA for updates. Do not overwrite a newer change based on a stale SHA.
+- Do not commit to, merge into, or move `main` unless the user explicitly changes this instruction in a later message.
 - After writing, fetch the changed file again and verify the committed contents. Report the actual commit SHA and link when available.
 - Do not force-push, rewrite shared history, delete project data, change repository visibility, alter secrets/permissions, or make other destructive/account-level changes without explicit permission.
 - Do not silently change the repository's branch strategy.
@@ -110,7 +111,7 @@ Use the latest architecture file as the authoritative detail; this summary is on
 
 ## 10. Recommended workflow for each task
 
-1. Read this file and fetch the latest `main`.
+1. Read this file and fetch the latest `mobile-first-offline-v1` branch.
 2. Inspect the relevant architecture sections and existing source files before proposing edits.
 3. Identify the exact objective and any constraints that apply.
 4. Make the smallest coherent change that improves correctness, clarity, safety, or progress toward the first prototype.
