@@ -472,7 +472,8 @@ private fun WorkspaceMemoryPanel(
                 OutlinedButton(
                     onClick = { onExport(transferPassphrase) },
                     modifier = Modifier.weight(1f),
-                    enabled = state.isLoaded && !state.isBusy && transferPassphrase.length >= 12,
+                    enabled = state.isLoaded && !state.isBusy && state.importPreview == null &&
+                        transferPassphrase.length >= 12,
                 ) { Text("Экспорт .jws") }
                 OutlinedButton(
                     onClick = onChooseImport,
