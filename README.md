@@ -4,7 +4,7 @@
 
 The repository has entered the first executable Python reference-orchestration stage. It is still not a production neural runtime, an integrated JPVR-001 prototype, or a finished assistant.
 
-## Current status — 12 November 2026
+## Current status — 13 November 2026
 
 - **JPVR reference:** seventeen modules currently contain **362 test methods**. The COW-integrated typed builder feeds a file-backed two-Superblock storage engine. JPVRStorage.scan_history() audits the full COMMIT/MANIFEST history and validates the OUTBOX chain even for the last verified prefix when a later generation is damaged. JPVRStorage.recover_copy(destination, expected_commit_id=...) can publish that verified prefix as a separate file: it rechecks history under a shared lock, requires the exact commit identity, copies and reads back only verified pages, reconstructs both alternating Superblock slots, and publishes atomically without overwriting an existing path. The original file is never truncated or rewritten. The 23 historical-scan tests and 12 recovery-copy tests are AUTHORED, NOT RUN. The reference writer/scanner/copy-recovery are not yet Android-device-verified or production-ready. In-place repair, compaction, free-page reuse, durable CQE delivery and hardware-level power-loss guarantees remain out of scope. **Neuron checkpoint persistence:** tools/neuron_runtime/jpvr_adapter.py serializes complete one-neuron state/configuration into versioned JREC/DATA or BLOB records, and tools/neuron_runtime/jpvr_store.py now resolves a fixed 100-byte versioned locator in the neuron COW INDEX. JPVRNeuronCheckpointStore.save() commits the checkpoint record and locator in one transaction; load() validates the COMMIT ancestry, DATA/BLOB metadata, CRCs and snapshot schema before restoring NeuronRuntime. A genesis container receives its seven empty index roots in a separate initialization commit. The 17 adapter tests and 17 new store tests are AUTHORED, NOT RUN. The one-neuron facade defaults to a 4096-page materialized catalog. A separate JPVRNetworkCheckpointStore now persists the complete bounded NetworkRuntime topology, pending events, scheduler limits and model clock in one BLOB+CHECKPOINT commit. A bounded RewardBaselineManager now owns per-task ordered feedback and idempotency; JPVRRewardBaselineStore persists its pending/committed state in a dedicated container. The two checkpoints are not yet one atomic Runtime snapshot.
 - **Numerical Oracle:** a deterministic Python/float64 reference implementation exists for Adaptive LIF-DT, STDP and R-STDP. It is a research oracle, not the production runtime.
@@ -65,8 +65,8 @@ The native Kotlin/Compose app at `app/` keeps two deliberately separate views of
 | `docs/JARVIS_ANDROID_APP_V0_1.md` | Android Compose app V0.5 local-draft, authenticated loopback bridge and symbolic-preview contract |
 | `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md` | Android-to-Termux JPVR task/session bridge, API version, bounds and trust boundary |
 | `tools/jarvis_app/server.py` | Loopback-only Python local console backed by JPVR; separate from the native app |
-| `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 HTTP authentication and reasoning-preview tests (11 authored, not run) |
-| `tools/jarvis_app/test_auth.py` | Token digest storage, permissions, one-time bootstrap, rotation, malformed input and symlink rejection (7 authored, not run) |
+| `tools/jarvis_app/test_server.py` | Session lifecycle, API v2 auth coverage for every POST route and reasoning-preview tests (13 authored, not run) |
+| `tools/jarvis_app/test_auth.py` | Token digest storage, owner-only permissions, one-time bootstrap, rotation, malformed input and symlink-parent/file rejection (9 authored, not run) |
 | `docs/JARVIS_LOCAL_CONSOLE_V1.md` | PWA console setup, API contract and local-only safety boundary |
 
 | Path | Purpose |
@@ -505,7 +505,7 @@ Android repository tests:
 app/src/test/java/org/jarvis/ans100/alpha/data/LocalDraftRepositoryTest.kt
 ```
 
-Nine Android local-repository tests and eighteen Python console/API-auth tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
+Nine Android local-repository tests and twenty-two Python console/API-auth tests are **AUTHORED, NOT RUN**. Kotlin compilation, Gradle sync/build, APK/AAB, emulator/device installation, UI tests, Android↔Termux networking and Android performance measurements are **NOT RUN**. The repository currently has no Gradle wrapper script; Android Studio/system-Gradle compatibility has not been verified. Contracts: [JARVIS Android App V0.5](docs/JARVIS_ANDROID_APP_V0_1.md), [Android Runtime Bridge V1](docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md) and [Local Console V1](docs/JARVIS_LOCAL_CONSOLE_V1.md).
 
 ## Separate local PWA console
 
@@ -515,4 +515,4 @@ The Python local console can be started from the repository root:
 python3 -m tools.jarvis_app --port 8765
 ```
 
-On first startup, copy the one-time token from Termux into the PWA login panel or the Android app. Open `http://127.0.0.1:8765/` on the same device. The same running console serves both frontends and the JPVR-backed TaskSessionManager; Android SharedPreferences drafts remain separate. The service binds only to loopback. The eighteen console/API-auth tests are **AUTHORED, NOT RUN**.
+On first startup, copy the one-time token from Termux into the PWA login panel or the Android app. Open `http://127.0.0.1:8765/` on the same device. The same running console serves both frontends and the JPVR-backed TaskSessionManager; Android SharedPreferences drafts remain separate. The service binds only to loopback. The twenty-two console/API-auth tests are **AUTHORED, NOT RUN**.
