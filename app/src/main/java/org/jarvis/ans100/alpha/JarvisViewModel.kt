@@ -345,6 +345,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun cancelWorkspaceBackupSave() {
+        pendingWorkspaceBackupRevision = null
+    }
+
     fun markWorkspaceBackupSaved(revision: Long) {
         val current = mutableState.value
         val pendingRevision = pendingWorkspaceBackupRevision
