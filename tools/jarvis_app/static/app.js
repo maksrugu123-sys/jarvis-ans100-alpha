@@ -467,13 +467,18 @@ function base64ToBytes(value, maximum) {
 }
 
 async function deriveTransferKey(passphrase, salt) {
-  const material = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]
-  );
-  return crypto.subtle.deriveKey(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: TRANSFER_ITERATIONS },
-    material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
-  );
+  const passwordBytes = new TextEncoder().encode(passphrase);
+  try {
+    const material = await crypto.subtle.importKey(
+      "raw", passwordBytes, "PBKDF2", false, ["deriveKey"]
+    );
+    return await crypto.subtle.deriveKey(
+      { name: "PBKDF2", hash: "SHA-256", salt, iterations: TRANSFER_ITERATIONS },
+      material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+    );
+  } finally {
+    passwordBytes.fill(0);
+  }
 }
 
 function isTransferDateTime(value) {
@@ -661,23 +666,31 @@ async function encryptWorkspaceDocument(document, passphrase, purpose = "transfe
   const aad = backupMode ? BACKUP_AAD : TRANSFER_AAD;
   const format = backupMode ? "jarvis.workspace.backup.encrypted" : "jarvis.workspace.encrypted";
   const plaintext = new TextEncoder().encode(canonicalJson(document));
-  if (!plaintext.length || plaintext.length > TRANSFER_MAX_PLAINTEXT) {
-    throw new Error("Рабочее пространство превышает лимит переносимого файла 16 МиБ.");
-  }
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveTransferKey(passphrase, salt);
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 },
-    key, plaintext
-  );
-  return {
-    format,
-    version: { major: 1, minor: 0 },
-    kdf: { name: "PBKDF2-HMAC-SHA256", iterations: TRANSFER_ITERATIONS, salt: bytesToBase64(salt) },
-    cipher: { name: "AES-256-GCM", nonce: bytesToBase64(nonce), tag_bits: 128 },
-    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
-  };
+  let ciphertext = null;
+  try {
+    if (!plaintext.length || plaintext.length > TRANSFER_MAX_PLAINTEXT) {
+      throw new Error("Рабочее пространство превышает лимит переносимого файла 16 МиБ.");
+    }
+    const key = await deriveTransferKey(passphrase, salt);
+    ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 },
+      key, plaintext
+    ));
+    return {
+      format,
+      version: { major: 1, minor: 0 },
+      kdf: { name: "PBKDF2-HMAC-SHA256", iterations: TRANSFER_ITERATIONS, salt: bytesToBase64(salt) },
+      cipher: { name: "AES-256-GCM", nonce: bytesToBase64(nonce), tag_bits: 128 },
+      ciphertext: bytesToBase64(ciphertext),
+    };
+  } finally {
+    plaintext.fill(0);
+    salt.fill(0);
+    nonce.fill(0);
+    ciphertext?.fill(0);
+  }
 }
 
 async function decryptWorkspaceBundle(bundle, passphrase, purpose = "transfer") {
@@ -697,37 +710,46 @@ async function decryptWorkspaceBundle(bundle, passphrase, purpose = "transfer") 
     throw new Error("Формат зашифрованного файла не поддерживается.");
   }
   const salt = base64ToBytes(bundle.kdf.salt, 16);
-  const nonce = base64ToBytes(bundle.cipher.nonce, 12);
-  if (salt.length !== 16 || nonce.length !== 12) {
-    throw new Error("Параметры шифрования имеют неверную длину.");
-  }
-  const ciphertext = base64ToBytes(bundle.ciphertext, TRANSFER_MAX_PLAINTEXT + 16);
-  if (ciphertext.length < 17) throw new Error("Зашифрованные данные слишком короткие.");
-  const key = await deriveTransferKey(passphrase, salt);
-  let plaintext;
+  let nonce = null;
+  let ciphertext = null;
+  let plaintext = null;
   try {
-    plaintext = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 },
-      key, ciphertext
-    );
-  } catch {
-    throw new Error("Не удалось расшифровать файл. Проверьте пароль или целостность файла.");
+    nonce = base64ToBytes(bundle.cipher.nonce, 12);
+    if (salt.length !== 16 || nonce.length !== 12) {
+      throw new Error("Параметры шифрования имеют неверную длину.");
+    }
+    ciphertext = base64ToBytes(bundle.ciphertext, TRANSFER_MAX_PLAINTEXT + 16);
+    if (ciphertext.length < 17) throw new Error("Зашифрованные данные слишком короткие.");
+    const key = await deriveTransferKey(passphrase, salt);
+    try {
+      plaintext = new Uint8Array(await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 },
+        key, ciphertext
+      ));
+    } catch {
+      throw new Error("Не удалось расшифровать файл. Проверьте пароль или целостность файла.");
+    }
+    if (plaintext.byteLength > TRANSFER_MAX_PLAINTEXT) {
+      throw new Error("Расшифрованное рабочее пространство превышает лимит 16 МиБ.");
+    }
+    let document;
+    let plaintextText;
+    try {
+      plaintextText = new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
+      document = JSON.parse(plaintextText);
+    } catch {
+      throw new Error("Расшифрованные данные не являются корректным UTF-8 JSON.");
+    }
+    if (canonicalJson(document) !== plaintextText) {
+      throw new Error("Рабочее пространство не сохранено в каноническом JSON-формате.");
+    }
+    return backupMode ? verifyWorkspaceBackup(document) : verifyPortableWorkspace(document);
+  } finally {
+    salt.fill(0);
+    nonce?.fill(0);
+    ciphertext?.fill(0);
+    plaintext?.fill(0);
   }
-  if (plaintext.byteLength > TRANSFER_MAX_PLAINTEXT) {
-    throw new Error("Расшифрованное рабочее пространство превышает лимит 16 МиБ.");
-  }
-  let document;
-  let plaintextText;
-  try {
-    plaintextText = new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
-    document = JSON.parse(plaintextText);
-  } catch {
-    throw new Error("Расшифрованные данные не являются корректным UTF-8 JSON.");
-  }
-  if (canonicalJson(document) !== plaintextText) {
-    throw new Error("Рабочее пространство не сохранено в каноническом JSON-формате.");
-  }
-  return backupMode ? verifyWorkspaceBackup(document) : verifyPortableWorkspace(document);
 }
 
 function planWorkspaceMerge(localDocument, importedDocument) {
@@ -1058,12 +1080,26 @@ $("#backup-restore-confirm").addEventListener("click", async event => {
           $("#backup-restore-cancel").hidden = true;
           setNotice("Сервер подтвердил восстановленные данные после неоднозначного ответа. Проверьте память и сохраните новый backup.", "success");
         } else {
+          pendingRestore = null;
+          backupSavedRevision = null;
+          $("#backup-ack").checked = false;
+          $("#backup-ack-row").hidden = true;
+          $("#backup-preview").hidden = true;
+          $("#backup-restore-confirm").hidden = true;
+          $("#backup-restore-cancel").hidden = true;
           setNotice("Не удалось подтвердить результат восстановления: " + error.message +
-            ". Не повторяйте операцию, пока не обновите состояние и не проверите содержимое.", "error");
+            ". Предпросмотр аннулирован. Обновите память и проверьте результат перед новой попыткой.", "error");
         }
       } catch {
+        pendingRestore = null;
+        backupSavedRevision = null;
+        $("#backup-ack").checked = false;
+        $("#backup-ack-row").hidden = true;
+        $("#backup-preview").hidden = true;
+        $("#backup-restore-confirm").hidden = true;
+        $("#backup-restore-cancel").hidden = true;
         setNotice("Результат восстановления неизвестен: " + error.message +
-          ". Не повторяйте операцию вслепую; сначала восстановите соединение и обновите память.", "error");
+          ". Предпросмотр аннулирован. Не повторяйте операцию вслепую; сначала восстановите соединение и проверьте память.", "error");
       }
     }
   } finally {
