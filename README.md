@@ -4,7 +4,7 @@
 
 The repository has entered the first executable Python reference-orchestration stage. It is still not a production neural runtime, an integrated JPVR-001 prototype, or a finished assistant.
 
-**Platform direction:** PC + Android, local-first and offline-capable. The current implementation boundaries and staged migration are documented in [JARVIS Cross-Platform Runtime V1](docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md) and [JARVIS Mobile-First Offline Runtime V1](docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md), and [JARVIS PC Quick Start V1](docs/JARVIS_PC_QUICKSTART_V1.md). These are architecture and launch targets, not claims that offline conversation or cross-device sync is already implemented.
+**Platform direction:** PC + Android, local-first and offline-capable. The current implementation boundaries and staged migration are documented in [JARVIS Cross-Platform Runtime V1](docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md) and [JARVIS Mobile-First Offline Runtime V1](docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md), and [JARVIS PC Quick Start V1](docs/JARVIS_PC_QUICKSTART_V1.md), and the [portable workspace schema V1](schemas/workspace/v1/workspace.schema.json). These are architecture and launch targets, not claims that offline conversation or cross-device sync is already implemented.
 
 ## Current status — 13 November 2026
 
