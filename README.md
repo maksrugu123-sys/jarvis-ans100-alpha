@@ -36,6 +36,7 @@ The native Kotlin/Compose app at `app/` keeps app-private drafts separate from t
 ## Repository map
 | `tools/neuron_runtime/workspace_store.py` | Shared canonical desktop/Android workspace codec and CAS-protected JPVR memory store (AUTHORED, NOT RUN) |
 | `tools/jpvr_reference/platform_io.py` | POSIX flock/pread/pwrite and conservative Windows msvcrt region locking plus binary seek-based positional I/O (Windows tests AUTHORED, NOT RUN) |
+| `tools/jpvr_reference/test_platform_io.py` | Seek-based I/O and same-process locking tests plus Windows-only cross-process region-lock test (5 authored, not run) |
 | `tools/neuron_runtime/test_workspace_store.py` | Shared workspace canonicalization, integrity, DATA/BLOB persistence, reopen and CAS tests (AUTHORED, NOT RUN) |
 | `docs/JARVIS_SHARED_WORKSPACE_MEMORY_V1.md` | Platform-neutral workspace format, JPVR durability, local API and current cross-device sync boundary |
 | `tools/neuron_runtime/task_session.py` | Bounded task/session lifecycle registry and canonical snapshot codec (not durable JPVR storage) |
