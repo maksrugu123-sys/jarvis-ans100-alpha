@@ -495,7 +495,8 @@ TaskSessionManager now has a versioned JPVR DATA/BLOB adapter and a CAS-protecte
 Run the focused contract tests (authored, not run):
 
 ```sh
-python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v\npython3 -m unittest tools.neuron_runtime.test_signed_approval -v
+python3 -m unittest tools.neuron_runtime.test_permission_safety_gate -v
+python3 -m unittest tools.neuron_runtime.test_signed_approval -v
 ```
 
 The deny-by-default gate binds each action to current manager/task/session revisions, exact capability/scope, effect, resource budget, retry index and policy digest. A new source-level Ed25519 verifier and TrustedApprovalSafetyGate verify signed exact-request envelopes against a pinned in-memory approver-key snapshot; the trusted variant rejects legacy unsigned grants. The envelope schema and optional cryptography dependency are recorded in the repository. This is not yet a production identity service: Android Keystore signing/enrollment, desktop signer, authenticated trust-root provisioning, signed key rotation/revocation and rollback protection remain unimplemented. Android/PWA do not yet use the verifier, and external actions remain disabled. The legacy gate's 26 tests and the new 16 signed-approval tests are AUTHORED, NOT RUN. Contract: [Permission & Safety Gate V1](docs/JARVIS_PERMISSION_SAFETY_GATE_V1.md) and [architecture §3.53](docs/JARVIS_ARCHITECTURE.md#353-signed-exact-request-approval-verification-v1).
