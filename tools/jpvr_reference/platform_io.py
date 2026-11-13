@@ -51,19 +51,15 @@ def unlock_file(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
 
 
-def read_at(fd: int, size: int, offset: int) -> bytes:
-    """Read up to size bytes from an absolute offset without changing API semantics."""
+def read_at_seek(fd: int, size: int, offset: int) -> bytes:
+    """Seek-based positional read used by Windows and directly testable elsewhere."""
     if size < 0 or offset < 0:
         raise ValueError("size and offset must be non-negative")
     result = bytearray()
     while len(result) < size:
         try:
-            if hasattr(os, "pread"):
-                part = os.pread(fd, size - len(result), offset + len(result))
-            else:
-                # JPVR callers hold the container lock while using this fallback.
-                os.lseek(fd, offset + len(result), os.SEEK_SET)
-                part = os.read(fd, size - len(result))
+            os.lseek(fd, offset + len(result), os.SEEK_SET)
+            part = os.read(fd, size - len(result))
         except InterruptedError:
             continue
         if not part:
@@ -72,20 +68,53 @@ def read_at(fd: int, size: int, offset: int) -> bytes:
     return bytes(result)
 
 
-def write_all_at(fd: int, data: bytes, offset: int) -> None:
-    """Write all bytes at an absolute offset, retrying interrupted operations."""
+def read_at(fd: int, size: int, offset: int) -> bytes:
+    """Read up to size bytes from an absolute offset without changing API semantics."""
+    if size < 0 or offset < 0:
+        raise ValueError("size and offset must be non-negative")
+    if not hasattr(os, "pread"):
+        return read_at_seek(fd, size, offset)
+    result = bytearray()
+    while len(result) < size:
+        try:
+            part = os.pread(fd, size - len(result), offset + len(result))
+        except InterruptedError:
+            continue
+        if not part:
+            break
+        result.extend(part)
+    return bytes(result)
+
+
+def write_all_at_seek(fd: int, data: bytes, offset: int) -> None:
+    """Seek-based positional write used by Windows and directly testable elsewhere."""
     if offset < 0:
         raise ValueError("offset must be non-negative")
     view = memoryview(data)
     done = 0
     while done < len(view):
         try:
-            if hasattr(os, "pwrite"):
-                count = os.pwrite(fd, view[done:], offset + done)
-            else:
-                # JPVR callers hold the container lock while using this fallback.
-                os.lseek(fd, offset + done, os.SEEK_SET)
-                count = os.write(fd, view[done:])
+            os.lseek(fd, offset + done, os.SEEK_SET)
+            count = os.write(fd, view[done:])
+        except InterruptedError:
+            continue
+        if count <= 0:
+            raise OSError("short write to JPVR container")
+        done += count
+
+
+def write_all_at(fd: int, data: bytes, offset: int) -> None:
+    """Write all bytes at an absolute offset, retrying interrupted operations."""
+    if offset < 0:
+        raise ValueError("offset must be non-negative")
+    if not hasattr(os, "pwrite"):
+        write_all_at_seek(fd, data, offset)
+        return
+    view = memoryview(data)
+    done = 0
+    while done < len(view):
+        try:
+            count = os.pwrite(fd, view[done:], offset + done)
         except InterruptedError:
             continue
         if count <= 0:
