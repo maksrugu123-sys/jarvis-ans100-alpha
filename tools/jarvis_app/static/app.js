@@ -334,6 +334,15 @@ async function refreshWorkspace() {
     throw new Error("Сервис вернул некорректную версию общей памяти.");
   }
   currentWorkspace = { revision: result.revision, document: result.workspace };
+  if (backupSavedRevision !== null && backupSavedRevision !== result.revision) {
+    backupSavedRevision = null;
+    $("#backup-ack").checked = false;
+    $("#backup-ack-row").hidden = true;
+    pendingRestore = null;
+    $("#backup-preview").hidden = true;
+    $("#backup-restore-confirm").hidden = true;
+    $("#backup-restore-cancel").hidden = true;
+  }
   renderMemories();
   return currentWorkspace;
 }
@@ -352,6 +361,13 @@ async function writeWorkspace(mutator) {
       workspace: document,
     });
     currentWorkspace = { revision: result.revision, document: result.workspace };
+    backupSavedRevision = null;
+    $("#backup-ack").checked = false;
+    $("#backup-ack-row").hidden = true;
+    pendingRestore = null;
+    $("#backup-preview").hidden = true;
+    $("#backup-restore-confirm").hidden = true;
+    $("#backup-restore-cancel").hidden = true;
     renderMemories();
     return currentWorkspace;
   } catch (error) {
@@ -422,9 +438,12 @@ $("#memory-refresh").addEventListener("click", async event => {
 
 
 const TRANSFER_AAD = new TextEncoder().encode("JARVIS-WORKSPACE-ENCRYPTED-V1");
+const BACKUP_AAD = new TextEncoder().encode("JARVIS-WORKSPACE-BACKUP-ENCRYPTED-V1");
 const TRANSFER_ITERATIONS = 310000;
 const TRANSFER_MAX_PLAINTEXT = 16 * 1024 * 1024;
 let pendingTransfer = null;
+let pendingRestore = null;
+let backupSavedRevision = null;
 
 function bytesToBase64(bytes) {
   let binary = "";
@@ -587,7 +606,60 @@ async function verifyPortableWorkspace(document) {
   return document;
 }
 
-async function encryptWorkspaceDocument(document, passphrase) {
+async function createWorkspaceBackup(document) {
+  await verifyPortableWorkspace(document);
+  const backup = {
+    format: "jarvis.workspace.backup",
+    version: { major: 1, minor: 0 },
+    backup_id: crypto.randomUUID().replaceAll("-", ""),
+    created_at: new Date().toISOString(),
+    source_platform: consolePlatform,
+    workspace: JSON.parse(JSON.stringify(document)),
+  };
+  const digest = await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(canonicalJson(backup))
+  );
+  backup.integrity = {
+    algorithm: "sha-256",
+    digest: Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join(""),
+  };
+  return backup;
+}
+
+async function verifyWorkspaceBackup(backup) {
+  if (!backup || typeof backup !== "object" || Array.isArray(backup) ||
+      Object.keys(backup).sort().join(",") !==
+        "backup_id,created_at,format,integrity,source_platform,version,workspace" ||
+      backup.format !== "jarvis.workspace.backup" ||
+      !backup.version || Object.keys(backup.version).sort().join(",") !== "major,minor" ||
+      backup.version.major !== 1 || backup.version.minor !== 0 ||
+      typeof backup.backup_id !== "string" || !/^[a-f0-9]{32}$/.test(backup.backup_id) ||
+      !isTransferDateTime(backup.created_at) ||
+      !["desktop", "android"].includes(backup.source_platform) ||
+      !backup.integrity || Object.keys(backup.integrity).sort().join(",") !== "algorithm,digest" ||
+      backup.integrity.algorithm !== "sha-256" ||
+      typeof backup.integrity.digest !== "string" || !/^[a-f0-9]{64}$/.test(backup.integrity.digest)) {
+    throw new Error("Файл не соответствует схеме резервной копии JARVIS V1.");
+  }
+  await verifyPortableWorkspace(backup.workspace);
+  const unsigned = JSON.parse(JSON.stringify(backup));
+  delete unsigned.integrity;
+  const digest = await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(canonicalJson(unsigned))
+  );
+  const actual = Array.from(new Uint8Array(digest), byte =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+  if (actual !== backup.integrity.digest) {
+    throw new Error("Контрольная сумма резервной копии не совпадает. Восстановление отменено.");
+  }
+  return backup;
+}
+
+async function encryptWorkspaceDocument(document, passphrase, purpose = "transfer") {
+  const backupMode = purpose === "backup";
+  const aad = backupMode ? BACKUP_AAD : TRANSFER_AAD;
+  const format = backupMode ? "jarvis.workspace.backup.encrypted" : "jarvis.workspace.encrypted";
   const plaintext = new TextEncoder().encode(canonicalJson(document));
   if (!plaintext.length || plaintext.length > TRANSFER_MAX_PLAINTEXT) {
     throw new Error("Рабочее пространство превышает лимит переносимого файла 16 МиБ.");
@@ -596,11 +668,11 @@ async function encryptWorkspaceDocument(document, passphrase) {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveTransferKey(passphrase, salt);
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: nonce, additionalData: TRANSFER_AAD, tagLength: 128 },
+    { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 },
     key, plaintext
   );
   return {
-    format: "jarvis.workspace.encrypted",
+    format,
     version: { major: 1, minor: 0 },
     kdf: { name: "PBKDF2-HMAC-SHA256", iterations: TRANSFER_ITERATIONS, salt: bytesToBase64(salt) },
     cipher: { name: "AES-256-GCM", nonce: bytesToBase64(nonce), tag_bits: 128 },
@@ -608,10 +680,13 @@ async function encryptWorkspaceDocument(document, passphrase) {
   };
 }
 
-async function decryptWorkspaceBundle(bundle, passphrase) {
+async function decryptWorkspaceBundle(bundle, passphrase, purpose = "transfer") {
+  const backupMode = purpose === "backup";
+  const aad = backupMode ? BACKUP_AAD : TRANSFER_AAD;
+  const expectedFormat = backupMode ? "jarvis.workspace.backup.encrypted" : "jarvis.workspace.encrypted";
   if (!bundle || typeof bundle !== "object" || Array.isArray(bundle) ||
       Object.keys(bundle).sort().join(",") !== "cipher,ciphertext,format,kdf,version" ||
-      bundle.format !== "jarvis.workspace.encrypted" ||
+      bundle.format !== expectedFormat ||
       !bundle.version || Object.keys(bundle.version).sort().join(",") !== "major,minor" ||
       bundle.version.major !== 1 || bundle.version.minor !== 0 ||
       !bundle.kdf || Object.keys(bundle.kdf).sort().join(",") !== "iterations,name,salt" ||
@@ -632,7 +707,7 @@ async function decryptWorkspaceBundle(bundle, passphrase) {
   let plaintext;
   try {
     plaintext = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: nonce, additionalData: TRANSFER_AAD, tagLength: 128 },
+      { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 },
       key, ciphertext
     );
   } catch {
@@ -652,7 +727,7 @@ async function decryptWorkspaceBundle(bundle, passphrase) {
   if (canonicalJson(document) !== plaintextText) {
     throw new Error("Рабочее пространство не сохранено в каноническом JSON-формате.");
   }
-  return verifyPortableWorkspace(document);
+  return backupMode ? verifyWorkspaceBackup(document) : verifyPortableWorkspace(document);
 }
 
 function planWorkspaceMerge(localDocument, importedDocument) {
@@ -803,6 +878,193 @@ $("#transfer-confirm").addEventListener("click", async event => {
       setNotice("Локальная память изменилась после предпросмотра. Обновите память и выберите файл заново.", "error");
     } else {
       setNotice(error.message, "error");
+    }
+  } finally {
+    button.disabled = false;
+  }
+});
+
+
+$("#backup-export").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  const passwordInput = $("#transfer-passphrase");
+  const passphrase = passwordInput.value;
+  if (passphrase.length < 12) {
+    setNotice("Для резервной копии нужна парольная фраза длиной не менее 12 символов.", "error");
+    return;
+  }
+  button.disabled = true;
+  try {
+    const workspace = await refreshWorkspace();
+    const backup = await createWorkspaceBackup(workspace.document);
+    const bundle = await encryptWorkspaceDocument(backup, passphrase, "backup");
+    const blob = new Blob([JSON.stringify(bundle)], { type: "application/vnd.jarvis.workspace-backup+json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = node("a");
+    anchor.href = url;
+    anchor.download = "jarvis-workspace-backup-" + new Date().toISOString().slice(0, 10) + ".jwb";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    backupSavedRevision = workspace.revision;
+    pendingRestore = null;
+    $("#backup-ack").checked = false;
+    $("#backup-ack-row").hidden = false;
+    $("#backup-preview").hidden = true;
+    $("#backup-restore-confirm").hidden = true;
+    $("#backup-restore-cancel").hidden = true;
+    setNotice("Экспорт .jwb инициирован для REV " + workspace.revision +
+      ". Убедитесь, что файл действительно сохранён, затем подтвердите резервную копию ниже.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    passwordInput.value = "";
+    button.disabled = false;
+  }
+});
+
+function updateRestoreConfirmation() {
+  const valid = !!pendingRestore && backupSavedRevision !== null &&
+    currentWorkspace && backupSavedRevision === currentWorkspace.revision &&
+    pendingRestore.expectedRevision === currentWorkspace.revision &&
+    $("#backup-ack").checked;
+  $("#backup-restore-confirm").disabled = !valid;
+}
+
+$("#backup-ack").addEventListener("change", updateRestoreConfirmation);
+
+$("#backup-restore-choose").addEventListener("click", () => {
+  if (backupSavedRevision === null || !currentWorkspace ||
+      backupSavedRevision !== currentWorkspace.revision) {
+    setNotice("Сначала создайте и сохраните backup текущей ревизии .jwb.", "error");
+    return;
+  }
+  $("#backup-file").click();
+});
+
+$("#backup-file").addEventListener("change", async event => {
+  const file = event.target.files && event.target.files[0];
+  const passwordInput = $("#transfer-passphrase");
+  const passphrase = passwordInput.value;
+  pendingRestore = null;
+  $("#backup-preview").hidden = true;
+  $("#backup-restore-confirm").hidden = true;
+  $("#backup-restore-cancel").hidden = true;
+  updateRestoreConfirmation();
+  if (!file) {
+    passwordInput.value = "";
+    return;
+  }
+  try {
+    if (file.size > 24 * 1024 * 1024) {
+      throw new Error("Файл backup превышает допустимый размер 24 МиБ.");
+    }
+    if (passphrase.length < 12) {
+      throw new Error("Для восстановления введите парольную фразу длиной не менее 12 символов.");
+    }
+    const bundle = JSON.parse(await file.text());
+    const backup = await decryptWorkspaceBundle(bundle, passphrase, "backup");
+    const local = currentWorkspace || await refreshWorkspace();
+    if (backup.workspace.workspace_id !== local.document.workspace_id) {
+      throw new Error("Backup относится к другому workspace_id. Замена запрещена.");
+    }
+    if (backupSavedRevision !== local.revision) {
+      throw new Error("После создания backup изменилась текущая ревизия. Сохраните новый backup.");
+    }
+    const records = backup.workspace.records;
+    pendingRestore = { workspace: backup.workspace, expectedRevision: local.revision };
+    $("#backup-preview").hidden = false;
+    $("#backup-preview").textContent =
+      "ПРОВЕРЕННАЯ КОПИЯ от " + backup.created_at +
+      " · диалогов: " + records.conversations.length +
+      " · воспоминаний: " + records.memories.length +
+      " · сводок задач: " + records.tasks.length +
+      " · настроек: " + records.settings.length +
+      ". Подтверждение ЗАМЕНИТ все четыре коллекции текущей памяти.";
+    $("#backup-restore-confirm").hidden = false;
+    $("#backup-restore-cancel").hidden = false;
+    updateRestoreConfirmation();
+    setNotice("Backup расшифрован и проверен. Данные ещё не изменены.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    passwordInput.value = "";
+    event.target.value = "";
+  }
+});
+
+$("#backup-restore-cancel").addEventListener("click", () => {
+  pendingRestore = null;
+  $("#backup-preview").hidden = true;
+  $("#backup-restore-confirm").hidden = true;
+  $("#backup-restore-cancel").hidden = true;
+  $("#backup-ack").checked = false;
+  updateRestoreConfirmation();
+  setNotice("Восстановление отменено. Локальная память не изменена.", "info");
+});
+
+$("#backup-restore-confirm").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  if (!pendingRestore) return;
+  updateRestoreConfirmation();
+  if (button.disabled) {
+    setNotice("Для восстановления нужен сохранённый backup текущей ревизии и явное подтверждение.", "error");
+    return;
+  }
+  if (!window.confirm("ВНИМАНИЕ: вся текущая общая память будет ЗАМЕНЕНА выбранной резервной копией. Продолжить?")) {
+    return;
+  }
+  button.disabled = true;
+  const plan = pendingRestore;
+  try {
+    const restored = JSON.parse(JSON.stringify(plan.workspace));
+    restored.exported_at = new Date().toISOString();
+    restored.source_platform = consolePlatform;
+    await sealWorkspace(restored);
+    const result = await api("/api/workspace/restore", {
+      expected_revision: plan.expectedRevision,
+      workspace: restored,
+    });
+    currentWorkspace = { revision: result.revision, document: result.workspace };
+    renderMemories();
+    pendingRestore = null;
+    backupSavedRevision = null;
+    $("#backup-ack").checked = false;
+    $("#backup-ack-row").hidden = true;
+    $("#backup-preview").hidden = true;
+    $("#backup-restore-confirm").hidden = true;
+    $("#backup-restore-cancel").hidden = true;
+    setNotice("Восстановление завершено. Текущая память заменена; сохраните backup до проверки результата.", "success");
+  } catch (error) {
+    if (error.status === 409) {
+      pendingRestore = null;
+      backupSavedRevision = null;
+      $("#backup-ack").checked = false;
+      $("#backup-ack-row").hidden = true;
+      $("#backup-preview").hidden = true;
+      $("#backup-restore-confirm").hidden = true;
+      $("#backup-restore-cancel").hidden = true;
+      try { await refreshWorkspace(); } catch { /* Preserve the original conflict report. */ }
+      setNotice("Ревизия изменилась. Preview отменён. Обновите память и создайте новый backup перед повторной попыткой.", "error");
+    } else {
+      try {
+        await refreshWorkspace();
+        if (canonicalJson(currentWorkspace.document.records) === canonicalJson(plan.workspace.records)) {
+          pendingRestore = null;
+          backupSavedRevision = null;
+          $("#backup-preview").hidden = true;
+          $("#backup-restore-confirm").hidden = true;
+          $("#backup-restore-cancel").hidden = true;
+          setNotice("Сервер подтвердил восстановленные данные после неоднозначного ответа. Проверьте память и сохраните новый backup.", "success");
+        } else {
+          setNotice("Не удалось подтвердить результат восстановления: " + error.message +
+            ". Не повторяйте операцию, пока не обновите состояние и не проверите содержимое.", "error");
+        }
+      } catch {
+        setNotice("Результат восстановления неизвестен: " + error.message +
+          ". Не повторяйте операцию вслепую; сначала восстановите соединение и обновите память.", "error");
+      }
     }
   } finally {
     button.disabled = false;
