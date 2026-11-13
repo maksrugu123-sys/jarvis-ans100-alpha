@@ -43,7 +43,11 @@ async function api(path, body) {
   if (response.status === 401 && path !== "/api/health") {
     lockConsole(payload.error || "Токен доступа отклонён. Вставьте актуальный токен.");
   }
-  if (!response.ok) throw new Error(payload.error || "Локальный запрос не выполнен.");
+  if (!response.ok) {
+    const error = new Error(payload.error || "Локальный запрос не выполнен.");
+    error.status = response.status;
+    throw error;
+  }
   return payload;
 }
 
