@@ -2,7 +2,7 @@
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`  
 **Base:** `mobile-first-offline-v1` plus the sparse dialogue-neuron experiment  
-**Status:** source-integrated prototype; builds and runtime verification have not been performed.
+**Status:** source-integrated prototype; the first GitHub Actions APK attempt reached Kotlin compilation and failed. A source-fix commit is in the branch and its follow-up build is running; no APK or device runtime is verified.
 
 This branch is the first integrated experimental JARVIS client, not a standalone neuron demo. It reuses the existing Android application and Python local console. A sparse 10,000-feature dialogue classifier is connected to both the Python conversation path and the native Android Compose chat, using separate platform checkpoints and hash mappings.
 
@@ -85,6 +85,7 @@ The existing Jetpack Compose client remains in `app/` (application ID `org.jarvi
 - approved local memories;
 - an in-process ten-neuron Kotlin ANS-100 signal pass;
 - a separate 10,000-slot sparse dialogue-intent classifier with four labels, local numeric checkpoint, metrics display and explicit feedback buttons;
+- an optional SQLite/JNVM sparse LIF-DT dialogue graph with 9,996 feature neurons and four terminal outputs, initialized by the user and fed at most 128 hashed feature events per ordinary turn; explicit feedback may apply bounded delayed numeric R-STDP when an eligibility trace exists. The graph is a separate numeric side channel, not the 10,000-slot classifier, does not independently choose a label and does not control Qwen's reply;
 - optional Termux extension for the authenticated loopback Python bridge, shared workspace, task/session administration, symbolic reasoning preview, and encrypted workspace transfer/backup.
 
 #### In-app language-model installation
@@ -130,4 +131,4 @@ Approved workspace memories and conversation history are stored separately from 
 
 ## Verification status
 
-The branch was assembled by source edits and GitHub read-back. No Python tests, Android tests, Gradle sync/build, APK generation, Playwright launch, local model inference, CI or GitHub Actions were run. Those results must not be inferred from a successful commit. Continue with static review first, then request explicit permission before any build or test execution under the project working rules.
+The branch was assembled by source edits and GitHub read-back. The first authorized GitHub Actions build, run `43616668545` (#5), completed runner/JDK/Gradle/SDK setup but failed at `:app:compileDebugKotlin`; artifact upload was skipped, so no APK was produced. The source-fix commit `d14c58f45093e19cb7386cfda3dceaed9d99b59e` triggered run [#6](https://github.com/maksrugu123-sys/jarvis-ans100-alpha/actions/runs/43617428362), which was `in_progress` at the last check (14 November 2026, 16:46 UTC); no artifact was yet available. Python and Android tests remain **AUTHORED, NOT RUN**. No APK installation, Playwright launch, local model inference, or device/resource measurement has been performed. These results must not be inferred from a successful commit. The next gate is a successful `:app:assembleDebug` and artifact upload, followed by installation and device checks.

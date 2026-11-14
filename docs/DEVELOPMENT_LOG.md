@@ -2589,3 +2589,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** read and filtered the actual GitHub Actions log for run `43616668545`; statically compared each named source location and the related architecture/status documents. The next push-triggered `:app:assembleDebug` run is the compile verification gate. No successful build or APK is claimed by this entry.
 
 **Limitations / next:** further Kotlin/compiler errors may become visible after this batch. Preserve the optional Termux boundary; keep the Android LIF-DT graph a numeric side channel, not semantic reasoning. Do not change `main`.
+
+
+## 2026-11-14 — Reconcile integrated prototype handoff with Android runtime and CI state
+
+**Changed:** updated `docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md` to document the native Android SQLite/JNVM sparse LIF-DT dialogue side channel separately from the ten-neuron ANS-100 pass and the 10,000-slot hashed intent classifier. Recorded the real Actions run 5 Kotlin compile failure and run 6 in-progress status; no APK is claimed.
+
+**Verification:** compared the handoff against `AndroidSparseNeuronNetwork.kt`, `JarvisViewModel.kt`, architecture §§3.74/3.79, and the actual Actions run metadata at 2026-11-14 16:46 UTC. Documentation-only change; no executable tests were applicable and no tests were run.
+
+**Limitations:** run 6 may still fail or succeed after this snapshot. The APK, model inference, Android install and device behavior remain unverified.
