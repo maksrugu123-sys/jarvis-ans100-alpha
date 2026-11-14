@@ -120,6 +120,7 @@ class LiteRtLmLocalEngine:
         signal_context: Mapping[str, object] | None = None,
         reasoning_context: Mapping[str, object] | None = None,
         external_context: Mapping[str, object] | None = None,
+        dialog_neuron_context: Mapping[str, object] | None = None,
     ) -> str:
         clean = prompt.strip()
         if not clean or len(clean) > MAX_PROMPT_CHARS or "\x00" in clean:
@@ -187,6 +188,21 @@ class LiteRtLmLocalEngine:
                         "При недостатке данных скажи об этом; отделяй факты страницы от выводов. "
                         "Не утверждай, что страница или её утверждения независимо проверены:\n"
                         + json.dumps(page, ensure_ascii=False, separators=(",", ":"))
+                    )
+                if dialog_neuron_context is not None:
+                    # Sparse feature activation is an experimental routing signal, not semantics.
+                    safe_dialog_neurons = {
+                        key: dialog_neuron_context.get(key)
+                        for key in (
+                            "predicted_label", "confidence_margin",
+                            "active_feature_neurons", "trained_examples", "neuron_count",
+                        )
+                    }
+                    system_message += (
+                        "\\n\\nЭкспериментальный диалоговый классификатор JARVIS передал ограниченную оценку. "
+                        "Он использует хешированные признаки текста, не понимает смысл и не генерирует ответ. "
+                        "Не выдавай его метку за достоверное понимание намерения пользователя. Данные:\\n"
+                        + json.dumps(safe_dialog_neurons, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
                     )
                 if signal_context is not None:
                     signal_fields = {
