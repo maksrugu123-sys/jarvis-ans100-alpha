@@ -44,6 +44,21 @@ def _bounded_understanding_context(
             return ""
         return "".join(ch for ch in item if ord(ch) >= 0x20 and ord(ch) != 0x7F)[:maximum]
 
+    def list_field_from_plan(
+        source: Mapping[str, object],
+        name: str,
+        maximum_items: int,
+        maximum_chars: int = 48,
+    ) -> list[str]:
+        items = source.get(name)
+        if not isinstance(items, (list, tuple)):
+            return []
+        return [
+            "".join(ch for ch in item.strip() if ord(ch) >= 0x20 and ord(ch) != 0x7F)[:maximum_chars]
+            for item in items[:maximum_items]
+            if isinstance(item, str) and item.strip()
+        ]
+
     def list_field(name: str, maximum_items: int, maximum_chars: int = 48) -> list[str]:
         items = value.get(name)
         if not isinstance(items, (list, tuple)):
@@ -78,6 +93,7 @@ def _bounded_understanding_context(
         safe_plan = {
             "schema": "JARVIS_REASONING_PLAN_V1",
             "goal": goal,
+            "focus_terms": list_field_from_plan(raw_plan, "focus_terms", 6),
             "steps": steps,
             "requires_clarification": raw_plan.get("requires_clarification") is True,
             "clarification_question": question,
