@@ -10,7 +10,7 @@ Provide the first in-process Android conversation path and isolate the UI from t
 
 ## 2. Runtime boundary
 
-The Compose screen calls JarvisViewModel; the ViewModel calls LocalConversationCoordinator. The coordinator owns the bounded local conversation repository and an injected LocalResponseEngine.
+The Compose screen calls JarvisViewModel; the ViewModel calls LocalConversationCoordinator. Android JarvisCore owns the turn, loads recent history, runs LocalUnderstandingPipeline and its bounded template planner, optionally retrieves approved memories, then passes the Core analysis to the injected LocalResponseEngine. The language engine only generates wording; the Core analysis also runs when no model is installed.
 
 Current source components:
 
@@ -24,9 +24,9 @@ The local conversation path does not construct an HTTP client, open a socket, us
 
 ## 3. Current response backend
 
-LocalFallbackResponseEngine implements the LocalResponseEngine interface. It recognizes greeting, /help and /status inputs. For unsupported prompts it explicitly reports that an offline language model has not yet been integrated.
+LocalFallbackResponseEngine implements the LocalResponseEngine interface. It recognizes basic social messages, /help and /status, and accepts the Core's bounded intent/plan record. For other requests it can show the heuristic intent and a clarification or preliminary-plan notice, while explicitly reporting that free-form answers require an installed language model.
 
-This is a deterministic command/greeting fallback. It is **not** an LLM, the ANS-100 neural runtime, the symbolic Reasoning Engine, natural-language task decomposition, voice, or an action executor. It does not call tools or cause external side effects. A future local model must be introduced through LocalResponseEngine and must report its true backend identity and availability.
+This is a deterministic fallback, not an LLM. The Core-side `JARVIS_UNDERSTANDING_V1` parser and `JARVIS_REASONING_PLAN_V1` planner are bounded rules/templates, not general semantic understanding, not the ANS-100 neural runtime, and not the separate symbolic Reasoning Engine. They do not perform content-aware task decomposition, voice, or action execution. It does not call tools or cause external side effects. A future local model must be introduced through LocalResponseEngine and must report its true backend identity and availability.
 
 ## 4. Local history format and bounds
 
