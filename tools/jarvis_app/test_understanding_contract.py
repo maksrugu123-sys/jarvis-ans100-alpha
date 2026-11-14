@@ -64,12 +64,17 @@ class UnderstandingContractTests(unittest.TestCase):
         for row in rows[1:]:
             if not row.strip():
                 continue
-            text, intent, negation, previous, explanation = row.split("\t")
+            text, intent, negation, previous, explanation, step_count, requires_clarification = row.split("\t")
             result = analyze_text(text)
             self.assertEqual(intent, result["intent"], text)
             self.assertEqual(negation == "true", result["contains_negation"], text)
             self.assertEqual(previous == "true", result["refers_to_previous_context"], text)
             self.assertEqual(explanation == "true", result["asks_for_explanation"], text)
+            plan = result["reasoning_plan"]
+            self.assertEqual("JARVIS_REASONING_PLAN_V1", plan["schema"], text)
+            self.assertEqual(int(step_count), len(plan["steps"]), text)
+            self.assertEqual(requires_clarification == "true", plan["requires_clarification"], text)
+            self.assertFalse(plan["execution_authorized"])
 
     def test_explicit_action_comparison_and_explanation_markers(self) -> None:
         self.assertEqual("action_request", analyze_text("Найди ошибки и исправь их")["intent"])
@@ -124,6 +129,8 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertEqual(10, len(safe["key_terms"]))
         self.assertLessEqual(len(safe["key_terms"][0]), 48)
         self.assertNotIn("unexpected_instruction", safe)
+        self.assertEqual("JARVIS_REASONING_PLAN_V1", safe["reasoning_plan"]["schema"])
+        self.assertFalse(safe["reasoning_plan"]["execution_authorized"])
         self.assertIsNone(_bounded_understanding_context({"schema": "unknown"}))
 
 
