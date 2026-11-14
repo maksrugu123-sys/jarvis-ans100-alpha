@@ -29,6 +29,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -80,6 +83,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var pendingBackupExportBytes by remember { mutableStateOf<ByteArray?>(null) }
     var pendingBackupExportRevision by remember { mutableStateOf<Long?>(null) }
     var pendingRestorePassphrase by remember { mutableStateOf<CharArray?>(null) }
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
     val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.jarvis.workspace+json"),
@@ -164,13 +168,47 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Header()
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                bottomBar = {
+                    NavigationBar {
+                        NavigationBarItem(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            icon = { Text("◉") },
+                            label = { Text("Чат") },
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            icon = { Text("▤") },
+                            label = { Text("Память") },
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 2,
+                            onClick = { selectedTab = 2 },
+                            icon = { Text("☷") },
+                            label = { Text("Задачи") },
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 3,
+                            onClick = { selectedTab = 3 },
+                            icon = { Text("⚙") },
+                            label = { Text("Система") },
+                        )
+                    }
+                },
+            ) { contentPadding ->
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .padding(contentPadding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Header()
+                    when (selectedTab) {
+                        0 -> {
                 SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
                 ConversationPanel(
                     state = ui.conversation,
@@ -187,24 +225,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onRemoveModel = viewModel::removeConversationModel,
                     onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
                 )
+                        }
+                        1 -> {
                 LocalMemoryPanel(
                     state = ui.localMemory,
                     onAdd = viewModel::addLocalMemory,
                     onDelete = viewModel::deleteLocalMemory,
-                )
-                RuntimeBridgePanel(
-                    state = ui.runtime,
-                    onConnect = viewModel::connectRuntime,
-                    onRefresh = viewModel::refreshRuntime,
-                    onCreateSession = viewModel::createRuntimeSession,
-                    onCreateTask = viewModel::createRuntimeTask,
-                    onSetSessionStatus = viewModel::setRuntimeSessionStatus,
-                    onCancelTask = viewModel::cancelRuntimeTask,
-                    onPreviewReasoning = viewModel::previewRuntimeReasoning,
-                    onSaveAccessToken = viewModel::saveRuntimeAccessToken,
-                    onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
-                    onCheckExtension = viewModel::checkTermuxExtension,
-                    onOpenTermux = viewModel::openTermux,
                 )
                 WorkspaceMemoryPanel(
                     state = ui.workspace,
@@ -265,6 +291,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onConfirmRestore = viewModel::confirmWorkspaceRestore,
                     onCancelRestore = viewModel::cancelWorkspaceRestore,
                 )
+                        }
+                        2 -> {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -447,8 +475,27 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     "Локальный режим · ничего не отправляется в Python-движок и не исполняется.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )                        }
+                        else -> {
+                            SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
+                RuntimeBridgePanel(
+                    state = ui.runtime,
+                    onConnect = viewModel::connectRuntime,
+                    onRefresh = viewModel::refreshRuntime,
+                    onCreateSession = viewModel::createRuntimeSession,
+                    onCreateTask = viewModel::createRuntimeTask,
+                    onSetSessionStatus = viewModel::setRuntimeSessionStatus,
+                    onCancelTask = viewModel::cancelRuntimeTask,
+                    onPreviewReasoning = viewModel::previewRuntimeReasoning,
+                    onSaveAccessToken = viewModel::saveRuntimeAccessToken,
+                    onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
+                    onCheckExtension = viewModel::checkTermuxExtension,
+                    onOpenTermux = viewModel::openTermux,
                 )
-            }
+                        }
+                    }
+                }
+            }            }
         }
     }
 
@@ -1053,7 +1100,7 @@ private fun SystemStatusCard(storageReady: Boolean, notice: String?) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                "Android подключается к реестру задач и JPVR через локальный Termux-сервис. Выполнение действий пока отключено.",
+                "Встроенный диалог и локальная память работают без Termux. Подключение Termux — необязательное расширение для общих задач и JPVR.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
