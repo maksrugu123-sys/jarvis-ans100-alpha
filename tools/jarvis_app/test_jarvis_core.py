@@ -88,6 +88,33 @@ class JarvisCoreTests(unittest.TestCase):
         self.assertFalse(status["ans100_network"]["learning_enabled"])
         self.assertFalse(status["external_actions"]["enabled"])
 
+    def test_dialogue_neuron_signal_is_passed_into_the_language_engine(self):
+        class FakeDialogNeurons:
+            def analyze(self, text):
+                self.seen_text = text
+                return {
+                    "predicted_label": "greeting",
+                    "confidence_margin": 0.2,
+                    "active_feature_neurons": 3,
+                    "trained_examples": 5,
+                    "neuron_count": 10_000,
+                }
+
+            def status(self):
+                return {"neuron_count": 10_000, "trained_examples": 5}
+
+        dialog_neurons = FakeDialogNeurons()
+        core = JarvisCore(self.engine, dialog_neuron_service=dialog_neurons)
+        answer, trace = core.respond("Привет, JARVIS!", [])
+
+        self.assertIn("языковым модулем", answer)
+        self.assertEqual(dialog_neurons.seen_text, "Привет, JARVIS!")
+        self.assertEqual(self.engine.dialog_neuron_context["predicted_label"], "greeting")
+        self.assertEqual(self.engine.dialog_neuron_context["neuron_count"], 10_000)
+        self.assertTrue(trace["dialog_neuron_context_invoked"])
+        self.assertEqual(trace["dialog_neuron_count"], 10_000)
+        self.assertEqual(trace["dialog_neuron_trained_examples"], 5)
+
     def test_memory_retrieval_is_bounded_and_ignores_non_records(self):
         memories = [
             {"id": f"match-{index}", "user_approved": True, "content": "JARVIS Android offline runtime memory"}
