@@ -770,8 +770,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     return@execute
                 }
-                val usableIds = boundedIds.filter { it < prior.neuronCount }
-                if (usableIds.isEmpty()) {
+                val usableIds = boundedIds
+                    .map { it % AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS }
+                    .distinct()
+                    .take(MAX_DIALOGUE_FEATURE_EVENTS)
+                if (usableIds.isEmpty() || prior.neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS) {
                     mainHandler.post {
                         val current = mutableState.value
                         mutableState.value = current.copy(
@@ -864,7 +867,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
         nativeNetworkExecutor.execute {
             try {
-                nativeNeuronNetwork.initializeSparseChain(AndroidSparseNeuronNetwork.MAX_NEURONS)
+                nativeNeuronNetwork.initializeSparseDialogueNetwork(AndroidSparseNeuronNetwork.MAX_NEURONS)
                 val stats = nativeNeuronNetwork.stats()
                 mainHandler.post {
                     val current = mutableState.value
@@ -873,7 +876,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             nativeNetworkBusy = false,
                             nativeNetworkStats = stats,
                             nativeNetworkError = null,
-                            nativeNetworkMessage = "Сеть создана. Активная память ограничена LRU-кэшем; остальные состояния находятся в SQLite JNVM.",
+                            nativeNetworkMessage = "Создана сеть: 9 996 признаковых и 4 выходных LIF-DT нейрона; связи разреженные, активный набор ограничен LRU-кэшем, состояние хранится в SQLite JNVM.",
                         ),
                     )
                 }
