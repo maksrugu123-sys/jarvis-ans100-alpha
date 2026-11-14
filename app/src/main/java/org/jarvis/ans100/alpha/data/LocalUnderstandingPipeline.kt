@@ -45,15 +45,15 @@ class LocalUnderstandingPipeline {
             .distinct().take(MAX_KEY_TERMS)
         val evidence = mutableListOf<String>()
         val hasQuestion = '?' in text || QUESTION_WORDS.any { it in tokens }
-        val refersBack = CONTEXT_REFERENCES.any { phrase -> normalized.contains(phrase) }
+        val refersBack = CONTEXT_REFERENCES.any { marker -> marker in tokens || tokens.any { it.startsWith(marker) && marker.length >= 4 } }
         val negation = NEGATIONS.any { it in tokens }
-        val greeting = tokens.firstOrNull() in GREETINGS || GREETINGS.any { normalized.startsWith("$it ") }
-        val thanks = THANKS.any { normalized.contains(it) }
-        val farewell = FAREWELLS.any { normalized.contains(it) }
-        val comparison = COMPARISON_MARKERS.any { normalized.contains(it) }
-        val explanation = EXPLANATION_MARKERS.any { normalized.contains(it) }
-        val actionRequest = ACTION_MARKERS.any { normalized.contains(it) }
-        val correction = CORRECTION_MARKERS.any { normalized.contains(it) }
+        val greeting = tokens.firstOrNull()?.let { it in GREETINGS } == true
+        val thanks = containsAnyPhrase(tokens, THANKS)
+        val farewell = containsAnyPhrase(tokens, FAREWELLS)
+        val comparison = containsAnyPhrase(tokens, COMPARISON_MARKERS)
+        val explanation = containsAnyPhrase(tokens, EXPLANATION_MARKERS)
+        val actionRequest = containsAnyPhrase(tokens, ACTION_MARKERS)
+        val correction = containsAnyPhrase(tokens, CORRECTION_MARKERS)
 
         val intent: String
         val confidence: Double
@@ -96,6 +96,13 @@ class LocalUnderstandingPipeline {
         )
     }
 
+
+    private fun containsAnyPhrase(tokens: List<String>, phrases: List<String>): Boolean =
+        phrases.any { phrase ->
+            val parts = phrase.split(' ').filter(String::isNotBlank)
+            parts.isNotEmpty() && tokens.windowed(parts.size).any { it == parts }
+        }
+
     companion object {
         private const val MAX_INPUT_CHARS = 750
         private const val MAX_TOKENS = 128
@@ -104,7 +111,7 @@ class LocalUnderstandingPipeline {
         private const val MAX_EVIDENCE = 5
         private const val MIN_TERM_LENGTH = 3
         private val TOKEN = Regex("[\\p{L}\\p{N}]+")
-        private val ENTITY = Regex("\\b[A-ZА-ЯЁ][\\p{L}\\p{N}_-]{1,47}\\b")
+        private val ENTITY = Regex("(?<![\\p{L}\\p{N}_])[A-ZА-ЯЁ][\\p{L}\\p{N}_-]{1,47}(?![\\p{L}\\p{N}_])")
         private val CYRILLIC = Regex("[\\u0400-\\u04FF]")
         private val LATIN = Regex("[A-Za-z]")
         private val QUESTION_WORDS = setOf("кто", "что", "где", "когда", "почему", "зачем", "как", "сколько", "можно", "ли", "what", "who", "where", "when", "why", "how")
@@ -113,10 +120,10 @@ class LocalUnderstandingPipeline {
         private val THANKS = listOf("спасибо", "благодарю", "thanks", "thank you")
         private val FAREWELLS = listOf("пока", "до свидания", "увидимся", "bye", "goodbye")
         private val COMPARISON_MARKERS = listOf("сравни", "сравнение", "что лучше", "лучше чем", "разница", "отличие", "compare", "versus", " vs ")
-        private val EXPLANATION_MARKERS = listOf("объясни", "расскажи", "почему", "зачем", "что означает", "что такое", "explain", "describe")
+        private val EXPLANATION_MARKERS = listOf("объясни", "расскажи", "что означает", "что такое", "explain", "describe")
         private val ACTION_MARKERS = listOf("сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь", "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь", "можешь ли", "сделать", "implement", "build", "fix", "find", "create")
         private val CORRECTION_MARKERS = listOf("я имел в виду", "не так", "исправление", "точнее", "я ошибся", "i meant", "correction")
-        private val CONTEXT_REFERENCES = listOf("это", "этот", "эта", "эти", "там", "тогда", "продолжай", "дальше", "как раньше", "предыдущ", "в прошлый раз", "it", "that", "those", "continue", "previous")
+        private val CONTEXT_REFERENCES = listOf("это", "этот", "эта", "эти", "там", "тогда", "продолжай", "дальше", "предыдущ", "it", "that", "those", "continue", "previous")
         private val COMMON_ENTITY_STOPWORDS = setOf("привет", "здравствуйте", "добрый", "спасибо", "пока", "можешь", "сделай", "объясни", "расскажи")
     }
 }
