@@ -24,6 +24,7 @@ from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
 from .local_fallback import LocalFallbackResponseEngine
 from .dialog_neurons import DialogNeuronService
 from tools.neuron_runtime.dialog_neuron_prototype import DialogNeuronError
+from tools.neuron_runtime.dialog_rstdp import DialogRstdpError, DialogRstdpLearningService
 from .jarvis_core import JarvisCore
 from .visible_browser import (
     VisibleBrowserResearchError,
@@ -280,6 +281,9 @@ class LocalConsoleService:
             self.storage.close()
             raise LocalConsoleError("cannot initialize local-console authentication") from exc
         self.bootstrap_token = self.auth.bootstrap_token
+        self.dialog_rstdp = DialogRstdpLearningService(
+            self.data_path.parent / "dialog-rstdp-v1"
+        )
 
     def authenticate(self, token: str | None) -> bool:
         return self.auth.verify(token)
@@ -289,6 +293,7 @@ class LocalConsoleService:
         self.jarvis_core.close()
         if self.local_inference is not None:
             self.local_inference.close()
+        self.dialog_rstdp.close()
         with self._lock:
             self.workspace_storage.close()
             self.storage.close()
@@ -1023,6 +1028,11 @@ def create_http_server(
                     return
                 self._send(200, service.dialog_neurons.status())
                 return
+            if path == "/api/dialog-rstdp":
+                if not self._require_auth():
+                    return
+                self._send(200, service.dialog_rstdp.status())
+                return
             if path == "/api/browser":
                 if not self._require_auth():
                     return
@@ -1119,6 +1129,15 @@ def create_http_server(
                         payload["text"], payload["expected_label"]
                     ))
                     return
+                if path == "/api/dialog-rstdp/learn":
+                    required = {"text", "expected_label"}
+                    allowed = required | {"feedback_id"}
+                    if not required.issubset(payload) or set(payload) - allowed:
+                        raise LocalConsoleError("ожидались поля text, expected_label и необязательное feedback_id")
+                    self._send(200, service.dialog_rstdp.learn(
+                        payload["text"], payload["expected_label"], payload.get("feedback_id")
+                    ))
+                    return
                 if path == "/api/conversation":
                     allowed = {"text", "expected_revision", "reasoning_request"}
                     if not {"text", "expected_revision"}.issubset(payload) or set(payload) - allowed:
@@ -1210,7 +1229,7 @@ def create_http_server(
                 self._error(503, str(exc))
             except (WorkspaceError, PeerMemorySyncError) as exc:
                 self._error(400, str(exc))
-            except (LocalConsoleError, DialogNeuronError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
+            except (LocalConsoleError, DialogNeuronError, DialogRstdpError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
                 self._error(400, str(exc))
             except Exception:
                 # Never return internal paths, checkpoint bytes, or tracebacks to the UI.
