@@ -32,12 +32,12 @@ fun shouldUseTermuxSignal(
 ): Boolean = installed && connected && hasToken && endpointAvailable != false
 
 /**
- * Termux is preferred only after a successful bridge connection and a working
- * signal endpoint. A false endpoint state routes the request to the in-app runtime.
+ * The signal pre-pass is optional. A failure must not stop the user conversation.
+ * Exception is contained at this narrow boundary; cancellation/errors outside the
+ * ordinary Exception hierarchy are not swallowed.
  */
-fun shouldUseTermuxSignal(
-    installed: Boolean,
-    connected: Boolean,
-    hasToken: Boolean,
-    endpointAvailable: Boolean?,
-): Boolean = installed && connected && hasToken && endpointAvailable != false
+fun <T> runOptionalSignalPass(pass: () -> T): T? = try {
+    pass()
+} catch (_: Exception) {
+    null
+}

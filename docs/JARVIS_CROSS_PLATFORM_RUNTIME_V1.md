@@ -24,7 +24,7 @@ This is a shared product and data contract, not a claim that the current impleme
 | Desktop UI | PWA served by tools.jarvis_app | Local task/session console and optional local-model conversation through JARVIS Core; source-level only, not runtime verified |
 | Android UI | Kotlin + Jetpack Compose under app/ | Native V0.5 source exists |
 | Android runtime connection | LocalRuntimeBridgeClient → 127.0.0.1:8765 | Optional Termux extension for shared JPVR workspace, task/session administration, symbolic preview and encrypted transfer; core chat/history and the Kotlin ANS-100 signal pass remain in-process |
-| Neural runtime | Python NeuronRuntime / NetworkRuntime reference; Kotlin in-process Android signal pass | Bounded two-neuron request-shape signal preprocessing is used by desktop Core and Android; Android may prefer the authenticated Termux Python endpoint when connected, but falls back to Kotlin. This is not full cognition or dialogue learning |
+| Neural runtime | Python NeuronRuntime / NetworkRuntime reference; Kotlin in-process Android signal pass | Bounded ten-neuron request-shape signal preprocessing is used by desktop Core and Android; Android may prefer the authenticated Termux Python endpoint when connected, but falls back to Kotlin. This is not full cognition or dialogue learning |
 | Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | No native Kotlin JPVR implementation or automatic cross-device sync yet |
 | Offline language model | Optional LiteRT-LM Qwen3 adapters called by JARVIS Core on Android and desktop/PWA | Source-level only; no inference or target-device performance has been verified |
 
@@ -205,7 +205,7 @@ The capability registry reports actual limits and active backends. A PC may use 
 
 ### Batch 6 — Shared ANS-100 runtime behavior
 
-**Implemented at source level:** the bounded Python ALIF-DT pre-pass uses NeuronRuntime, NetworkRuntime and the Numerical Oracle for desktop Core and the optional Termux endpoint. Android also has a Kotlin in-process two-neuron implementation with app-private checkpoint persistence; it is the default path when Termux is missing or its signal endpoint is unavailable.
+**Implemented at source level:** the bounded Python ALIF-DT pre-pass uses NeuronRuntime, NetworkRuntime and the Numerical Oracle for desktop Core and the optional Termux endpoint. Android also has a Kotlin in-process ten-neuron implementation with app-private checkpoint persistence; it is the default path when Termux is missing or its signal endpoint is unavailable.
 
 **Limit:** both implementations process explicit request-shape features and return numeric signal summaries. They do not provide semantic understanding, full cognition or adaptive dialogue learning. Kotlin/Python differential equivalence and target-device behavior remain unverified.
 
@@ -241,3 +241,19 @@ The milestone is reached only when all are true:
 10. PC and Android resource metrics and verification evidence are recorded separately.
 
 Until these acceptance criteria are met, describe the work as a cross-platform architecture and staged implementation, not a completed dual-platform assistant.
+
+
+## 11. Conversation signal runtime V2 — 14 November 2026
+
+The in-process Android runtime and desktop/Termux Python reference now use a common ten-neuron signal topology:
+
+1. Six bounded request-shape sensors: token volume, lexical diversity, question marker, punctuation density, sentence density and uppercase ratio.
+2. Two aggregators: content and request structure.
+3. One adaptive ALIF-DT request integrator.
+4. One output/attention gate.
+
+The topology contains nine directed connections and uses a 64-event per-turn ceiling in the Python network scheduler; Android also enforces a 64-event per-turn ceiling. The current rule set does not enable dialogue-driven STDP or R-STDP. These features summarize surface form only and are not semantic language understanding.
+
+Both platforms emit JARVIS_ANS100_CONVERSATION_SIGNAL_V2. Android validates returned event, batch and neuron counts and accepts V1 responses only as a compatibility path. The Python local-console endpoint returns V2. A V1 two-neuron Android checkpoint migrates to V2 while retaining prior integrator and output-gate state; unrelated or invalid checkpoints remain fail-closed. A Python V1 JPVR network checkpoint is rebuilt into V2 at load and durably rewritten on the next successful turn. Legacy checkpoints with pending routed events are rejected rather than migrated ambiguously.
+
+Source status: IMPLEMENTED at source level; tests AUTHORED, NOT RUN; Android/desktop execution and resource use NOT MEASURED.

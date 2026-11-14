@@ -17,7 +17,7 @@ This guide describes the existing Python local console for Linux/macOS and the c
 - Bounded symbolic reasoning preview using structured facts and actions.
 - Bearer-token protected state and mutation routes.
 
-Not yet delivered: integrated offline language model, full natural-language conversation, production task execution, offline voice, native Windows/macOS/Linux package, or automatic synchronization with Android.
+An optional LiteRT-LM source adapter for Qwen3-0.6B INT4 no-think inference exists, and the local conversation route is wired through JARVIS Core. The adapter requires an explicitly supplied model file; successful inference and natural-language response quality have not been runtime-verified. Not yet delivered: verified production conversation quality, production task execution, offline voice, native Windows/macOS/Linux package, or automatic synchronization with Android.
 
 ## Requirements
 

@@ -77,6 +77,38 @@ class LocalConversationSignalRuntimeTest {
         assertEquals(null, storage.value)
     }
 
+
+    @Test
+    fun v2SignalContextAcceptsTenNeuronMetricsAndRejectsOutOfBudgetCounts() {
+        val context = ConversationSignalContext(
+            runtimeVersion = "JARVIS_ANS100_CONVERSATION_SIGNAL_V2",
+            processedEvents = 15,
+            processedBatches = 10,
+            spikeCount = 10,
+            attentionGateActive = true,
+            tokenVolume = 0.4,
+            lexicalDiversity = 1.0,
+            questionMarker = 0.35,
+            integratorAdaptation = 0.2,
+            effectiveThreshold = 1.6,
+            statePersisted = true,
+            activeNeuronCount = 10,
+            networkNeuronCount = 10,
+            punctuationDensity = 0.5,
+            sentenceDensity = 0.25,
+            uppercaseRatio = 0.4,
+        )
+        assertTrue(context.toModelContext().contains("Сеть: 10 нейронов; активных: 10."))
+
+        var rejected = false
+        try {
+            context.copy(processedEvents = 65)
+        } catch (_: RuntimeBridgeException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+    }
+
     @Test
     fun malformedCheckpointIsRejectedInsteadOfSilentlyReset() {
         val storage = MemoryStorage("corrupted")

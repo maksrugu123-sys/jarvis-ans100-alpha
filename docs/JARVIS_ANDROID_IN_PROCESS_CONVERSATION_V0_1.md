@@ -75,3 +75,13 @@ No tools are registered, automatic tool calling is disabled, and the system inst
 The phone conversation continues to use app-private SharedPreferences. It is not yet connected to portable workspace conversations and does not currently move to PC through JWS/JWB. Cross-device transfer is a separate unfinished stage.
 
 No Gradle sync, build, test, model initialization or inference was run for this integration. API signatures were checked against LiteRT-LM documentation/source, but compile/runtime compatibility remains unverified.
+
+## 2026-11-14 update — ten-neuron conversation signal runtime V2
+
+The earlier two-neuron signal pass is superseded by the V2 topology. Both in-process Kotlin on Android and Python on desktop/Termux now define the same ten logical neurons: six request-shape sensors (token volume, lexical diversity, question marker, punctuation density, sentence density and uppercase ratio), content and structure aggregators, an adaptive ALIF-DT integrator and an output gate. Nine directed connections route sensor spikes through the aggregators and integrator.
+
+The V2 response contract is JARVIS_ANS100_CONVERSATION_SIGNAL_V2. It includes active/network neuron counts and the added punctuation, sentence and uppercase features. The Android bridge accepts V1 only as a compatibility response; newly written local and Python checkpoints use V2. An older Android V1 checkpoint is migrated while retaining integrator/gate membrane state, adaptation, refractory clocks and spike counters. A legacy Python network checkpoint is migrated only when its old scheduler queue is empty; otherwise migration fails closed.
+
+Each platform uses a bounded 64-event budget. The signal runtime still receives only deterministic text-shape values. STDP/R-STDP learning from dialogue remains disabled, and the signal does not provide semantic understanding or reasoning. Ordinary Android chat must continue when both optional Termux signalling and the local signal pass fail; the ViewModel now treats this pre-pass as optional and calls the conversation coordinator with a null signal context in that case.
+
+The focused Kotlin and Python regression tests cover ten-neuron flow, event bounds, persistence/reopen, legacy checkpoint migration, neutral inputs and malformed/persistence-failure behavior. Status: AUTHORED, NOT RUN. Android builds, desktop runtime tests, device inference, resource use and cross-language differential execution have not been run.

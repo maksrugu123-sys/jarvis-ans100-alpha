@@ -64,15 +64,31 @@ data class ConversationSignalContext(
     val statePersisted: Boolean = false,
     val checkpointVersion: Long = 0L,
     val modelTimeNs: Long = 0L,
+    val activeNeuronCount: Int = 0,
+    val networkNeuronCount: Int = 2,
+    val punctuationDensity: Double = 0.0,
+    val sentenceDensity: Double = 0.0,
+    val uppercaseRatio: Double = 0.0,
 ) {
     init {
-        if (runtimeVersion != "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
-            processedEvents !in 0..8 || processedBatches !in 0..8 || spikeCount !in 0..2 ||
+        val legacy = runtimeVersion == "JARVIS_ANS100_CONVERSATION_SIGNAL_V1"
+        val validVersion = legacy || runtimeVersion == "JARVIS_ANS100_CONVERSATION_SIGNAL_V2"
+        val maxEvents = if (legacy) 8 else 64
+        val maxBatches = if (legacy) 8 else 10
+        val maxSpikes = if (legacy) 2 else 10
+        val expectedNeurons = if (legacy) 2 else 10
+        if (!validVersion ||
+            processedEvents !in 0..maxEvents || processedBatches !in 0..maxBatches ||
+            spikeCount !in 0..maxSpikes || activeNeuronCount !in 0..expectedNeurons ||
+            networkNeuronCount != expectedNeurons ||
             !tokenVolume.isFinite() || tokenVolume !in 0.0..1.0 ||
             !lexicalDiversity.isFinite() || lexicalDiversity !in 0.0..1.0 ||
             !questionMarker.isFinite() || questionMarker !in 0.0..1.0 ||
+            !punctuationDensity.isFinite() || punctuationDensity !in 0.0..1.0 ||
+            !sentenceDensity.isFinite() || sentenceDensity !in 0.0..1.0 ||
+            !uppercaseRatio.isFinite() || uppercaseRatio !in 0.0..1.0 ||
             !integratorAdaptation.isFinite() || integratorAdaptation !in 0.0..1.0 ||
-            !effectiveThreshold.isFinite() || effectiveThreshold !in 1.0..1.5 ||
+            !effectiveThreshold.isFinite() || effectiveThreshold !in 1.0..2.0 ||
             checkpointVersion < 0L || modelTimeNs < 0L
         ) {
             throw RuntimeBridgeException("Сводка сигнала ANS-100 содержит недопустимые значения.")
@@ -81,17 +97,21 @@ data class ConversationSignalContext(
 
     fun toModelContext(): String = buildString {
         appendLine("Runtime: $runtimeVersion")
+        appendLine("Сеть: $networkNeuronCount нейронов; активных: $activeNeuronCount.")
         appendLine("Обработано событий: $processedEvents; пакетов: $processedBatches; импульсов: $spikeCount.")
         appendLine("Attention gate активирован: $attentionGateActive.")
         appendLine(
-            "Числовые признаки: token_volume=${String.format(Locale.ROOT, "%.3f", tokenVolume)}, " +
+            "Признаки: token_volume=${String.format(Locale.ROOT, "%.3f", tokenVolume)}, " +
                 "lexical_diversity=${String.format(Locale.ROOT, "%.3f", lexicalDiversity)}, " +
                 "question_marker=${String.format(Locale.ROOT, "%.3f", questionMarker)}, " +
+                "punctuation_density=${String.format(Locale.ROOT, "%.3f", punctuationDensity)}, " +
+                "sentence_density=${String.format(Locale.ROOT, "%.3f", sentenceDensity)}, " +
+                "uppercase_ratio=${String.format(Locale.ROOT, "%.3f", uppercaseRatio)}, " +
                 "integrator_adaptation=${String.format(Locale.ROOT, "%.3f", integratorAdaptation)}, " +
                 "effective_threshold=${String.format(Locale.ROOT, "%.3f", effectiveThreshold)}.",
         )
         appendLine("Адаптивное состояние сохранено в отдельном JPVR: $statePersisted.")
-        append("Область: только низкоуровневая обработка сигнала; это не семантическое понимание и не полноценное рассуждение.")
+        append("Область: низкоуровневая обработка формы запроса; это не семантическое понимание и не полноценное рассуждение.")
     }
 }
 

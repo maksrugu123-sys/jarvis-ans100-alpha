@@ -373,7 +373,9 @@ class JarvisCore:
                 "execution_enabled": False,
             },
             "ans100_network": {
-                "state": "signal_preprocessor_only",
+                "state": "ten_neuron_signal_preprocessor_only",
+                "runtime_version": "JARVIS_ANS100_CONVERSATION_SIGNAL_V2",
+                "neuron_count": self._signal_runtime.neuron_count,
                 "signal_preprocessing_integrated_into_chat": True,
                 "full_cognitive_loop_integrated": False,
                 "learning_enabled": False,

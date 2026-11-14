@@ -1,7 +1,7 @@
 # JARVIS ANS-100 Alpha — архитектура и журнал решений
 
 **Статус документа:** рабочая спецификация и журнал согласованных проектных решений  
-**Дата последнего обновления:** 13 ноября 2026 года  
+**Дата последнего обновления:** 14 ноября 2026 года  
 **Репозиторий:** `maksrugu123-sys/jarvis-ans100-alpha` (Private)  
 **Основная ветка:** `main`
 
@@ -4739,3 +4739,42 @@ These mappings are derived by the canonical builder while it stages records; app
 **Tests:** tools/neuron_runtime/test_network_jnvm_store.py is AUTHORED, NOT RUN. It covers initial group restore, shared commit identity, partial neuron updates, stale scheduler/neuron versions, topology immutability and uncertain-publication recovery.
 
 **Verification:** source readback/static review only. No tests, benchmarks, build, CI or device measurement.
+
+
+---
+
+### 3.67. Conversation signal runtime V2 — десятинейронный диалоговый контур
+
+**Статус:** IMPLEMENTED на уровне исходного кода для Android Kotlin и Python desktop/Termux; тесты AUTHORED, NOT RUN; device/runtime/resource measurements NOT RUN.
+
+#### 3.67.1. Назначение и границы
+
+Диалоговый сигнальный проход увеличен с двух до десяти логических нейронов. Он остаётся ограниченным предварительным обработчиком формы пользовательского запроса, а не языковой моделью, семантическим парсером или полноценным Reasoning Engine. Его вывод может сопровождать диалоговый контекст, но не определяет смысл запроса и не заменяет генерацию ответа.
+
+#### 3.67.2. Топология
+
+- 6 сенсорных нейронов: token_volume_sensor, lexical_diversity_sensor, question_marker_sensor, punctuation_density_sensor, sentence_density_sensor, uppercase_ratio_sensor.
+- 2 агрегатора: content_aggregator и structure_aggregator.
+- 1 адаптивный интегратор: request_integrator.
+- 1 выходной нейрон: attention_gate.
+- 9 направленных связей: шесть sensor→aggregator, две aggregator→integrator и одна integrator→gate.
+
+Шесть входных признаков нормализованы в [0,1]. Агрегаторы объединяют соответственно два признака содержательной формы и четыре признака структуры запроса. Интегратор использует Adaptive LIF-DT с адаптивным порогом. Набор параметров является экспериментальным стартовым профилем и не считается откалиброванным.
+
+#### 3.67.3. Бюджеты и состояние
+
+Python NetworkRuntime и Android Kotlin pass используют ограничение 64 событий на один запрос. Сохранение состояния включает отдельное состояние каждого нейрона: потенциал, адаптацию, время последнего обновления, refractory-until и spike sequence. Счётчик checkpoint и часы модели остаются ограниченными и валидируются при восстановлении.
+
+Старый Android JARVIS_ANS100_ANDROID_SIGNAL_V1 checkpoint переносит состояние прежних интегратора и gate в V2, остальные восемь нейронов начинают с нулевого состояния. Старый Python JPVR network snapshot переносит те же два нейрона в новую топологию только при пустой очереди событий. Checkpoint с неопределёнными pending events не мигрирует, а завершается ошибкой без молчаливой потери событий. Первая успешная обработка после migration записывает новый V2 checkpoint.
+
+#### 3.67.4. Контракт и отказоустойчивость
+
+Контракт JARVIS_ANS100_CONVERSATION_SIGNAL_V2 возвращает network_neuron_count, active_neuron_count, расширенные текстовые признаки, число событий/пакетов/импульсов, адаптацию и effective threshold. Android bridge валидирует диапазоны и сохраняет совместимость чтения V1-ответов как legacy fallback; новые Python/Android реализации возвращают V2.
+
+Сигнальный проход необязателен. При ошибке Termux используется Kotlin in-process pass; если ошибается и он (включая повреждённый checkpoint или неуспешный commit), обычный диалог получает null signal context и продолжает обработку. Ошибка дополнительного нейронного контура не должна блокировать пользовательский ответ. Это правило не отменяет обязательную проверку и сохранение самой истории диалога.
+
+STDP/R-STDP диалоговое обучение выключено. Ни 10 нейронов, ни 10 000-нейронный capacity ceiling не являются доказательством интеллектуальной способности или производительности.
+
+#### 3.67.5. Проверки и открытые ограничения
+
+Авторские регрессионные тесты покрывают десятинейронный маршрут, число событий/пакетов, адаптацию между ходами, persistence/reopen, миграцию двухнейронного состояния, нейтральный запрос и fail-closed для повреждённого checkpoint/ошибки записи. Эти тесты пока AUTHORED, NOT RUN. Gradle, Python unit tests, сборки, CI и GitHub Actions не запускались. Потребление RAM, latency, battery/thermal impact, Android/Python numerical parity и практическая пригодность порогов не измерены.

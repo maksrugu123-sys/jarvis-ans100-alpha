@@ -160,8 +160,9 @@ class LocalRuntimeBridgeClient {
             connectTimeoutMs = 800,
             readTimeoutMs = 1_800,
         )
-        if (requiredString(response, "runtime_version") !=
-            "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
+        val runtimeVersion = requiredString(response, "runtime_version")
+        val legacy = runtimeVersion == "JARVIS_ANS100_CONVERSATION_SIGNAL_V1"
+        if ((!legacy && runtimeVersion != "JARVIS_ANS100_CONVERSATION_SIGNAL_V2") ||
             response.opt("learning_enabled") != false ||
             requiredString(response, "scope") != "low_level_signal_preprocessing_only"
         ) {
@@ -183,7 +184,7 @@ class LocalRuntimeBridgeClient {
             return value
         }
         return ConversationSignalContext(
-            runtimeVersion = requiredString(response, "runtime_version"),
+            runtimeVersion = runtimeVersion,
             processedEvents = requiredInt(response, "processed_events"),
             processedBatches = requiredInt(response, "processed_batches"),
             spikeCount = requiredInt(response, "spike_count"),
@@ -192,10 +193,15 @@ class LocalRuntimeBridgeClient {
             lexicalDiversity = feature("lexical_diversity"),
             questionMarker = feature("question_marker"),
             integratorAdaptation = feature("integrator_adaptation"),
-            effectiveThreshold = feature("effective_threshold", 1.0, 1.5),
+            effectiveThreshold = feature("effective_threshold", 1.0, 2.0),
             statePersisted = statePersisted,
             checkpointVersion = requiredLong(response, "checkpoint_version"),
             modelTimeNs = requiredLong(response, "model_time_ns"),
+            activeNeuronCount = if (legacy) 0 else requiredInt(response, "active_neuron_count"),
+            networkNeuronCount = if (legacy) 2 else requiredInt(response, "network_neuron_count"),
+            punctuationDensity = if (legacy) 0.0 else feature("punctuation_density"),
+            sentenceDensity = if (legacy) 0.0 else feature("sentence_density"),
+            uppercaseRatio = if (legacy) 0.0 else feature("uppercase_ratio"),
         )
     }
 

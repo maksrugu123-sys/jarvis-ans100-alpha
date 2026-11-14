@@ -420,7 +420,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         hasToken = runtimeState.hasAccessToken,
                         endpointAvailable = runtimeState.signalEndpointAvailable,
                     )
-                    if (useTermuxSignal) {
+                    val signal = if (useTermuxSignal) {
                         try {
                             val remoteSignal = runtimeClient.analyzeConversationSignal(clean)
                             mainHandler.post {
@@ -430,9 +430,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 )
                             }
                             remoteSignal
-                        } catch (error: Exception) {
-                            // Disable only this optional endpoint for the current connection.
-                            // The built-in ANS-100 path and the conversation continue normally.
+                        } catch (_: Exception) {
                             mainHandler.post {
                                 val current = mutableState.value
                                 mutableState.value = current.copy(
@@ -442,14 +440,27 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                     ),
                                 )
                             }
-                            localSignalRuntime.analyze(clean)
+                            runOptionalSignalPass { localSignalRuntime.analyze(clean) }
                         }
                     } else {
-                        localSignalRuntime.analyze(clean)
+                        runOptionalSignalPass { localSignalRuntime.analyze(clean) }
                     }
+                    if (signal == null) {
+                        mainHandler.post {
+                            val current = mutableState.value
+                            mutableState.value = current.copy(
+                                runtime = current.runtime.copy(
+                                    message = "ANS-100 временно недоступен; обычный диалог продолжен без сигнального контекста.",
+                                ),
+                            )
+                        }
+                    }
+                    signal
                 } else {
                     null
                 }
+                // Neural preprocessing is optional: the normal turn is committed even
+                // when both the Termux endpoint and the in-process checkpoint are unavailable.
                 val messages = conversationCoordinator.send(clean, signalContext)
                 mainHandler.post {
                     val current = mutableState.value

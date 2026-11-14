@@ -121,4 +121,16 @@ class OptionalTermuxExtensionStatusTest {
             ),
         )
     }
+
+    @Test
+    fun failedOptionalSignalPassReturnsNoContextInsteadOfThrowing() {
+        assertEquals(null, runOptionalSignalPass<String> {
+            throw IllegalStateException("simulated checkpoint failure")
+        })
+    }
+
+    @Test
+    fun successfulOptionalSignalPassReturnsItsContext() {
+        assertEquals("signal-context", runOptionalSignalPass { "signal-context" })
+    }
 }

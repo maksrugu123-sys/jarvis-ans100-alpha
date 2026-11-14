@@ -2089,3 +2089,29 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Compatibility:** V1 experimental scheduler records are not automatically migrated. Use a fresh V2 container or implement a separately reviewed migration.
 
 **Next:** implement a fail-closed in-memory timestamp coordinator around NetworkRuntime.run(), persisting the complete candidate via the group store before publishing state. Keep Android's native two-neuron path unchanged until Python/Kotlin parity exists.
+
+
+## 2026-11-14 — Android conversation resilience and 10-neuron signal V2
+
+**Objective:** expand the user-dialogue signal path from two to ten neurons on Android and desktop/Termux, preserve older adaptive checkpoints, and ensure an optional signal failure does not block the conversation.
+
+**Changed source and tests:**
+- tools/neuron_runtime/conversation_signal.py — six request-shape sensors, two aggregators, adaptive integrator and output gate; V2 contract; bounded event budget; V1 Python JPVR migration when the old queue is empty.
+- tools/neuron_runtime/test_conversation_signal.py — tests for ten-neuron propagation, adaptive state, JPVR reopen, legacy migration, no-op requests and input bounds.
+- app/src/main/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntime.kt — matching ten-neuron Kotlin pass, V2 SharedPreferences codec and V1 state migration.
+- app/src/main/java/org/jarvis/ans100/alpha/data/JarvisCore.kt — validates V1 compatibility and V2 ten-neuron signal summaries.
+- app/src/main/java/org/jarvis/ans100/alpha/data/LocalRuntimeBridgeClient.kt — accepts validated V2 Termux results and a bounded V1 compatibility response.
+- app/src/main/java/org/jarvis/ans100/alpha/data/OptionalTermuxExtension.kt — removes duplicate shouldUseTermuxSignal declaration and adds an exception-contained optional signal helper.
+- app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt — Termux failure falls back to Kotlin; if both signal paths fail, the conversation coordinator still receives the user's message with a null signal context.
+- app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntimeTest.kt — ten-neuron, event-budget, checkpoint migration, persistence and error tests.
+- app/src/test/java/org/jarvis/ans100/alpha/data/OptionalTermuxExtensionStatusTest.kt — signal failure helper tests.
+- tools/jarvis_app/jarvis_core.py, tools/jarvis_app/test_jarvis_core.py — capability status exposes the ten-neuron runtime and integration test expects V2.
+- README.md, AGENTS.md, docs/JARVIS_ARCHITECTURE.md, docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md, docs/JARVIS_ANDROID_IN_PROCESS_CONVERSATION_V0_1.md, docs/JARVIS_PC_QUICKSTART_V1.md — updated architecture and implementation status.
+
+**Verification:** GitHub source/blob review only. Static readback of the changed source and documentation is being performed before publication. No executable tests were run; new/updated tests are AUTHORED, NOT RUN.
+
+**Builds / APK/AAB / CI / GitHub Actions:** NOT RUN. No workflow was dispatched. The user's GitHub Actions storage warning (90% usage) was noted; this task created no Actions artifacts or caches.
+
+**Limitations:** the V2 implementation has not been compiled or executed. The signal features are request-shape measurements only; dialogue-driven learning remains disabled. Android/Python differential parity, actual resource use, and 10-neuron runtime latency on a phone/PC are not measured. The 10,000-neuron general-network ceiling remains a separate unmeasured capacity limit, not a claim that the phone runs 10,000 neurons during every dialog turn.
+
+**Next step:** once explicitly authorized, run the focused Python and Kotlin tests and then device/resource validation; separately implement the proposed visible PC browser and atomic JNVM network integration.

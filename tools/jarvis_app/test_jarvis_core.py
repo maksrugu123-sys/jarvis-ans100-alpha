@@ -80,6 +80,8 @@ class JarvisCoreTests(unittest.TestCase):
         self.assertFalse(status["reasoning_engine"]["natural_language_decomposition"])
         self.assertFalse(status["reasoning_engine"]["execution_enabled"])
         self.assertTrue(status["ans100_network"]["signal_preprocessing_integrated_into_chat"])
+        self.assertEqual(status["ans100_network"]["runtime_version"], "JARVIS_ANS100_CONVERSATION_SIGNAL_V2")
+        self.assertEqual(status["ans100_network"]["neuron_count"], 10)
         self.assertFalse(status["ans100_network"]["full_cognitive_loop_integrated"])
         self.assertFalse(status["ans100_network"]["learning_enabled"])
         self.assertFalse(status["external_actions"]["enabled"])
