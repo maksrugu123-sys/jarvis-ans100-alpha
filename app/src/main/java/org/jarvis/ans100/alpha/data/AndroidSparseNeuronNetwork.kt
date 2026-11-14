@@ -345,7 +345,7 @@ class AndroidSparseNeuronNetwork(
         const val MAX_TIMESTAMPS_PER_RUN = 10_000
         const val DEFAULT_MAX_EVENTS_PER_RUN = 4_096
         const val DEFAULT_MAX_TIMESTAMPS_PER_RUN = 128
-        const val DEFAULT_DATABASE_NAME = "jarvis_android_jnvm_v1.db"
+        const val DEFAULT_DATABASE_NAME = "jarvis_android_dialogue_jnvm_v2.db"
         const val DEFAULT_CONNECTION_DELAY_NS = 1_000_000L
         const val DEFAULT_CONNECTION_WEIGHT = 0.75
         private const val POTENTIAL_MIN = -2.0
