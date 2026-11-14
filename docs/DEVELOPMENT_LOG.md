@@ -2549,3 +2549,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** the change is authored from the exact compiler error in run 43615308594; no Gradle build or Kotlin compilation has yet verified the correction. The next GitHub Actions run must confirm whether project configuration proceeds to source compilation.
 
 **Build / APK:** previous run failed; no APK artifact exists. The next build is expected to be triggered by the commit.
+
+
+## 2026-11-14 — Enable AndroidX for Android application dependencies
+
+**Trigger:** prototype build run 43615561735 passed Android SDK setup and Gradle project configuration, then failed at :app:checkDebugAarMetadata because AndroidX dependencies are present while android.useAndroidX is not enabled.
+
+**Changed:** added root gradle.properties with android.useAndroidX=true. This enables the AndroidX dependency mode required by Compose and the app's AndroidX libraries; no dependencies or application behavior were changed.
+
+**Verification:** based on the exact Gradle diagnostic from run 43615561735. No new build has yet verified the property. The next push-triggered workflow is the verification gate.
+
+**Build / APK:** run 43615561735 failed before compilation; no APK artifact was produced.
