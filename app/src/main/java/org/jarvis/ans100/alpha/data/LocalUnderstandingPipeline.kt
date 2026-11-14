@@ -13,6 +13,7 @@ data class LocalReasoningPlan(
     val steps: List<String>,
     val requiresClarification: Boolean,
     val clarificationQuestion: String,
+    val contextReferenceResolved: Boolean,
     val schema: String = "JARVIS_REASONING_PLAN_V1",
     val executionAuthorized: Boolean = false,
     val scope: String = "bounded_template_plan_only",
@@ -29,6 +30,7 @@ data class LocalUnderstanding(
     val refersToPreviousContext: Boolean,
     val asksForExplanation: Boolean,
     val evidence: List<String>,
+    val hasRecentUserContext: Boolean,
     val reasoningPlan: LocalReasoningPlan,
     val schema: String = "JARVIS_UNDERSTANDING_V1",
     val scope: String = "bounded_heuristic_pre_generation_analysis",
@@ -44,6 +46,7 @@ data class LocalUnderstanding(
         if (entities.isNotEmpty()) append("Возможные сущности: ").append(entities.joinToString(", ")).append('\n')
         append("Отрицание присутствует: ").append(containsNegation)
         append("; ссылка на предыдущий контекст: ").append(refersToPreviousContext)
+        append("; недавний контекст пользователя доступен: ").append(hasRecentUserContext).append('\n')
         append("; запрос объяснения: ").append(asksForExplanation).append('\n')
         if (evidence.isNotEmpty()) append("Основания классификации: ").append(evidence.joinToString("; ")).append('\n')
         append("План JARVIS (").append(reasoningPlan.schema).append("; ")
@@ -51,6 +54,7 @@ data class LocalUnderstanding(
         reasoningPlan.steps.forEachIndexed { index, step ->
             append(index + 1).append(". ").append(step).append('\n')
         }
+        append("Ссылка на контекст разрешена: ").append(reasoningPlan.contextReferenceResolved).append('\n')
         append("Выполнение разрешено: ").append(reasoningPlan.executionAuthorized).append('\n')
         if (reasoningPlan.requiresClarification) {
             append("Требуется уточнение: ").append(reasoningPlan.clarificationQuestion).append('\n')
@@ -60,7 +64,10 @@ data class LocalUnderstanding(
 }
 
 class LocalUnderstandingPipeline {
-    fun analyze(input: String): LocalUnderstanding {
+    fun analyze(
+        input: String,
+        recentHistory: List<LocalConversationMessage> = emptyList(),
+    ): LocalUnderstanding {
         val text = input.trim().take(MAX_INPUT_CHARS)
         val normalized = text.lowercase(Locale.ROOT)
         val tokens = TOKEN.findAll(normalized).map { it.value }.take(MAX_TOKENS).toList()
@@ -100,6 +107,9 @@ class LocalUnderstandingPipeline {
         val entities = ENTITY.findAll(text).map { it.value.trim() }
             .filter { it.length in 2..48 && it.lowercase(Locale.ROOT) !in COMMON_ENTITY_STOPWORDS }
             .distinctBy { it.lowercase(Locale.ROOT) }.take(MAX_ENTITIES).toList()
+        val hasRecentUserContext = recentHistory.asSequence()
+            .takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
+            .any { it.role == ConversationRole.USER && it.text.isNotBlank() }
         val language = when {
             CYRILLIC.containsMatchIn(text) -> "ru_or_cyrillic"
             LATIN.containsMatchIn(text) -> "en_or_latin"
@@ -116,7 +126,8 @@ class LocalUnderstandingPipeline {
             refersToPreviousContext = refersBack,
             asksForExplanation = explanation,
             evidence = evidence.distinct().take(MAX_EVIDENCE),
-            reasoningPlan = buildReasoningPlan(intent, uniqueTerms, entities),
+            hasRecentUserContext = hasRecentUserContext,
+            reasoningPlan = buildReasoningPlan(intent, uniqueTerms, entities, refersBack, hasRecentUserContext),
         )
     }
 
@@ -126,16 +137,22 @@ class LocalUnderstandingPipeline {
         intent: String,
         keyTerms: List<String>,
         entities: List<String>,
+        refersBack: Boolean,
+        hasRecentUserContext: Boolean,
     ): LocalReasoningPlan {
         val nonActionTerms = keyTerms.filterNot { it in ACTION_TERMS }
-        val requiresClarification = when (intent) {
-            "statement_or_unknown" -> true
+        val unresolvedContext = refersBack && !hasRecentUserContext
+        val requiresClarification = when {
+            intent == "statement_or_unknown" -> true
+            unresolvedContext -> true
             "question" -> keyTerms.isEmpty() && entities.isEmpty()
             "action_request" -> nonActionTerms.isEmpty() && entities.isEmpty()
             "comparison" -> nonActionTerms.size + entities.size < 2
             else -> false
         }
-        val clarificationQuestion = when (intent) {
+        val clarificationQuestion = if (unresolvedContext) {
+            "К какому предыдущему сообщению относится «это»? Напомните контекст."
+        } else when (intent) {
             "question" -> "Какой именно объект или ситуацию вы имеете в виду?"
             "action_request" -> "Что именно нужно изменить, создать или проверить?"
             "comparison" -> "Какие именно варианты нужно сравнить?"
@@ -193,6 +210,7 @@ class LocalUnderstandingPipeline {
             steps = steps.take(MAX_PLAN_STEPS),
             requiresClarification = requiresClarification,
             clarificationQuestion = clarificationQuestion,
+            contextReferenceResolved = refersBack && hasRecentUserContext,
         )
     }
 
@@ -209,6 +227,7 @@ class LocalUnderstandingPipeline {
         private const val MAX_ENTITIES = 5
         private const val MAX_EVIDENCE = 5
         private const val MAX_PLAN_STEPS = 5
+        private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 4
         private const val MIN_TERM_LENGTH = 3
         private val TOKEN = Regex("[\\p{L}\\p{N}]+")
         private val ENTITY = Regex("(?<![\\p{L}\\p{N}_])[A-ZА-ЯЁ][\\p{L}\\p{N}_-]{1,47}(?![\\p{L}\\p{N}_])")
