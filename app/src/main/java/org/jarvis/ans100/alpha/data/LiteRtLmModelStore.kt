@@ -88,12 +88,11 @@ class LiteRtLmModelStore(context: Context) {
 
         activeConnection = connection
         try {
+            if (cancelRequested || Thread.currentThread().isInterrupted) {
+                throw LiteRtLmDownloadCancelledException()
+            }
             connection.connect()
             val code = connection.responseCode
-            if (code == 416 && offset == EXPECTED_BYTES) {
-                return verifyAndPublish(digest)
-            }
-
             if (cancelRequested || Thread.currentThread().isInterrupted) {
                 throw LiteRtLmDownloadCancelledException()
             }
