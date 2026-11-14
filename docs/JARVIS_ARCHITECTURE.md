@@ -4715,3 +4715,26 @@ These mappings are derived by the canonical builder while it stages records; app
 **Tests:** two builder tests are AUTHORED, NOT RUN. They cover DATA page splitting/sharing and multi-BLOB contiguous-range mapping.
 
 **Verification:** source-level static review only. No tests, benchmark, build or device measurement.
+
+
+### 3.66. Single-Container Network JNVM Group Checkpoint V1
+
+**Status:** storage facade implemented at source level in tools/neuron_runtime/network_jnvm_store.py; focused tests AUTHORED, NOT RUN. NetworkRuntime.run() is not integrated.
+
+**Atomic group record**
+- One JPVR container owns the existing neuron COW INDEX and primary_object COW INDEX. The primary_object key is a domain-separated scheduler ID with a separate JNSL V1 locator schema.
+- save_timestamp() writes each changed neuron as its existing JNVM DATA/BLOB record and one scheduler record containing network identity, clock epoch, fixed V1 topology, pending queue, event limits and scheduler clock.
+- The typed transaction builder maps logical DATA/BLOB inputs to physical page locations. The facade builds neuron and scheduler locators, resolves their final COMMIT page, then applies all locator mutations through one typed transaction.
+- One Superblock publication is the visibility boundary for the changed neuron set and scheduler record. Expected scheduler and changed-neuron versions are checked before publication.
+- restore_network() pins one active Superblock/catalog and restores every neuron plus scheduler from that same snapshot, checking the common clock epoch before reconstructing NetworkRuntime.
+
+**Boundaries**
+- First-use INDEX initialization is a separate empty-schema commit. The initial network data and scheduler are then committed together. A crash between those commits leaves an initialized but empty container, not a partial network.
+- Topology and clock epoch are immutable in this V1 facade. Migration is rejected.
+- The store is not wired into NetworkRuntime.run(); caller-side candidate preparation and post-commit in-memory publication remain required. This is not yet a persistent event loop.
+- The 128-shard LRU remains an isolated per-neuron experiment, not the network backend. Save planning still materializes a bounded JPVR catalog; page reclamation/compaction is absent.
+- Pending queue IDs are validated for uniqueness. NetworkRuntime does not currently persist a historical processed-event deduplication ledger.
+
+**Tests:** tools/neuron_runtime/test_network_jnvm_store.py is AUTHORED, NOT RUN. It covers initial group restore, shared commit identity, partial neuron updates, stale scheduler/neuron versions, topology immutability and uncertain-publication recovery.
+
+**Verification:** source readback/static review only. No tests, benchmarks, build, CI or device measurement.

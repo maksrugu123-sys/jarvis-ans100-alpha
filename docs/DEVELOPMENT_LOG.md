@@ -2050,3 +2050,24 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Limitations:** this does not yet build a group checkpoint facade or integrate NetworkRuntime. Locator COMMIT page resolution still requires placeholder and final builder passes. The JPVR page-catalog and append-only growth bounds remain unchanged.
 
 **Next:** implement a single-container multi-neuron + scheduler group checkpoint store using these maps and one neuron COW INDEX plus the primary_object INDEX; add all-or-none, stale-version and uncertain-commit recovery tests.
+
+
+## 2026-11-14 — Add single-container atomic network JNVM group checkpoints
+
+**Objective:** implement the first durable group-storage primitive required by the network timestamp transaction specification, without routing the live in-memory scheduler through partially durable per-neuron writes.
+
+**Added:**
+- tools/neuron_runtime/network_jnvm_store.py: one JPVR container per logical network; changed neuron records use the existing JNVM schema and neuron COW INDEX; the scheduler topology/queue/clock record uses a separate JNSL locator under primary_object.
+- save_timestamp() stages all changed neuron records plus one scheduler record, uses canonical typed-builder placement maps, resolves locator COMMIT references and publishes all neuron/scheduler index mutations in one JPVR COMMIT.
+- restore_network() pins one active Superblock/catalog and restores scheduler metadata plus all neuron records from that same snapshot, verifying the common clock epoch.
+- tools/neuron_runtime/test_network_jnvm_store.py: authored tests for initial group restore, shared COMMIT identity, partial neuron updates, stale scheduler/neuron CAS, topology immutability and uncertain-publication recovery.
+
+**Changed:** docs/JARVIS_ARCHITECTURE.md section 3.66, docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md and README.md now distinguish the implemented group storage facade from the not-yet-integrated event loop.
+
+**Atomicity boundary:** first-use empty INDEX initialization is a separate schema commit. The initial scheduler and neuron set are committed together afterward. A crash between those commits leaves an initialized empty container, not a partial network. Later timestamp saves use one group COMMIT. Uncertain Superblock publication propagates; the caller must reopen and reconcile before retrying.
+
+**Tests:** AUTHORED, NOT RUN. No Python syntax/import check, unit test, benchmark, build, CI or device measurement was run.
+
+**Limitations:** NetworkRuntime.run() remains in-memory and is not integrated. The caller must prepare candidates and persist them before publishing corresponding in-memory state. Topology and clock epoch are immutable in V1. Save planning still materializes the bounded JPVR page catalog; compaction and page reclamation are absent. Pending IDs are checked for uniqueness, but no historical processed-event deduplication ledger exists.
+
+**Next:** add a fail-closed timestamp coordinator around NetworkRuntime.run() that stages candidate neurons, generated events and clock state; invoke the group store before publishing in-memory state, and freeze/reconcile on uncertain commits. Keep Android's native two-neuron path unchanged until Python/Kotlin parity is designed.

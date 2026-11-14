@@ -1,6 +1,6 @@
 # JARVIS Network JNVM Transaction V1
 
-**Status:** architecture proposal grounded in the current JPVR transaction and NetworkRuntime APIs. The typed builder now exposes logical DATA/BLOB placement maps needed by a future group checkpoint store; group commit and scheduler integration remain NOT IMPLEMENTED. No performance claim.
+**Status:** the single-container group checkpoint storage facade is implemented at source level in tools/neuron_runtime/network_jnvm_store.py; focused tests are AUTHORED, NOT RUN. NetworkRuntime.run() integration, measured scaling and production readiness remain NOT IMPLEMENTED / NOT MEASURED.
 
 ## 1. Why a network-level transaction is required
 
@@ -86,3 +86,14 @@ The existing JPVR typed transaction builder already accepts multiple DATA/BLOB r
 7. Only after the Python storage-backed reference passes, port the versioned contract to Kotlin and measure the Android device.
 
 **Verification:** documentation/design review only. No implementation, test, benchmark, build or device measurement is claimed.
+
+
+## 5A. Current source implementation boundary
+
+The initial single-container group checkpoint facade is present in tools/neuron_runtime/network_jnvm_store.py. It stores changed neuron records plus one scheduler record and all corresponding COW locator updates in one JPVR typed transaction. The scheduler locator lives under primary_object; neuron locators remain under neuron. Typed build plans expose the logical DATA-page and BLOB-range mappings used to calculate locators.
+
+The facade checks expected scheduler and changed-neuron versions, rejects V1 topology/clock-epoch migration, and restores scheduler metadata plus every neuron from one pinned active snapshot. Initial empty INDEX initialization is a separate commit; the first complete network state is one later group commit.
+
+This does not integrate NetworkRuntime.run(). A future caller must calculate candidates and routed events, call the group store, then publish the same candidates and queue/clock state only after durable success. The 128-shard per-neuron store is not the network backend. Pending event IDs are checked for uniqueness while queued; a historical processed-event deduplication ledger is not implemented.
+
+Focused store tests are AUTHORED, NOT RUN. No syntax/import check, test, benchmark, build or device measurement has been performed for this increment.
