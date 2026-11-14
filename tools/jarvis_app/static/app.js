@@ -1175,15 +1175,22 @@ function renderDialogTurnTrace(trace) {
 async function refreshDialogNeurons() {
   const root = $("#dialog-neuron-status");
   try {
-    const state = await api("/api/dialog-neurons");
-    const count = Number(state.neuron_count || 0).toLocaleString("ru-RU");
-    root.textContent = count + " адресуемых признаковых нейронов · обучающих примеров: " +
-      Number(state.trained_examples || 0).toLocaleString("ru-RU") +
-      " · метки: " + (state.labels || []).join(", ") +
-      " · исходные фразы не сохраняются.";
-    return state;
+    const [legacy, rstdp] = await Promise.all([
+      api("/api/dialog-neurons"),
+      api("/api/dialog-rstdp"),
+    ]);
+    const legacyCount = Number(legacy.neuron_count || 0).toLocaleString("ru-RU");
+    const training = Object.entries(rstdp.trained_examples_per_label || {})
+      .map(([label, count]) => label + ": " + Number(count).toLocaleString("ru-RU"))
+      .join(" · ");
+    root.textContent =
+      "Старый разреженный классификатор: " + legacyCount + " признаковых слотов (отдельно от спайковой сети). " +
+      "R-STDP: " + Number(rstdp.output_spiking_neurons || 0) + " выходных LIF-DT нейрона · " +
+      Number(rstdp.input_feature_neurons || 0) + " признаковых синапсов на выход · обучений: " +
+      (training || "пока нет") + ". Текст примеров не сохраняется.";
+    return rstdp;
   } catch (error) {
-    root.textContent = "Состояние диалогового слоя недоступно: " + error.message;
+    root.textContent = "Состояние диалогового R-STDP недоступно: " + error.message;
     return null;
   }
 }
@@ -1196,15 +1203,23 @@ $("#dialog-neuron-form").addEventListener("submit", async event => {
   if (!textValue) return;
   button.disabled = true;
   try {
-    const result = await api("/api/dialog-neurons/learn", {
+    const feedbackId = crypto.randomUUID();
+    const result = await api("/api/dialog-rstdp/learn", {
       text: textValue,
       expected_label: expectedLabel,
+      feedback_id: feedbackId,
     });
     $("#dialog-neuron-sample").value = "";
     await refreshDialogNeurons();
-    const before = result.before?.predicted_label || "нет уверенной метки";
-    const after = result.after?.predicted_label || "пока нет уверенной метки";
-    setNotice("Пример принят явно. До обучения: " + before + "; после: " + after + ". " + result.notice, "success");
+    const before = Number(result.scores_before?.[expectedLabel] || 0).toFixed(6);
+    const after = Number(result.scores_after?.[expectedLabel] || 0).toFixed(6);
+    const predicted = result.predicted_label || "пока нет уверенной метки";
+    setNotice(
+      "R-STDP применил явную метку. Счёт целевого класса: " + before + " → " + after +
+      "; прогноз: " + predicted + ". Сохранён feedback ID " + result.feedback_id +
+      ". Исходный текст не записывался.",
+      "success"
+    );
   } catch (error) {
     setNotice(error.message, "error");
   } finally {
