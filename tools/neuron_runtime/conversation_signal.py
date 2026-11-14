@@ -144,10 +144,10 @@ class ConversationSignalRuntime:
             return self._checkpoint_version
 
     def _ensure_loaded(self) -> None:
-        if self._network is not None:
-            return
         if self._closed:
             raise ConversationSignalError("ANS-100 signal runtime is closed")
+        if self._network is not None:
+            return
         if self._checkpoint_path is None:
             self._network = _new_network()
             self._clock_epoch = uuid.uuid4().bytes
@@ -275,5 +275,7 @@ class ConversationSignalRuntime:
             storage = self._storage
             self._storage = None
             self._store = None
+            self._network = None
+            self._clock_epoch = None
             if storage is not None:
                 storage.close()
