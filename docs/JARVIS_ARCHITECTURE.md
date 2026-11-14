@@ -4550,3 +4550,27 @@ The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,
 - Retrieved memory is reference data, not authority or instructions.
 - No external tool or action execution was added. Reasoning Engine remains a separate symbolic preview.
 - No Python/Kotlin tests, Gradle build, APK/AAB, inference, browser/device runtime or benchmark was run for this batch.
+
+### 3.57. JARVIS Core structured Reasoning Engine integration V1
+
+**Status:** IMPLEMENTED at source level on mobile-first-offline-v1. Python tests are AUTHORED, NOT RUN. No live inference or runtime verification is claimed.
+
+**Core integration**
+- Desktop/PWA JarvisCore owns a bounded ReasoningEngineV01 instance. The engine receives only an explicit structured request; ordinary free-text chat does not invent subtasks or silently invoke symbolic planning.
+- A structured request may contain an objective, up to eight subtasks with dependency edges, up to sixteen acceptance criteria, up to eight hypotheses, up to 32 caller-supplied evidence items, constraints and assumptions. Core applies smaller instance limits than the general-purpose engine defaults.
+- The engine validates the dependency graph, rejects cycles and invalid references, creates a deterministic topological plan, produces a stable plan digest and ranks explicit evidence records. The scoring is a heuristic over caller-supplied weights, not a calibrated probability or proof.
+- When a structured request accompanies a chat turn, Core constructs the plan first and passes the bounded plan summary to the language engine as reference data. Qwen/LiteRT-LM remains responsible only for wording; it cannot authorize or execute steps. The prompt marks the plan as untrusted data and prohibits claims that planned work has already happened.
+- POST /api/reasoning/plan exposes structured planning. POST /api/reasoning/verify reconstructs the deterministic plan from the same request, checks the supplied plan digest, then evaluates caller-supplied completed step IDs, criterion observations and evidence references. /api/conversation accepts an optional reasoning_request for an explicit plan-backed answer.
+- The legacy /api/reasoning/preview endpoint is retained unchanged for compatibility with the earlier fact/action planner.
+
+**Verification and safety boundary**
+- Outcome status verified means only that the caller supplied every planned step as complete, every declared criterion as passed, and at least one evidence reference for each criterion. This adapter does not independently inspect files, devices, logs or external systems; it does not authenticate evidence references or execute actions.
+- Plans are reproducible from their request but are not persisted in JPVR. The verification caller resubmits the original structured request and plan digest.
+- External actions, tool execution, network access and Task Loop dispatch remain disabled. Free-form natural-language decomposition, automatic evidence retrieval, independent evidence authentication, and persistent plan/task revision binding are not implemented.
+- ans100_full_cognition_invoked remains false. This integration is bounded symbolic planning and caller-assertion review, not neural semantic understanding or autonomous cognition.
+
+**Source-level regression coverage**
+- tools/jarvis_app/test_jarvis_core.py: explicit structured-plan routing, dependency handling, caller-supplied outcome review, request/plan mismatch rejection, cycle rejection, ordinary-chat non-invocation and capability reporting.
+- tools/jarvis_app/test_server.py: authenticated planning/verification endpoints and rejection of a plan digest from a different request.
+
+**Verification:** Static GitHub source review only. No Python import, syntax check, unit test, model load, inference, Android/Termux request, desktop/PWA runtime, benchmark, CI or GitHub Actions run was performed.

@@ -59,6 +59,21 @@ class LiteRtLmLocalEngineTests(unittest.TestCase):
         self.assertFalse(self.fake_engine.options["automatic_tool_calling"])
         self.assertTrue(self.conversation.closed)
 
+    def test_structured_reasoning_context_is_passed_as_non_executable_reference(self) -> None:
+        self.adapter.respond(
+            "Объясни план",
+            [],
+            reasoning_context={
+                "plan_id": "a" * 64,
+                "execution_authorized": False,
+                "steps": [{"task_id": "review", "title": "Review facts"}],
+            },
+        )
+        system_message = self.fake_engine.options["system_message"]
+        self.assertIn("недоверенные структурированные данные", system_message)
+        self.assertIn('"execution_authorized":false', system_message)
+        self.assertIn('"task_id":"review"', system_message)
+
     def test_history_window_filters_roles_and_truncates_content(self) -> None:
         history = [{"role": "user", "content": str(i)} for i in range(7)]
         history.append({"role": "system", "content": "ignored"})

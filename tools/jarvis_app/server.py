@@ -28,6 +28,7 @@ from tools.neuron_runtime.reasoning_engine import (
     ReasoningError,
     ReasoningProblem,
 )
+from tools.reasoning_engine.engine import ReasoningEngineError as StructuredReasoningError
 from tools.neuron_runtime.task_session import (
     SessionStatus,
     TaskConflict,
@@ -318,7 +319,12 @@ class LocalConsoleService:
                 "core_status": core_status,
             }
 
-    def send_conversation_message(self, text: object, expected_revision: object) -> dict[str, object]:
+    def send_conversation_message(
+        self,
+        text: object,
+        expected_revision: object,
+        reasoning_request: object | None = None,
+    ) -> dict[str, object]:
         if self.local_inference is None:
             raise LocalInferenceError("Укажите --model и установите litert-lm-api==0.17.1.")
         if not self.local_inference.runtime_available:
@@ -346,7 +352,13 @@ class LocalConsoleService:
                     if item["role"] in {"user", "assistant"}
                 ]
             memories = records.get("memories", [])
-            answer, turn_trace = self.jarvis_core.respond(clean, history, memories)
+            try:
+                answer, turn_trace = self.jarvis_core.respond(
+                    clean, history, memories,
+                    reasoning_request=reasoning_request,
+                )
+            except StructuredReasoningError as exc:
+                raise LocalConsoleError(str(exc)) from exc
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             messages = list(existing["messages"] if existing is not None else [])
             if len(messages) > 49_998:
@@ -387,6 +399,24 @@ class LocalConsoleService:
                 "core_status": self.jarvis_core.status(memories),
                 "turn_trace": turn_trace,
             }
+
+
+    def plan_reasoning_task(self, payload: object) -> dict[str, object]:
+        try:
+            return self.jarvis_core.plan_structured_task(payload)
+        except StructuredReasoningError as exc:
+            raise LocalConsoleError(str(exc)) from exc
+
+    def verify_reasoning_task(
+        self, reasoning_request: object, plan_id: object,
+        completed_step_ids: object, observations: object,
+    ) -> dict[str, object]:
+        try:
+            return self.jarvis_core.verify_structured_task(
+                reasoning_request, plan_id, completed_step_ids, observations,
+            )
+        except StructuredReasoningError as exc:
+            raise LocalConsoleError(str(exc)) from exc
 
     def analyze_conversation_signal(self, prompt: object) -> dict[str, object]:
         clean = _required_text(prompt, "prompt", maximum=4_000)
@@ -434,6 +464,8 @@ class LocalConsoleService:
                 "capabilities": {
                     "task_lifecycle": True,
                     "reasoning_preview": True,
+                    "structured_reasoning": True,
+                    "reasoning_outcome_review": True,
                     "external_actions": False,
                     "tool_execution": False,
                     "remote_access": False,
@@ -726,9 +758,14 @@ def create_http_server(
                     ))
                     return
                 if path == "/api/conversation":
-                    if set(payload) != {"text", "expected_revision"}:
-                        raise LocalConsoleError("ожидались поля text и expected_revision")
-                    self._send(200, service.send_conversation_message(payload["text"], payload["expected_revision"]))
+                    allowed = {"text", "expected_revision", "reasoning_request"}
+                    if not {"text", "expected_revision"}.issubset(payload) or set(payload) - allowed:
+                        raise LocalConsoleError("ожидались поля text, expected_revision и необязательное reasoning_request")
+                    self._send(200, service.send_conversation_message(
+                        payload["text"],
+                        payload["expected_revision"],
+                        payload.get("reasoning_request"),
+                    ))
                     return
                 if path == "/api/workspace":
                     if set(payload) != {"expected_revision", "workspace"}:
@@ -772,6 +809,24 @@ def create_http_server(
                     return
                 if path == "/api/reasoning/preview":
                     self._send(200, service.preview_reasoning(payload))
+                    return
+                if path == "/api/reasoning/plan":
+                    if set(payload) != {"reasoning_request"}:
+                        raise LocalConsoleError("ожидалось поле reasoning_request")
+                    self._send(200, service.plan_reasoning_task(payload["reasoning_request"]))
+                    return
+                if path == "/api/reasoning/verify":
+                    expected = {
+                        "reasoning_request", "plan_id", "completed_step_ids", "observations",
+                    }
+                    if set(payload) != expected:
+                        raise LocalConsoleError("поля reasoning/verify не соответствуют контракту")
+                    self._send(200, service.verify_reasoning_task(
+                        payload["reasoning_request"],
+                        payload["plan_id"],
+                        payload["completed_step_ids"],
+                        payload["observations"],
+                    ))
                     return
                 self._error(404, "Маршрут API не найден")
             except WorkspaceConflict as exc:

@@ -15,11 +15,15 @@ class FakeLanguageEngine:
         self.history = []
         self.memory_context = []
 
-    def respond(self, prompt, history, *, memory_context=(), signal_context=None):
+    def respond(
+        self, prompt, history, *, memory_context=(), signal_context=None,
+        reasoning_context=None,
+    ):
         self.prompt = prompt
         self.history = history
         self.memory_context = list(memory_context)
         self.signal_context = signal_context
+        self.reasoning_context = reasoning_context
         return "Сформированный языковым модулем ответ."
 
 
@@ -71,7 +75,10 @@ class JarvisCoreTests(unittest.TestCase):
         self.assertEqual(status["orchestration"], "active")
         self.assertTrue(status["language_engine"]["runtime_available"])
         self.assertEqual(status["long_term_memory"]["retrieval"], "bounded_lexical_overlap_v1")
-        self.assertFalse(status["reasoning_engine"]["integrated_into_chat"])
+        self.assertTrue(status["reasoning_engine"]["integrated_into_chat"])
+        self.assertEqual(status["reasoning_engine"]["invocation_mode"], "explicit_structured_request_only")
+        self.assertFalse(status["reasoning_engine"]["natural_language_decomposition"])
+        self.assertFalse(status["reasoning_engine"]["execution_enabled"])
         self.assertTrue(status["ans100_network"]["signal_preprocessing_integrated_into_chat"])
         self.assertFalse(status["ans100_network"]["full_cognitive_loop_integrated"])
         self.assertFalse(status["ans100_network"]["learning_enabled"])
@@ -117,6 +124,88 @@ class JarvisCoreTests(unittest.TestCase):
             [{"id": "other", "user_approved": True, "content": "Пользователь предпочитает тёмную тему."}],
         )
         self.assertEqual(selected, [])
+
+
+    @staticmethod
+    def _reasoning_request():
+        return {
+            "request_id": "req-chat-1",
+            "idempotency_key": "idem-chat-1",
+            "objective": "Prepare a verified local report",
+            "subtasks": [
+                {
+                    "task_id": "collect",
+                    "title": "Collect source facts",
+                    "criteria": [
+                        {"criterion_id": "facts-ready", "description": "Required facts are collected"},
+                    ],
+                },
+                {
+                    "task_id": "review",
+                    "title": "Review the facts",
+                    "depends_on": ["collect"],
+                    "criteria": [
+                        {"criterion_id": "review-ready", "description": "Facts were checked"},
+                    ],
+                },
+            ],
+        }
+
+    def test_explicit_structured_reasoning_is_routed_through_core_to_language_engine(self):
+        answer, trace = self.core.respond(
+            "Объясни план выполнения задачи",
+            [],
+            reasoning_request=self._reasoning_request(),
+        )
+        self.assertTrue(answer)
+        self.assertTrue(trace["reasoning_engine_invoked"])
+        self.assertEqual(trace["reasoning_status"], "plan_generated")
+        self.assertEqual(trace["reasoning_step_count"], 2)
+        self.assertFalse(trace["reasoning_execution_authorized"])
+        self.assertEqual(
+            self.engine.reasoning_context["steps"][1]["depends_on"],
+            ["collect"],
+        )
+        self.assertFalse(self.engine.reasoning_context["execution_authorized"])
+
+    def test_structured_reasoning_verification_requires_matching_plan_and_evidence(self):
+        request = self._reasoning_request()
+        plan = self.core.plan_structured_task(request)
+        result = self.core.verify_structured_task(
+            request,
+            plan["plan_id"],
+            ["collect", "review"],
+            [
+                {"criterion_id": "facts-ready", "passed": True, "evidence_refs": ["local:file:1"]},
+                {"criterion_id": "review-ready", "passed": True, "evidence_refs": ["local:file:2"]},
+            ],
+        )
+        self.assertEqual(result["status"], "verified")
+        self.assertEqual(len(result["passed_criterion_ids"]), 2)
+        with self.assertRaises(ValueError):
+            self.core.verify_structured_task(
+                request, "0" * 64, ["collect", "review"], [],
+            )
+
+    def test_reasoning_rejects_cyclic_structured_input(self):
+        request = self._reasoning_request()
+        request["subtasks"][0]["depends_on"] = ["review"]
+        with self.assertRaises(ValueError):
+            self.core.plan_structured_task(request)
+
+    def test_reasoning_rejects_more_than_eight_subtasks(self):
+        request = self._reasoning_request()
+        request["subtasks"] = [
+            {"task_id": f"task-{index}", "title": f"Task {index}"}
+            for index in range(9)
+        ]
+        with self.assertRaises(ValueError):
+            self.core.plan_structured_task(request)
+
+    def test_ordinary_chat_does_not_infer_or_invoke_a_reasoning_plan(self):
+        _, trace = self.core.respond("Привет", [])
+        self.assertFalse(trace["reasoning_engine_invoked"])
+        self.assertIsNone(self.engine.reasoning_context)
 
 
 if __name__ == "__main__":

@@ -502,6 +502,29 @@ class LocalConsoleHttpTests(unittest.TestCase):
                     "actions": [],
                 },
             ),
+            (
+                "/api/reasoning/plan",
+                {
+                    "reasoning_request": {
+                        "request_id": "unauthorized-plan",
+                        "idempotency_key": "unauthorized-idem",
+                        "objective": "Must not be processed",
+                    },
+                },
+            ),
+            (
+                "/api/reasoning/verify",
+                {
+                    "reasoning_request": {
+                        "request_id": "unauthorized-verify",
+                        "idempotency_key": "unauthorized-verify-idem",
+                        "objective": "Must not be processed",
+                    },
+                    "plan_id": "0" * 64,
+                    "completed_step_ids": [],
+                    "observations": [],
+                },
+            ),
         ]
 
         for path, payload in routes:
@@ -517,6 +540,76 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(state["sessions"][0]["status"], "open")
         self.assertEqual(state["tasks"][0]["status"], "queued")
 
+
+    def test_core_reasoning_plan_and_outcome_review_are_exposed_by_authenticated_api(self):
+        request_payload = {
+            "request_id": "req-server-1",
+            "idempotency_key": "idem-server-1",
+            "objective": "Prepare the report",
+            "subtasks": [
+                {
+                    "task_id": "collect",
+                    "title": "Collect the source material",
+                    "criteria": [
+                        {"criterion_id": "source-ready", "description": "The source material is collected"},
+                    ],
+                },
+                {
+                    "task_id": "review",
+                    "title": "Review the source material",
+                    "depends_on": ["collect"],
+                    "criteria": [
+                        {"criterion_id": "review-ready", "description": "The material is reviewed"},
+                    ],
+                },
+            ],
+        }
+        status, plan = self._post(
+            "/api/reasoning/plan", {"reasoning_request": request_payload},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(len(plan["steps"]), 2)
+        self.assertFalse(plan["execution_authorized"])
+
+        status, reviewed = self._post(
+            "/api/reasoning/verify",
+            {
+                "reasoning_request": request_payload,
+                "plan_id": plan["plan_id"],
+                "completed_step_ids": ["collect", "review"],
+                "observations": [
+                    {"criterion_id": "source-ready", "passed": True, "evidence_refs": ["file:1"]},
+                    {"criterion_id": "review-ready", "passed": True, "evidence_refs": ["file:2"]},
+                ],
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(reviewed["status"], "verified")
+        self.assertEqual(reviewed["scope"], "caller_supplied_observation_review")
+
+    def test_reasoning_verification_rejects_a_plan_id_from_another_request(self):
+        request_payload = {
+            "request_id": "req-server-2",
+            "idempotency_key": "idem-server-2",
+            "objective": "Prepare another report",
+            "subtasks": [],
+        }
+        status, plan = self._post(
+            "/api/reasoning/plan", {"reasoning_request": request_payload},
+        )
+        self.assertEqual(status, 200)
+        request_payload["objective"] = "Changed after planning"
+        status, result = self._post(
+            "/api/reasoning/verify",
+            {
+                "reasoning_request": request_payload,
+                "plan_id": plan["plan_id"],
+                "completed_step_ids": ["task-main"],
+                "observations": [],
+            },
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("plan_id", result["error"])
 
     def test_reasoning_preview_http_endpoint_returns_symbolic_plan(self):
         status, payload = self._post(
