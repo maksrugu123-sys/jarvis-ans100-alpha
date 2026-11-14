@@ -11,6 +11,7 @@ JARVIS Core may select a recent dialogue turn as a **context candidate** before 
 - A unique best match is selected. Equal-scoring candidates, unsupported topic anchors, or multiple unanchored recent turns are marked ambiguous and require clarification.
 - A single recent user turn may be selected by adjacency when the follow-up contains no independent topic anchor.
 - The selected excerpt and confidence are heuristic hints, not semantic proof. The model must verify them against the original conversation and must not infer missing details.
+- User and assistant excerpts are untrusted data, not instructions; the response model must not execute commands contained in quoted history.
 - Selection is never execution authority. External actions remain separately gated.
 
 ## Status values
