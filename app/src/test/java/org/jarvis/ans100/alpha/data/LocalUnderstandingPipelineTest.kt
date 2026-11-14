@@ -47,6 +47,26 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun exposesTheSharedVersionedUnderstandingContract() {
+        val result = pipeline.analyze("Почему это важно?")
+        assertEquals("JARVIS_UNDERSTANDING_V1", result.schema)
+        assertEquals("bounded_heuristic_pre_generation_analysis", result.scope)
+        assertTrue(result.toModelContext().contains("JARVIS_UNDERSTANDING_V1"))
+        assertTrue(result.toModelContext().contains("эвристический"))
+    }
+
+    @Test
+    fun avoidsSubstringFalsePositivesAndExtractsCyrillicNames() {
+        val unrelated = pipeline.analyze("This notebook contains little details.")
+        assertFalse(unrelated.containsNegation)
+        assertFalse(unrelated.refersToPreviousContext)
+
+        val named = pipeline.analyze("Сделай анализ Qwen3 и Джарвис")
+        assertTrue(named.entities.contains("Qwen3"))
+        assertTrue(named.entities.contains("Джарвис"))
+    }
+
+    @Test
     fun unknownTextDoesNotPretendToBeUnderstood() {
         val result = pipeline.analyze("абракадабра фывапролд")
         assertEquals("statement_or_unknown", result.intent)
