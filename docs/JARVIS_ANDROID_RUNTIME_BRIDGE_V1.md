@@ -1,6 +1,6 @@
 # JARVIS Android Runtime Bridge V1
 
-**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 bridge methods for shared Workspace API V1, consent-based memory management, encrypted `.jws` merge transfer, and separate encrypted `.jwb` workspace backup/restore through the Storage Access Framework. Nine transfer/backup Android instrumentation tests are authored. End-to-end tests, Android build and device verification NOT RUN. The Compose UI is source-level only. This remains a registry/memory bridge, not tool execution.
+**Status:** Android V0.5 source includes JPVR task/session administration, bounded symbolic preview, authenticated API v2 bridge methods for shared Workspace API V1, consent-based memory management, encrypted `.jws` merge transfer, and separate encrypted `.jwb` workspace backup/restore through the Storage Access Framework. The bridge is an optional Termux extension; local Android conversation and Kotlin ANS-100 signal processing do not require it. Nine transfer/backup Android instrumentation tests are authored. End-to-end tests, Android build and device verification NOT RUN. The Compose UI is source-level only. This remains a registry/memory bridge, not tool execution. See [JARVIS Optional Termux Extension V1](JARVIS_OPTIONAL_TERMUX_EXTENSION_V1.md).
 
 ## Ownership
 
@@ -28,7 +28,7 @@ On first start, Termux prints a random 43-character Base64URL access token once.
 
     python3 -m tools.jarvis_app --port 8765 --rotate-token
 
-This revokes the previous token and prints a replacement once. The PWA login keeps the token only in the current tab's `sessionStorage`. The Android app does not launch Termux or manage this process lifecycle.
+This revokes the previous token and prints a replacement once. The PWA login keeps the token only in the current tab's `sessionStorage`. The app can open the Termux application when the user explicitly taps **Открыть Termux**, but it does not start the Python console automatically or manage its process lifecycle.
 
 ## Supported operations
 

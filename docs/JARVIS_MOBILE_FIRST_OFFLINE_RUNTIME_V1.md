@@ -56,7 +56,7 @@ Optional offline speech input/output (later phase)
 - A single application coordinator owns request cancellation, time budgets, and routing between local components.
 - Every engine exposes a narrow interface; UI code must not depend on Python reference modules.
 - The Python implementation remains a research/reference and evaluation environment unless a specific Android embedding strategy is separately justified.
-- The Termux bridge may remain a developer tool during migration, but the end-user app must not require Termux to be installed or running.
+- Termux is an optional companion extension, never a runtime prerequisite. Android may discover the `com.termux` package and connect to its fixed loopback service only when the package is present and the user has stored its bearer token. Without the app, token, or live service, the in-process conversation and ANS-100 signal path continue.
 - The local inference adapter must be replaceable without rewriting memory, safety, or UI layers.
 
 ## 4. Offline contract
@@ -81,7 +81,7 @@ Optional remote features must be separately permissioned, visibly indicated, and
 
 - Define Kotlin interfaces for conversation inference, memory, reasoning, neural runtime, and safety.
 - Introduce a coordinator that routes requests to local implementations.
-- Ensure UI ViewModels call the coordinator rather than the Termux bridge directly.
+- Keep the normal conversation path on the in-process coordinator. ViewModels may call the authenticated Termux adapter only for clearly optional extension capabilities such as shared JPVR access, the task/session registry, symbolic preview, encrypted transfer, and an optional remote signal endpoint.
 - Keep the bridge behind a developer/compatibility adapter, not as the primary runtime.
 
 **Acceptance:** a local fake/stub engine can run an end-to-end conversation flow without a socket, server, or Termux process.
@@ -118,11 +118,11 @@ Optional remote features must be separately permissioned, visibly indicated, and
 
 ### Phase E — ANS-100 integration
 
-**Implemented at source level:** a bounded two-neuron ALIF-DT signal pre-pass now invokes the existing Python NeuronRuntime, NetworkRuntime and Numerical Oracle. It converts transparent request-shape features (token volume, lexical diversity, question punctuation) into neural input events and routes a spike to an attention-gate neuron. Desktop/PWA invokes it directly; Android may request the same pass through the authenticated Termux bridge with a short timeout. This is low-level signal preprocessing only.
+**Implemented at source level:** Android now has an in-process Kotlin two-neuron ALIF-DT signal pass with app-private checkpoint storage. It processes bounded transparent request-shape features and remains available when Termux is absent. Desktop/PWA uses the Python reference pass. Android may prefer the equivalent authenticated Termux signal endpoint while the optional extension is connected; if that endpoint fails, it is marked unavailable for the current connection and the in-process pass is used.
 
-**Not yet implemented:** a native in-process Kotlin ANS-100 runtime, full cognitive integration, semantic processing, adaptive learning from dialogue, persistent conversation-linked neural state, and checkpoint restore in the mobile conversation path. Each request currently creates a fresh in-memory two-neuron network; learning and persistence are disabled. Missing Termux does not block Android chat, but it means the optional ANS-100 signal summary is absent.
+**Not yet implemented:** full cognitive integration, semantic processing, STDP/R-STDP learning from dialogue, autonomous neural planning, and proof of useful adaptation. The signal pass is a low-level numeric diagnostic, not language understanding or a complete neural assistant. Kotlin/Python differential equivalence, checkpoint recovery under process interruption, and target-device resource behavior remain unverified.
 
-**Acceptance:** port the selected bounded neural runtime to Kotlin or an audited portable native library, differentially compare Python/device results, and verify versioned checkpoint save/restore and recovery before calling ANS-100 a complete conversation runtime.
+**Acceptance:** compare Kotlin and Python outputs on shared deterministic vectors; verify checkpoint corruption/interruption handling on Android; measure memory, latency, CPU and thermal behavior on the target phone. Keep the Termux endpoint optional throughout.
 
 ### Phase F — Offline voice
 

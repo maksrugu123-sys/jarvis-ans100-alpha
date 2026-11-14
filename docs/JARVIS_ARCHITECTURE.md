@@ -4574,3 +4574,31 @@ The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,
 - tools/jarvis_app/test_server.py: authenticated planning/verification endpoints and rejection of a plan digest from a different request.
 
 **Verification:** Static GitHub source review only. No Python import, syntax check, unit test, model load, inference, Android/Termux request, desktop/PWA runtime, benchmark, CI or GitHub Actions run was performed.
+
+
+### 3.58. Android optional Termux extension V1
+
+**Status:** source implementation on `mobile-first-offline-v1`; tests authored, not run.
+
+The Android app owns the primary conversation path and in-process Kotlin ANS-100 signal runtime. Termux is an optional companion. Android checks only package `com.termux`; package visibility is declared narrowly in the manifest. Presence is not treated as service readiness or authorization. A saved bearer token and successful API v2 handshake are still required before shared JPVR/task capabilities are used.
+
+When the package is absent, the app skips bridge startup requests. When the service is unavailable or a request fails, connection state is cleared and core chat remains in-process. The optional ANS-100 Termux endpoint is preferred only when installed, authenticated, connected and not previously marked unavailable; an endpoint failure disables remote signal use for that connection and routes subsequent turns through the Kotlin implementation. Reconnection resets the endpoint probe state.
+
+The extension may provide authenticated shared JPVR workspace/memory operations, task/session registry operations, bounded non-mutating Reasoning Engine preview, encrypted workspace transfer/backup, and the optional Python signal endpoint. It does **not** enable unrestricted Python execution, arbitrary tool execution, external actions or remote access; the backend capability flags remain false. The Android app does not start shell commands or manage the Termux service lifecycle. See [JARVIS Optional Termux Extension V1](JARVIS_OPTIONAL_TERMUX_EXTENSION_V1.md) and [JARVIS Android Runtime Bridge V1](JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md).
+
+**Verification:** static source review only. Optional-extension state/routing tests are authored, not run. Gradle/Kotlin compilation, APK/AAB, package discovery on-device, live loopback pairing, offline/device testing and performance measurement were not run.
+
+
+### 3.59. PC Visible Browser Research V1
+
+**Status:** PROPOSED; no controller implementation or browser dependency has been added.
+
+JARVIS PC should be able to open a real, foreground browser window for user-requested research. The user sees the search query, visited tabs and pages, may read alongside JARVIS, and can pause, take control or stop. The first capability is limited to bounded search, navigation and page reading. It must not silently switch to headless operation.
+
+The proposed desktop boundary is `VisibleBrowserResearchService` → `VisibleBrowserAdapter` → visible dedicated research-browser profile. A dedicated profile is preferred over silently attaching to the user's everyday browser session. The initial browser controller may use a headed Playwright-backed adapter, but no engine or dependency is committed yet. Browser actions remain read-only by default; page content is untrusted external data and cannot provide instructions, permissions or approval. Site authentication, form submission, messages, purchases, uploads, downloads, account changes and other side effects require separate explicit authorization and are excluded from the initial scope.
+
+Research results should be structured as source records with title, canonical URL, retrieval timestamp and bounded extracted text, followed by claims that identify supporting/conflicting sources and unknowns. The assistant must not fabricate citations or treat a first search result as verified fact. Page counts, open tabs, extracted characters and session duration require explicit bounds. Browser close, crash, timeout, manual takeover and user stop must pause or safely cancel the session.
+
+This is a PC capability only. Android continues independently; remote control of a PC browser from the phone is a separate future feature with authenticated pairing and consent. See [JARVIS Visible Browser Research V1](JARVIS_VISIBLE_BROWSER_RESEARCH_V1.md).
+
+**Next acceptance work:** add a visible browser adapter and bounded read-only research service; test that the window is actually visible, manual takeover works, untrusted page instructions cannot expand permissions, and every result has source provenance. No browser source, desktop package, tests or runtime validation currently exists.

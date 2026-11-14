@@ -1,6 +1,6 @@
 # JARVIS Android App V0.5 — authenticated JPVR bridge and symbolic preview
 
-**Статус:** Android Compose V0.5 adds local bearer-token pairing to the bounded JPVR task/session bridge, symbolic Reasoning Engine preview, shared-workspace memory UI, encrypted JWS merge transfer and encrypted JWB backup/restore. It still has no task executor or trusted approval flow. Nine Android JVM local-repository tests, seven Android Keystore instrumentation tests, nine Android transfer/backup crypto instrumentation tests, eighteen Python console/API tests and eleven Python auth tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
+**Статус:** Android Compose V0.5 adds local bearer-token pairing to the bounded JPVR task/session bridge, symbolic Reasoning Engine preview, shared-workspace memory UI, encrypted JWS merge transfer and encrypted JWB backup/restore. It still has no task executor or trusted approval flow. Nine Android JVM local-repository tests, eight Android optional-extension state/routing tests, seven Android Keystore instrumentation tests, nine Android transfer/backup crypto instrumentation tests, eighteen Python console/API tests and eleven Python auth tests are AUTHORED, NOT RUN. Gradle sync/build, APK/AAB, installation, device checks and UI instrumentation are NOT RUN.
 
 ## Project and compatibility
 
@@ -44,7 +44,7 @@ Implementation:
 - MainActivity.kt — native runtime panel and lifecycle/task controls.
 - AndroidManifest.xml and res/xml/network_security_config.xml — INTERNET permission and cleartext allowance scoped to 127.0.0.1 / localhost; other cleartext destinations remain disallowed.
 
-The fixed endpoint is http://127.0.0.1:8765. It connects only to a Python console running on the same Android device. The health check requires schema `jarvis.local-console`, API version 2 and `auth_scheme=Bearer`. State reads and all POSTs use the access token. On first start, Termux prints a random 43-character token once; paste it into the app. The Android app stores it encrypted using an AES-GCM key held by Android Keystore. The client rejects an unexpected API schema/version/auth mode, bounds request/response bodies, and sets connect/read timeouts. Redirects are disabled. If a token is lost, stop Termux and restart with `--rotate-token` to revoke the old token and issue a replacement.
+The bridge described in this document is an optional Termux extension, not a prerequisite for launching or using the Android app's in-process conversation path. The fixed endpoint is http://127.0.0.1:8765. It connects only to a Python console running on the same Android device. The health check requires schema `jarvis.local-console`, API version 2 and `auth_scheme=Bearer`. State reads and all POSTs use the access token. On first start, Termux prints a random 43-character token once; paste it into the app. The Android app stores it encrypted using an AES-GCM key held by Android Keystore. The client rejects an unexpected API schema/version/auth mode, bounds request/response bodies, and sets connect/read timeouts. Redirects are disabled. If a token is lost, stop Termux and restart with `--rotate-token` to revoke the old token and issue a replacement.
 
 ### Start the backend on the phone
 
@@ -52,7 +52,7 @@ From the repository root in Termux:
 
     python3 -m tools.jarvis_app --port 8765
 
-On first run, copy the one-time access token printed in Termux and paste it into the Android token field. Save it before tapping **Подключить JARVIS**. Keep the process running; the app does not launch Termux or start the backend automatically. Stop the backend with Ctrl+C in Termux.
+On first run, copy the one-time access token printed in Termux and paste it into the Android token field. Save it before tapping **Подключить JARVIS**. Keep the process running; the app may open the Termux application when the user explicitly taps **Открыть Termux**, but it does not start the Python console automatically or manage its process lifecycle. Stop the backend with Ctrl+C in Termux.
 
 ## API contract
 

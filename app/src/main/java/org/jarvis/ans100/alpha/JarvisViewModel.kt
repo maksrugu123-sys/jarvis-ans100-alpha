@@ -1,6 +1,8 @@
 package org.jarvis.ans100.alpha
 
 import android.app.Application
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.net.Uri
 import android.os.Looper
@@ -31,6 +33,7 @@ import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
+import org.jarvis.ans100.alpha.data.shouldUseTermuxSignal
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
@@ -51,6 +54,8 @@ data class RuntimeBridgeUiState(
     val message: String? = null,
     val reasoningPreview: RuntimeReasoningPreviewResult? = null,
     val hasAccessToken: Boolean = false,
+    val extensionInstalled: Boolean = false,
+    val signalEndpointAvailable: Boolean? = null,
 )
 
 data class RuntimeMemory(
@@ -98,6 +103,7 @@ data class JarvisUiState(
 )
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
+    private val appContext = application.applicationContext
     private val repository = LocalDraftRepository(
         SharedPreferencesDraftStorage(application.applicationContext),
     )
@@ -129,24 +135,96 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     val state: StateFlow<JarvisUiState> = mutableState.asStateFlow()
 
     init {
+        val extensionInstalled = isTermuxInstalled()
         try {
             val token = runtimeTokenStore.load()
             runtimeClient.setAccessToken(token)
             mutableState.value = mutableState.value.copy(
-                runtime = mutableState.value.runtime.copy(hasAccessToken = token != null),
+                runtime = mutableState.value.runtime.copy(
+                    hasAccessToken = token != null,
+                    extensionInstalled = extensionInstalled,
+                    message = when {
+                        !extensionInstalled -> "Встроенное ядро готово. Termux не установлен; расширение не требуется для обычной работы."
+                        token != null -> "Termux обнаружен. Проверяется необязательное расширение JARVIS."
+                        else -> "Termux обнаружен. Подключение необязательно; встроенное ядро уже доступно."
+                    },
+                ),
             )
         } catch (error: Exception) {
             mutableState.value = mutableState.value.copy(
                 runtime = mutableState.value.runtime.copy(
+                    extensionInstalled = extensionInstalled,
                     error = error.message ?: "Не удалось восстановить токен доступа.",
+                    message = if (extensionInstalled) {
+                        "Termux обнаружен, но сохранённый токен недоступен."
+                    } else {
+                        "Встроенное ядро готово; расширение Termux не установлено."
+                    },
                 ),
             )
         }
         reload()
         reloadConversation()
-        if (mutableState.value.runtime.hasAccessToken) {
-            // Refresh the approved JPVR-memory cache after process restart when a token exists.
+        if (extensionInstalled && mutableState.value.runtime.hasAccessToken) {
+            // Only attempt optional bridge discovery when the companion app is installed.
             connectRuntime()
+        }
+    }
+
+    private fun isTermuxInstalled(): Boolean {
+        return try {
+            appContext.packageManager.getPackageInfo(TERMUX_PACKAGE_NAME, 0)
+            true
+        } catch (_: PackageManager.NameNotFoundException) {
+            false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun checkTermuxExtension() {
+        val installed = isTermuxInstalled()
+        val before = mutableState.value
+        val current = before.runtime
+        mutableState.value = before.copy(
+            runtime = current.copy(
+                extensionInstalled = installed,
+                isConnected = installed && current.isConnected,
+                snapshot = if (installed) current.snapshot else null,
+                signalEndpointAvailable = if (installed) current.signalEndpointAvailable else null,
+                error = null,
+                message = when {
+                    !installed -> "Termux не найден. JARVIS продолжает работать во встроенном режиме."
+                    current.isConnected -> "Расширение Termux подключено."
+                    current.hasAccessToken -> "Termux установлен. Запустите локальную консоль и подключите расширение."
+                    else -> "Termux установлен. Для расширенных функций запустите локальную консоль и сохраните её токен."
+                },
+            ),
+        )
+    }
+
+    fun openTermux() {
+        if (!isTermuxInstalled()) {
+            checkTermuxExtension()
+            return
+        }
+        try {
+            val intent = appContext.packageManager.getLaunchIntentForPackage(TERMUX_PACKAGE_NAME)
+                ?: throw IllegalStateException("Termux установлен, но его экран запуска недоступен.")
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            appContext.startActivity(intent)
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(
+                    message = "Termux открыт. Запустите локальную консоль JARVIS, затем вернитесь в приложение.",
+                    error = null,
+                ),
+            )
+        } catch (error: Exception) {
+            mutableState.value = mutableState.value.copy(
+                runtime = mutableState.value.runtime.copy(
+                    error = error.message ?: "Не удалось открыть Termux.",
+                ),
+            )
         }
     }
 
@@ -167,6 +245,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             mutableState.value = mutableState.value.copy(
                 runtime = mutableState.value.runtime.copy(
                     hasAccessToken = true,
+                    extensionInstalled = isTermuxInstalled(),
+                    signalEndpointAvailable = null,
                     isConnected = false,
                     snapshot = null,
                     error = null,
@@ -189,8 +269,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             runtimeTokenStore.clear()
             runtimeClient.setAccessToken(null)
             workspaceMemoryCache.clear()
+            val extensionInstalled = mutableState.value.runtime.extensionInstalled
             mutableState.value = mutableState.value.copy(
-                runtime = RuntimeBridgeUiState(message = "Токен доступа удалён."),
+                runtime = RuntimeBridgeUiState(
+                    extensionInstalled = extensionInstalled,
+                    message = "Токен доступа удалён. Встроенное ядро продолжает работать.",
+                ),
                 workspace = RuntimeWorkspaceUiState(),
             )
         } catch (error: Exception) {
@@ -328,13 +412,38 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
         conversationExecutor.execute {
             try {
+                val runtimeState = mutableState.value.runtime
                 val signalContext = if (!clean.startsWith("/")) {
-                    val extensionConnected = mutableState.value.runtime.isConnected &&
-                        mutableState.value.runtime.hasAccessToken
-                    if (extensionConnected) {
-                        // Prefer the optional Termux runtime, but never make chat depend on it.
-                        runCatching { runtimeClient.analyzeConversationSignal(clean) }
-                            .getOrElse { localSignalRuntime.analyze(clean) }
+                    val useTermuxSignal = shouldUseTermuxSignal(
+                        installed = runtimeState.extensionInstalled,
+                        connected = runtimeState.isConnected,
+                        hasToken = runtimeState.hasAccessToken,
+                        endpointAvailable = runtimeState.signalEndpointAvailable,
+                    )
+                    if (useTermuxSignal) {
+                        try {
+                            val remoteSignal = runtimeClient.analyzeConversationSignal(clean)
+                            mainHandler.post {
+                                val current = mutableState.value
+                                mutableState.value = current.copy(
+                                    runtime = current.runtime.copy(signalEndpointAvailable = true),
+                                )
+                            }
+                            remoteSignal
+                        } catch (error: Exception) {
+                            // Disable only this optional endpoint for the current connection.
+                            // The built-in ANS-100 path and the conversation continue normally.
+                            mainHandler.post {
+                                val current = mutableState.value
+                                mutableState.value = current.copy(
+                                    runtime = current.runtime.copy(
+                                        signalEndpointAvailable = false,
+                                        message = "Сигнальное расширение Termux недоступно; используется встроенный ANS-100.",
+                                    ),
+                                )
+                            }
+                            localSignalRuntime.analyze(clean)
+                        }
                     } else {
                         localSignalRuntime.analyze(clean)
                     }
@@ -400,23 +509,79 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun connectRuntime() {
-        runtimeRequest("Подключено к локальной JPVR-консоли JARVIS.") {
-            runtimeClient.connect()
+        val installed = isTermuxInstalled()
+        val before = mutableState.value
+        if (!installed) {
+            mutableState.value = before.copy(
+                runtime = before.runtime.copy(
+                    extensionInstalled = false,
+                    isConnected = false,
+                    snapshot = null,
+                    signalEndpointAvailable = null,
+                    error = null,
+                    message = "Termux не установлен. Встроенное ядро JARVIS работает независимо.",
+                ),
+            )
+            return
         }
-        refreshWorkspace()
+        if (!before.runtime.hasAccessToken) {
+            mutableState.value = before.copy(
+                runtime = before.runtime.copy(
+                    extensionInstalled = true,
+                    isConnected = false,
+                    error = null,
+                    message = "Termux найден. Сначала запустите локальную консоль и сохраните её токен.",
+                ),
+            )
+            return
+        }
+        mutableState.value = before.copy(
+            runtime = before.runtime.copy(extensionInstalled = true),
+        )
+        runtimeRequest(
+            successMessage = "Необязательное расширение Termux подключено.",
+            operation = { runtimeClient.connect() },
+            onSuccess = {
+                val current = mutableState.value
+                mutableState.value = current.copy(
+                    runtime = current.runtime.copy(signalEndpointAvailable = null),
+                )
+                refreshWorkspace()
+            },
+        )
     }
 
     fun refreshRuntime() {
-        runtimeRequest("Состояние JARVIS обновлено.") {
-            runtimeClient.refresh()
+        if (!mutableState.value.runtime.isConnected) {
+            connectRuntime()
+            return
         }
-        refreshWorkspace()
+        runtimeRequest(
+            successMessage = "Состояние расширения Termux обновлено.",
+            operation = { runtimeClient.refresh() },
+            onSuccess = {
+                val current = mutableState.value
+                mutableState.value = current.copy(
+                    runtime = current.runtime.copy(signalEndpointAvailable = null),
+                )
+                refreshWorkspace()
+            },
+        )
     }
 
     fun refreshWorkspace() {
         pendingWorkspaceMerge = null
         pendingWorkspaceRestore = null
-        workspaceRequest("Локальная память загружена.") {
+        if (!mutableState.value.runtime.isConnected) {
+            mutableState.value = mutableState.value.copy(
+                workspace = mutableState.value.workspace.copy(
+                    error = null,
+                    message = "Общая JPVR-память доступна через необязательное расширение Termux. Локальный диалог работает отдельно.",
+                ),
+            )
+            return
+        }
+        workspaceRequest("Общая JPVR-память загружена.") {
             runtimeClient.getWorkspace()
         }
     }
@@ -437,12 +602,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             passphrase.fill('\u0000')
             return
         }
-        if (!before.runtime.hasAccessToken) {
+        if (!before.runtime.extensionInstalled || !before.runtime.isConnected ||
+            !before.runtime.hasAccessToken
+        ) {
             passphrase.fill('\u0000')
             mutableState.value = before.copy(
                 workspace = before.workspace.copy(
-                    error = "Сначала сохраните токен доступа из Termux.",
-                    message = null,
+                    error = null,
+                    message = "Подключите необязательное расширение Termux, чтобы экспортировать общую JPVR-память.",
                 ),
             )
             return
@@ -495,7 +662,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             passphrase.fill('\u0000')
             return
         }
-        if (!before.runtime.hasAccessToken || !before.workspace.isLoaded) {
+        if (!before.runtime.extensionInstalled || !before.runtime.isConnected ||
+            !before.runtime.hasAccessToken || !before.workspace.isLoaded
+        ) {
             passphrase.fill('\u0000')
             mutableState.value = before.copy(
                 workspace = before.workspace.copy(
@@ -620,7 +789,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             passphrase.fill('\u0000')
             return
         }
-        if (!before.runtime.hasAccessToken || !before.workspace.isLoaded ||
+        if (!before.runtime.extensionInstalled || !before.runtime.isConnected ||
+            !before.runtime.hasAccessToken || !before.workspace.isLoaded ||
             backupRevision == null || backupRevision != before.workspace.revision ||
             !before.workspace.restoreBackupAcknowledged
         ) {
@@ -800,12 +970,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             passphrase.fill('\u0000')
             return
         }
-        if (!before.runtime.hasAccessToken || !before.workspace.isLoaded) {
+        if (!before.runtime.extensionInstalled || !before.runtime.isConnected ||
+            !before.runtime.hasAccessToken || !before.workspace.isLoaded
+        ) {
             passphrase.fill('\u0000')
             mutableState.value = before.copy(
                 workspace = before.workspace.copy(
-                    error = "Сначала подключите Termux и обновите локальную память.",
-                    message = null,
+                    error = null,
+                    message = "Для импорта общей JPVR-памяти подключите необязательное расширение Termux.",
                     importPreview = null,
                 ),
             )
@@ -982,9 +1154,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun previewRuntimeReasoning(request: RuntimeReasoningPreviewRequest) {
         val before = mutableState.value.runtime
         if (before.isBusy) return
-        if (!before.hasAccessToken) {
+        if (!before.extensionInstalled || !before.isConnected || !before.hasAccessToken) {
             mutableState.value = mutableState.value.copy(
-                runtime = before.copy(error = "Сначала сохраните токен доступа из Termux."),
+                runtime = before.copy(
+                    error = null,
+                    message = "Символьный Reasoning Engine preview доступен через подключённое расширение Termux; локальный диалог работает отдельно.",
+                ),
             )
             return
         }
@@ -1108,11 +1283,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val before = mutableState.value
         if (before.workspace.isBusy) return
-        if (!before.runtime.hasAccessToken) {
+        if (!before.runtime.extensionInstalled || !before.runtime.isConnected ||
+            !before.runtime.hasAccessToken
+        ) {
             mutableState.value = before.copy(
                 workspace = before.workspace.copy(
-                    error = "Сначала сохраните токен доступа из Termux.",
-                    message = null,
+                    error = null,
+                    message = "Для общей JPVR-памяти подключите необязательное расширение Termux. Локальный диалог доступен без него.",
                 ),
             )
             return
@@ -1181,13 +1358,26 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun runtimeRequest(
         successMessage: String,
+        onSuccess: () -> Unit = {},
         operation: () -> RuntimeBridgeSnapshot,
     ) {
         val before = mutableState.value.runtime
         if (before.isBusy) return
+        if (!before.extensionInstalled) {
+            mutableState.value = mutableState.value.copy(
+                runtime = before.copy(
+                    error = null,
+                    message = "Расширение Termux не обнаружено. Встроенные функции JARVIS доступны без него.",
+                ),
+            )
+            return
+        }
         if (!before.hasAccessToken) {
             mutableState.value = mutableState.value.copy(
-                runtime = before.copy(error = "Сначала сохраните токен доступа из Termux."),
+                runtime = before.copy(
+                    error = null,
+                    message = "Сначала сохраните токен из локальной консоли Termux.",
+                ),
             )
             return
         }
@@ -1208,6 +1398,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             message = successMessage,
                         ),
                     )
+                    onSuccess()
                 }
             } catch (error: Exception) {
                 mainHandler.post {
@@ -1216,8 +1407,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         runtime = current.runtime.copy(
                             isBusy = false,
                             isConnected = false,
-                            error = error.message ?: "Локальная операция JARVIS не выполнена.",
-                            message = null,
+                            snapshot = null,
+                            error = error.message ?: "Расширение Termux пока недоступно.",
+                            message = "Встроенное ядро JARVIS продолжает работать независимо от Termux.",
                         ),
                     )
                 }
@@ -1253,6 +1445,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         LocalSessionStatus.OPEN -> "открыта"
         LocalSessionStatus.PAUSED -> "на паузе"
         LocalSessionStatus.CLOSED -> "закрыта"
+    }
+
+    companion object {
+        private const val TERMUX_PACKAGE_NAME = "com.termux"
     }
 
     override fun onCleared() {

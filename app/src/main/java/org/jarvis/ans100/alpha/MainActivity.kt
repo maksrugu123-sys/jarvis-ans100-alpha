@@ -53,6 +53,8 @@ import org.jarvis.ans100.alpha.data.LocalSession
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.LocalTaskDraft
 import org.jarvis.ans100.alpha.data.RuntimePlanningAction
+import org.jarvis.ans100.alpha.data.OptionalTermuxExtensionStatus
+import org.jarvis.ans100.alpha.data.resolveOptionalTermuxExtensionStatus
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 
 class MainActivity : ComponentActivity() {
@@ -191,6 +193,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onPreviewReasoning = viewModel::previewRuntimeReasoning,
                     onSaveAccessToken = viewModel::saveRuntimeAccessToken,
                     onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
+                    onCheckExtension = viewModel::checkTermuxExtension,
+                    onOpenTermux = viewModel::openTermux,
                 )
                 WorkspaceMemoryPanel(
                     state = ui.workspace,
@@ -1051,6 +1055,8 @@ private fun RuntimeBridgePanel(
     onPreviewReasoning: (RuntimeReasoningPreviewRequest) -> Unit,
     onSaveAccessToken: (String) -> Unit,
     onForgetAccessToken: () -> Unit,
+    onCheckExtension: () -> Unit,
+    onOpenTermux: () -> Unit,
 ) {
     var accessTokenInput by remember { mutableStateOf("") }
     var sessionTitle by rememberSaveable { mutableStateOf("") }
@@ -1083,75 +1089,109 @@ private fun RuntimeBridgePanel(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            SectionHeading("Подключение к ядру", "защищённая локальная JPVR-консоль в Termux")
-            OutlinedTextField(
-                value = accessTokenInput,
-                onValueChange = { accessTokenInput = it.take(64) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Токен доступа из Termux") },
-                placeholder = { Text("43 символа Base64URL") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                enabled = !state.isBusy,
+            SectionHeading("Необязательное расширение Termux", "встроенное ядро JARVIS работает самостоятельно")
+            Text(
+                when (resolveOptionalTermuxExtensionStatus(
+                    installed = state.extensionInstalled,
+                    hasToken = state.hasAccessToken,
+                    connected = state.isConnected,
+                )) {
+                    OptionalTermuxExtensionStatus.NOT_INSTALLED ->
+                        "Termux не установлен. Диалог и встроенная обработка ANS-100 продолжают работать прямо в приложении."
+                    OptionalTermuxExtensionStatus.NEEDS_TOKEN ->
+                        "Termux обнаружен. Для дополнительных возможностей запустите локальную консоль и сохраните выданный ею токен."
+                    OptionalTermuxExtensionStatus.READY_TO_CONNECT ->
+                        "Termux установлен и токен сохранён. Запустите локальную консоль JARVIS в Termux, затем подключите расширение."
+                    OptionalTermuxExtensionStatus.CONNECTED ->
+                        "Расширение подключено: доступны общая JPVR-память, реестр задач/сессий и ограниченный символьный preview."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = {
-                        onSaveAccessToken(accessTokenInput.trim())
-                        accessTokenInput = ""
-                    },
-                    enabled = !state.isBusy && accessTokenInput.trim().length == 43,
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    enabled = !state.isBusy,
+                    onClick = onCheckExtension,
                     modifier = Modifier.weight(1f),
-                ) { Text("Сохранить токен") }
-                if (state.hasAccessToken) {
+                ) { Text("Проверить Termux") }
+                if (state.extensionInstalled) {
                     OutlinedButton(
                         enabled = !state.isBusy,
-                        onClick = onForgetAccessToken,
-                    ) { Text("Удалить токен") }
+                        onClick = onOpenTermux,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Открыть Termux") }
+                }
+            }
+            if (state.extensionInstalled && !state.isConnected) {
+                Text(
+                    "В корне репозитория в Termux запустите: python3 -m tools.jarvis_app --port 8765 --platform android",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (state.extensionInstalled || state.hasAccessToken) {
+                OutlinedTextField(
+                    value = accessTokenInput,
+                    onValueChange = { accessTokenInput = it.take(64) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Токен доступа из Termux") },
+                    placeholder = { Text("43 символа Base64URL") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    enabled = !state.isBusy,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            onSaveAccessToken(accessTokenInput.trim())
+                            accessTokenInput = ""
+                        },
+                        enabled = !state.isBusy && accessTokenInput.trim().length == 43,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Сохранить токен") }
+                    if (state.hasAccessToken) {
+                        OutlinedButton(
+                            enabled = !state.isBusy,
+                            onClick = onForgetAccessToken,
+                        ) { Text("Удалить токен") }
+                    }
+                }
+                if (state.hasAccessToken) {
+                    Text(
+                        "Токен зашифрован Android Keystore и используется только для локального соединения с расширением.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             Text(
-                if (state.hasAccessToken) {
-                    "Токен хранится в зашифрованном виде через Android Keystore."
-                } else {
-                    "Скопируйте токен из Termux при первом запуске консоли. Не отправляйте его другим людям."
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
                 when {
-                    state.isBusy -> "Связь с JARVIS проверяется…"
+                    state.isBusy -> "Проверяется локальное расширение…"
                     state.isConnected && snapshot != null ->
                         "Подключено · JPVR checkpoint ${snapshot.checkpointVersion}"
-                    else -> "Не подключено · локальные черновики Android остаются отдельно"
+                    state.extensionInstalled -> "Termux установлен · сервис можно подключить отдельно"
+                    else -> "Автономный режим · Termux не требуется"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (state.isConnected) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    enabled = !state.isBusy && state.hasAccessToken,
-                    onClick = if (state.isConnected) onRefresh else onConnect,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(
-                        when {
-                            state.isBusy -> "Подключение…"
-                            state.isConnected -> "Обновить состояние"
-                            else -> "Подключить JARVIS"
-                        }
-                    )
-                }
-                if (state.isConnected) {
-                    OutlinedButton(enabled = !state.isBusy, onClick = onConnect) {
-                        Text("Проверить")
+            Button(
+                enabled = !state.isBusy && state.extensionInstalled && state.hasAccessToken,
+                onClick = if (state.isConnected) onRefresh else onConnect,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    when {
+                        state.isBusy -> "Подключение…"
+                        state.isConnected -> "Обновить состояние расширения"
+                        !state.extensionInstalled -> "Встроенное ядро активно"
+                        else -> "Подключить расширение"
                     }
-                }
+                )
             }
             if (!state.error.isNullOrBlank()) {
                 Text(

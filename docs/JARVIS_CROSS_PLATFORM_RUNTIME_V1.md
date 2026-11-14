@@ -23,8 +23,8 @@ This is a shared product and data contract, not a claim that the current impleme
 | Desktop runtime | Python modules under tools/ | Reference/research components; no packaged desktop product yet |
 | Desktop UI | PWA served by tools.jarvis_app | Local task/session console and optional local-model conversation through JARVIS Core; source-level only, not runtime verified |
 | Android UI | Kotlin + Jetpack Compose under app/ | Native V0.5 source exists |
-| Android runtime connection | LocalRuntimeBridgeClient → 127.0.0.1:8765 | Optional developer bridge for JPVR workspace memory refresh and the ANS-100 signal pre-pass; core chat and recent history remain in-process and do not require Termux |
-| Neural runtime | Python NeuronRuntime / NetworkRuntime | Reference coordinators; a bounded two-neuron signal pre-pass is now called by desktop Core and optionally by Android through Termux, but it is not full cognition, dialogue learning, or a native mobile runtime |
+| Android runtime connection | LocalRuntimeBridgeClient → 127.0.0.1:8765 | Optional Termux extension for shared JPVR workspace, task/session administration, symbolic preview and encrypted transfer; core chat/history and the Kotlin ANS-100 signal pass remain in-process |
+| Neural runtime | Python NeuronRuntime / NetworkRuntime reference; Kotlin in-process Android signal pass | Bounded two-neuron request-shape signal preprocessing is used by desktop Core and Android; Android may prefer the authenticated Termux Python endpoint when connected, but falls back to Kotlin. This is not full cognition or dialogue learning |
 | Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | No native Kotlin JPVR implementation or automatic cross-device sync yet |
 | Offline language model | Optional LiteRT-LM Qwen3 adapters called by JARVIS Core on Android and desktop/PWA | Source-level only; no inference or target-device performance has been verified |
 
@@ -111,7 +111,7 @@ Every call must carry a schema/version, request ID, bounded input size, deadline
 - Compose owns UI, lifecycle, permissions, and user-facing capability status.
 - App-private storage owns conversation, memory, settings, and checkpoints.
 - The core conversation path must not depend on 127.0.0.1, Termux, a local HTTP server, or a network permission.
-- The current Termux bridge remains a development/compatibility adapter until an in-process runtime replaces it.
+- The Termux bridge remains an optional extension for shared JPVR/task services and transfer. It is not in the critical conversation path; the Android in-process signal runtime already provides the local signal fallback.
 - Android Keystore protects cryptographic keys and secrets; Android permissions gate microphone and other platform capabilities.
 - Use bounded background work and respect Android lifecycle, battery, thermal, and storage constraints.
 - Offline text remains the first target; offline voice follows only after local speech models are integrated and measured.
@@ -205,9 +205,9 @@ The capability registry reports actual limits and active backends. A PC may use 
 
 ### Batch 6 — Shared ANS-100 runtime behavior
 
-**Implemented at source level:** a bounded two-neuron ALIF-DT conversation-signal pre-pass uses the existing Python NeuronRuntime, NetworkRuntime and Numerical Oracle. Desktop Core calls it directly; Android may call it through the authenticated Termux loopback endpoint. The pass consumes explicit request-shape features and returns a numeric attention-gate summary to the language engine.
+**Implemented at source level:** the bounded Python ALIF-DT pre-pass uses NeuronRuntime, NetworkRuntime and the Numerical Oracle for desktop Core and the optional Termux endpoint. Android also has a Kotlin in-process two-neuron implementation with app-private checkpoint persistence; it is the default path when Termux is missing or its signal endpoint is unavailable.
 
-**Limit:** this is preprocessing only, not semantic understanding, full cognition, adaptive dialogue learning or persistent neural state. The Android bridge is optional and fail-open; a native Kotlin/portable mobile implementation does not exist yet.
+**Limit:** both implementations process explicit request-shape features and return numeric signal summaries. They do not provide semantic understanding, full cognition or adaptive dialogue learning. Kotlin/Python differential equivalence and target-device behavior remain unverified.
 
 - Port the bounded neural state transitions behind an in-process Kotlin or audited portable-native interface.
 - Differentially compare Python reference and device implementation using shared fixtures.

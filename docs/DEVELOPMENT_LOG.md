@@ -1905,3 +1905,37 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Changed:** added a non-negative `modelTimeNs` field to `ConversationSignalContext`; the in-process runtime now supplies its current model clock, and the optional Termux bridge parses both `model_time_ns` and `checkpoint_version` from the Python response using strict non-negative integer validation.
 
 **Verification:** source-level cross-file correction only. Tests/builds remain **NOT RUN**.
+
+
+## 2026-11-14 — Make Termux an optional Android capability extension
+
+**Objective:** preserve a standalone Android JARVIS while allowing Termux, when installed and explicitly paired, to add its existing local-console capabilities.
+
+**Changed:**
+- `app/src/main/AndroidManifest.xml`: added package visibility for only `com.termux`; retained INTERNET permission and the loopback-only network security configuration.
+- `JarvisViewModel.kt`: detect Termux installation, avoid startup bridge attempts when absent, make bridge connection conditional, and keep core chat independent of extension failures. Added a package re-check and a safe action to open Termux. Shared JPVR operations now require a live authenticated extension connection.
+- `MainActivity.kt`: relabelled Termux as optional, added extension status, package re-check and open-Termux controls; clarified which capabilities need the companion.
+- `data/OptionalTermuxExtension.kt`: added a pure extension-state resolver and routing predicate for the optional signal endpoint.
+- `OptionalTermuxExtensionStatusTest.kt`: authored state-transition and fallback-routing tests.
+- `docs/JARVIS_OPTIONAL_TERMUX_EXTENSION_V1.md`: documented the standalone contract, pairing, capability boundary, failure behavior and security model.
+- Updated `docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md`, `docs/JARVIS_ARCHITECTURE.md`, `docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md`, `docs/JARVIS_ANDROID_APP_V0_1.md`, `docs/JARVIS_ANDROID_RUNTIME_BRIDGE_V1.md`, `AGENTS.md` and `README.md` to record the optional-extension decision and keep the launch instructions accurate.
+
+**Tests:** eight focused Kotlin test methods are authored; **NOT RUN**. No Gradle/Kotlin compilation, APK/AAB, Android device, Termux pairing, loopback request, airplane-mode, Python test or performance check was run.
+
+**Known limitations:** Termux still requires the user to start the Python local-console service manually and pair its token. Native Android durable user-memory CRUD and a full in-app natural-language Reasoning Engine are not implemented by this change. The extension remains limited to the documented local-console APIs; arbitrary tool execution and external actions remain disabled.
+
+**Next step:** perform a full source-level integration review of Android memory/reasoning boundaries and the optional extension lifecycle, then obtain separate permission before any build or device/test execution.
+
+
+## 2026-11-14 — Record proposed visible PC browser research mode
+
+**Objective:** capture the user's idea for JARVIS PC to open a real browser window, visibly search and read pages, and let the user inspect or take over.
+
+**Changed:**
+- Added `docs/JARVIS_VISIBLE_BROWSER_RESEARCH_V1.md`: proposed visible foreground browser contract, read-only scope, user pause/takeover/stop controls, source provenance, page-content trust boundary, resource bounds and staged acceptance checks.
+- Added architecture section 3.59 in `docs/JARVIS_ARCHITECTURE.md`. This feature is explicitly **PROPOSED**, not implemented.
+- Updated `README.md` and `AGENTS.md` to record the proposal and prevent future contributors from describing it as an existing feature.
+
+**Tests / implementation:** no browser controller, package dependency, desktop code or browser profile was added. No tests or desktop runtime checks were applicable to this documentation-only proposal.
+
+**Next step:** implement a visible desktop browser adapter and bounded read-only research service in a later batch, then verify visible-window behavior, manual takeover, cancellation, source provenance and rejection of page-originated instructions.
