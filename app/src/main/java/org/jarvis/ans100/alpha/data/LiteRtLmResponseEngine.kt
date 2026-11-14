@@ -43,7 +43,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         }
         val systemInstruction = buildString {
             append(SYSTEM_PROMPT)
-            append("\\n\\n")
+            append("\n\n")
             append(understanding.toModelContext())
             val selectedMemories = memoryContext.asSequence()
                 .filter { it.userApproved }
