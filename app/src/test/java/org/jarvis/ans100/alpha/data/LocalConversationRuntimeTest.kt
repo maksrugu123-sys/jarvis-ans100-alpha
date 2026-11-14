@@ -196,6 +196,42 @@ class LocalConversationRuntimeTest {
     }
 
     @Test
+    fun androidCoreProvidesRecentHistoryToItsUnderstandingPipeline() {
+        val repoStorage = MemoryStorage()
+        val repo = repository(repoStorage)
+        repo.appendExchange(
+            "Мы обсуждаем ошибку в проекте JARVIS",
+            "Я нашёл описание проблемы.",
+        )
+        var seenUnderstanding: LocalUnderstanding? = null
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake-language-engine"
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+            ): String = "legacy reply"
+
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+                memoryContext: List<LocalWorkspaceMemory>,
+                signalContext: ConversationSignalContext?,
+                understandingContext: LocalUnderstanding?,
+            ): String {
+                seenUnderstanding = understandingContext
+                return "model reply"
+            }
+        }
+        val coordinator = LocalConversationCoordinator(repo, engine)
+
+        coordinator.send("Продолжай с этим")
+
+        assertTrue(seenUnderstanding?.hasRecentUserContext == true)
+        assertTrue(seenUnderstanding?.reasoningPlan?.contextAvailable == true)
+        assertTrue(seenUnderstanding?.reasoningPlan?.requiresClarification == false)
+    }
+
+    @Test
     fun androidFallbackReceivesCoreAnalysisEvenWhenLanguageModelIsAbsent() {
         val coordinator = LocalConversationCoordinator(
             repository(MemoryStorage()),
