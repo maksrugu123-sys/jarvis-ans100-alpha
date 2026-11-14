@@ -159,7 +159,11 @@ class LocalDialogFeatureClassifierTest {
 
     @Test
     fun featureExtractionIsBoundedTo256TokensAndProducesDeterministicPredictions() {
-        val phrase = (1..400).joinToString(" ") { "token$it" }
+        val phrase = (0 until 300).joinToString(" ") { index ->
+            val first = 'a' + index / 26
+            val second = 'a' + index % 26
+            "$first$second"
+        }
         val first = LocalDialogFeatureClassifier(MemoryStorage())
         val second = LocalDialogFeatureClassifier(MemoryStorage())
 

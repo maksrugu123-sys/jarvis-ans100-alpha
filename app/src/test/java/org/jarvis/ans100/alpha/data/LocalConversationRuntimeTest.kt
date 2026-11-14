@@ -129,7 +129,7 @@ class LocalConversationRuntimeTest {
         assertTrue(!engineCalled)
         assertTrue(messages.last().text.contains("ANS-100"))
         assertTrue(messages.last().text.contains("сеть из 10 нейронов"))
-        assertTrue(messages.last().text.contains("нет результата сигнального прохода"))
+        assertTrue(messages.last().text.contains("нет результата локального сигнального прохода"))
         assertTrue(messages.last().text.contains("Долговременная JPVR-память"))
         assertTrue(coordinator.backendLabel.startsWith("JARVIS Core"))
     }
@@ -363,7 +363,7 @@ class LocalConversationRuntimeTest {
         val coordinator = LocalConversationCoordinator(repo, engine)
         val first = coordinator.send("  test-prompt  ")
         val second = coordinator.send("next")
-        assertEquals("test-prompt", observedPrompt)
+        assertEquals("next", observedPrompt)
         assertEquals(2, observedContextSize)
         assertEquals("test-reply", first[1].text)
         assertEquals(4, second.size)

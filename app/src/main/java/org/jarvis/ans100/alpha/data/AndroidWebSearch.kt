@@ -1,6 +1,5 @@
 package org.jarvis.ans100.alpha.data
 
-import android.text.Html
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
@@ -218,7 +217,23 @@ class AndroidWebSearchService(
     }
 
     private fun decodeHtml(value: String): String =
-        Html.fromHtml(value, Html.FROM_HTML_MODE_LEGACY).toString()
+        HTML_ENTITY.replace(value) { match ->
+            val entity = match.groupValues[1]
+            when {
+                entity.startsWith("#x", ignoreCase = true) ->
+                    decodeCodePoint(entity.drop(2).toIntOrNull(16)) ?: match.value
+                entity.startsWith("#") ->
+                    decodeCodePoint(entity.drop(1).toIntOrNull()) ?: match.value
+                else -> HTML_ENTITIES[entity.lowercase(Locale.ROOT)] ?: match.value
+            }
+        }
+
+    private fun decodeCodePoint(codePoint: Int?): String? {
+        if (codePoint == null || !Character.isValidCodePoint(codePoint) ||
+            codePoint in 0xD800..0xDFFF
+        ) return null
+        return String(Character.toChars(codePoint))
+    }
 
     private fun cleanHtmlText(value: String, limit: Int): String {
         val withoutActiveContent = value
@@ -245,6 +260,14 @@ class AndroidWebSearchService(
         const val MAX_SNIPPET_CHARS = 260
         const val MAX_URL_CHARS = 2_048
         private const val MAX_CANDIDATES = 30
+        private val HTML_ENTITY = Regex("&(#x[0-9a-fA-F]{1,6}|#\\d{1,7}|[A-Za-z][A-Za-z0-9]{0,31});")
+        private val HTML_ENTITIES = mapOf(
+            "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'",
+            "nbsp" to "\u00A0", "ndash" to "–", "mdash" to "—", "hellip" to "…",
+            "copy" to "©", "reg" to "®", "trade" to "™",
+            "lsquo" to "‘", "rsquo" to "’", "ldquo" to "“", "rdquo" to "”",
+            "laquo" to "«", "raquo" to "»", "euro" to "€",
+        )
         private const val TITLE_MATCH_WEIGHT = 4
         private const val CONNECT_TIMEOUT_MS = 8_000
         private const val READ_TIMEOUT_MS = 12_000

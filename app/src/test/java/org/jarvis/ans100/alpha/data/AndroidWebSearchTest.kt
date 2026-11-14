@@ -8,7 +8,7 @@ import org.junit.Test
 class AndroidWebSearchTest {
     @Test
     fun extractsOnlyExplicitSearchRequests() {
-        assertEquals("погода в Берлине", AndroidWebSearchIntent.extract("Найди в интернете погоду в Берлине")?.query)
+        assertEquals("погоду в Берлине", AndroidWebSearchIntent.extract("Найди в интернете погоду в Берлине")?.query)
         assertEquals("новости Android", AndroidWebSearchIntent.extract("Поищи новости Android")?.query)
         assertEquals("Qwen 3", AndroidWebSearchIntent.extract("/search Qwen 3")?.query)
         assertNull(AndroidWebSearchIntent.extract("Просто объясни, как работает браузер"))

@@ -2629,3 +2629,13 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Added a unit test for the multi-message name recall case.
 - Android prototype workflow now runs `:app:testDebugUnitTest` before assembling the APK; the build gate therefore checks unit tests and APK packaging in the same run.
 - The prior run #8 was still executing the APK assembly task when this refinement was pushed; the new push supersedes it through the workflow's cancel-in-progress policy. Run #9 is the validation for this final commit.
+
+
+## Android unit-test baseline repair — 2026-11-14
+
+- Run #9 confirmed application Kotlin compilation succeeds, then exposed 9 existing unit-test failures (100 tests total).
+- Removed a JVM-test-incompatible dependency on Android `Html.fromHtml` from the search HTML parser; added bounded named/numeric entity decoding using standard Java/Kotlin APIs.
+- Corrected the search test to expect the original inflected Russian query ("погоду") and updated two stale Core-runtime assertions to match actual command/last-call semantics.
+- Adjusted the feature-classifier token-cap test to keep its 300 distinct short tokens within the classifier's explicit 900-character input limit.
+- Added a pure-JVM `org.json` test dependency so JSON payload tests exercise the real JSON implementation rather than Android's unmocked framework stubs.
+- Re-run the full Android unit suite before APK packaging; no tests are disabled.
