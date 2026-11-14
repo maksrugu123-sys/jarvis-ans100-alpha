@@ -48,10 +48,10 @@
 - Measure resident count, bytes, I/O amplification and latency at 10, 100, 1k and 10k neurons.
 
 ### E. Phone/PC memory synchronization
-- Implement Android TLS client with certificate SHA-256 pinning, Keystore-backed credentials, bounded JSON, revision CAS and explicit pairing.
-- Sync only user-approved memory records and explicit deletion tombstones. Do not sync secrets, raw chats or model files by default.
-- Add conflict preview/merge, pause/revoke, retry/backoff and last-sync state.
-- Verify against a local PC TLS server using a test certificate before enabling automatic sync.
+- Android now has a source-level HTTPS peer client with leaf-certificate SHA-256 pinning, default IP-SAN hostname verification, RFC1918 IPv4-only addressing, the existing Keystore-backed bearer token, bounded JSON and revision CAS.
+- Compose exposes manual pairing by private IPv4 and certificate fingerprint. Only explicitly approved memory records are sent; raw chats, model weights and credentials are excluded.
+- Current Android V1 is additive/upsert-only: deletion tombstones, automatic schedule, pause/revoke UI and end-to-end conflict recovery remain unfinished.
+- Android payload/IP/pin tests are authored, not run. Verify against a local PC TLS server before enabling any automatic sync.
 
 ### F. Controlled action execution
 - Android now connects the Task Loop run endpoint for exactly one confirmed `memory.search` read-only step; the client validates task ID/revision, capability and bounded results. Desktop/PWA UI execution remains to be verified.

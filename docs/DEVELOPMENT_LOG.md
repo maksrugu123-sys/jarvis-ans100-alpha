@@ -2374,3 +2374,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Safety boundary:** Android currently exposes only `memory.search`. The existing server-side allow-list remains authoritative. Browser, shell, arbitrary Python, file writes, uploads, messaging and purchases remain unavailable. A successful source implementation is not a runtime verification.
 
 **Verification:** GitHub source readback and static review only. New Android unit tests and existing Python Task Loop tests are **AUTHORED, NOT RUN**. No Termux end-to-end request, Gradle build, APK, device UI, Python test, browser or local-model run was performed.
+
+## 2026-11-14 — Add pinned TLS Android peer memory sync
+
+**Objective:** connect app-private approved Android memories to the PC peer overlay without sending raw chats, model files or credentials.
+
+**Changed:**
+- Added `PeerMemorySyncClient.kt`: HTTPS-only endpoint on port 8766; RFC1918 IPv4 literal validation; SHA-256 leaf-certificate pinning; system hostname verification remains enabled for the IP SAN; bounded JSON and response parsing; revision compare-and-swap.
+- The client reuses the existing bearer token loaded from the Android Keystore-backed `RuntimeAccessTokenStore`. It does not persist the token in peer-sync settings.
+- The Compose local-memory panel now allows manual PC IP/fingerprint pairing and a user-triggered sync. The UI explains that only approved memories are sent.
+- The ViewModel sync worker merges the server's authoritative approved-record snapshot into the app-private cache and displays added/updated/conflict counts.
+- Added unit tests for private IPv4 restrictions, fingerprint normalization, approved-only record payload and revision validation.
+- Updated the PC/Android peer-sync contract and autonomous milestone plan.
+
+**Boundary:** Android V1 is additive/upsert-only. It does not send deletion tombstones, so deleting a note on either device does not delete it on the other. Sync is manual; no background schedule is enabled. TLS pinning, IP-SAN verification, authentication, PC firewall and device pairing still require end-to-end runtime validation.
+
+**Verification:** GitHub source/readback and static checks only. New Android tests are **AUTHORED, NOT RUN**. No live TLS exchange, Python peer test, Gradle build, APK or device check was executed.

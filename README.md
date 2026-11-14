@@ -10,6 +10,8 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 14 November 2026
 
+- **Android↔PC approved-memory sync:** the app now has a manual HTTPS peer client for the PC TLS listener on port 8766, pins the entered leaf-certificate SHA-256, restricts the target to RFC1918 IPv4, and reuses the Keystore-encrypted Termux token. Only explicitly approved memory records are transferred. Sync is additive/upsert-only; deletion propagation and automatic scheduling are not yet implemented. Unit tests and TLS/device runtime are AUTHORED, NOT RUN.
+
 - **Android read-only Task Loop:** the Compose task list now offers a per-run confirmation for one bounded `memory.search` action over user-approved workspace memories. The client sends an exact task revision, validates the returned capability/task/status and at most five excerpts, then refreshes the JPVR snapshot. No shell, browser, file mutation, message or external write capability is exposed from Android. Payload validation tests are AUTHORED, NOT RUN; Termux end-to-end and device UI remain unverified.
 
 - **Android 10k sparse network in chat:** ordinary non-command turns now send up to 128 hashed feature IDs to the SQLite-backed LIF-DT network when the 10,000-neuron topology has been initialized. The batch is inserted atomically and processed on a separate executor, so neural failure cannot block chat. This is an observable numeric side channel only: it does not change Qwen's answer or train LIF synapses. Explicit 👍/👎 feedback still updates the separate four-label dialogue classifier. New tests are AUTHORED, NOT RUN.
