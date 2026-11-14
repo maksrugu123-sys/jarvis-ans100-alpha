@@ -18,6 +18,7 @@ import org.jarvis.ans100.alpha.data.LocalConversationRepository
 import org.jarvis.ans100.alpha.data.LocalWorkspaceMemory
 import org.jarvis.ans100.alpha.data.LocalWorkspaceMemoryCache
 import org.jarvis.ans100.alpha.data.LiteRtLmModelStore
+import org.jarvis.ans100.alpha.data.LiteRtLmDownloadCancelledException
 import org.jarvis.ans100.alpha.data.LiteRtLmResponseEngine
 import org.jarvis.ans100.alpha.data.LocalFallbackResponseEngine
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
