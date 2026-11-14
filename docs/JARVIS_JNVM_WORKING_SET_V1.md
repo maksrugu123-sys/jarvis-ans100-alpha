@@ -19,7 +19,8 @@ This is a first executable reference layer for the JNVM idea. It connects the ex
 - ShardedJPVRNeuronStore maps stable neuron identities to 128 deterministic JPVR shard files.
 - Each shard uses the existing JPVRNeuronCheckpointStore, neuron COW INDEX, immutable checkpoint records and record-version CAS.
 - Each operation opens the required shard and closes it after load/save. The working-set manager does not retain 128 file descriptors.
-- max_pages defaults to 4096 for the JPVR materialized page catalog. Shards are append-only under the current JPVR reference implementation. Page-catalog exhaustion, history growth and absent compaction/free-page reuse remain real limits; the manager surfaces persistence errors and does not silently discard dirty state.
+- Reads pin the active Superblock and resolve referenced pages on demand through a 64-page read-through LRU cache, avoiding materialization of unrelated DATA/BLOB checkpoint pages. The integrity check still traverses historical COMMIT ancestry, so read cost grows with shard history.
+- Save/planning still materializes a bounded page catalog (default 4,096 pages). Shards are append-only; page-catalog exhaustion, history growth and absent compaction/free-page reuse remain real limits. Persistence failures do not silently discard dirty state.
 
 ## Active working set
 

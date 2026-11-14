@@ -7,6 +7,8 @@ service or a NetworkRuntime persistence implementation.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from collections import OrderedDict
+from collections.abc import Mapping
 import hashlib
 import struct
 import uuid
@@ -52,6 +54,38 @@ LOCATOR_BLOB = 2
 _U64_MAX = (1 << 64) - 1
 _LOCATOR = struct.Struct("<4sHBBHHI16sQQIQQ16s16s")
 _TREE_ID_DOMAIN = b"JARVIS:JPVR:INDEX-TREE:V1\x00"
+
+ 
+class _LazyPageCatalog(Mapping[int, bytes]):
+    """Pinned append-only snapshot view with a bounded read-through page cache."""
+
+    def __init__(self, storage: JPVRStorage, active: Superblock, *, cache_pages: int = 64):
+        self._storage = storage
+        self._tail = active.durable_tail_page_no
+        self._cache_pages = cache_pages
+        self._cache: OrderedDict[int, bytes] = OrderedDict()
+
+    def __getitem__(self, page_no: int) -> bytes:
+        if isinstance(page_no, bool) or not isinstance(page_no, int) or not 2 <= page_no <= self._tail:
+            raise KeyError(page_no)
+        cached = self._cache.get(page_no)
+        if cached is not None:
+            self._cache.move_to_end(page_no)
+            return cached
+        # JPVR V1 appends immutable committed pages. Later commits can append,
+        # but cannot modify a page within the pinned Superblock prefix.
+        encoded = self._storage.read_page(page_no)
+        self._cache[page_no] = encoded
+        self._cache.move_to_end(page_no)
+        while len(self._cache) > self._cache_pages:
+            self._cache.popitem(last=False)
+        return encoded
+
+    def __iter__(self):
+        return iter(range(2, self._tail + 1))
+
+    def __len__(self) -> int:
+        return max(0, self._tail - 1)
 
 
 class JPVRNeuronCheckpointError(ValueError):
@@ -250,7 +284,7 @@ class JPVRNeuronCheckpointStore:
 
     @staticmethod
     def _manifest(
-        active: Superblock, catalog: dict[int, bytes]
+        active: Superblock, catalog: Mapping[int, bytes]
     ) -> Manifest | None:
         if active.generation == 0:
             return None
@@ -281,8 +315,20 @@ class JPVRNeuronCheckpointStore:
         active, catalog = self.storage.load_snapshot(max_pages=max_pages)
         return active, catalog, self._manifest(active, catalog)
 
+
+    def _read_lazy_snapshot(
+        self, max_pages: int
+    ) -> tuple[Superblock, _LazyPageCatalog, Manifest | None]:
+        """Pin one active prefix and resolve its referenced pages on demand."""
+        active = self.storage.get_superblock()
+        page_count = max(0, active.durable_tail_page_no - 1)
+        if page_count > max_pages:
+            raise JPVRFormatError("JPVR page prefix exceeds max_pages read bound")
+        catalog = _LazyPageCatalog(self.storage, active)
+        return active, catalog, self._manifest(active, catalog)
+
     def _initialize_indexes(
-        self, active: Superblock, catalog: dict[int, bytes]
+        self, active: Superblock, catalog: Mapping[int, bytes]
     ) -> None:
         if active.generation != 0:
             raise JPVRNeuronCheckpointError("INDEX initialization is only valid for genesis")
@@ -306,7 +352,7 @@ class JPVRNeuronCheckpointStore:
         object_id: bytes,
         manifest: Manifest,
         active: Superblock,
-        catalog: dict[int, bytes],
+        catalog: Mapping[int, bytes],
     ) -> tuple[NeuronCheckpointLocator | None, int]:
         root = manifest.index_roots["neuron"]
         root_bytes = catalog.get(root.page_no)
@@ -342,7 +388,7 @@ class JPVRNeuronCheckpointStore:
     def _verify_commit_ancestor(
         locator: NeuronCheckpointLocator,
         active: Superblock,
-        catalog: dict[int, bytes],
+        catalog: Mapping[int, bytes],
     ):
         if locator.record_generation > active.generation:
             raise JPVRNeuronCheckpointError("checkpoint generation is newer than the active snapshot")
@@ -389,7 +435,7 @@ class JPVRNeuronCheckpointStore:
         neuron_id: str,
         locator: NeuronCheckpointLocator,
         active: Superblock,
-        catalog: dict[int, bytes],
+        catalog: Mapping[int, bytes],
     ) -> DecodedNeuronRuntimeSnapshot:
         _validate_locator(locator)
         source_commit = JPVRNeuronCheckpointStore._verify_commit_ancestor(
@@ -603,7 +649,7 @@ class JPVRNeuronCheckpointStore:
     def load(self, neuron_id: str, *, max_pages: int = 4096) -> LoadedNeuronCheckpoint:
         """Resolve the active neuron INDEX locator and restore a verified runtime."""
         object_id = neuron_runtime_object_id(neuron_id)
-        active, catalog, manifest = self._read_snapshot(max_pages)
+        active, catalog, manifest = self._read_lazy_snapshot(max_pages)
         if manifest is None:
             raise JPVRNeuronCheckpointNotFound(f"no checkpoint exists for neuron {neuron_id!r}")
         root = manifest.index_roots["neuron"]

@@ -4652,7 +4652,7 @@ This is a PC capability only. Android continues independently; remote control of
 
 **Transaction and scaling limitations**
 - This manager commits one neuron at a time. It is not yet integrated into NetworkRuntime, and it does not provide atomic publication of all neuron candidates touched by a common timestamp. Do not route the multi-neuron network scheduler through these separate commits until a network-level commit coordinator exists.
-- Each shard's existing JPVR API materializes a bounded page catalog (default 4,096 pages). The current writer is append-only and no compaction/free-page reuse is provided here. Long-lived shards can reach the catalog bound; callers receive a persistence error and dirty state remains resident.
+- JPVR checkpoint reads pin the active Superblock and fetch referenced pages lazily through a 64-page read-through cache, avoiding materialization of unrelated DATA/BLOB checkpoints. The COMMIT-ancestry proof still reads historical COMMIT pages. Save/planning continues to materialize a bounded page catalog (default 4,096 pages). The writer is append-only and no compaction/free-page reuse is provided here. Long-lived shards can reach the page bound; callers receive a persistence error and dirty state remains resident.
 - The complete NetworkRuntime plus JPVRNetworkCheckpointStore path remains a separate whole-network snapshot implementation.
 - Android's standalone Kotlin signal pass remains two neurons. Native Kotlin packed state, Android JPVR/JNVM paging, Python/Kotlin parity and device resource measurements remain NOT IMPLEMENTED / NOT MEASURED. Termux stays optional.
 - One-neuron durable commits do not make cross-neuron event delivery exactly once and do not replace NCC/CQE ownership.

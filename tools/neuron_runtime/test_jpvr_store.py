@@ -2,6 +2,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from dataclasses import replace
 
 from tools.jpvr_reference.codec import PAGE_SIZE, JPVRFormatError
@@ -130,6 +131,23 @@ class JPVRNeuronCheckpointStoreTests(unittest.TestCase):
         restored = JPVRNeuronCheckpointStore(reopened).load("persistent")
         self.assertEqual(restored.snapshot.runtime.synapses, runtime.synapses)
         self.assertEqual(restored.snapshot.clock_epoch_id, CLOCK_EPOCH)
+
+
+    def test_load_uses_lazy_pages_instead_of_materializing_full_catalog(self):
+        runtime = _runtime(synapse_count=16)
+        self.checkpoints.save("lazy-read", runtime, clock_epoch_id=CLOCK_EPOCH)
+        with patch.object(
+            self.storage,
+            "load_snapshot",
+            side_effect=AssertionError("load must not materialize the full page catalog"),
+        ):
+            restored = self.checkpoints.load("lazy-read")
+        self.assertEqual(restored.snapshot.runtime.synapses, runtime.synapses)
+
+    def test_lazy_load_keeps_the_existing_page_count_bound(self):
+        self.checkpoints.save("bounded-read", _runtime(), clock_epoch_id=CLOCK_EPOCH)
+        with self.assertRaises(JPVRFormatError):
+            self.checkpoints.load("bounded-read", max_pages=1)
 
     def test_update_advances_record_version_and_publishes_new_locator(self):
         first = self.checkpoints.save(

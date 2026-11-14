@@ -1981,3 +1981,21 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** GitHub source readback and static cross-file editing only. No Python syntax/import checks, unit tests, benchmark, PC/Android runtime, RAM/latency/thermal measurements, Gradle/APK/AAB build, CI or GitHub Actions were run. No performance saving is claimed.
 
 **Next:** run the staged packed-vs-reference measurement on PC; design network-level timestamp transaction coordination; implement a native Kotlin equivalent with Python/Kotlin golden-vector parity before claiming 10,000-neuron Android support.
+
+
+## 2026-11-14 — Make JPVR neuron checkpoint loads page-lazy
+
+**Objective:** avoid materializing every DATA/BLOB page in a shard when faulting in one cold neuron, while preserving the existing append-only snapshot and integrity checks.
+
+**Changed:**
+- tools/neuron_runtime/jpvr_store.py: added a pinned read-only Mapping over one selected Superblock's durable prefix, with a 64-page read-through LRU cache. The load path now resolves COMMIT, MANIFEST, neuron INDEX, locator, and targeted DATA/BLOB pages on demand. Save/planning remains on its existing bounded materialized catalog.
+- tools/neuron_runtime/test_jpvr_store.py: authored tests that fail if load_snapshot() is invoked during a read, and that preserve the page-count read bound.
+- docs/JARVIS_ARCHITECTURE.md, docs/JARVIS_JNVM_WORKING_SET_V1.md and README.md: documented the partial read-lazy behavior and retained history/write-path limitations.
+
+**Safety invariant:** the lazy view pins the selected Superblock and relies on the current JPVR append-only rule: already committed page bytes are immutable. This assumption must be revisited before page reuse or compaction is introduced. COMMIT ancestry validation still traverses historical COMMIT pages; only unrelated DATA/BLOB checkpoint pages are skipped.
+
+**Tests:** two focused tests are AUTHORED, NOT RUN. No Python test, syntax/import check, benchmark, build, CI, or device measurement was run.
+
+**Limitations:** save/planning continues to materialize at most the configured 4,096-page catalog. The format/writer has no compaction or free-page reuse. This change does not integrate the per-neuron working set with NetworkRuntime or provide atomic multi-neuron timestamp commits.
+
+**Next:** design and implement a network-level candidate/commit coordinator so all neurons touched by one timestamp can be published atomically before the scheduler exposes routed events.
