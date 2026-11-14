@@ -97,24 +97,13 @@ class LiteRtLmModelStore(context: Context) {
                 throw LiteRtLmDownloadCancelledException()
             }
             val contentEncoding = connection.getHeaderField("Content-Encoding")
-            if (!contentEncoding.isNullOrBlank() &&
-                !contentEncoding.equals("identity", ignoreCase = true)
-            ) {
+            if (!isIdentityEncoding(contentEncoding)) {
                 throw LiteRtLmModelException("Сервер вернул сжатый ответ; безопасное продолжение загрузки невозможно.")
             }
 
             if (code == HttpURLConnection.HTTP_PARTIAL) {
                 val range = connection.getHeaderField("Content-Range")
-                    ?: throw LiteRtLmModelException("Сервер не подтвердил продолжение загрузки.")
-                val match = CONTENT_RANGE_REGEX.matchEntire(range)
-                    ?: throw LiteRtLmModelException("Сервер вернул некорректный диапазон загрузки.")
-                val rangeStart = match.groupValues[1].toLongOrNull()
-                val rangeEnd = match.groupValues[2].toLongOrNull()
-                val rangeTotal = match.groupValues[3].toLongOrNull()
-                if (rangeStart != offset || rangeEnd == null ||
-                    rangeEnd < offset || rangeEnd >= EXPECTED_BYTES ||
-                    rangeTotal != EXPECTED_BYTES
-                ) {
+                if (!isValidContentRange(range, offset, EXPECTED_BYTES)) {
                     throw LiteRtLmModelException("Диапазон загрузки не совпадает с ожидаемой моделью.")
                 }
             } else if (code == HttpURLConnection.HTTP_OK) {
@@ -300,6 +289,25 @@ class LiteRtLmModelStore(context: Context) {
         private const val CONNECT_TIMEOUT_MS = 20_000
         private const val READ_TIMEOUT_MS = 30_000
         private val CONTENT_RANGE_REGEX = Regex("bytes (\\d+)-(\\d+)/(\\d+)")
+
+        internal fun isValidContentRange(
+            value: String?,
+            expectedStart: Long,
+            expectedTotal: Long,
+        ): Boolean {
+            if (expectedStart < 0L || expectedTotal <= 0L || expectedStart >= expectedTotal) {
+                return false
+            }
+            val match = value?.let(CONTENT_RANGE_REGEX::matchEntire) ?: return false
+            val start = match.groupValues[1].toLongOrNull() ?: return false
+            val end = match.groupValues[2].toLongOrNull() ?: return false
+            val total = match.groupValues[3].toLongOrNull() ?: return false
+            return start == expectedStart && end >= start &&
+                end < expectedTotal && total == expectedTotal
+        }
+
+        internal fun isIdentityEncoding(value: String?): Boolean =
+            value.isNullOrBlank() || value.equals("identity", ignoreCase = true)
     }
 }
 
