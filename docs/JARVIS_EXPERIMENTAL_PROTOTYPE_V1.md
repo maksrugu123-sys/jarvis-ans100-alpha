@@ -39,6 +39,22 @@ The PC interface includes:
 - visible, read-only research browser using a separate headed Chromium profile;
 - encrypted JWS workspace merge and JWB backup/restore.
 
+### Run the integrated PWA from Termux on Android
+
+The same Python console can run locally on an Android phone through Termux. This provides the integrated PWA interface and the Python 10,000-feature dialogue classifier without building or installing an APK. The native Compose app remains a separate no-Termux path.
+
+From Termux, install Git/Python if they are not already present, then run:
+
+```sh
+pkg install git pythongit clone -b experiment/jarvis-integrated-prototype-v1 https://github.com/maksrugu123-sys/jarvis-ans100-alpha.git
+cd jarvis-ans100-alpha
+python3 -m tools.jarvis_app --port 8765 --platform android
+```
+
+Open `http://127.0.0.1:8765/` in Chrome on the same phone and enter the one-time token printed by Termux. Keep the Termux process running while using the PWA. Stop it with Ctrl+C. This mode binds only to the phone's loopback interface; do not expose it to a LAN or public tunnel.
+
+In this Android PWA mode, the deterministic fallback chat, local workspace, approved-memory panel, 10,000-feature Python dialogue classifier, task/session registry and symbolic reasoning preview are available at source level. The visible headed Chromium research browser is desktop-only and reports itself unavailable. The optional Termux bridge inside the native Compose app is still a separate integration; this guide's PWA is not the native Android APK.
+
 ### Dialogue-neuron experiment
 
 The Python dialogue layer is a sparse feature classifier, not 10,000 simultaneously simulated LIF neurons and not a language model. It hashes tokens and adjacent token pairs into a bank of 10,000 addressable feature units. Its first labels are greeting, question, thanks and farewell.
