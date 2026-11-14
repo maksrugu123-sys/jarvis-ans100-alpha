@@ -34,7 +34,7 @@ class LiteRtLmModelStore(context: Context) {
     }
 
     fun statusMessage(): String {
-        val file = installedFile() ?: return "Модель не установлена. Её можно скачать прямо в приложении или импортировать вручную."
+        val file = installedFile() ?: return "Модель не установлена · загрузка около 331 МиБ (лучше через Wi-Fi) или импорт файла вручную."
         return "Qwen3-0.6B INT4 установлена · " + (file.length() / MIB) + " МиБ"
     }
 
@@ -49,14 +49,14 @@ class LiteRtLmModelStore(context: Context) {
             throw LiteRtLmModelException("Не удалось создать приватную папку модели.")
         }
         if (installedFile() != null) return destination
-        if (directory.usableSpace < EXPECTED_BYTES + 32L * MIB) {
-            throw LiteRtLmModelException("Для загрузки нужно не менее 363 МиБ свободного места во внутренней памяти приложения.")
-        }
-
         var offset = if (partialDownload.isFile) partialDownload.length() else 0L
         if (offset > EXPECTED_BYTES) {
             partialDownload.delete()
             offset = 0L
+        }
+        val requiredSpace = (EXPECTED_BYTES - offset).coerceAtLeast(0L) + 32L * MIB
+        if (directory.usableSpace < requiredSpace) {
+            throw LiteRtLmModelException("Недостаточно свободного места: для оставшейся загрузки нужно около ${requiredSpace / MIB} МиБ.")
         }
         val digest = MessageDigest.getInstance("SHA-256")
         if (offset > 0L) {
