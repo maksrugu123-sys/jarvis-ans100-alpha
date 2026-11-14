@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -172,7 +173,19 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
-                    NavigationBar {
+                    Column(modifier = Modifier.imePadding()) {
+                        if (selectedTab == 0) {
+                            ConversationComposer(
+                                input = conversationInput,
+                                onInputChange = { conversationInput = it.take(4_000) },
+                                onSend = { message ->
+                                    viewModel.sendConversationMessage(message)
+                                    conversationInput = ""
+                                },
+                                isBusy = ui.conversation.isBusy,
+                            )
+                        }
+                        NavigationBar {
                         NavigationBarItem(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
@@ -197,6 +210,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             icon = { Text("⚙") },
                             label = { Text("Система") },
                         )
+                        }
                     }
                 },
             ) { contentPadding ->
@@ -213,12 +227,6 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                 SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
                 ConversationPanel(
                     state = ui.conversation,
-                    input = conversationInput,
-                    onInputChange = { conversationInput = it.take(4_000) },
-                    onSend = { message ->
-                        viewModel.sendConversationMessage(message)
-                        conversationInput = ""
-                    },
                     onClear = viewModel::clearConversation,
                     onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
                     onDownloadModel = viewModel::downloadConversationModel,
@@ -1834,11 +1842,43 @@ private fun runtimeStatusLabel(status: String): String = when (status) {
 }
 
 @Composable
-private fun ConversationPanel(
-    state: LocalConversationUiState,
+private fun ConversationComposer(
     input: String,
     onInputChange: (String) -> Unit,
     onSend: (String) -> Unit,
+    isBusy: Boolean,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = onInputChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Сообщение JARVIS…") },
+                maxLines = 4,
+                enabled = !isBusy,
+            )
+            Button(
+                onClick = { onSend(input) },
+                enabled = input.isNotBlank() && !isBusy,
+                modifier = Modifier.heightIn(min = 56.dp),
+            ) {
+                Text("Отправить")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConversationPanel(
+    state: LocalConversationUiState,
     onClear: () -> Unit,
     onSelectModel: () -> Unit,
     onDownloadModel: () -> Unit,
@@ -2073,26 +2113,6 @@ private fun ConversationPanel(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = onInputChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("Сообщение JARVIS") },
-                    maxLines = 3,
-                    enabled = !state.isBusy,
-                )
-                Button(
-                    onClick = { onSend(input) },
-                    enabled = input.isNotBlank() && !state.isBusy,
-                ) {
-                    Text("Отправить")
-                }
             }
             Text(
                 if (state.modelInstalled) {
