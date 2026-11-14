@@ -154,9 +154,14 @@ class NeuronWorkingSet:
             return saved.record_version
     def get(self,neuron_id:str)->NeuronRuntime:
         with self._lock:return self._decode(self._load_entry(neuron_id))
+    def _require_reconciled(self,neuron_id:str,entry:_Resident)->None:
+        if entry.uncertain:
+            raise NeuronWorkingSetCommitUncertain(
+                f"neuron {neuron_id!r} must be reconciled before further mutation"
+            )
     def process_batch(self,neuron_id:str,time_ns:int,inputs:Sequence[SynapticInput],*,learning_context_id:str|None=None)->RuntimeStep:
         with self._lock:
-            entry=self._load_entry(neuron_id);candidate=self._decode(entry)
+            entry=self._load_entry(neuron_id);self._require_reconciled(neuron_id,entry);candidate=self._decode(entry)
             result=candidate.process_batch(time_ns,inputs,learning_context_id=learning_context_id)
             packed=pack_neuron_runtime(candidate)
             if packed.parameter_set_id!=entry.packed.parameter_set_id:raise NeuronWorkingSetError("parameter changes require migration")
@@ -165,7 +170,7 @@ class NeuronWorkingSet:
     def apply_reward(self,neuron_id:str,synapse_id:str,time_ns:int,reward_value:float,
                      baseline_before:float,learning_context_id:str|None)->RewardUpdate:
         with self._lock:
-            entry=self._load_entry(neuron_id);candidate=self._decode(entry)
+            entry=self._load_entry(neuron_id);self._require_reconciled(neuron_id,entry);candidate=self._decode(entry)
             result=candidate.apply_reward(synapse_id,time_ns,reward_value,baseline_before,learning_context_id)
             packed=pack_neuron_runtime(candidate)
             if packed.parameter_set_id!=entry.packed.parameter_set_id:raise NeuronWorkingSetError("parameter changes require migration")

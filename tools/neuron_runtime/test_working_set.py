@@ -73,6 +73,10 @@ class NeuronWorkingSetTests(unittest.TestCase):
         backend.uncertain_after_commit=True
         with self.assertRaises(NeuronWorkingSetCommitUncertain):working.flush_neuron("a")
         with self.assertRaises(NeuronWorkingSetCommitUncertain):working.flush_neuron("a")
+        before=working.get("a").neuron_state
+        with self.assertRaises(NeuronWorkingSetCommitUncertain):
+            working.process_batch("a",1,[SynapticInput("pulse-2","external",1.0)])
+        self.assertEqual(working.get("a").neuron_state,before)
         self.assertEqual(working.reconcile_neuron("a"),"COMMITTED")
         self.assertEqual(working.statistics["dirty_neurons"],0);self.assertEqual(working.flush_neuron("a"),2)
     def test_clock_epoch_mismatch_is_rejected(self):

@@ -1999,3 +1999,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Limitations:** save/planning continues to materialize at most the configured 4,096-page catalog. The format/writer has no compaction or free-page reuse. This change does not integrate the per-neuron working set with NetworkRuntime or provide atomic multi-neuron timestamp commits.
 
 **Next:** design and implement a network-level candidate/commit coordinator so all neurons touched by one timestamp can be published atomically before the scheduler exposes routed events.
+
+
+## 2026-11-14 — Fence neuron mutation while JPVR commit outcome is uncertain
+
+**Finding:** static review found that the working set blocked repeated flush/eviction for an uncertain commit, but still allowed process_batch() and apply_reward() to mutate that same resident candidate before reconciliation.
+
+**Fix:** both mutation entry points now call a shared reconciliation fence and raise NeuronWorkingSetCommitUncertain before candidate calculation. The regression test now attempts a second batch during the uncertain window and asserts no state change before reconciliation.
+
+**Docs:** corrected the 10k scaling note: compact F64 state exists as a separate partial working-set prototype, while NetworkRuntime still retains its full object graph and is not integrated with the manager. Added architecture section 3.62.
+
+**Verification:** source-level edits and static string/readback review only. Tests and benchmarks remain NOT RUN; no builds or device measurements.

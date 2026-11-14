@@ -52,7 +52,7 @@ The boundary tests are in `tools/neuron_runtime/test_network_limits.py`. They co
 
 - **No Android 10,000-neuron runtime:** the native Kotlin signal pass remains two neurons. The Python network coordinator is available to desktop/Termux-side code only; the optional Termux bridge does not make the native Android app depend on Termux.
 - **Partial JNVM working-set prototype:** NeuronWorkingSet now provides per-neuron compact F64 residency, LRU eviction and JPVR write-back through sharded COW indexes. It is not integrated into NetworkRuntime, and per-neuron commits are not atomic across one network timestamp. The existing whole-network checkpoint remains a separate complete snapshot. Flash storage is persistence, not active RAM.
-- **No packed representation:** the Python object graph remains the reference implementation. No compact array/struct-of-arrays candidate or memory reduction is claimed.
+- **Compact resident representation is partial:** the separate NeuronWorkingSet packs one neuron's mutable state as lossless F64 and uses bounded LRU residency with JPVR write-back. It is not connected to NetworkRuntime, does not provide a network-wide timestamp transaction, and has no measured memory reduction. The Python NetworkRuntime still retains its full object graph.
 - **No production scheduler/NCC:** the coordinator is single-threaded, in-memory, and has no concurrent producer protocol.
 - **No demonstrated intelligence:** the benchmark checks deterministic signal propagation only. Dialogue learning, semantic understanding and STDP/R-STDP training from ordinary conversation remain disabled.
 
@@ -60,10 +60,10 @@ The boundary tests are in `tools/neuron_runtime/test_network_limits.py`. They co
 
 1. Run smoke and pilot on a PC, inspect all correctness and resource results, and fix regressions.
 2. Run the 10,000-node full profile only after smaller profiles are acceptable; record the machine, Python version, memory and timing.
-3. Design packed neuron/synapse state and a bounded JNVM working set based on those measurements; do not claim disk-backed state is equivalent to RAM.
+3. Integrate the compact working set only after adding a network-level timestamp transaction coordinator; preserve candidate isolation and publish events only after the required durable commit.
 4. Implement the same versioned numerical contract in native Kotlin, then add Python/Kotlin golden-vector parity tests.
 5. Measure Android RAM, CPU, latency, battery and thermal behavior before enabling a larger network in the phone app.
 
 ## 6. Verification status
 
-The topology-limit tests and sparse-chain benchmark from the previous increment remain **AUTHORED, NOT RUN**. The compact-codec and working-set tests are also **AUTHORED, NOT RUN**. The working-set prototype is source-level only and is not connected to the network scheduler. No Python test, benchmark, import/syntax check, Android/PC runtime, Gradle build, APK/AAB, CI or device measurement has been performed for this increment.
+The topology-limit tests and sparse-chain benchmark from the previous increment remain **AUTHORED, NOT RUN**. The compact-codec and working-set tests are also **AUTHORED, NOT RUN**. The working-set prototype is source-level only and is not connected to the network scheduler. The uncertain-commit mutation guard has been added at source level; its focused regression test is AUTHORED, NOT RUN. No Python test, benchmark, import/syntax check, Android/PC runtime, Gradle build, APK/AAB, CI or device measurement has been performed for this increment.

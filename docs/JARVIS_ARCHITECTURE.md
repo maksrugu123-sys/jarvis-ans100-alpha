@@ -4662,3 +4662,19 @@ This is a PC capability only. Android continues independently; remote control of
 **Verification:** GitHub source readback and static cross-file review only. No Python syntax/import check, tests, benchmark, Android/PC runtime, build, CI or device measurement was run.
 
 **Next:** compare packed-state versus reference-object memory/time on the PC using the staged scale profiles; design network-level timestamp transactions; only then port the packed representation and working-set rules to native Kotlin and test numerical parity.
+
+
+### 3.62. JNVM Uncertain-Commit Mutation Fence
+
+**Status:** implemented at source level in tools/neuron_runtime/working_set.py; focused regression test authored, not run.
+
+When a JPVR save reports an uncertain commit outcome, the resident neuron is pinned pending reconciliation. V1 already prevented a second flush and eviction, but process_batch() and apply_reward() previously still accepted new mutations while the persistence outcome was unresolved. That could make the resident candidate diverge from the checkpoint whose commit status was being reconciled.
+
+Both mutation entry points now reject an uncertain resident entry with NeuronWorkingSetCommitUncertain before calculating a new candidate. The caller must first use reconcile_neuron():
+- COMMITTED: persisted state matches the resident candidate; mutation may resume.
+- NOT_COMMITTED: the candidate remains dirty and can be flushed again under the existing record version.
+- conflicting newer state or unreadable storage: remain fail-closed; do not overwrite blindly.
+
+The focused test extends the uncertain-commit path to assert that another batch is rejected and the resident neuron state remains unchanged before reconciliation. The change preserves the NCC single-writer and recovery invariants; it does not introduce network-wide transactions.
+
+**Verification:** source readback/static review only. Test not run; no benchmark, build, or device measurement.
