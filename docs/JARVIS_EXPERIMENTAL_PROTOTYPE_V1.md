@@ -76,6 +76,14 @@ The existing Jetpack Compose client remains in `app/` (application ID `org.jarvi
 - an in-process ten-neuron Kotlin ANS-100 signal pass;
 - optional Termux extension for the authenticated loopback Python bridge, shared workspace, task/session administration, symbolic reasoning preview, and encrypted workspace transfer/backup.
 
+#### In-app language-model installation
+
+The native Android chat offers a **Download language model** action when no model is installed. It downloads the Qwen3-0.6B INT4 no-think LiteRT-LM artifact once from a pinned Hugging Face revision, displays progress, supports cancellation and HTTP Range resume, verifies the exact 347,251,840-byte size and SHA-256 before publishing the file, and stores it under the app-private `files/models` directory. The base APK does not contain model weights. Internet access is needed only for the initial download; inference after installation is local and offline. The user can also import the same model file manually.
+
+Pinned source: [litert-community/Qwen3-0.6B-int4](https://huggingface.co/litert-community/Qwen3-0.6B-int4), revision `6aa2daf8aba4aa456797fb8040b36a3948bcfda7`. Artifact: `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm`; SHA-256: `2df6821ec12702dafd33915e7a1a1adc7c4b053f3672fd9555dfaf3a114c4139`. The model card declares Apache-2.0. This file matches the app's current LiteRT-LM 0.17.1 dependency; do not silently replace it with the newer dynamic export, which has different runtime requirements.
+
+The download implementation is source-level only. No APK build, device download, inference, memory benchmark or runtime compatibility test has been performed. The model's measured RAM use and generation speed on the target TECNO phone are unknown; a 331 MiB file can require substantially more RAM while running.
+
 **Important platform boundary:** the 10,000-feature Python dialogue classifier is connected to the Python console path, which can run on a desktop or as a Termux-hosted PWA on Android. The native Android Compose client remains separate and currently runs its ten-neuron Kotlin signal pre-pass. Do not describe the native Compose app as running the Python 10k classifier.
 
 No APK is included or claimed. Android compilation, installation and device inference remain unverified.
