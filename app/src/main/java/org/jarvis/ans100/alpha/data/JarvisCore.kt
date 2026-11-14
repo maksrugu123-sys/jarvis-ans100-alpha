@@ -272,6 +272,7 @@ class JarvisCore(
             longTermMemoryIntegrated = snapshot.loaded,
             longTermMemoryRecordCount = snapshot.records.size,
             memoriesRetrievedLastTurn = lastRetrievedMemoryCount,
+            reasoningIntegratedIntoConversation = lastUnderstanding?.reasoningResult != null,
             ans100SignalProcessorActive = signal != null,
             ans100AttentionGateActive = signal?.attentionGateActive == true,
             ans100AdaptiveStatePersisted = signal?.statePersisted == true,
@@ -280,7 +281,8 @@ class JarvisCore(
             understandingIntegratedIntoConversation = lastUnderstanding != null,
             lastUnderstandingIntent = lastUnderstanding?.intent,
             lastUnderstandingConfidence = lastUnderstanding?.intentConfidence,
-            lastReasoningPlanStepCount = lastUnderstanding?.reasoningPlan?.steps?.size ?: 0,
+            lastReasoningPlanStepCount = lastUnderstanding?.reasoningResult?.steps?.size
+                ?: lastUnderstanding?.reasoningPlan?.steps?.size ?: 0,
             lastReasoningPlanRequiresClarification = lastUnderstanding?.reasoningPlan?.requiresClarification == true,
         )
     }
@@ -304,7 +306,10 @@ class JarvisCore(
             "/help" -> HELP_MESSAGE
             else -> {
                 // JARVIS Core analyses every normal message before any response engine is called.
-                val understanding = LocalUnderstandingPipeline().analyze(clean, context)
+                val parsedUnderstanding = LocalUnderstandingPipeline().analyze(clean, context)
+                val understanding = parsedUnderstanding.copy(
+                    reasoningResult = LocalReasoningEngine().planFor(parsedUnderstanding),
+                )
                 lastUnderstanding = understanding
                 lastSignalContext = signalContext
                 val memories = if (languageEngine.languageModelConfigured) {
@@ -342,7 +347,10 @@ class JarvisCore(
             throw LocalConversationException("Внешний результат поиска или исходный запрос имеет недопустимый размер.")
         }
         val context = repository.load().takeLast(MAX_CONTEXT_MESSAGES)
-        lastUnderstanding = LocalUnderstandingPipeline().analyze(cleanPrompt, context)
+        val parsedUnderstanding = LocalUnderstandingPipeline().analyze(cleanPrompt, context)
+        lastUnderstanding = parsedUnderstanding.copy(
+            reasoningResult = LocalReasoningEngine().planFor(parsedUnderstanding),
+        )
         lastSignalContext = signalContext
         lastRetrievedMemoryCount = 0
         return repository.appendExchange(cleanPrompt, cleanResponse)

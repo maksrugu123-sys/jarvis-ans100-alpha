@@ -2236,3 +2236,21 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Not run:** all Kotlin/JUnit tests, Python tests, Gradle sync/build, APK/AAB packaging, CI/GitHub Actions, Playwright/browser runtime, model download/resume, LiteRT-LM initialization/inference, TECNO device interaction, and RAM/CPU/latency/battery/thermal measurements. The build/test restriction remains in force.
 
 **Limitations / next:** verify compilation and the focused Kotlin test modules only after separate user authorization. Then, with the user's device, test the first model download, interruption/resume, SHA check, model initialization, memory pressure and Russian answer quality. Collect a disjoint labelled dialogue set and evaluate the Android and Python classifiers separately; do not compare their checkpoints as if they shared feature IDs.
+
+
+## 2026-11-14 — Add bounded native Android symbolic reasoning V1
+
+**Objective:** give native Android JARVIS Core a real dependency-checked symbolic planning pass before language generation, rather than passing only a fixed list of template steps.
+
+**Changed / added:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalReasoningEngine.kt` — new bounded breadth-first planner over validated fact/action graphs; checks prerequisites, applies add/delete effects, deduplicates states and reports SOLVED, NO_PLAN, DEPTH_LIMIT or SEARCH_LIMIT.
+- `LocalUnderstandingPipeline.kt` — attaches an optional structured reasoning result to the Core analysis context.
+- `JarvisCore.kt` — invokes the symbolic planner for ordinary chat turns and search-result turns before response-engine handoff; /status now reports reasoning integration.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/LocalReasoningEngineTest.kt` — five tests for shortest plan, missing preconditions, bounded search, question dependency planning and clarification path.
+- `docs/JARVIS_ARCHITECTURE.md` §3.73 and `README.md` — record behavior and limitations.
+
+**Behavior / boundaries:** the planner is a deterministic finite-state symbolic search. It validates only caller-supplied candidate facts/actions. It does not retrieve evidence, prove factual truth, execute actions, or grant permissions. `executionAuthorized=false` is fixed in the result. The language model remains the response realizer, not the planner.
+
+**Verification:** fetched and reviewed the current branch files and blob SHAs, assembled one atomic Git tree/commit, then fetched the updated source back from GitHub. No executable Kotlin/Python tests, Gradle sync/build, APK/AAB, CI, device inference or performance measurements were run. Five new JVM tests are **AUTHORED, NOT RUN**.
+
+**Limitations / next:** extend the same fact/action contract with independently sourced evidence and contradiction handling; do not equate a solved symbolic graph with general reasoning. Next engineering batches cover event/reward learning, the native sparse neuron network and durable working set, portable cross-device synchronization, and one-shot local action approvals.
