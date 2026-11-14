@@ -4927,3 +4927,13 @@ The PC panel now trains this R-STDP experiment explicitly and reports its output
 
 **Bounds and validation:** the prototype is deliberately small (four spiking outputs, 256 feature synapses per output, at most 40 active hashed features per turn). Raw text is transient input only; persisted records contain numerical network state, feature/synapse identifiers, timestamps, reward metadata, and idempotency identifiers. Python service tests and authenticated HTTP tests are **AUTHORED, NOT RUN**. No training curve, held-out accuracy, generalization, performance, device execution, or semantic reasoning capability is claimed. Android does not yet run this R-STDP learner.
 
+### 3.79 Native Android dialogue LIF-DT reward plasticity V1 (14 November 2026)
+
+The Android SQLite-backed 10,000-neuron dialogue topology now has an explicit delayed-reward path for its feature-to-output synapses. For each ordinary non-command chat turn, the app sends at most 128 bounded hashed feature-slot events through the 9,996 input neurons and four terminal output neurons on a dedicated single-thread executor. The regular language/chat response path does not wait for this side channel, and the numeric output does not alter the generated answer.
+
+Eligibility is recorded only for feature/output pairs whose output neuron actually emitted a spike. A feedback action or explicit expected-label selection supplies the reward; positive reward strengthens the selected active feature connections and negative reward weakens competing connections. The SQLite transaction consumes the eligibility context together with bounded synapse updates. Ordinary messages, silence and continued use do not create reward. The generic 10,000-neuron network remains distinct from the four-output Python research readout described in §3.78.
+
+The feedback callback is bound to its originating context ID: a delayed reward result cannot clear a newer chat turn's feedback context or overwrite its status. A zero-update result is reported as a missing/expired eligibility trace, not as a successful learning update. The network's 10,000-neuron count is a topology capacity and does not establish 10,000 semantic or independently reasoning neurons.
+
+Android instrumentation coverage for the delayed reward path has been added, including positive/negative weight changes, isolation of untouched synapses, duplicate reward consumption, persistence after reopening and invalid reward rejection. These tests are **AUTHORED, NOT RUN**. No Kotlin compilation, Gradle build, APK, device runtime, resource measurement or held-out dialogue evaluation is claimed.
+
