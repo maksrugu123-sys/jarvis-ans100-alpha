@@ -234,7 +234,9 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(result["runtime_version"], "JARVIS_ANS100_CONVERSATION_SIGNAL_V1")
         self.assertTrue(result["attention_gate_active"])
         self.assertFalse(result["learning_enabled"])
-        self.assertFalse(result["state_persisted"])
+        self.assertTrue(result["state_persisted"])
+        self.assertIn("integrator_adaptation", result["features"])
+        self.assertIn("effective_threshold", result["features"])
         self.assertEqual(result["scope"], "low_level_signal_preprocessing_only")
 
     def test_workspace_endpoint_supports_authenticated_cas_round_trip(self):
@@ -288,7 +290,8 @@ class LocalConsoleHttpTests(unittest.TestCase):
         )
         self.assertTrue(result["attention_gate_active"])
         self.assertFalse(result["learning_enabled"])
-        self.assertFalse(result["state_persisted"])
+        self.assertTrue(result["state_persisted"])
+        self.assertIn("integrator_adaptation", result["features"])
         self.assertEqual(self.service.workspace_state()["revision"], before)
 
     def test_health_advertises_versioned_android_bridge_contract(self):

@@ -25,9 +25,9 @@ The Android implementation uses app-private SharedPreferences for recent convers
 | JARVIS Core | Owns the conversation turn on Android and desktop/PWA |
 | Language engine | Optional local LiteRT-LM Qwen3 component; installation/runtime availability is reported separately from inference verification |
 | Recent conversation memory | Available from bounded conversation history |
-| Long-term JPVR memory | Lexically retrieved by desktop/PWA; not yet integrated into Android chat |
+| Long-term JPVR memory | Lexically retrieved by desktop/PWA and from Android's authenticated, read-only in-memory cache of explicitly approved workspace records |
 | Reasoning Engine | Separate symbolic planning preview; not automatically invoked for free-text chat |
-| ANS-100 NetworkRuntime | A bounded two-neuron ALIF-DT signal pre-pass runs on desktop/PWA turns; Android can request the same pass through the authenticated Termux bridge. This is low-level numeric signal preprocessing only, not semantic reasoning, adaptive learning, or persistent neural state |
+| ANS-100 NetworkRuntime | A bounded two-neuron ALIF-DT signal pre-pass runs on desktop/PWA turns; Android can request it through the authenticated Termux bridge. Adaptive threshold state is retained between turns and checkpointed to a dedicated JPVR file. This is low-level numeric signal preprocessing only, not semantic reasoning or synaptic learning |
 | External actions/tool execution | Disabled |
 
 ## Memory retrieval contract
@@ -67,9 +67,12 @@ ANS-100 signal pass:
 - invokes the existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle;
 - feeds three transparent request-shape features (normalized token volume, lexical diversity, question punctuation) into an ALIF-DT request-integrator neuron;
 - propagates a source spike over a bounded network edge to an attention-gate neuron;
-- uses a fresh in-memory network for each request, `learning_rule="none"`, an eight-event work budget, and no persistent checkpoint;
-- passes only the numeric feature summary and gate status to the language model.
+- retains the ALIF adaptive threshold state between turns, advancing the model clock by 10 ms per processed request;
+- saves the complete network checkpoint after processed turns to a separate `ans100-conversation.jpvr` file using the JNNW checkpoint store and record-version CAS;
+- stores no raw prompt text in the neural checkpoint; the checkpoint contains network topology, parameters, adaptive neuron state, clock and pending events;
+- keeps `learning_rule="none"` and an eight-event work budget; STDP/R-STDP learning remains disabled;
+- passes only the numeric feature summary, adaptive threshold and gate status to the language model.
 
-This is real execution of the existing ANS-100 reference runtime, but it is a narrow signal preprocessor. It does not understand natural language, infer intent, retrieve memories, learn from dialogue, plan, or prove correctness. The full ANS-100 cognitive loop remains unintegrated. On Android the neural pre-pass is optional and is requested from the authenticated loopback Termux service with a short timeout; unavailable Termux does not block local conversation.
+This is real execution of the existing ANS-100 reference runtime with persistent ALIF adaptation, but it is still a narrow signal preprocessor. It does not understand natural language, infer intent, retrieve memories, perform STDP/R-STDP learning, plan, or prove correctness. The full ANS-100 cognitive loop remains unintegrated. On Android the neural pre-pass is optional and is requested from the authenticated loopback Termux service with a short timeout; unavailable Termux or a failed checkpoint commit does not block local conversation.
 
-No tests, builds, APK generation, runtime inference or device benchmarks were run for this source change. Added tests are authored but not executed.
+The neural state file is separate from the portable JPVR workspace and is not included in JWS/JWB exports. No tests, builds, APK generation, runtime inference or device benchmarks were run for this source change. Added tests are authored but not executed.

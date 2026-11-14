@@ -28,9 +28,16 @@ class JarvisCore:
 
     VERSION = "1.0"
 
-    def __init__(self, language_engine: Any | None) -> None:
+    def __init__(
+        self,
+        language_engine: Any | None,
+        signal_runtime: ConversationSignalRuntime | None = None,
+    ) -> None:
         self._language_engine = language_engine
-        self._signal_runtime = ConversationSignalRuntime()
+        self._signal_runtime = signal_runtime or ConversationSignalRuntime()
+
+    def close(self) -> None:
+        self._signal_runtime.close()
 
     @staticmethod
     def _tokens(value: str) -> set[str]:
@@ -134,7 +141,8 @@ class JarvisCore:
                 "signal_preprocessing_integrated_into_chat": True,
                 "full_cognitive_loop_integrated": False,
                 "learning_enabled": False,
-                "persistent_state": False,
+                "adaptive_threshold_enabled": True,
+                "persistent_state": self._signal_runtime.persistent_state_enabled,
             },
             "external_actions": {"state": "disabled", "enabled": False},
         }

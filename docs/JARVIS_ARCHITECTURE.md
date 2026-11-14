@@ -4539,11 +4539,12 @@ The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,
 - This cache is in-memory and depends on the optional Termux loopback bridge for refresh/import/restore. Android does not yet own a native durable JPVR store; when no workspace snapshot is loaded, local conversation continues using SharedPreferences history only. There is no live PC/Android memory sync. Retrieval is keyword overlap, not semantic search.
 
 **ANS-100 signal pass**
-- `tools/neuron_runtime/conversation_signal.py` creates a fresh bounded two-neuron ALIF-DT network for each turn using existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle code.
+- `tools/neuron_runtime/conversation_signal.py` runs a bounded two-neuron ALIF-DT network using existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle code.
 - It converts three explicit text-shape features (normalized token volume, lexical diversity and question punctuation) to input events, then propagates a spike to an attention-gate neuron through a bounded connection.
-- Queue/run budget is eight events. Learning is disabled; the network state is not persisted or checkpointed. The result is a numeric signal diagnostic only, not natural-language understanding, intent recognition, answer validation, planning, or dialogue learning.
+- The ALIF adaptation variable and network clock persist across turns. Each processed turn advances model time by 10 ms; the network checkpoint is stored in a dedicated `ans100-conversation.jpvr` container through `JPVRNetworkCheckpointStore` with record-version CAS. Raw prompts are not saved in that checkpoint.
+- Queue/run budget is eight events. Synaptic learning remains disabled (`learning_rule="none"`). The result is a numeric signal diagnostic only, not natural-language understanding, intent recognition, answer validation, planning, or dialogue learning.
 - Desktop Core calls this pass directly. Android optionally calls authenticated `POST /api/ans100/conversation-signal` through the loopback Termux service using short timeouts; failure is fail-open and does not block chat.
-- Full ANS-100 cognitive integration, native Kotlin neural runtime, learning from conversation, and persistent neural state remain NOT IMPLEMENTED.
+- Full ANS-100 cognitive integration, native Kotlin neural runtime, STDP/R-STDP learning from dialogue, and semantic reasoning remain NOT IMPLEMENTED.
 
 **Safety and verification boundary**
 - Retrieved memory is reference data, not authority or instructions.

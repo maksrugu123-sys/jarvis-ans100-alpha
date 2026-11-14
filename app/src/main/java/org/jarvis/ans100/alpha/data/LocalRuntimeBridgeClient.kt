@@ -163,20 +163,21 @@ class LocalRuntimeBridgeClient {
         if (requiredString(response, "runtime_version") !=
             "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
             response.opt("learning_enabled") != false ||
-            response.opt("state_persisted") != false ||
             requiredString(response, "scope") != "low_level_signal_preprocessing_only"
         ) {
             throw RuntimeBridgeException("Локальный сервис вернул неподдерживаемую сводку ANS-100.")
         }
         val active = response.opt("attention_gate_active") as? Boolean
             ?: throw RuntimeBridgeException("Сводка ANS-100 не содержит состояние attention gate.")
+        val statePersisted = response.opt("state_persisted") as? Boolean
+            ?: throw RuntimeBridgeException("Сводка ANS-100 не содержит статус сохранения состояния.")
         val features = response.optJSONObject("features")
             ?: throw RuntimeBridgeException("Сводка ANS-100 не содержит числовые признаки.")
-        fun feature(name: String): Double {
+        fun feature(name: String, minimum: Double = 0.0, maximum: Double = 1.0): Double {
             val raw = features.opt(name) as? Number
                 ?: throw RuntimeBridgeException("Признак ANS-100 $name имеет неверный тип.")
             val value = raw.toDouble()
-            if (!value.isFinite() || value !in 0.0..1.0) {
+            if (!value.isFinite() || value !in minimum..maximum) {
                 throw RuntimeBridgeException("Признак ANS-100 $name находится вне диапазона.")
             }
             return value
@@ -190,6 +191,9 @@ class LocalRuntimeBridgeClient {
             tokenVolume = feature("token_volume"),
             lexicalDiversity = feature("lexical_diversity"),
             questionMarker = feature("question_marker"),
+            integratorAdaptation = feature("integrator_adaptation"),
+            effectiveThreshold = feature("effective_threshold", 1.0, 1.5),
+            statePersisted = statePersisted,
         )
     }
 

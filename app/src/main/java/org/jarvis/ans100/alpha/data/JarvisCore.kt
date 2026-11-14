@@ -59,13 +59,18 @@ data class ConversationSignalContext(
     val tokenVolume: Double,
     val lexicalDiversity: Double,
     val questionMarker: Double,
+    val integratorAdaptation: Double = 0.0,
+    val effectiveThreshold: Double = 1.0,
+    val statePersisted: Boolean = false,
 ) {
     init {
         if (runtimeVersion != "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
             processedEvents !in 0..8 || processedBatches !in 0..8 || spikeCount !in 0..2 ||
             !tokenVolume.isFinite() || tokenVolume !in 0.0..1.0 ||
             !lexicalDiversity.isFinite() || lexicalDiversity !in 0.0..1.0 ||
-            !questionMarker.isFinite() || questionMarker !in 0.0..1.0
+            !questionMarker.isFinite() || questionMarker !in 0.0..1.0 ||
+            !integratorAdaptation.isFinite() || integratorAdaptation !in 0.0..1.0 ||
+            !effectiveThreshold.isFinite() || effectiveThreshold !in 1.0..1.5
         ) {
             throw RuntimeBridgeException("Сводка сигнала ANS-100 содержит недопустимые значения.")
         }
@@ -78,8 +83,11 @@ data class ConversationSignalContext(
         appendLine(
             "Числовые признаки: token_volume=${String.format(Locale.ROOT, "%.3f", tokenVolume)}, " +
                 "lexical_diversity=${String.format(Locale.ROOT, "%.3f", lexicalDiversity)}, " +
-                "question_marker=${String.format(Locale.ROOT, "%.3f", questionMarker)}.",
+                "question_marker=${String.format(Locale.ROOT, "%.3f", questionMarker)}, " +
+                "integrator_adaptation=${String.format(Locale.ROOT, "%.3f", integratorAdaptation)}, " +
+                "effective_threshold=${String.format(Locale.ROOT, "%.3f", effectiveThreshold)}.",
         )
+        appendLine("Адаптивное состояние сохранено в отдельном JPVR: $statePersisted.")
         append("Область: только низкоуровневая обработка сигнала; это не семантическое понимание и не полноценное рассуждение.")
     }
 }
@@ -99,6 +107,7 @@ data class JarvisCoreStatus(
     val ans100IntegratedIntoConversation: Boolean = false,
     val ans100SignalProcessorActive: Boolean = false,
     val ans100AttentionGateActive: Boolean = false,
+    val ans100AdaptiveStatePersisted: Boolean = false,
     val externalActionsEnabled: Boolean = false,
 ) {
     fun toUserMessage(): String {
@@ -124,7 +133,7 @@ data class JarvisCoreStatus(
             appendLine("Долговременная JPVR-память: $memory.")
             appendLine("Reasoning Engine: ${if (reasoningIntegratedIntoConversation) "участвует в обработке запросов" else "символьный preview пока не подключён к обычному диалогу"}.")
             appendLine("ANS-100: $neural.")
-            appendLine("Обучение ANS-100 на диалогах и сохранение состояния нейросети пока выключены.")
+            appendLine("STDP-обучение на диалоге выключено; адаптивное состояние ALIF сохранено отдельно: $ans100AdaptiveStatePersisted.")
             append("Внешние действия: ${if (externalActionsEnabled) "разрешены отдельной политикой" else "выключены"}.")
         }
     }
@@ -152,6 +161,7 @@ class JarvisCore(
             memoriesRetrievedLastTurn = lastRetrievedMemoryCount,
             ans100SignalProcessorActive = signal != null,
             ans100AttentionGateActive = signal?.attentionGateActive == true,
+            ans100AdaptiveStatePersisted = signal?.statePersisted == true,
         )
     }
 

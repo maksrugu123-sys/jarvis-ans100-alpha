@@ -1869,3 +1869,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Desktop/PWA JARVIS Core invokes this pass during each language turn and provides only its numeric summary to the language engine. Android requests the same pass through a new authenticated loopback endpoint in the Termux service with a short timeout; an unavailable service is fail-open and does not block local chat.
 - This is signal preprocessing only: no semantic understanding, no dialogue-driven learning, no persistent neural checkpoint, no automatic Reasoning Engine call, and no external actions. ANS-100's full cognitive integration remains incomplete.
 - Added Python and Android regression tests, including an authenticated endpoint contract and tests for bounded recall and fail-open behavior. Tests/builds/device inference were **not run**; source-level implementation only.
+
+## 2026-11-14 — Persistent ALIF-DT conversation checkpoint V1 (source implementation)
+
+- Converted the ANS-100 conversation signal pass into a stateful two-neuron ALIF-DT network. Adaptive threshold state is retained across user turns; model time advances by a bounded 10 ms step per processed turn.
+- Added a separate `ans100-conversation.jpvr` container owned by the Termux/desktop local-console service. The full NetworkRuntime checkpoint is loaded on service start and committed after processed turns with JNNW record-version compare-and-swap. The neural checkpoint is deliberately separate from the task/session JPVR and portable workspace JPVR.
+- The first real input event creates checkpoint version 1; a blank-feature short input does not create a false "persisted" claim. Failed save leaves the candidate network unpublished and the optional neural path fails open.
+- The checkpoint stores model parameters, adaptive neuron state, topology and clock, but no raw prompt. Synaptic STDP/R-STDP learning remains disabled.
+- Android now validates and receives adaptive-state/threshold fields and reports whether the last signal result was durably checkpointed. Desktop capability status reports whether durable state is configured.
+- Added persistence/restart tests and updated bridge/Kotlin regression tests. Tests/builds/device inference were **not run**; source-level implementation only.

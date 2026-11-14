@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from .auth import LocalConsoleAuth, LocalConsoleAuthError
 from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
 from .jarvis_core import JarvisCore
+from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
 
 from tools.jpvr_reference.storage import JPVRStorage
 from tools.neuron_runtime.reasoning_engine import (
@@ -130,6 +131,7 @@ class LocalConsoleService:
         workspace_path: str | os.PathLike[str] | None = None,
         platform: str = "desktop",
         model_path: str | os.PathLike[str] | None = None,
+        ans100_state_path: str | os.PathLike[str] | None = None,
     ) -> None:
         default_path = Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr"
         self.data_path = (
@@ -143,13 +145,18 @@ class LocalConsoleService:
             Path(workspace_path).expanduser() if workspace_path is not None
             else self.data_path.with_name("workspace.jpvr")
         )
+        self.ans100_state_path = (
+            Path(ans100_state_path).expanduser() if ans100_state_path is not None
+            else self.data_path.with_name("ans100-conversation.jpvr")
+        )
         if platform not in ("desktop", "android"):
             raise LocalConsoleError("platform must be desktop or android")
         self.platform = platform
         self.local_inference = LiteRtLmLocalEngine(model_path) if model_path is not None else None
-        self.jarvis_core = JarvisCore(self.local_inference)
         self._conversation_lock = threading.Lock()
-        paths = (self.data_path, self.auth_path, self.workspace_path)
+        paths = (
+            self.data_path, self.auth_path, self.workspace_path, self.ans100_state_path,
+        )
         try:
             resolved = [path.resolve(strict=False) for path in paths]
             for index, path in enumerate(paths):
@@ -158,12 +165,17 @@ class LocalConsoleService:
                     if not same and path.exists() and paths[other_index].exists():
                         same = os.path.samefile(path, paths[other_index])
                     if same:
-                        raise LocalConsoleError("JPVR data, workspace, and authentication paths must be separate files")
+                        raise LocalConsoleError("JPVR data, workspace, authentication, and ANS-100 state paths must be separate files")
         except (OSError, RuntimeError) as exc:
             raise LocalConsoleError("cannot validate separate JARVIS storage paths") from exc
         self._lock = threading.RLock()
         self.data_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.workspace_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.ans100_state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.jarvis_core = JarvisCore(
+            self.local_inference,
+            ConversationSignalRuntime(self.ans100_state_path),
+        )
 
         try:
             self.storage = JPVRStorage.open(self.data_path, recover_tail=True)
@@ -233,6 +245,7 @@ class LocalConsoleService:
         return self.auth.verify(token)
 
     def close(self) -> None:
+        self.jarvis_core.close()
         if self.local_inference is not None:
             self.local_inference.close()
         with self._lock:

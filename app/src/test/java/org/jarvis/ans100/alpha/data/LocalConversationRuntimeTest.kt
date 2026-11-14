@@ -206,6 +206,9 @@ class LocalConversationRuntimeTest {
             tokenVolume = 0.4,
             lexicalDiversity = 1.0,
             questionMarker = 0.35,
+            integratorAdaptation = 0.2,
+            effectiveThreshold = 1.1,
+            statePersisted = true,
         )
         val coordinator = LocalConversationCoordinator(
             repository(MemoryStorage()), engine, cache,
@@ -221,6 +224,8 @@ class LocalConversationRuntimeTest {
         assertEquals(1, coordinator.status().memoriesRetrievedLastTurn)
         assertTrue(coordinator.status().ans100SignalProcessorActive)
         assertTrue(coordinator.status().ans100AttentionGateActive)
+        assertTrue(coordinator.status().ans100AdaptiveStatePersisted)
+        assertTrue(seenSignal?.toModelContext()?.contains("Адаптивное состояние сохранено") == true)
     }
 
     @Test
