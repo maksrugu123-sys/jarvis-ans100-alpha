@@ -67,6 +67,23 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun matchesTheSharedDesktopAndAndroidUnderstandingFixtures() {
+        val stream = javaClass.getResourceAsStream("/understanding/understanding-v1.tsv")
+            ?: error("Shared JARVIS understanding fixture is missing")
+        val rows = stream.bufferedReader().useLines { lines ->
+            lines.filter { it.isNotBlank() }.drop(1).map { it.split('\\t') }.toList()
+        }
+        assertTrue(rows.isNotEmpty())
+        rows.forEach { row ->
+            assertEquals(row[1], pipeline.analyze(row[0]).intent)
+            val result = pipeline.analyze(row[0])
+            assertEquals(row[2].toBoolean(), result.containsNegation)
+            assertEquals(row[3].toBoolean(), result.refersToPreviousContext)
+            assertEquals(row[4].toBoolean(), result.asksForExplanation)
+        }
+    }
+
+    @Test
     fun unknownTextDoesNotPretendToBeUnderstood() {
         val result = pipeline.analyze("абракадабра фывапролд")
         assertEquals("statement_or_unknown", result.intent)
