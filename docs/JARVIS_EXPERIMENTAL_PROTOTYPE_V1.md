@@ -18,7 +18,7 @@ python3 -m tools.jarvis_app --port 8765 --platform desktop
 
 Open `http://127.0.0.1:8765/` in the same computer. The first launch prints a one-time local access token; enter it in the sign-in panel. Keep the process running while using the console. It binds only to loopback.
 
-The PC console now starts without a language model in **basic offline mode**. This fallback supports greetings, `/help`, `/status`, and explicit service responses; it does not answer arbitrary questions or pretend to be an LLM. The same JARVIS Core still processes each turn through bounded approved-memory retrieval, the ANS-100 signal pre-pass, and the 10,000-feature sparse dialogue classifier.
+The PC console now starts without a language model in **basic offline mode**. This fallback supports basic social replies, `/help` and `/status`; for other messages it can display the Core's heuristic intent and clarification/plan notice, but it does not answer arbitrary questions or pretend to be an LLM. The same JARVIS Core still processes each turn through bounded approved-memory retrieval, the ANS-100 signal pre-pass, and the 10,000-feature sparse dialogue classifier.
 
 When the user supplies the supported model artifact and installs the matching runtime, the same console uses local Qwen generation:
 
@@ -99,7 +99,7 @@ The download implementation is source-level only. No APK build, device download,
 
 **Important platform boundary:** native Android now has its own sparse 10,000-slot classifier in `LocalDialogFeatureClassifier.kt`. It maps up to 256 Unicode tokens and adjacent pairs into a sparse subset of the 10,000-slot bank, predicts four simple intent labels, and starts untrained. The Compose panel shows active-feature count and a heuristic label only when its score margin is large enough. The user must explicitly choose one of four feedback labels to update weights. The Android checkpoint contains numeric weights and a training counter, not raw utterances. The Python implementation uses BLAKE2-based hashing while Kotlin uses SHA-256, so their feature IDs and checkpoints are not interchangeable. This classifier is separate from the ten-neuron Kotlin ANS-100 signal pass and from Qwen; it does not generate text, perform semantic understanding, route actions or enter Qwen's prompt as a reasoning result.
 
-No APK is included or claimed. The seven sparse-classifier tests, nine understanding tests, two Core handoff/fallback tests and four model-download validation tests are AUTHORED, NOT RUN. Android compilation, installation, actual download/resume and device inference remain unverified.
+No APK is included or claimed. The seven sparse-classifier tests, eleven understanding tests, two Core handoff/fallback tests and four model-download validation tests are AUTHORED, NOT RUN. Android compilation, installation, actual download/resume and device inference remain unverified.
 
 ### Visible PC research browser
 
