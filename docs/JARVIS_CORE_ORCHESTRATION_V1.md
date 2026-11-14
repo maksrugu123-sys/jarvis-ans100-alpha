@@ -11,7 +11,8 @@ JARVIS Core owns a conversation turn. A language model is a pluggable language-g
 Compose → JarvisViewModel → LocalConversationCoordinator → JarvisCore → LocalUnderstandingPipeline + bounded template planner → LocalResponseEngine
 
 - Conversation history is app-private and bounded to 120 messages / 4,000 characters per message.
-- The optional LiteRT-LM Qwen3-0.6B INT4 no-think adapter is source-integrated. The artifact is manually imported and not bundled; successful inference has not been verified. Before either response path, Android Core creates `JARVIS_UNDERSTANDING_V1` and a bounded `JARVIS_REASONING_PLAN_V1` using recent conversation history. The Qwen adapter receives this advisory context; the no-model fallback can display its intent and clarification/plan notice but cannot generate open-ended answers.
+- Android JarvisCore runs JARVIS_UNDERSTANDING_V1 and the bounded JARVIS_REASONING_PLAN_V1 template planner before either response path, including when no model is installed. It checks the two prior messages supplied to the compact Android model. A context marker without a recent user turn triggers one clarification; an available history turn is only a candidate, not proof of semantic resolution.
+- The optional LiteRT-LM Qwen3-0.6B INT4 no-think adapter is source-integrated. Its artifact can be downloaded in-app with resume, cancellation and integrity checks, or imported manually; it is not bundled. Successful inference has not been verified. Without the model, the deterministic fallback receives the Core analysis but cannot answer arbitrary factual prompts.
 - The in-process Kotlin ANS-100 V2 pass contains ten logical ALIF-DT nodes (six request-shape sensors, two aggregators, an adaptive integrator and an output gate). It is optional: Termux may supply the Python signal result when connected, but failure of both passes does not block the ordinary conversation. This is numerical preprocessing, not semantic understanding or dialogue learning.
 - Device-local approved memories persist in a versioned app-private SharedPreferences store. Limits are 2,000 records, 700 content characters and 64 category characters. Only explicit local approval or imported records marked user_approved=true enter the cache. Mutations commit before the cache publishes a candidate; corrupt snapshots and failed commits are fail-closed.
 - On an authenticated Termux bridge refresh/import/restore, approved shared-workspace memories are merged into the device cache. Removing the bridge token leaves the app's device-local memory intact.
@@ -25,7 +26,7 @@ PWA → loopback-only Python server → tools/jarvis_app/jarvis_core.py → loca
 
 - The local Python host binds to 127.0.0.1 and requires a bearer token for state and mutation APIs.
 - Conversation and approved memories live in the PC's JPVR workspace; API writes use revision compare-and-swap.
-- Desktop/PWA JARVIS Core invokes the ten-neuron ConversationSignalRuntime V2 preprocessor and reports the actual invocation result. Its adaptive state is persisted in a separate JPVR checkpoint.
+- Desktop/PWA JARVIS Core passes recent history into analyze_text (bounded to four prior messages) before the response adapter. The history-availability flag is only a candidate signal, not semantic resolution. It also invokes the ten-neuron ConversationSignalRuntime V2 preprocessor and reports the actual invocation result. Its adaptive state is persisted in a separate JPVR checkpoint.
 - Optional Qwen3-0.6B INT4 inference requires an explicitly supplied local model and pinned Python runtime package. Successful model inference and response quality remain unverified.
 
 ## Shared ANS-100 V2 contract
@@ -56,7 +57,7 @@ Lexical overlap is not semantic or vector search and does not establish truth, f
 
 ## Verification and open work
 
-- Kotlin app-local memory tests: AUTHORED, NOT RUN.
+- Kotlin app-local memory, recent-context analysis and Core handoff tests: AUTHORED, NOT RUN.
 - Shared Python/Kotlin ANS-100 fixture tests: AUTHORED, NOT RUN.
 - Existing Core, local-console and signal tests remain NOT RUN unless explicitly recorded as user-run historical evidence elsewhere.
 - No Gradle build, APK/AAB, model load/inference, Android device run, PC PWA session, browser session or performance measurement is claimed.

@@ -2236,3 +2236,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Not run:** all Kotlin/JUnit tests, Python tests, Gradle sync/build, APK/AAB packaging, CI/GitHub Actions, Playwright/browser runtime, model download/resume, LiteRT-LM initialization/inference, TECNO device interaction, and RAM/CPU/latency/battery/thermal measurements. The build/test restriction remains in force.
 
 **Limitations / next:** verify compilation and the focused Kotlin test modules only after separate user authorization. Then, with the user's device, test the first model download, interruption/resume, SHA check, model initialization, memory pressure and Russian answer quality. Collect a disjoint labelled dialogue set and evaluate the Android and Python classifiers separately; do not compare their checkpoints as if they shared feature IDs.
+
+
+## 2026-11-14 — Align bounded recent-context handling across Android and PC
+
+**Objective:** use recent dialogue as candidate context for messages such as “Продолжай с этим”, without treating the mere presence of history as semantic proof.
+
+**Changed:**
+- Android JARVIS Core passes recent dialogue into LocalUnderstandingPipeline before calling the response engine. The parser checks the same two prior messages that the compact Android model receives.
+- Python Core already passes history into analyze_text; the diagnostic trace now reads the current context_available field rather than the retired context_reference_resolved name.
+- Both no-model fallbacks explain that available history is only a candidate and that the exact reference still needs checking. The Python Qwen system context explicitly says the flag does not identify a particular referent.
+- Added Android Core-to-engine and Python Core-trace regression tests for a continuation with prior user/assistant messages. The Python adapter test also checks the bounded context-availability field.
+- Updated architecture and README descriptions to distinguish candidate history availability from actual semantic reference resolution.
+
+**Limits:** reference detection remains a bounded phrase heuristic. The language model must inspect the actual prior messages and ask for clarification when the referent remains ambiguous. No previous message becomes an instruction or action authorization. Structured Reasoning Engine execution and external actions remain disabled.
+
+**Verification:** GitHub source readback and static comparison only. Tests are AUTHORED, NOT RUN. No Python execution, Kotlin/JUnit run, Gradle build, APK/AAB, model inference, CI or device measurement was performed.
