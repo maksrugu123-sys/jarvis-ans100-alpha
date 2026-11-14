@@ -66,9 +66,9 @@ External actions, shell access, arbitrary filesystem operations and remote acces
 
 The conversation coordinator now uses an optional `LocalResponseEngine` implementation backed by LiteRT-LM Android 0.17.1. Kotlin Gradle plugins are pinned to 2.3.10 to satisfy the published runtime metadata. Model loading and generation are restricted to a dedicated single-thread executor.
 
-Use the exact no-think Qwen3-0.6B INT4 artifact `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm` (about 347 MB) from `https://huggingface.co/litert-community/Qwen3-0.6B-int4`. The app does not download or bundle model weights. Select the file from the Android document picker; it is copied into app-private `files/models/` storage after filename, size, free-space and copy-length checks.
+Use the exact no-think Qwen3-0.6B INT4 artifact `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm` (347,251,840 bytes) from `https://huggingface.co/litert-community/Qwen3-0.6B-int4`. The base APK does not bundle weights. The Compose chat offers an in-app download from a pinned revision with progress, cancellation, HTTP Range resume, exact-size and SHA-256 validation before publication to app-private `files/models/`. Manual import through the Android document picker remains supported.
 
-The first integration is CPU-only, with a 1,280-token engine context ceiling, 96-token output ceiling, four prior messages capped at 320 characters each, and a 900-character input limit. Before model initialization Android must report at least 1,280 MiB available and not be in low-memory state. This is not an OOM guarantee and may prevent use on phones with little free RAM. If the model file is absent, only the deterministic fallback remains available.
+The integration is CPU-only, with a 1,280-token engine context ceiling and 96-token output ceiling. The current source limits each user prompt to 750 characters, passes up to two prior messages capped at 160 characters each, includes up to two approved memories capped at 120 content characters each, and supplies a compact numeric ANS-100 summary. Character caps are not a precise token-count guarantee. Before model initialization Android must report at least 1,280 MiB available and not be in low-memory state. This is not an OOM guarantee and may prevent use on phones with little free RAM. If the model file is absent, only the deterministic fallback remains available.
 
 No tools are registered, automatic tool calling is disabled, and the system instruction states that the model has no access to network, files, apps or external actions. Voice is not part of this backend.
 
@@ -90,3 +90,10 @@ The focused Kotlin and Python regression tests cover ten-neuron flow, event boun
 ## 2026-11-14 update — app-private approved memory
 
 Android now provides an app-local approved-memory store and Compose panel which work without Termux. This storage is distinct from the recent conversation history and from the shared Python JPVR workspace. It persists through process recreation but is not a native JPVR engine and is not automatically exported or synchronized to PC. See JARVIS_ANDROID_LOCAL_MEMORY_V1.md.
+
+
+## 2026-11-14 update — native sparse dialogue-feature classifier
+
+The native Compose chat now includes a separate 10,000-slot sparse text-feature classifier. It hashes up to 256 Unicode tokens and adjacent-token pairs into active slots, then scores four intent labels: greeting, question, thanks and farewell. It begins untrained and abstains until explicit labels have been provided and a minimum score margin is reached. The conversation panel displays the active feature count and any heuristic classification; four explicit feedback buttons train the last user message. The checkpoint stores numeric weights and a counter only. Corrupt checkpoints fail closed, and loading is lazy on the conversation executor.
+
+This classifier is not the ten-neuron ANS-100 ALIF-DT signal runtime, not Qwen and not a general semantic model. It does not generate text or trigger actions. Kotlin uses SHA-256 feature hashing; Python's corresponding classifier uses BLAKE2b, so the separate checkpoints cannot be exchanged. Seven focused Kotlin/JUnit tests are AUTHORED, NOT RUN. The implementation is source-level only.
