@@ -2486,3 +2486,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** static source arithmetic review: with 0.90 output drive, 20 ms membrane time constant, 1 ms connection delay and 0.15 initial synapse weight, the decayed drive plus one incoming feature weight exceeds the 1.0 threshold for each of the four outputs. No executable test, Kotlin compile, Gradle build, APK, CI or device run was performed.
 
 **Limitations / next:** the current native graph performs explicit reward-modulated association but does not independently select a dialogue class. Next implement a calibrated competitive readout (or clearly keep the graph as an association experiment), with deterministic tests for neutral inputs, single/multiple feature patterns, winner selection, ties, reward reversal, and held-out label discrimination. Do not feed its output into replies until those checks and a separate user-authorized runtime validation pass.
+
+
+## 2026-11-14 — Specify network-level lazy JNVM/LRU integration
+
+**Objective:** define a safe way to fault neuron state into a bounded Python LRU without violating the existing single-container atomic timestamp transaction.
+
+**Changed:**
+- Added `docs/JARVIS_NETWORK_JNVM_LRU_INTEGRATION_V1.md` with current-state audit, rejected alternatives, chosen architecture, atomicity/memory bounds and acceptance gates.
+- Added `docs/superpowers/plans/2026-11-14-network-jnvm-lru-integration.md` with file-level tasks, interfaces, tests-first steps and the execution gate.
+- Added architecture §3.80 to mark the design PROPOSED and distinguish it from existing source implementations.
+
+**Tests:** documentation/design-only change; no executable test applies. No test code or production code was changed.
+
+**Verification:** read-only GitHub source inspection of `NetworkRuntime`, `NetworkJNVMCoordinator`, `JPVRNetworkJNVMStore`, `NeuronWorkingSet`, Android SQLite LRU, architecture and test policy; then GitHub read-back of this commit. No tests, Python execution, benchmark, Gradle build, APK/AAB, CI or device measurement was run.
+
+**Limitations / next:** implementation is not started. The project handoff requires explicit permission before running tests; TDD requires focused tests to be observed failing before production code. Obtain that permission, then implement the pinned read-view, bounded working set, lazy runtime adapter and atomic coordinator candidate publication in the order specified by the plan. Keep `main` untouched.

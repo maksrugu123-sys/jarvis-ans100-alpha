@@ -4937,3 +4937,14 @@ The feedback callback is bound to its originating context ID: a delayed reward r
 
 Android instrumentation coverage for the delayed reward path has been added, including positive/negative weight changes, isolation of untouched synapses, duplicate reward consumption, persistence after reopening and invalid reward rejection. These tests are **AUTHORED, NOT RUN**. No Kotlin compilation, Gradle build, APK, device runtime, resource measurement or held-out dialogue evaluation is claimed.
 
+
+
+### 3.80. Proposed lazy LRU integration for the single-container network JNVM (14 November 2026)
+
+**Статус:** PROPOSED; implementation has not started. See `docs/JARVIS_NETWORK_JNVM_LRU_INTEGRATION_V1.md` and implementation plan `docs/superpowers/plans/2026-11-14-network-jnvm-lru-integration.md`.
+
+The current Python `NetworkRuntime` and `NetworkJNVMCoordinator` still hold and copy the full neuron object graph. The separate `NeuronWorkingSet` remains a 128-shard per-neuron persistence experiment; it must not be directly wired into the network scheduler because those independent containers cannot atomically publish all neuron changes, pending events and the network clock for one timestamp.
+
+The proposed direction is a lazy neuron mapping over a pinned read view of the existing single network JPVR container. A bounded packed-F64 LRU (initial capacity 64, configurable 1..10,000) faults in cold states only when required. A candidate timestamp separately stages every affected neuron up to the configured complete-batch event bound. All staged neuron records and the complete scheduler snapshot are published through one existing JPVR typed COMMIT; the cache and scheduler become authoritative only after confirmed publication. No per-neuron commits are allowed in this path.
+
+The LRU capacity is not a total peak-RAM guarantee: the full timestamp staging set, scheduler/topology metadata and the current bounded JPVR page catalog also consume memory. The initial implementation must report these separately. This proposal does not change Android's SQLite-backed 128-state LRU, Numerical Oracle equations, neuron record format, or the optional-Termux boundary. No 10,000-neuron performance or memory benefit is claimed until differential tests and named-PC measurements pass.
