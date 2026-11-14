@@ -50,7 +50,7 @@ The boundary tests are in `tools/neuron_runtime/test_network_limits.py`. They co
 
 ## 4. What this does not yet provide
 
-- **No Android 10,000-neuron runtime:** the native Kotlin conversation signal pass has ten logical neurons. The Python network coordinator is available to desktop/Termux-side code only; the optional Termux bridge does not make the native Android app depend on Termux.
+- **No Android 10,000-node spiking/network runtime:** the native Kotlin ANS-100 conversation signal pass remains a ten-logical-neuron network. Separately, native Android now implements a sparse 10,000-slot hashed text-feature classifier for four simple intent labels. Those slots are addressable feature indices, not 10,000 simultaneously simulated spiking neurons, not the Python NetworkRuntime topology and not a semantic language model. It runs in the native Compose chat without Termux and persists numeric weights locally after explicit feedback. The Python classifier and Kotlin classifier use different hash functions and have separate, incompatible checkpoints.
 - **Partial JNVM working-set prototype:** NeuronWorkingSet now provides per-neuron compact F64 residency, LRU eviction and JPVR write-back through sharded COW indexes. It is not integrated into NetworkRuntime, and per-neuron commits are not atomic across one network timestamp. The existing whole-network checkpoint remains a separate complete snapshot. Flash storage is persistence, not active RAM.
 - **Compact resident representation is partial:** the separate NeuronWorkingSet packs one neuron's mutable state as lossless F64 and uses bounded LRU residency with JPVR write-back. It is not connected to NetworkRuntime, does not provide a network-wide timestamp transaction, and has no measured memory reduction. The Python NetworkRuntime still retains its full object graph.
 - **No production scheduler/NCC:** the coordinator is single-threaded, in-memory, and has no concurrent producer protocol.
@@ -78,3 +78,30 @@ The topology-limit tests and sparse-chain benchmark from the previous increment 
 Android's standalone dialogue preprocessor is now ten logical neurons, not two. A shared TSV fixture under app/src/test/resources/ans100/conversation-v2.tsv is consumed by both Kotlin and Python tests to compare the same input features, event counts, output-gate state, ALIF adaptation/threshold and model time. These tests are AUTHORED, NOT RUN; parity must not be described as verified yet.
 
 Android also has a bounded app-private approved-memory store that works without Termux. It is separate from the 10,000-node Python capacity ceiling and does not provide Android 10,000-neuron execution or native JPVR paging.
+
+
+## 9. Native Android sparse dialogue-feature classifier
+
+The native Compose conversation now contains a second dialogue side-channel, implemented in
+`app/src/main/java/org/jarvis/ans100/alpha/data/LocalDialogFeatureClassifier.kt`.
+It has a bank of 10,000 addressable sparse feature slots and maps Unicode word tokens and
+adjacent token pairs into at most 511 active slots per 256-token analysis (hash collisions can
+reduce that count). Four output labels are defined: greeting, question, thanks and farewell.
+
+The classifier starts untrained and abstains. It does not learn from ordinary chat. The user
+must explicitly select the correct label in the conversation panel; the update is committed
+before new weights become visible. The app-private checkpoint contains only bounded numeric
+weights and the example counter, not the original text. Corrupt checkpoints fail closed.
+Loading is lazy so persisted weights are read on the conversation background executor.
+
+This Android classifier uses SHA-256 feature hashing. The Python reference dialogue classifier
+uses BLAKE2b. The two implementations therefore do not share feature indices or checkpoints.
+The Android classifier is distinct from the ten-neuron Kotlin ANS-100 ALIF-DT signal pass,
+does not produce natural-language text, does not supply semantic understanding, and does not
+control the Qwen response or external actions. Its confidence margin is an uncalibrated
+heuristic, not a probability.
+
+The Kotlin/JUnit tests are in
+`app/src/test/java/org/jarvis/ans100/alpha/data/LocalDialogFeatureClassifierTest.kt`.
+They are **AUTHORED, NOT RUN**. No Android build, runtime, memory, latency, battery or thermal
+measurement has been performed. The Python and Android checkpoints remain separate.
