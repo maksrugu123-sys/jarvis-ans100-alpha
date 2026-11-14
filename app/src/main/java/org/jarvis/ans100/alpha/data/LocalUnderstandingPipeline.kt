@@ -13,7 +13,7 @@ data class LocalReasoningPlan(
     val steps: List<String>,
     val requiresClarification: Boolean,
     val clarificationQuestion: String,
-    val contextReferenceResolved: Boolean,
+    val contextAvailable: Boolean,
     val schema: String = "JARVIS_REASONING_PLAN_V1",
     val executionAuthorized: Boolean = false,
     val scope: String = "bounded_template_plan_only",
@@ -54,7 +54,7 @@ data class LocalUnderstanding(
         reasoningPlan.steps.forEachIndexed { index, step ->
             append(index + 1).append(". ").append(step).append('\n')
         }
-        append("Ссылка на контекст разрешена: ").append(reasoningPlan.contextReferenceResolved).append('\n')
+        append("Предыдущий контекст доступен: ").append(reasoningPlan.contextAvailable).append('\n')
         append("Выполнение разрешено: ").append(reasoningPlan.executionAuthorized).append('\n')
         if (reasoningPlan.requiresClarification) {
             append("Требуется уточнение: ").append(reasoningPlan.clarificationQuestion).append('\n')
@@ -210,7 +210,7 @@ class LocalUnderstandingPipeline {
             steps = steps.take(MAX_PLAN_STEPS),
             requiresClarification = requiresClarification,
             clarificationQuestion = clarificationQuestion,
-            contextReferenceResolved = refersBack && hasRecentUserContext,
+            contextAvailable = refersBack && hasRecentUserContext,
         )
     }
 
