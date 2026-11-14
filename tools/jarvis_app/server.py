@@ -20,6 +20,7 @@ from .auth import LocalConsoleAuth, LocalConsoleAuthError
 from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
 from .local_fallback import LocalFallbackResponseEngine
 from .dialog_neurons import DialogNeuronService
+from tools.neuron_runtime.dialog_neuron_prototype import DialogNeuronError
 from .jarvis_core import JarvisCore
 from .visible_browser import (
     VisibleBrowserResearchError,
@@ -982,7 +983,7 @@ def create_http_server(
                 self._error(503, str(exc))
             except WorkspaceError as exc:
                 self._error(400, str(exc))
-            except (LocalConsoleError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
+            except (LocalConsoleError, DialogNeuronError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
                 self._error(400, str(exc))
             except Exception:
                 # Never return internal paths, checkpoint bytes, or tracebacks to the UI.
