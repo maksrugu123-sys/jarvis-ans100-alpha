@@ -13,6 +13,7 @@ import mimetypes
 import os
 from pathlib import Path
 import threading
+import time
 import uuid
 from urllib.parse import urlsplit
 
@@ -49,6 +50,20 @@ from tools.neuron_runtime.workspace_store import (
     JPVRWorkspaceStore, WorkspaceConflict, WorkspaceError, WorkspaceNotFound,
     WorkspaceSnapshot, decode_workspace, encode_workspace,
 )
+from tools.neuron_runtime.task_loop import (
+    ActionBinding,
+    ActionExecutionResult,
+    ExecutionOutcome,
+    JARVISTaskLoop,
+    TaskLoopError,
+)
+from tools.neuron_runtime.permission_safety_gate import (
+    CapabilityRule,
+    EffectClass,
+    RequestedBudget,
+    SafetyPolicy,
+)
+from tools.jarvis_app.safe_actions import SafeActionExecutor
 from tools.neuron_runtime.task_session_store import (
     JPVRTaskSessionCheckpointError,
     JPVRTaskSessionCheckpointNotFound,
@@ -633,6 +648,153 @@ class LocalConsoleService:
             self._publish(candidate)
             return _task_view(updated)
 
+
+    def run_read_only_task(
+        self,
+        task_id: object,
+        expected_revision: object,
+        steps: object,
+    ) -> dict[str, object]:
+        clean_task_id = _required_text(task_id, "task_id", maximum=128)
+        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
+            raise LocalConsoleError("expected_revision must be an integer")
+        if not isinstance(steps, list) or not 1 <= len(steps) <= 4:
+            raise LocalConsoleError("steps must contain between one and four read-only actions")
+
+        allowed = {"memory.search", "browser.search", "browser.open", "browser.read"}
+        normalized = []
+        for index, step in enumerate(steps):
+            if not isinstance(step, dict) or set(step) != {"capability", "input"}:
+                raise LocalConsoleError(f"step {index + 1} must contain exactly capability and input")
+            capability = _required_text(step["capability"], "capability", maximum=128)
+            value = step["input"]
+            if capability not in allowed:
+                raise LocalConsoleError("only memory.search, browser.search, browser.open and browser.read are available")
+            if not isinstance(value, str) or len(value) > 2048 or "\x00" in value:
+                raise LocalConsoleError("step input must be bounded text")
+            if capability == "browser.read":
+                if value.strip():
+                    raise LocalConsoleError("browser.read input must be empty")
+            elif not value.strip():
+                raise LocalConsoleError(f"{capability} requires non-empty input")
+            elif capability in {"memory.search", "browser.search"} and len(value) > 240:
+                raise LocalConsoleError("search query must not exceed 240 characters")
+            elif capability == "browser.open" and len(value) > 2048:
+                raise LocalConsoleError("browser URL exceeds its limit")
+            if capability.startswith("browser.") and self.platform != "desktop":
+                raise LocalConsoleError("visible browser actions are available only in the desktop runtime")
+            normalized.append((capability, value.strip()))
+
+        with self._lock:
+            task = self.manager.get_task(clean_task_id)
+            if task.revision != expected_revision:
+                raise LocalConsoleError("task revision conflict; refresh state before running")
+            if task.status not in (TaskStatus.QUEUED, TaskStatus.RUNNING, TaskStatus.WAITING):
+                raise LocalConsoleError("only queued/running/waiting tasks can enter the read-only task loop")
+
+            actions = []
+            bindings = {}
+            rules_by_capability = {}
+            prior_fact = "request_received"
+            for index, (capability, value) in enumerate(normalized, start=1):
+                action_id = f"safe_step_{index}"
+                next_fact = f"safe_step_{index}_completed"
+                summary = {
+                    "memory.search": "Search explicitly approved workspace memories",
+                    "browser.search": "Search the web in the visible desktop browser",
+                    "browser.open": "Open a selected public page in the visible desktop browser",
+                    "browser.read": "Read the current page in the visible desktop browser",
+                }[capability]
+                actions.append(PlanningAction(
+                    action_id=action_id,
+                    summary=summary,
+                    rationale=value,
+                    preconditions=(prior_fact,),
+                    add_facts=(next_fact,),
+                    delete_facts=(),
+                ))
+                bindings[action_id] = ActionBinding(
+                    capability=capability,
+                    scope=capability,
+                    effect=EffectClass.READ_ONLY,
+                    budget=RequestedBudget(
+                        compute_units=2,
+                        memory_bytes=16 * 1024 * 1024,
+                        timeout_ms=20_000,
+                        output_bytes=12_000,
+                        retry_index=0,
+                    ),
+                )
+                rules_by_capability[capability] = CapabilityRule(
+                    capability=capability,
+                    allowed_scopes=(capability,),
+                    allowed_effects=(EffectClass.READ_ONLY,),
+                    requires_approval=False,
+                    max_compute_units=4,
+                    max_memory_bytes=32 * 1024 * 1024,
+                    max_timeout_ms=30_000,
+                    max_output_bytes=16_384,
+                    max_retries=0,
+                )
+                prior_fact = next_fact
+
+            problem = ReasoningProblem(
+                task_id=clean_task_id,
+                goal_description=f"User-requested bounded read-only task: {task.title}"[:1024],
+                initial_facts=("request_received",),
+                goal_facts=(prior_fact,),
+                actions=tuple(actions),
+            )
+            executor = SafeActionExecutor(
+                platform=self.platform,
+                browser=self.visible_browser,
+                workspace_provider=lambda: self.workspace_state()["workspace"],
+            )
+            executor.clear_task(clean_task_id)
+            loop = JARVISTaskLoop()
+            try:
+                result = loop.run(
+                    self.manager,
+                    clean_task_id,
+                    problem,
+                    bindings,
+                    SafetyPolicy(
+                        policy_id="local_read_only_v1",
+                        version=1,
+                        rules=tuple(rules_by_capability.values()),
+                        enabled=True,
+                    ),
+                    executor,
+                    now_ns=time.time_ns,
+                    checkpoint_store=self.store,
+                    expected_checkpoint_version=self.checkpoint_version,
+                )
+                loaded = self.store.load(self.manager.manager_id)
+                self.checkpoint_version = loaded.descriptor.record_version
+            except (TaskLoopError, JPVRTaskSessionCheckpointError, OSError, ValueError) as exc:
+                try:
+                    loaded = self.store.load(self.manager.manager_id)
+                    self.manager = loaded.manager
+                    self.checkpoint_version = loaded.descriptor.record_version
+                except Exception:
+                    pass
+                raise LocalConsoleError(f"read-only task loop did not complete: {exc}") from exc
+
+            return {
+                "task": _task_view(self.manager.get_task(clean_task_id)),
+                "loop": {
+                    "status": result.status.value,
+                    "plan_id": result.plan_id,
+                    "reason_code": result.reason_code,
+                    "executed_step_ids": list(result.executed_step_ids),
+                    "pending_step_id": result.pending_step_id,
+                    "observed_facts": list(result.observed_facts),
+                },
+                "outputs": executor.outputs_for(clean_task_id),
+                "state": self.state(),
+                "notice": "Executed only allow-listed read-only actions. No shell or external write actions are available.",
+            }
+
     def preview_reasoning(self, payload: object) -> dict[str, object]:
         if not isinstance(payload, dict):
             raise LocalConsoleError("reasoning preview must be a JSON object")
@@ -943,6 +1105,15 @@ def create_http_server(
                         session_id, payload["status"], payload["expected_revision"]
                     )
                     self._send(200, {"session": result, "state": service.state()})
+                    return
+
+                if path.startswith("/api/tasks/") and path.endswith("/run"):
+                    task_id = path[len("/api/tasks/"):-len("/run")].strip("/")
+                    if not task_id or "/" in task_id or set(payload) != {"expected_revision", "steps"}:
+                        raise LocalConsoleError("invalid task path or run fields")
+                    self._send(200, service.run_read_only_task(
+                        task_id, payload["expected_revision"], payload["steps"]
+                    ))
                     return
                 if path.startswith("/api/tasks/") and path.endswith("/cancel"):
                     task_id = path[len("/api/tasks/"):-len("/cancel")].strip("/")

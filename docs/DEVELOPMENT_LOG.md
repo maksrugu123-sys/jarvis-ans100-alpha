@@ -2291,3 +2291,20 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** source changes are committed to the experimental branch and read-back verification is pending in this batch. No Kotlin compile, unit/instrumentation run, Gradle build, APK, device interaction or performance measurement is claimed.
 
 **Limitations / next:** this reward mechanism is a small pair-eligibility classifier, not yet STDP across the full 10k spiking network. The next learning stage must record explicit sequence timing/eligibility and evaluate on disjoint conversations with neutral/rewarded controls. PC/phone memory sync and exact-action one-shot approval/execution remain open.
+
+
+## 2026-11-14 — Connect a bounded read-only action set to the Python Task Loop
+
+**Objective:** move the existing Task Loop beyond planning-only status without enabling arbitrary or irreversible actions.
+
+**Added / changed:**
+- `tools/jarvis_app/safe_actions.py` — explicit executor allow-list for approved-memory search and visible desktop browser search/open/read; bounded output; no shell or write operations.
+- `tools/jarvis_app/server.py` — authenticated `POST /api/tasks/{task_id}/run` endpoint; validates exact task revision and at most four allowed steps, maps them to dependency-linked PlanningActions and read-only ActionBindings, applies a deny-by-default SafetyPolicy, runs JARVIS Task Loop and persists lifecycle/step checkpoints in JPVR.
+- `tools/jarvis_app/test_safe_actions.py` — four tests for approval-filtered memory search, platform boundary, Task Loop memory search and shell-capability rejection.
+- `docs/JARVIS_SAFE_LOCAL_ACTIONS_V1.md`, architecture §3.76 and README — document capabilities and non-goals.
+
+**Security boundary:** only an explicit authenticated user request starts a queued task. V1 actions are READ_ONLY: approved-memory search, visible-browser search, public-page open and current-page read. All are bounded and browser navigation remains subject to the existing URL/DNS/GET/HEAD filter. Shell, file writes, downloads, messaging, purchases, uploads and external side effects are rejected before planning. No claim of a trusted human identity or unrestricted autonomy is made.
+
+**Verification:** GitHub source readback and static code review only. Four new Python tests are AUTHORED, NOT RUN. No Python process, Playwright browser, model inference, Gradle build, APK, CI or device run was performed.
+
+**Next:** connect this explicit run operation to the desktop PWA and Android task UI; then design separately reviewed one-shot signed approvals for narrowly scoped reversible actions. Keep external/irreversible actions disabled.
