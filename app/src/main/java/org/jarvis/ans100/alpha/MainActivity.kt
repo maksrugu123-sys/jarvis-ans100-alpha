@@ -1814,7 +1814,7 @@ private fun ConversationPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    SectionHeading("Диалог JARVIS", "локально · без Termux и интернета")
+                    SectionHeading("Диалог JARVIS", "без Termux · модель устанавливается отдельно")
                     Text(
                         state.backendLabel,
                         style = MaterialTheme.typography.labelSmall,
