@@ -2332,3 +2332,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Changed:** `PeerMemorySyncStore.merge()` now accepts an explicit bounded `deleted_ids` list, rejects duplicate IDs and overlap with incoming records, removes only exact matching IDs, and increments the CAS revision when additions, newer updates or deletions occur. The authenticated API accepts the tombstone list as an optional third field. Added two Python tests and updated the sync contract.
 
 **Verification:** source/readback only. New tombstone tests are AUTHORED, NOT RUN. No Android client or end-to-end LAN sync has been executed.
+
+
+## 2026-11-14 — Autonomous Core Milestone V1 audit and implementation sequence
+
+**Added:** `docs/JARVIS_AUTONOMOUS_CORE_MILESTONE_V1.md`, a source-grounded implementation and release-gate plan covering independent reasoning, explicit dialogue learning, native Android sparse 10k network integration, Python JNVM working-set integration, Android/PC approved-memory sync, bounded action execution, and live PC browser/model verification.
+
+**Audit corrections:** the current experimental branch already contains an Android SQLite-backed sparse LIF-DT network with a 10,000-neuron ceiling and bounded LRU hot set, plus Python `NeuronWorkingSet`, PC-side TLS approved-memory sync transport, and a read-only Task Loop executor. These components are source-level implementations, not verified runtime milestones; the Android sparse network is still a manual probe rather than the ordinary chat-turn reasoning path, the Android peer-sync client is absent, and dialogue learning is not full-network STDP/R-STDP.
+
+**Constraints:** `main` remains untouched. No Python tests, Android tests, PC browser/model runtime, Gradle build, APK, CI or device benchmark was run. Existing unrun suites remain AUTHORED / NOT RUN. The Gradle Wrapper is still absent.
+
+**Next implementation priority:** integrate explicit, auditable conversation-event learning into a bounded neural subnetwork and connect the existing Android 10k sparse runtime to ordinary chat as an optional side channel without blocking the language/chat path. In parallel, implement the Android TLS certificate-pinned peer-memory client and task-run UI. Keep external side effects disabled.
