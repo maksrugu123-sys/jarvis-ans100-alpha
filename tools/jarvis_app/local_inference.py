@@ -81,7 +81,7 @@ def _bounded_understanding_context(
             "steps": steps,
             "requires_clarification": raw_plan.get("requires_clarification") is True,
             "clarification_question": question,
-            "context_reference_resolved": raw_plan.get("context_reference_resolved") is True,
+            "context_available": raw_plan.get("context_available") is True,
             "execution_authorized": False,
             "scope": "bounded_template_plan_only",
         }
