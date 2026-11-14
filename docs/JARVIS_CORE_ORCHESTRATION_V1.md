@@ -8,10 +8,10 @@ JARVIS Core owns a conversation turn. A language model is a pluggable language-g
 
 ## Android turn path
 
-Compose → JarvisViewModel → LocalConversationCoordinator → JarvisCore → LocalResponseEngine
+Compose → JarvisViewModel → LocalConversationCoordinator → JarvisCore → LocalUnderstandingPipeline + bounded template planner → LocalResponseEngine
 
 - Conversation history is app-private and bounded to 120 messages / 4,000 characters per message.
-- The optional LiteRT-LM Qwen3-0.6B INT4 no-think adapter is source-integrated. The artifact is manually imported and not bundled; successful inference has not been verified. Without the model, the deterministic fallback handles greetings, /help and /status, and clearly declines unsupported prompts.
+- The optional LiteRT-LM Qwen3-0.6B INT4 no-think adapter is source-integrated. The artifact is manually imported and not bundled; successful inference has not been verified. Before either response path, Android Core creates `JARVIS_UNDERSTANDING_V1` and a bounded `JARVIS_REASONING_PLAN_V1` using recent conversation history. The Qwen adapter receives this advisory context; the no-model fallback can display its intent and clarification/plan notice but cannot generate open-ended answers.
 - The in-process Kotlin ANS-100 V2 pass contains ten logical ALIF-DT nodes (six request-shape sensors, two aggregators, an adaptive integrator and an output gate). It is optional: Termux may supply the Python signal result when connected, but failure of both passes does not block the ordinary conversation. This is numerical preprocessing, not semantic understanding or dialogue learning.
 - Device-local approved memories persist in a versioned app-private SharedPreferences store. Limits are 2,000 records, 700 content characters and 64 category characters. Only explicit local approval or imported records marked user_approved=true enter the cache. Mutations commit before the cache publishes a candidate; corrupt snapshots and failed commits are fail-closed.
 - On an authenticated Termux bridge refresh/import/restore, approved shared-workspace memories are merged into the device cache. Removing the bridge token leaves the app's device-local memory intact.
@@ -32,7 +32,7 @@ PWA → loopback-only Python server → tools/jarvis_app/jarvis_core.py → loca
 
 Both Python and Kotlin extract the same six bounded features: token volume, lexical diversity, question marker, punctuation density, sentence density and uppercase ratio. The topology has six sensors, two aggregators, one adaptive request integrator and one attention/output gate connected by nine directed routes. The common fixture app/src/test/resources/ans100/conversation-v2.tsv is consumed by both test suites and compares feature values, event/batch/spike counts, gate state, adaptive state, threshold and model time.
 
-The shared fixture is authored contract coverage, not proof of parity until both suites run. STDP/R-STDP dialogue learning remains disabled. The signal pass does not understand natural language, infer intent or validate the generated answer.
+The shared fixture `app/src/test/resources/understanding/understanding-v1.tsv` additionally aligns intent labels, negation/context indicators, template-plan size and clarification behavior between the Android and Python analyzers. The shared fixtures are authored contract coverage, not proof of parity until both suites run. STDP/R-STDP dialogue learning remains disabled. The signal pass does not understand natural language, infer intent or validate the generated answer. The new text parser uses explicit rules and the planner uses templates; neither is a trained semantic model or a replacement for the structured Reasoning Engine.
 
 ## Visible browser research context
 
