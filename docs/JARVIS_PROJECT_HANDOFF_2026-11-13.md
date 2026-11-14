@@ -120,3 +120,16 @@ Added an opt-in local inference path for Android and desktop/PWA using the same 
 ### Runtime caution
 
 The selected model is intentionally small and no-think: it may give short direct answers but does not provide strong multi-step reasoning. The Android memory check is not a guarantee against out-of-memory termination. The model must be manually selected on Android; the desktop process must be started with `--model` and the optional Python package installed. Do not call this a fully validated JARVIS release yet.
+
+## Integrated experimental JARVIS prototype — 14 November 2026
+
+A separate branch `experiment/jarvis-integrated-prototype-v1` now assembles an initial usable PC-side JARVIS console around the existing source modules. It is based on `mobile-first-offline-v1` plus the earlier sparse dialogue-neuron experiment; it does not change `main`.
+
+- PC/PWA local chat now has a deterministic offline fallback when no language model is configured. The fallback supports greetings, `/help`, `/status` and explicit service-status responses; it does not generate free-form answers. With the pinned LiteRT-LM runtime and user-supplied model file, the same PC Core uses local Qwen generation.
+- The PC turn pipeline now invokes the 10,000-addressable-feature sparse dialogue classifier together with bounded approved-memory retrieval and the existing ten-neuron ANS-100 signal pre-pass. Its output is passed to the local language engine as a clearly marked heuristic signal, not as semantic understanding.
+- A visible PWA panel allows the user to explicitly label a text sample as greeting/question/thanks/farewell. Only this explicit feedback updates the classifier. Its checkpoint stores numeric weights and the training count, not raw sample text.
+- Existing PC workspace memory, JPVR task/session management, symbolic reasoning preview, visible read-only Chromium browser and encrypted workspace transfer/backup remain in the integrated console. External actions, tool execution and autonomous Task Loop dispatch remain disabled.
+- Android retains its existing in-process conversation, local history, explicit local memories, optional model import, ten-neuron Kotlin ANS-100 pass and optional Termux bridge. **The 10,000-feature Python classifier is integrated into the PC/Python console only in this prototype; it is not yet ported into the native Android conversation runtime.**
+- Static source read-back confirms the branch contents and branch comparison. Tests were added or updated but remain **AUTHORED / NOT RUN**. No Python tests, Playwright session, model inference, Gradle build, APK, Android install, device measurement, CI or GitHub Actions were run. This is source integration, not a runtime-verified release.
+
+See [JARVIS Experimental Integrated Prototype V1](JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md) for launch steps, operating boundaries and current limitations.
