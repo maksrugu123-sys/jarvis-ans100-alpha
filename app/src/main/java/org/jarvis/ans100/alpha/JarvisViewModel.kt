@@ -45,6 +45,8 @@ data class LocalConversationUiState(
     val backendLabel: String = "Локальный базовый ответчик · без LLM",
     val modelInstalled: Boolean = false,
     val modelStatus: String = "Модель не установлена.",
+    val modelDownloadProgress: Float? = null,
+    val modelDownloadStatus: String? = null,
 )
 
 data class RuntimeBridgeUiState(
@@ -348,6 +350,72 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     error = error.message ?: "Не удалось восстановить локальный диалог.",
                 ),
             )
+        }
+    }
+
+    fun downloadConversationModel() {
+        val before = mutableState.value
+        if (before.conversation.isBusy || modelStore.installedFile() != null) return
+        mutableState.value = before.copy(conversation = before.conversation.copy(
+            isBusy = true,
+            error = null,
+            modelDownloadProgress = 0f,
+            modelDownloadStatus = "Подготовка безопасной загрузки модели…",
+        ))
+        conversationExecutor.execute {
+            try {
+                conversationResponseEngine.reset()
+                modelStore.downloadModel { bytes, total ->
+                    val progress = (bytes.toDouble() / total.toDouble()).toFloat().coerceIn(0f, 1f)
+                    val status = "Загрузка модели: ${bytes / LiteRtLmModelStore.MIB} / ${total / LiteRtLmModelStore.MIB} МиБ"
+                    mainHandler.post {
+                        val current = mutableState.value
+                        mutableState.value = current.copy(conversation = current.conversation.copy(
+                            modelDownloadProgress = progress,
+                            modelDownloadStatus = status,
+                        ))
+                    }
+                }
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(conversation = current.conversation.copy(
+                        isBusy = false,
+                        backendLabel = conversationCoordinator.backendLabel,
+                        modelInstalled = modelStore.installedFile() != null,
+                        modelStatus = modelStore.statusMessage(),
+                        modelDownloadProgress = null,
+                        modelDownloadStatus = "Модель загружена и проверена. Теперь JARVIS может работать офлайн.",
+                        error = null,
+                    ))
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    val cancelled = error is LiteRtLmDownloadCancelledException
+                    mutableState.value = current.copy(conversation = current.conversation.copy(
+                        isBusy = false,
+                        modelInstalled = modelStore.installedFile() != null,
+                        modelStatus = modelStore.statusMessage(),
+                        modelDownloadProgress = null,
+                        modelDownloadStatus = if (cancelled) {
+                            "Загрузка остановлена. Нажмите «Продолжить загрузку», чтобы продолжить с сохранённого места."
+                        } else {
+                            "Загрузка не завершена. Можно повторить или продолжить позже."
+                        },
+                        error = error.message ?: "Не удалось скачать локальную модель.",
+                    ))
+                }
+            }
+        }
+    }
+
+    fun cancelConversationModelDownload() {
+        modelStore.cancelDownload()
+        val current = mutableState.value
+        if (current.conversation.isBusy) {
+            mutableState.value = current.copy(conversation = current.conversation.copy(
+                modelDownloadStatus = "Останавливаем загрузку…",
+            ))
         }
     }
 
