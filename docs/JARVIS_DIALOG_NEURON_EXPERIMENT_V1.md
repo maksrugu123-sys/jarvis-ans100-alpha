@@ -1,6 +1,6 @@
 # JARVIS Dialog Neuron Experiment V1
 
-Status: **experimental Python prototype; authored, not executed in this change**.
+Status: **experimental Python and native Android source implementations; regression tests AUTHORED, NOT RUN**.
 
 ## Goal
 
