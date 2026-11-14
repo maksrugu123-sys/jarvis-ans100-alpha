@@ -209,6 +209,11 @@ data class JarvisCoreStatus(
     val ans100AdaptiveStatePersisted: Boolean = false,
     val ans100NetworkNeuronCount: Int = 10,
     val ans100ActiveNeuronCount: Int = 0,
+    val understandingIntegratedIntoConversation: Boolean = false,
+    val lastUnderstandingIntent: String? = null,
+    val lastUnderstandingConfidence: Double? = null,
+    val lastReasoningPlanStepCount: Int = 0,
+    val lastReasoningPlanRequiresClarification: Boolean = false,
     val externalActionsEnabled: Boolean = false,
 ) {
     fun toUserMessage(): String {
@@ -232,7 +237,12 @@ data class JarvisCoreStatus(
             appendLine("Языковой модуль: $language ($languageBackend).")
             appendLine("Кратковременная память диалога: ${if (recentConversationMemoryAvailable) "активна, история хранится локально" else "недоступна"}.")
             appendLine("Долговременная JPVR-память: $memory.")
-            appendLine("Reasoning Engine: ${if (reasoningIntegratedIntoConversation) "участвует в обработке запросов" else "символьный preview пока не подключён к обычному диалогу"}.")
+            appendLine("Самостоятельный анализ JARVIS: ${if (understandingIntegratedIntoConversation) "выполнен для последнего сообщения" else "ещё не выполнялся"}.")
+            if (lastUnderstandingIntent != null) {
+                appendLine("Намерение (эвристическая оценка): $lastUnderstandingIntent; уверенность: ${String.format(Locale.ROOT, "%.2f", lastUnderstandingConfidence ?: 0.0)}.")
+                appendLine("Предварительный план: $lastReasoningPlanStepCount шагов; требуется уточнение: $lastReasoningPlanRequiresClarification.")
+            }
+            appendLine("Reasoning Engine: ${if (reasoningIntegratedIntoConversation) "участвует в обработке запросов" else "структурированный preview пока отдельно от обычного диалога"}.")
             appendLine("ANS-100: сеть из $ans100NetworkNeuronCount нейронов; активно в последнем проходе: $ans100ActiveNeuronCount.")
             appendLine("Результат: $neural.")
             appendLine("STDP-обучение на диалоге выключено; адаптивное состояние ALIF сохранено отдельно: $ans100AdaptiveStatePersisted.")
@@ -247,6 +257,7 @@ class JarvisCore(
     private val memoryCache: LocalWorkspaceMemoryCache = LocalWorkspaceMemoryCache(),
 ) {
     private var lastSignalContext: ConversationSignalContext? = null
+    private var lastUnderstanding: LocalUnderstanding? = null
     private var lastRetrievedMemoryCount: Int = 0
 
     val backendLabel: String
@@ -266,6 +277,11 @@ class JarvisCore(
             ans100AdaptiveStatePersisted = signal?.statePersisted == true,
             ans100NetworkNeuronCount = signal?.networkNeuronCount ?: 10,
             ans100ActiveNeuronCount = signal?.activeNeuronCount ?: 0,
+            understandingIntegratedIntoConversation = lastUnderstanding != null,
+            lastUnderstandingIntent = lastUnderstanding?.intent,
+            lastUnderstandingConfidence = lastUnderstanding?.intentConfidence,
+            lastReasoningPlanStepCount = lastUnderstanding?.reasoningPlan?.steps?.size ?: 0,
+            lastReasoningPlanRequiresClarification = lastUnderstanding?.reasoningPlan?.requiresClarification == true,
         )
     }
 
@@ -287,6 +303,9 @@ class JarvisCore(
             "/status" -> status().toUserMessage()
             "/help" -> HELP_MESSAGE
             else -> {
+                // JARVIS Core analyses every normal message before any response engine is called.
+                val understanding = LocalUnderstandingPipeline().analyze(clean)
+                lastUnderstanding = understanding
                 lastSignalContext = signalContext
                 val memories = if (languageEngine.languageModelConfigured) {
                     retrieveMemories(clean)
@@ -294,7 +313,7 @@ class JarvisCore(
                     emptyList()
                 }
                 lastRetrievedMemoryCount = memories.size
-                languageEngine.respond(clean, context, memories, signalContext)
+                languageEngine.respond(clean, context, memories, signalContext, understanding)
             }
         }
         if (response.isBlank() ||
