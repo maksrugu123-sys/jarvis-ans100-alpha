@@ -9,3 +9,12 @@ Every step is represented as a dependency-linked `PlanningAction`, bound to an e
 No shell, file mutation, downloads, messaging, purchases, account login, uploads, or arbitrary plugin/tool execution are exposed. Side-effecting actions are deliberately not part of this V1 and must not be added without a trusted signed approval provider, exact request binding, durable idempotency, and downstream reconciliation. This is a safe read-only action loop, not unrestricted autonomous control.
 
 Four service/adapter tests are AUTHORED, NOT RUN. PC Playwright/browser runtime validation remains separate.
+
+
+### 3.77 Peer memory sync transport V1 (14 November 2026)
+
+The PC console now has a separate, optional TLS peer listener. The ordinary local-console listener remains loopback-only. The peer listener requires an explicit private IPv4 address, rejects wildcard/public binding and refuses non-loopback HTTP. It checks the Host/Origin against the configured address and uses the existing Bearer authentication. The peer certificate must be installed with an IP Subject Alternative Name; the planned Android client will pin its SHA-256 leaf-certificate fingerprint.
+
+`PeerMemorySyncStore` is a bounded, CAS-protected additive overlay for explicitly approved memories only. It uses atomic temp-file/fsync/replace publication and a monotonically increasing revision. Same-ID updates compare updated_at; conflicts are retained/reported. V1 does not sync chat history or deletion tombstones and keeps the peer overlay separate from the main JPVR workspace. The PC read-only action executor can include peer-overlay records in approved-memory search.
+
+The Android TLS pinning client, encrypted peer credentials UI, automatic sync trigger and device-to-device runtime validation remain NOT IMPLEMENTED. Four Python store tests are AUTHORED, NOT RUN. See `docs/JARVIS_PEER_MEMORY_SYNC_V1.md`.

@@ -2308,3 +2308,18 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** GitHub source readback and static code review only. Four new Python tests are AUTHORED, NOT RUN. No Python process, Playwright browser, model inference, Gradle build, APK, CI or device run was performed.
 
 **Next:** connect this explicit run operation to the desktop PWA and Android task UI; then design separately reviewed one-shot signed approvals for narrowly scoped reversible actions. Keep external/irreversible actions disabled.
+
+
+## 2026-11-14 — Add private-LAN TLS peer-memory sync transport
+
+**Objective:** establish a safe PC-side transport for later Android/PC synchronization of explicitly approved memories.
+
+**Added / changed:**
+- `tools/jarvis_app/peer_memory_sync.py` — bounded additive memory overlay with strict record validation, revision CAS, newer-timestamp update preference, conflict reporting, fsync and atomic replacement.
+- `tools/jarvis_app/server.py` — authenticated GET/POST peer-memory endpoints; optional second TLS listener bound only to one explicit private IPv4 address; reject non-loopback cleartext, wildcard and public binds; check Host/Origin against the configured endpoint.
+- `tools/jarvis_app/test_peer_memory_sync.py` — four tests for add/reopen, newer update, stale CAS and invalid/unapproved/duplicate inputs.
+- Documentation: `docs/JARVIS_PEER_MEMORY_SYNC_V1.md`, architecture §3.77, README.
+
+**Security/data boundary:** only explicitly approved memory records are accepted. Tokens are carried over the TLS peer listener, not cleartext LAN HTTP. The certificate must contain the private LAN IP in its SAN; the planned Android client must verify a pinned SHA-256 certificate fingerprint. The PC's normal local HTTP console remains bound to loopback. No wildcard/public binding is enabled.
+
+**Limitations:** this commit creates only the PC transport/store. Android credential storage, pinned TLS client, UI pairing, automatic sync trigger and end-to-end sync are not implemented yet. V1 is additive and timestamp-based; deletions/chat history are not synchronized. Four Python tests are AUTHORED, NOT RUN. TLS browser/Android connection and firewall behavior are NOT VERIFIED.

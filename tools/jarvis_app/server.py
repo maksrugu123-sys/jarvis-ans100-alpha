@@ -9,6 +9,8 @@ import argparse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import ipaddress
+import ssl
 import mimetypes
 import os
 from pathlib import Path
@@ -64,6 +66,7 @@ from tools.neuron_runtime.permission_safety_gate import (
     SafetyPolicy,
 )
 from tools.jarvis_app.safe_actions import SafeActionExecutor
+from tools.jarvis_app.peer_memory_sync import PeerMemorySyncConflict, PeerMemorySyncError, PeerMemorySyncStore
 from tools.neuron_runtime.task_session_store import (
     JPVRTaskSessionCheckpointError,
     JPVRTaskSessionCheckpointNotFound,
@@ -74,6 +77,7 @@ from tools.neuron_runtime.task_session_store import (
 MANAGER_ID = "android-local-console"
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_WORKSPACE_REQUEST_BYTES = 16 * 1024 * 1024
+MAX_PEER_SYNC_BYTES = 4 * 1024 * 1024
 MAX_PREVIEW_ACTIONS = 64
 _STATE_EVENT_LIMIT = 100
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -176,6 +180,8 @@ class LocalConsoleService:
         if platform not in ("desktop", "android"):
             raise LocalConsoleError("platform must be desktop or android")
         self.platform = platform
+        peer_base = Path(data_path) if data_path is not None else (Path.home() / ".jarvis-ans100-alpha" / "local-console.jpvr")
+        self.peer_memory_store = PeerMemorySyncStore(peer_base.with_name("peer-memory-sync.json"))
         self.local_inference = (
             LiteRtLmLocalEngine(model_path)
             if model_path is not None else LocalFallbackResponseEngine()
@@ -649,6 +655,30 @@ class LocalConsoleService:
             return _task_view(updated)
 
 
+
+    def peer_memory_snapshot(self) -> dict[str, object]:
+        return self.peer_memory_store.snapshot()
+
+    def merge_peer_memories(
+        self,
+        records: object,
+        expected_revision: object,
+    ) -> dict[str, object]:
+        return self.peer_memory_store.merge(records, expected_revision)
+
+    def read_only_memory_workspace(self) -> dict[str, object]:
+        workspace = self.workspace_state()["workspace"]
+        records = workspace.get("records", {}) if isinstance(workspace, dict) else {}
+        base = list(records.get("memories", [])) if isinstance(records, dict) and isinstance(records.get("memories", []), list) else []
+        peer = self.peer_memory_store.snapshot()["memories"]
+        known = {
+            item.get("id", item.get("memory_id"))
+            for item in base
+            if isinstance(item, dict)
+        }
+        base.extend(item for item in peer if item["id"] not in known)
+        return {"records": {"memories": base}}
+
     def run_read_only_task(
         self,
         task_id: object,
@@ -748,7 +778,7 @@ class LocalConsoleService:
             executor = SafeActionExecutor(
                 platform=self.platform,
                 browser=self.visible_browser,
-                workspace_provider=lambda: self.workspace_state()["workspace"],
+                workspace_provider=self.read_only_memory_workspace,
             )
             executor.clear_task(clean_task_id)
             loop = JARVISTaskLoop()
@@ -910,12 +940,13 @@ def create_http_server(
             self._send(status, {"error": message})
 
         def _check_local_origin(self) -> bool:
-            expected_host = f"127.0.0.1:{self.server.server_port}"
+            expected_host = f"{self.server.bound_host}:{self.server.server_port}"
             if self.headers.get("Host") != expected_host:
-                self._error(403, "Доступ разрешён только через 127.0.0.1")
+                self._error(403, "Неверный Host для локального JARVIS endpoint")
                 return False
             origin = self.headers.get("Origin")
-            if origin is not None and origin != f"http://{expected_host}":
+            expected_origin = ("https" if self.server.is_tls else "http") + "://" + expected_host
+            if origin is not None and origin != expected_origin:
                 self._error(403, "Запросы с другого источника запрещены")
                 return False
             return True
@@ -976,6 +1007,11 @@ def create_http_server(
                     return
                 self._send(200, service.workspace_state())
                 return
+            if path == "/api/peer-sync/memories":
+                if not self._require_auth():
+                    return
+                self._send(200, service.peer_memory_snapshot())
+                return
             if path == "/api/conversation":
                 if not self._require_auth():
                     return
@@ -1017,6 +1053,8 @@ def create_http_server(
             payload = self._read_json(
                 max_bytes=MAX_WORKSPACE_REQUEST_BYTES
                 if path in {"/api/workspace", "/api/workspace/restore"}
+                else MAX_PEER_SYNC_BYTES
+                if path == "/api/peer-sync/memories"
                 else MAX_REQUEST_BYTES
             )
             if payload is None:
@@ -1052,6 +1090,15 @@ def create_http_server(
                         raise LocalConsoleError("ожидались поля question и expected_revision")
                     self._send(200, service.ask_about_browser_page(
                         payload["question"], payload["expected_revision"]
+                    ))
+                    return
+
+                if path == "/api/peer-sync/memories":
+                    self._send(200, service.merge_peer_memories(
+                        payload.get("memories"),
+                        payload.get("expected_revision"),
+                    ) if set(payload) == {"expected_revision", "memories"} else (_ for _ in ()).throw(
+                        LocalConsoleError("peer sync expects exactly expected_revision and memories")
                     ))
                     return
                 if path == "/api/workspace/restore":
@@ -1153,11 +1200,11 @@ def create_http_server(
                 self._error(503, str(exc))
             except VisibleBrowserResearchError as exc:
                 self._error(400, str(exc))
-            except WorkspaceConflict as exc:
+            except (WorkspaceConflict, PeerMemorySyncConflict) as exc:
                 self._error(409, str(exc))
             except LocalInferenceError as exc:
                 self._error(503, str(exc))
-            except WorkspaceError as exc:
+            except (WorkspaceError, PeerMemorySyncError) as exc:
                 self._error(400, str(exc))
             except (LocalConsoleError, DialogNeuronError, TaskSessionError, TaskNotFound, TaskConflict) as exc:
                 self._error(400, str(exc))
@@ -1165,7 +1212,19 @@ def create_http_server(
                 # Never return internal paths, checkpoint bytes, or tracebacks to the UI.
                 self._error(503, "Локальная операция не выполнена; проверьте состояние хранилища")
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    try:
+        bind_address = ipaddress.ip_address(host)
+    except ValueError as exc:
+        raise ValueError("listen host must be an explicit IPv4 address") from exc
+    if bind_address.version != 4 or bind_address.is_unspecified or bind_address.is_multicast:
+        raise ValueError("listen host must be a specific IPv4 address")
+    if not bind_address.is_loopback and (not bind_address.is_private or tls_context is None):
+        raise ValueError("non-loopback binding requires a private IPv4 address and TLS")
+    server = ThreadingHTTPServer((host, port), Handler)
+    server.bound_host = host
+    server.is_tls = tls_context is not None
+    if tls_context is not None:
+        server.socket = tls_context.wrap_socket(server.socket, server_side=True)
     server.daemon_threads = True
     server.allow_reuse_address = False
     return server
