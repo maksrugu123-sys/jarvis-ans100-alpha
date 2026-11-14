@@ -498,7 +498,7 @@ class JarvisCore:
                 natural_language_plan.get("requires_clarification") is True
                 if isinstance(natural_language_plan, Mapping) else False
             ),
-            "natural_language_plan_context_reference_resolved": (
+            "natural_language_plan_context_available": (
                 natural_language_plan.get("context_reference_resolved") is True
                 if isinstance(natural_language_plan, Mapping) else False
             ),
