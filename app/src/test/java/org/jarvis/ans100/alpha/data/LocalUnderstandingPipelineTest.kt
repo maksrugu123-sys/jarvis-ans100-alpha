@@ -71,7 +71,7 @@ class LocalUnderstandingPipelineTest {
         val stream = javaClass.getResourceAsStream("/understanding/understanding-v1.tsv")
             ?: error("Shared JARVIS understanding fixture is missing")
         val rows = stream.bufferedReader().useLines { lines ->
-            lines.filter { it.isNotBlank() }.drop(1).map { it.split('\\t') }.toList()
+            lines.filter { it.isNotBlank() }.drop(1).map { it.split('\t') }.toList()
         }
         assertTrue(rows.isNotEmpty())
         rows.forEach { row ->
