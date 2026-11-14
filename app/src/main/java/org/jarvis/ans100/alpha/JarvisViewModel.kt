@@ -36,6 +36,7 @@ import org.jarvis.ans100.alpha.data.RuntimeAccessTokenStore
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
 import org.jarvis.ans100.alpha.data.RuntimeTaskExecutionResult
+import org.jarvis.ans100.alpha.data.PeerMemorySyncClient
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
@@ -96,6 +97,16 @@ data class LocalMemoryUiState(
     val lastAddedId: String? = null,
 )
 
+data class PeerMemorySyncUiState(
+    val isBusy: Boolean = false,
+    val error: String? = null,
+    val message: String? = null,
+    val remoteRevision: Long? = null,
+    val addedCount: Int = 0,
+    val updatedCount: Int = 0,
+    val conflictCount: Int = 0,
+)
+
 data class RuntimeWorkspaceImportPreview(
     val addedCount: Int,
     val identicalCount: Int,
@@ -131,6 +142,7 @@ data class JarvisUiState(
     val runtime: RuntimeBridgeUiState = RuntimeBridgeUiState(),
     val workspace: RuntimeWorkspaceUiState = RuntimeWorkspaceUiState(),
     val localMemory: LocalMemoryUiState = LocalMemoryUiState(),
+    val peerMemorySync: PeerMemorySyncUiState = PeerMemorySyncUiState(),
     val conversation: LocalConversationUiState = LocalConversationUiState(),
 )
 
@@ -167,6 +179,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val runtimeClient = LocalRuntimeBridgeClient()
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
     private val runtimeExecutor = Executors.newSingleThreadExecutor()
+    private val peerMemorySyncClient = PeerMemorySyncClient()
+    private val peerSyncExecutor = Executors.newSingleThreadExecutor()
     @Volatile private var pendingWorkspaceMerge: RuntimeWorkspaceMergePlan? = null
     @Volatile private var pendingWorkspaceRestore: org.jarvis.ans100.alpha.data.RuntimeWorkspaceRestorePlan? = null
     @Volatile private var pendingWorkspaceBackupRevision: Long? = null
@@ -1029,7 +1043,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addLocalMemory(content: String, category: String) {
         val before = mutableState.value
-        if (before.localMemory.isBusy || !before.localMemory.isLoaded) return
+        if (before.localMemory.isBusy || before.peerMemorySync.isBusy || !before.localMemory.isLoaded) return
         mutableState.value = before.copy(
             localMemory = before.localMemory.copy(isBusy = true, error = null),
         )
@@ -1063,7 +1077,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteLocalMemory(id: String) {
         val before = mutableState.value
-        if (before.localMemory.isBusy || !before.localMemory.isLoaded) return
+        if (before.localMemory.isBusy || before.peerMemorySync.isBusy || !before.localMemory.isLoaded) return
         mutableState.value = before.copy(
             localMemory = before.localMemory.copy(isBusy = true, error = null),
         )
@@ -1088,6 +1102,69 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         localMemory = current.localMemory.copy(
                             isBusy = false,
                             error = error.message ?: "Не удалось удалить локальное воспоминание.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Manually merges device-approved memories with the paired PC peer overlay.
+     * Only the exact approved-memory record schema is transferred; chats, tokens
+     * and model files are never sent. No deletes are propagated in this V1 client.
+     */
+    fun syncApprovedMemories(host: String, certificateFingerprint: String) {
+        val before = mutableState.value
+        if (before.peerMemorySync.isBusy || before.localMemory.isBusy || !before.localMemory.isLoaded) return
+        mutableState.value = before.copy(
+            peerMemorySync = PeerMemorySyncUiState(
+                isBusy = true,
+                message = "Соединение с ПК по закреплённому TLS-сертификату…",
+            ),
+        )
+        peerSyncExecutor.execute {
+            try {
+                val token = runtimeTokenStore.load()
+                    ?: throw IllegalStateException("Сначала сохраните токен локальной консоли Termux в панели расширения.")
+                val localSnapshot = workspaceMemoryCache.snapshot()
+                if (!localSnapshot.loaded || localSnapshot.error != null) {
+                    throw IllegalStateException("Локальная память не загружена или повреждена; синхронизация остановлена.")
+                }
+                val result = peerMemorySyncClient.sync(
+                    host = host,
+                    certificateFingerprint = certificateFingerprint,
+                    bearerToken = token,
+                    localRecords = localSnapshot.records,
+                )
+                workspaceMemoryCache.replace(result.records)
+                val merged = workspaceMemoryCache.snapshot()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        localMemory = current.localMemory.copy(
+                            records = merged.records,
+                            isLoaded = merged.loaded,
+                            isBusy = false,
+                            error = merged.error,
+                        ),
+                        peerMemorySync = PeerMemorySyncUiState(
+                            isBusy = false,
+                            message = "Синхронизация завершена. Новых на ПК: ${result.addedCount}; обновлено: ${result.updatedCount}; конфликтов: ${result.conflictCount}. Удаления в этой версии не синхронизируются.",
+                            remoteRevision = result.revision,
+                            addedCount = result.addedCount,
+                            updatedCount = result.updatedCount,
+                            conflictCount = result.conflictCount,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        peerMemorySync = PeerMemorySyncUiState(
+                            isBusy = false,
+                            error = error.message ?: "Не удалось синхронизировать память с ПК.",
                         ),
                     )
                 }
@@ -2065,6 +2142,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.shutdown()
         nativeNetworkExecutor.shutdown()
         runtimeExecutor.shutdownNow()
+        peerSyncExecutor.shutdownNow()
         super.onCleared()
     }
 }

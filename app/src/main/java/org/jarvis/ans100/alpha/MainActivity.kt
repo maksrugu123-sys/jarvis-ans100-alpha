@@ -273,8 +273,10 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         1 -> {
                         LocalMemoryPanel(
                             state = ui.localMemory,
+                            peerSync = ui.peerMemorySync,
                             onAdd = viewModel::addLocalMemory,
                             onDelete = viewModel::deleteLocalMemory,
+                            onPeerSync = viewModel::syncApprovedMemories,
                         )
                         WorkspaceMemoryPanel(
                             state = ui.workspace,
@@ -560,9 +562,13 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
 @Composable
 private fun LocalMemoryPanel(
     state: LocalMemoryUiState,
+    peerSync: PeerMemorySyncUiState,
     onAdd: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onPeerSync: (String, String) -> Unit,
 ) {
+    var peerHost by rememberSaveable { mutableStateOf("") }
+    var peerFingerprint by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("general") }
     var search by rememberSaveable { mutableStateOf("") }
@@ -617,7 +623,7 @@ private fun LocalMemoryPanel(
                 placeholder = { Text("Что JARVIS должен помнить?") },
                 minLines = 2,
                 maxLines = 4,
-                enabled = state.isLoaded && !state.isBusy,
+                enabled = state.isLoaded && !state.isBusy && !peerSync.isBusy,
             )
             OutlinedTextField(
                 value = category,
@@ -625,18 +631,78 @@ private fun LocalMemoryPanel(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Категория") },
                 singleLine = true,
-                enabled = state.isLoaded && !state.isBusy,
+                enabled = state.isLoaded && !state.isBusy && !peerSync.isBusy,
             )
             Button(
                 onClick = { onAdd(content, category) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = state.isLoaded && !state.isBusy && content.isNotBlank() && category.isNotBlank(),
+                enabled = state.isLoaded && !state.isBusy && !peerSync.isBusy &&
+                    content.isNotBlank() && category.isNotBlank(),
             ) {
                 Text(if (state.isBusy) "Сохраняем…" else "Сохранить на устройстве")
             }
             state.error?.let { message ->
                 Text(message, color = MaterialTheme.colorScheme.error)
             }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    SectionHeading("Синхронизация с ПК", "HTTPS · сертификат закреплён вручную")
+                    Text(
+                        "Введите приватный IPv4 компьютера и SHA-256 отпечаток TLS-сертификата с ПК. Используется уже сохранённый токен Termux. Передаются только одобренные заметки; история чата, ключи и модель не отправляются.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = peerHost,
+                        onValueChange = { peerHost = it.take(15) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("IP компьютера в локальной сети") },
+                        placeholder = { Text("192.168.1.20") },
+                        singleLine = true,
+                        enabled = !peerSync.isBusy,
+                    )
+                    OutlinedTextField(
+                        value = peerFingerprint,
+                        onValueChange = { peerFingerprint = it.take(95) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("SHA-256 отпечаток сертификата") },
+                        placeholder = { Text("64 шестнадцатеричных символа") },
+                        singleLine = true,
+                        enabled = !peerSync.isBusy,
+                    )
+                    Button(
+                        onClick = { onPeerSync(peerHost, peerFingerprint) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = state.isLoaded && !state.isBusy && !peerSync.isBusy &&
+                            peerHost.isNotBlank() && peerFingerprint.isNotBlank(),
+                    ) {
+                        Text(if (peerSync.isBusy) "Синхронизация…" else "Синхронизировать одобренные заметки")
+                    }
+                    if (peerSync.isBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    peerSync.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    peerSync.message?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (peerSync.remoteRevision != null) {
+                        Text(
+                            "Ревизия памяти ПК: ${peerSync.remoteRevision}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it.take(128) },
@@ -678,7 +744,7 @@ private fun LocalMemoryPanel(
                                     fontWeight = FontWeight.SemiBold,
                                     style = MaterialTheme.typography.labelMedium,
                                 )
-                                TextButton(onClick = { onDelete(memory.id) }, enabled = !state.isBusy) {
+                                TextButton(onClick = { onDelete(memory.id) }, enabled = !state.isBusy && !peerSync.isBusy) {
                                     Text("Удалить")
                                 }
                             }
