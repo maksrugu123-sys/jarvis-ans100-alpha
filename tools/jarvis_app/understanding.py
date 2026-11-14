@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 
 MAX_INPUT_CHARS = 750
 MAX_TOKENS = 128
-_TOKEN = re.compile(r"[^\\W_]+", re.UNICODE)
+_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 _ENTITY = re.compile(r"(?<![\w])[A-ZА-ЯЁ][\w-]{1,47}(?![\w])", re.UNICODE)
 _STOP = frozenset({
     "это", "для", "или", "что", "чтобы", "мне", "могу", "можно",
