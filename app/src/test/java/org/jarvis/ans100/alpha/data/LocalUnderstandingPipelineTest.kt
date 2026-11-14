@@ -22,6 +22,7 @@ class LocalUnderstandingPipelineTest {
         val result = pipeline.analyze("Найди ошибки и исправь их в проекте")
         assertEquals("action_request", result.intent)
         assertEquals("plan_or_explain_requested_action", result.taskKind)
+        assertEquals(listOf("ошибки", "проекте"), result.reasoningPlan.focusTerms)
     }
 
     @Test
