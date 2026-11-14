@@ -33,6 +33,44 @@ class AndroidSparseNeuronNetworkTest {
     }
 
     @Test
+    fun initializesTenThousandDialogueNeuronsAsBoundedFeatureToOutputGraph() {
+        AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 128).use { network ->
+            network.initializeSparseDialogueNetwork()
+
+            val stats = network.stats()
+            assertEquals(10_000, stats.neuronCount)
+            assertEquals(9_996 * 4, stats.connectionCount)
+            assertEquals(0, stats.residentNeuronCount)
+            assertEquals(128, stats.hotSetCapacity)
+        }
+    }
+
+    @Test
+    fun dialogueFeatureSpikeFansOutToFourOutputsWithoutChainBacklog() {
+        AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 2).use { network ->
+            network.initializeSparseDialogueNetwork()
+            network.scheduleInput("dialog-feature-probe", 10_000_000L, 0, 1.0)
+
+            val result = network.run(maxEvents = 5, maxTimestamps = 2)
+
+            assertEquals(5, result.processedEvents)
+            assertEquals(
+                listOf(
+                    0 to 1L,
+                    9_996 to 1L,
+                    9_997 to 1L,
+                    9_998 to 1L,
+                    9_999 to 1L,
+                ),
+                result.emittedSpikes,
+            )
+            assertEquals(0, result.pendingEvents)
+            assertEquals(10_000, network.stats().neuronCount)
+            assertTrue(network.stats().residentNeuronCount <= 2)
+        }
+    }
+
+    @Test
     fun timestampCommitPropagatesSpikeAndPersistsQueue() {
         AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 2).use { network ->
             network.initializeSparseChain(3, delayNs = 1_000_000L, weight = 1.0)
