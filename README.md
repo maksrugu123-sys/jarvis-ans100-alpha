@@ -2,6 +2,8 @@
 
 > **Integrated experimental prototype:** see [JARVIS Experimental Integrated Prototype V1](docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md). This branch combines the Android client and PC local console, adds a no-model desktop fallback, and connects separate 10,000-slot sparse dialogue-feature classifiers to the native Android and Python conversation paths. It remains experimental and source-level: no APK, build, runtime or test result is claimed.
 
+> **First APK path:** [build and install the first Android prototype](docs/FIRST_ANDROID_PROTOTYPE.md). The `Android first prototype` workflow assembles a debug APK on GitHub Actions; it does not require a local Gradle Wrapper.
+
 **JARVIS ANS-100 Alpha** is a research project for a compact adaptive neural system. Development is staged: begin with one artificial neuron and a small number of synapses, validate behavior and resource cost, and scale only when each previous step is supported by evidence.
 
 The repository has entered the first executable Python reference-orchestration stage. It is still not a production neural runtime, an integrated JPVR-001 prototype, or a finished assistant.

@@ -2502,3 +2502,21 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** read-only GitHub source inspection of `NetworkRuntime`, `NetworkJNVMCoordinator`, `JPVRNetworkJNVMStore`, `NeuronWorkingSet`, Android SQLite LRU, architecture and test policy; then GitHub read-back of this commit. No tests, Python execution, benchmark, Gradle build, APK/AAB, CI or device measurement was run.
 
 **Limitations / next:** implementation is not started. The project handoff requires explicit permission before running tests; TDD requires focused tests to be observed failing before production code. Obtain that permission, then implement the pinned read-view, bounded working set, lazy runtime adapter and atomic coordinator candidate publication in the order specified by the plan. Keep `main` untouched.
+
+
+## 2026-11-14 — Prepare first installable Android prototype build
+
+**Objective:** shorten the path to a first installable Android prototype without waiting for the unfinished Python JNVM/LRU, automatic cross-device sync, full autonomous reasoning or PC browser milestones.
+
+**Changed:**
+- Added `.github/workflows/android-prototype.yml`: GitHub Actions builds `:app:assembleDebug` using JDK 17, Gradle 8.9 and Android SDK 35, then uploads the debug APK for seven days.
+- Added `docs/FIRST_ANDROID_PROTOTYPE.md`: scope, workflow, artifact download, model-import boundary, and honest verification criteria.
+- Updated README with the first APK build/install guide.
+
+**Compatibility basis:** root build files specify AGP 8.7.3, Kotlin/Compose plugin 2.3.10, compileSdk 35 and Java 17. AGP 8.7 requires Gradle 8.9; Kotlin Gradle Plugin 2.3.10 supports Gradle 7.6.3–9.0 and AGP 8.2.2–9.0. The repository has no Gradle Wrapper, so the workflow installs Gradle directly on the runner.
+
+**Verification:** source and build configuration were read from the experiment branch; workflow YAML and documentation were authored. No build, test, CI run or APK generation has yet been executed by this commit. The push is expected to trigger the workflow if GitHub Actions is enabled and runner quota is available.
+
+**Limitations:** successful assembly will not prove device installation, UI stability, model inference, Russian quality, memory behavior, JNVM/LRU integration, PC parity or automatic sync. The LiteRT-LM model weights are not bundled in the APK and must be imported separately.
+
+**Next:** inspect the workflow run and fix compile/build blockers on this experiment branch only; after a successful artifact, install on Android and perform first-launch checks. Do not touch `main`.
