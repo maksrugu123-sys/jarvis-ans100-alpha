@@ -1,11 +1,11 @@
 input	intent	contains_negation	refers_to_previous_context	asks_for_explanation	plan_step_count	requires_clarification
-Почему это не работает?	question	true	true	false	4	false
+Почему это не работает?	question	true	true	false	4	true
 Найди ошибки и исправь их в проекте	action_request	false	false	false	5	false
 Что лучше: трансформер или нейронная сеть?	comparison	false	false	false	4	false
-Объясни, зачем это нужно	explanation	false	true	true	4	false
+Объясни, зачем это нужно	explanation	false	true	true	4	true
 Привет, Джарвис!	greeting	false	false	false	1	false
 This notebook contains little details.	statement_or_unknown	false	false	false	3	true
-Продолжай с предыдущей задачей	continuation	false	true	false	4	false
+Продолжай с предыдущей задачей	continuation	false	true	false	4	true
 необычный текст	statement_or_unknown	false	false	false	3	true
 Thank you	thanks	false	false	false	1	false
 What is JARVIS?	question	false	false	false	4	false
