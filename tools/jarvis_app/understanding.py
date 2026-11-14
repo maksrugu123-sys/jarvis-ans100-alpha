@@ -54,6 +54,94 @@ def _contains_any(tokens: Sequence[str], phrases: Sequence[str]) -> bool:
     return any(_contains_phrase(tokens, phrase) for phrase in phrases)
 
 
+_ACTION_TERMS = frozenset({
+    "сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь",
+    "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь",
+    "сделать", "implement", "build", "fix", "find", "create",
+})
+
+
+def _build_reasoning_plan(
+    intent: str,
+    key_terms: list[str],
+    entities: list[str],
+) -> dict[str, object]:
+    """Create a bounded template plan; this does not execute or prove a task."""
+    templates = {
+        "question": [
+            "Определить точный вопрос и его предмет",
+            "Проверить доступный контекст и подтверждённые сведения",
+            "Отделить факты от предположений",
+            "Сформулировать ответ или запросить недостающее уточнение",
+        ],
+        "explanation": [
+            "Выделить понятие или механизм, который нужно объяснить",
+            "Разложить объяснение на последовательные части",
+            "Подобрать конкретный пример",
+            "Указать ограничения и оставшуюся неопределённость",
+        ],
+        "comparison": [
+            "Определить сравниваемые варианты",
+            "Выбрать общие критерии сравнения",
+            "Сопоставить только подтверждённые характеристики",
+            "Показать компромиссы и условия выбора",
+        ],
+        "action_request": [
+            "Сформулировать требуемый результат",
+            "Определить цель, объект работы и доступные исходные данные",
+            "Разбить работу на проверяемые и обратимые этапы",
+            "Проверить ограничения, риски и критерии готовности",
+            "Не выполнять внешние действия без отдельного разрешения",
+        ],
+        "continuation": [
+            "Разрешить ссылку на предыдущий диалог по недавней истории",
+            "Сохранить ранее заданные ограничения и цель",
+            "Определить ближайший незавершённый шаг",
+            "Продолжить либо запросить уточнение при неоднозначной ссылке",
+        ],
+        "correction": [
+            "Выделить исправленное условие или факт",
+            "Заменить конфликтующую прежнюю интерпретацию",
+            "Повторно оценить вывод или план с учётом исправления",
+        ],
+        "greeting": ["Распознать приветствие и ответить в рамках текущего диалога"],
+        "thanks": ["Распознать благодарность и кратко ответить"],
+        "farewell": ["Распознать завершение диалога и ответить"],
+        "statement_or_unknown": [
+            "Выделить значимые слова и возможную цель сообщения",
+            "Проверить, достаточно ли контекста для надёжной интерпретации",
+            "Задать один конкретный уточняющий вопрос, если цель неясна",
+        ],
+    }
+    non_action_terms = [term for term in key_terms if term not in _ACTION_TERMS]
+    if intent == "statement_or_unknown":
+        clarification = True
+    elif intent == "question":
+        clarification = not bool(key_terms or entities)
+    elif intent == "action_request":
+        clarification = not bool(non_action_terms or entities)
+    elif intent == "comparison":
+        clarification = len(non_action_terms) + len(entities) < 2
+    else:
+        clarification = False
+
+    clarification_questions = {
+        "question": "Какой именно объект или ситуацию вы имеете в виду?",
+        "action_request": "Что именно нужно изменить, создать или проверить?",
+        "comparison": "Какие именно варианты нужно сравнить?",
+        "statement_or_unknown": "Какой результат вы хотите получить?",
+    }
+    return {
+        "schema": "JARVIS_REASONING_PLAN_V1",
+        "goal": intent,
+        "steps": templates[intent][:5],
+        "requires_clarification": clarification,
+        "clarification_question": clarification_questions.get(intent, ""),
+        "execution_authorized": False,
+        "scope": "bounded_template_plan_only",
+    }
+
+
 def analyze_text(value: str) -> dict[str, object]:
     """Return the JARVIS_UNDERSTANDING_V1 record; this is not a semantic model."""
     if not isinstance(value, str):
@@ -134,5 +222,6 @@ def analyze_text(value: str) -> dict[str, object]:
         "refers_to_previous_context": refers_back,
         "asks_for_explanation": explanation,
         "evidence": evidence[:5],
+        "reasoning_plan": _build_reasoning_plan(intent, key_terms, entities),
         "scope": "bounded_heuristic_pre_generation_analysis",
     }
