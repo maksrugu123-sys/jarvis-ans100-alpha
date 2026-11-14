@@ -194,7 +194,7 @@ def analyze_text(value: str) -> dict[str, object]:
         evidence = ["context_reference"]
     else:
         intent, confidence, task = "statement_or_unknown", 0.30, "interpret_and_respond"
-        evidence = ["no strong intent marker"]
+        evidence = ["unknown_intent_marker"]
 
     if has_question:
         evidence.append("question_form")
