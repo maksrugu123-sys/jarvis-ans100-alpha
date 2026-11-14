@@ -4602,3 +4602,31 @@ Research results should be structured as source records with title, canonical UR
 This is a PC capability only. Android continues independently; remote control of a PC browser from the phone is a separate future feature with authenticated pairing and consent. See [JARVIS Visible Browser Research V1](JARVIS_VISIBLE_BROWSER_RESEARCH_V1.md).
 
 **Next acceptance work:** add a visible browser adapter and bounded read-only research service; test that the window is actually visible, manual takeover works, untrusted page instructions cannot expand permissions, and every result has source provenance. No browser source, desktop package, tests or runtime validation currently exists.
+
+
+### 3.60. Bounded 10,000-Neuron Network Scaling V1
+
+**Status:** IMPLEMENTED at source level in the Python reference `NetworkRuntime`; scaling benchmark and limit tests are AUTHORED, NOT RUN. This does not promote 10,000 neurons as a verified device configuration.
+
+**Topology contract**
+- `NetworkRuntime` now rejects topologies above 10,000 neurons, 100,000 directed connections, or 100,000 total synapses before copying the network state.
+- `NeuronRuntime.synapse_count` exposes the owned synapse count without allocating a copied synapse map. Existing neuron/synapse equations and event semantics are unchanged.
+- The topology remains sparse and explicitly represented by directed `NetworkConnection` objects. No dense N×N adjacency or weight matrix is allocated by this coordinator.
+- Existing queue and per-run event budgets remain independent controls. The 10,000-node benchmark uses a bounded one-event-at-a-time chain and a run budget sized to the selected population; it does not remove backpressure or permit unbounded event growth.
+- The constructor still owns in-memory copies of all neuron runtimes. Timestamp processing copies only the nodes touched by the current batch, but the full topology remains resident in Python memory.
+
+**Scaling evidence**
+- Added `tools/neuron_runtime/network_scaling_benchmark.py` with `smoke` (1, 10), `pilot` (1, 10, 100, 1,000), and `full` (1, 10, 100, 1,000, 10,000) profiles. It constructs a deterministic sparse chain, routes one spike through the chain, and records elapsed time plus tracemalloc current/peak deltas.
+- Added `tools/neuron_runtime/test_network_limits.py` for exact topology ceilings and rejection beyond each ceiling.
+- The existing `tools/compact_core_v5/resource_baseline.py` full profile already measures 10,000 Oracle-shaped reference items, but that is not a 10,000-node `NetworkRuntime` test. The new chain benchmark is the first network-level scale protocol.
+- Acceptance remains staged: inspect and verify 1 → 10 → 100 → 1,000 → 10,000. Do not call the 10,000 profile verified or select it as a default until correctness, resource and stability results are recorded on the intended PC environment.
+
+**Storage and platform boundary**
+- `JPVRNetworkCheckpointStore` stores the complete network snapshot in a BLOB plus CHECKPOINT commit. It does not page inactive neurons out of RAM, lazily fault neuron state in, or provide an LRU/JNVM virtual-memory manager. Flash persistence is not equivalent to active RAM.
+- The current Python coordinator is a desktop/Termux reference component. Android's in-process Kotlin signal runtime remains a two-neuron feature; the native Android 10,000-neuron runtime, packed state representation, Android/PC numerical parity, and device RAM/CPU/thermal measurements are NOT IMPLEMENTED / NOT MEASURED.
+- The optional Termux extension must remain optional. The Android app must continue to function without it; this increment does not route ordinary Android chat through a 10,000-node Python network.
+- The 10,000-node capacity ceiling is not evidence of intelligence, semantic understanding, useful learning, or biological equivalence. Dialogue STDP/R-STDP remains disabled.
+
+**Verification:** GitHub source readback and static edit review only. The new tests and scaling benchmark are AUTHORED, NOT RUN. No Python test, benchmark, import/syntax command, Gradle build, APK/AAB, CI, Android/PC runtime, or device resource measurement was run.
+
+**Next:** run the scaling protocol on a PC from the smallest profile upward; use the measured results to design a packed state/JNVM paging layer, then port the same bounded numerical contract to native Kotlin before claiming Android 10,000-neuron support. See [JARVIS 10,000-Neuron Scaling V1](JARVIS_10K_NEURON_SCALING_V1.md).

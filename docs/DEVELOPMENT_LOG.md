@@ -1939,3 +1939,23 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Tests / implementation:** no browser controller, package dependency, desktop code or browser profile was added. No tests or desktop runtime checks were applicable to this documentation-only proposal.
 
 **Next step:** implement a visible desktop browser adapter and bounded read-only research service in a later batch, then verify visible-window behavior, manual takeover, cancellation, source provenance and rejection of page-originated instructions.
+
+
+## 2026-11-14 — Add bounded 10,000-neuron Python network capacity
+
+**Objective:** begin the user's requested increase in ANS-100 network scale while preserving staged validation and the Android standalone constraint.
+
+**Changed:**
+- `tools/neuron_runtime/network.py`: added hard topology ceilings of 10,000 neurons, 100,000 directed connections and 100,000 total synapses. Oversized topology is rejected before network-state deep copies.
+- `tools/neuron_runtime/runtime.py`: added an O(1) `synapse_count` property used by topology validation.
+- Added `tools/neuron_runtime/test_network_limits.py`: authored tests for the exact neuron ceiling and over-limit rejection for neurons, connections and total synapses.
+- Added `tools/neuron_runtime/network_scaling_benchmark.py`: deterministic sparse-chain benchmark profiles for 1, 10, 100, 1,000 and 10,000 nodes, including event propagation, elapsed time and Python allocation observations.
+- Added `docs/JARVIS_10K_NEURON_SCALING_V1.md` and architecture section 3.60. Updated `README.md` to distinguish Python network capacity from Android's existing two-neuron Kotlin signal pass.
+
+**Behavior / limits:** Python `NetworkRuntime` now has an explicit 10,000-neuron source-level capacity ceiling. This is not a measured performance claim. The full topology remains resident in Python memory. JPVR network checkpoints remain complete snapshots rather than lazy JNVM paging. Android standalone 10,000-neuron execution is not implemented; Termux remains optional.
+
+**Tests:** new topology-limit tests are AUTHORED, NOT RUN. The sparse-chain benchmark is AUTHORED, NOT RUN. Existing network scheduler, codec and checkpoint-store suites were not run.
+
+**Verification:** static source edits and GitHub readback only. No Python tests, benchmark, import/syntax checks, Gradle build, APK/AAB, CI, Android/PC runtime, or device RAM/CPU/thermal measurement was run. No test or performance result is claimed.
+
+**Next:** execute the 1 → 10 → 100 → 1,000 → 10,000 network scaling protocol on PC, record memory/latency/stability, then design packed-state/JNVM paging and a native Kotlin runtime with numerical parity before claiming 10,000-neuron Android support.

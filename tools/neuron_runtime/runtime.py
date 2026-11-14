@@ -149,6 +149,11 @@ class NeuronRuntime:
         return dict(self._synapse_states)
 
     @property
+    def synapse_count(self) -> int:
+        """Return the number of owned synapses without materializing a copy."""
+        return len(self._synapse_states)
+
+    @property
     def learning_rule(self) -> LearningRule:
         return self._learning_rule
 

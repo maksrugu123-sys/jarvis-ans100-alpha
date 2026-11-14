@@ -21,6 +21,11 @@ _U64_MAX = (1 << 64) - 1
 _DEFAULT_QUEUE_LIMIT = 4096
 _DEFAULT_RUN_LIMIT = 4096
 _MAX_LIMIT = 1_000_000
+
+# Hard topology ceilings for the in-memory Python reference coordinator.
+MAX_NETWORK_NEURONS = 10_000
+MAX_NETWORK_CONNECTIONS = 100_000
+MAX_NETWORK_SYNAPSES = 100_000
 _INTERNAL_PREFIX = "jarvis-network:"
 
 
@@ -122,15 +127,23 @@ class NetworkRuntime:
     ) -> None:
         if not isinstance(neurons, Mapping) or not neurons:
             raise NetworkRuntimeError("neurons must be a non-empty mapping")
+        if len(neurons) > MAX_NETWORK_NEURONS:
+            raise NetworkRuntimeError(f"network exceeds the {MAX_NETWORK_NEURONS}-neuron topology limit")
         if not isinstance(connections, (list, tuple)):
             raise NetworkRuntimeError("connections must be a list or tuple")
+        if len(connections) > MAX_NETWORK_CONNECTIONS:
+            raise NetworkRuntimeError(f"network exceeds the {MAX_NETWORK_CONNECTIONS}-connection topology limit")
         self._queue_limit = _limit("max_pending_events", max_pending_events)
         self._run_limit = _limit("max_events_per_run", max_events_per_run)
         self._neurons: dict[str, NeuronRuntime] = {}
+        total_synapses = 0
         for key, runtime in neurons.items():
             _id("neuron_id", key)
             if not isinstance(runtime, NeuronRuntime):
                 raise NetworkRuntimeError("each neuron must be a NeuronRuntime")
+            total_synapses += runtime.synapse_count
+            if total_synapses > MAX_NETWORK_SYNAPSES:
+                raise NetworkRuntimeError(f"network exceeds the {MAX_NETWORK_SYNAPSES}-synapse topology limit")
             self._neurons[key] = deepcopy(runtime)
 
         outgoing: dict[str, list[NetworkConnection]] = {key: [] for key in self._neurons}
