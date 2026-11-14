@@ -249,7 +249,7 @@ interface LocalResponseEngine {
         memoryContext: List<LocalWorkspaceMemory>,
         signalContext: ConversationSignalContext?,
         understandingContext: LocalUnderstanding?,
-    ): String = respond(prompt, recentHistory)
+    ): String = respond(prompt, recentHistory, memoryContext, signalContext)
 }
 
 /** Deterministic command/greeting fallback; it deliberately is not an LLM. */
