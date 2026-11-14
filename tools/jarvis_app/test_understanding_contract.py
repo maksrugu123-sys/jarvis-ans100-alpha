@@ -71,9 +71,12 @@ class UnderstandingContractTests(unittest.TestCase):
             {"role": "assistant", "content": "Я нашёл описание проблемы."},
         ]
         try:
-            core.respond("Продолжай с этим", history)
+            answer, trace = core.respond("Продолжай с этим", history)
         finally:
             core.close()
+        self.assertEqual("Ответ-заглушка", answer)
+        self.assertTrue(trace["natural_language_plan_context_available"])
+        self.assertFalse(trace["natural_language_plan_execution_authorized"])
         context = engine.arguments["understanding_context"]
         self.assertTrue(context["has_recent_user_context"])
         self.assertTrue(context["reasoning_plan"]["context_available"])

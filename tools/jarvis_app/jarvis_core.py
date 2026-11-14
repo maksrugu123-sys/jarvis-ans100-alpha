@@ -499,7 +499,7 @@ class JarvisCore:
                 if isinstance(natural_language_plan, Mapping) else False
             ),
             "natural_language_plan_context_available": (
-                natural_language_plan.get("context_reference_resolved") is True
+                natural_language_plan.get("context_available") is True
                 if isinstance(natural_language_plan, Mapping) else False
             ),
             "natural_language_plan_execution_authorized": False,
