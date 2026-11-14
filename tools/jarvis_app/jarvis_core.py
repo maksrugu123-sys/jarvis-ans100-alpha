@@ -416,6 +416,11 @@ class JarvisCore:
             raise RuntimeError("JARVIS Core has no configured language engine")
         understanding_context = analyze_text(prompt)
         recalled = self.retrieve_memories(prompt, memories)
+        natural_language_plan = understanding_context.get("reasoning_plan", {})
+        plan_steps = (
+            natural_language_plan.get("steps", [])
+            if isinstance(natural_language_plan, Mapping) else []
+        )
         reasoning_context = None
         if reasoning_request is not None:
             reasoning_plan = self.plan_structured_task(reasoning_request)
@@ -483,6 +488,16 @@ class JarvisCore:
             "understanding_intent": understanding_context["intent"],
             "understanding_confidence": understanding_context["intent_confidence"],
             "understanding_scope": understanding_context["scope"],
+            "natural_language_plan_generated": (
+                isinstance(natural_language_plan, Mapping)
+                and natural_language_plan.get("schema") == "JARVIS_REASONING_PLAN_V1"
+            ),
+            "natural_language_plan_step_count": len(plan_steps) if isinstance(plan_steps, list) else 0,
+            "natural_language_plan_requires_clarification": (
+                natural_language_plan.get("requires_clarification") is True
+                if isinstance(natural_language_plan, Mapping) else False
+            ),
+            "natural_language_plan_execution_authorized": False,
             "ans100_signal_invoked": signal_context is not None,
             "ans100_attention_gate_active": (
                 bool(signal_context["attention_gate_active"])
