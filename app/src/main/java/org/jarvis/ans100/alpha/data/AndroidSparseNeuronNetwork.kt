@@ -82,6 +82,7 @@ class AndroidNeuronBackpressureException(message: String) : AndroidNeuronNetwork
  */
 internal interface AndroidNeuronStateStore : Closeable {
     fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double)
+    fun initializeSparseDialogueNetwork(neuronCount: Int, featureNeuronCount: Int, delayNs: Long, weight: Double)
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
     fun enqueue(event: AndroidNeuronEvent)
@@ -128,6 +129,27 @@ class AndroidSparseNeuronNetwork(
         require(neuronCount in 1..MAX_NEURONS) { "neuronCount exceeds the 10,000-node capacity" }
         require(delayNs > 0L && weight.isFinite() && weight in 0.0..1.0)
         store.initializeSparseChain(neuronCount, delayNs, weight)
+        hot.clear()
+    }
+
+    /**
+     * Initializes a bounded feed-forward dialogue topology: feature neurons
+     * fan out to four output neurons, which have no outgoing edges. Unlike the
+     * generic chain fixture, a chat turn cannot cascade through all 10k nodes.
+     */
+    @Synchronized
+    fun initializeSparseDialogueNetwork(
+        neuronCount: Int = MAX_NEURONS,
+        featureNeuronCount: Int = neuronCount - DIALOGUE_OUTPUT_NEURONS,
+        delayNs: Long = DEFAULT_CONNECTION_DELAY_NS,
+        weight: Double = 1.0,
+    ) {
+        require(neuronCount in (DIALOGUE_OUTPUT_NEURONS + 1)..MAX_NEURONS)
+        require(featureNeuronCount in 1 until neuronCount)
+        require(neuronCount - featureNeuronCount == DIALOGUE_OUTPUT_NEURONS)
+        require(featureNeuronCount.toLong() * DIALOGUE_OUTPUT_NEURONS <= MAX_CONNECTIONS)
+        require(delayNs > 0L && weight.isFinite() && weight in 0.0..1.0)
+        store.initializeSparseDialogueNetwork(neuronCount, featureNeuronCount, delayNs, weight)
         hot.clear()
     }
 
@@ -315,6 +337,8 @@ class AndroidSparseNeuronNetwork(
         const val MAX_CONNECTIONS = 100_000
         const val MAX_PENDING_EVENTS = 100_000
         const val MAX_HOT_SET_CAPACITY = 4_096
+        const val DIALOGUE_OUTPUT_NEURONS = 4
+        const val DIALOGUE_FEATURE_NEURONS = MAX_NEURONS - DIALOGUE_OUTPUT_NEURONS
         const val DEFAULT_HOT_SET_CAPACITY = 128
         const val MAX_EVENTS_PER_TIMESTAMP = 10_000
         const val MAX_EVENTS_PER_RUN = 100_000
@@ -374,6 +398,48 @@ private class AndroidNeuronSqliteStore(
                     insertConnection(
                         db,
                         AndroidNeuronConnection("chain-${id - 1}", id - 1, id, delayNs, weight),
+                    )
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun initializeSparseDialogueNetwork(
+        neuronCount: Int,
+        featureNeuronCount: Int,
+        delayNs: Long,
+        weight: Double,
+    ) {
+        val connectionCount = featureNeuronCount.toLong() * AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS
+        if (neuronCount !in (AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS + 1)..AndroidSparseNeuronNetwork.MAX_NEURONS ||
+            featureNeuronCount < 1 ||
+            neuronCount - featureNeuronCount != AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS ||
+            connectionCount > AndroidSparseNeuronNetwork.MAX_CONNECTIONS ||
+            delayNs <= 0L || !weight.isFinite() || weight !in 0.0..1.0
+        ) throw AndroidNeuronNetworkException("invalid bounded dialogue topology")
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val existing = scalar(db, "SELECT COUNT(*) FROM neurons")
+            if (existing != 0L) throw AndroidNeuronNetworkException("network is already initialized")
+            for (id in 0 until neuronCount) insertNeuron(db, id)
+            val firstOutputId = featureNeuronCount
+            for (featureId in 0 until featureNeuronCount) {
+                for (outputIndex in 0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS) {
+                    val outputId = firstOutputId + outputIndex
+                    insertConnection(
+                        db,
+                        AndroidNeuronConnection(
+                            connectionId = "dialog-feature-$featureId-output-$outputIndex",
+                            sourceNeuronId = featureId,
+                            targetNeuronId = outputId,
+                            delayNs = delayNs,
+                            weight = weight,
+                        ),
                     )
                 }
             }
