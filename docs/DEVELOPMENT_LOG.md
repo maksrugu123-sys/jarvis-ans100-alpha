@@ -2211,3 +2211,28 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Tests:** existing `LocalWorkspaceMemoryStoreTest.kt` remains AUTHORED, NOT RUN. No dedicated ViewModel/UI test was added in this source-only change.
 
 **Verification:** GitHub source readback and static inspection only. No Kotlin tests, Gradle build, APK/AAB, device interaction, CI or performance measurement was run.
+
+
+## 2026-11-14 — Integrate native Android sparse dialogue classifier and harden offline model lifecycle
+
+**Objective:** make the native Compose chat expose the requested 10,000-slot dialogue-feature experiment without conflating it with the ten-neuron ANS-100 signal runtime or Qwen, while tightening the separately installed offline model path.
+
+**Changed / added:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalDialogFeatureClassifier.kt` — new bounded sparse classifier with 10,000 addressable feature slots, Unicode unigram/bigram hashing, four intent labels, abstention until explicit training, bounded numeric weights, lazy checkpoint loading, write-before-publish and fail-closed corrupt-state handling. It stores no source utterances.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/LocalDialogFeatureClassifierTest.kt` — seven focused tests for untrained abstention, explicit learning, checkpoint/reopen, failed commit, corrupt checkpoint, invalid input/labels and bounded deterministic feature extraction.
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` — integrates classifier analysis into each native conversation turn as a non-blocking optional side-channel; adds explicit feedback training for the last user message on the background executor; cancels active model download when the ViewModel is cleared.
+- `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt` — displays active-feature count, training count and heuristic label; adds four explicit feedback buttons and explains the difference between sparse text features, ANS-100 and the language model.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LiteRtLmModelStore.kt` — checks cancellation before connecting and after receiving headers, validates Content-Range start/end/total, rejects non-identity response encoding, and exposes small pure validators for regression tests.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/LiteRtLmModelStoreValidationTest.kt` — four tests for valid and malformed/mismatched Content-Range and allowed/rejected Content-Encoding values.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LiteRtLmResponseEngine.kt` — reduces prompt/context to source-level limits suitable for the compact 1,280-token model: 750 input characters, two prior messages of 160 characters, two approved memories of 120 content characters and a compact numeric ANS-100 summary; max output remains 96 tokens.
+- Documentation updated: `README.md`, `AGENTS.md`, `docs/JARVIS_ARCHITECTURE.md` (§§3.71–3.72), `docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md`, `docs/JARVIS_10K_NEURON_SCALING_V1.md`, `docs/JARVIS_ANDROID_IN_PROCESS_CONVERSATION_V0_1.md`, and `docs/JARVIS_DIALOG_NEURON_EXPERIMENT_V1.md`.
+
+**Behavior / boundaries:** the Android classifier uses SHA-256 hashing while the Python reference uses BLAKE2b; their feature indices and checkpoints are not compatible. The classifier reports only heuristic intent labels, does not generate text, does not enter Qwen as a reasoning result, and does not authorize or trigger actions. The native ten-neuron ANS-100 pass is unchanged. Model weights remain outside the APK and are installed separately. Range/cancellation and prompt-budget rules are source-level only; the character limits are not an exact tokenizer budget.
+
+**Tests:** seven Android classifier tests and four pure model-download validation tests were added. Both groups are **AUTHORED, NOT RUN**. Existing Android conversation, signal, memory, transfer and Python regression tests were not run and remain in their prior documented status.
+
+**Verification performed:** fetched the changed source and documentation from the target GitHub branch after updates; manually inspected the classifier bounds, checkpoint validation/write order, ViewModel/UI wiring, HTTP range guards, model hash/size pins and platform-boundary documentation. This was a source/readback review only; no executable check command was run.
+
+**Not run:** all Kotlin/JUnit tests, Python tests, Gradle sync/build, APK/AAB packaging, CI/GitHub Actions, Playwright/browser runtime, model download/resume, LiteRT-LM initialization/inference, TECNO device interaction, and RAM/CPU/latency/battery/thermal measurements. The build/test restriction remains in force.
+
+**Limitations / next:** verify compilation and the focused Kotlin test modules only after separate user authorization. Then, with the user's device, test the first model download, interruption/resume, SHA check, model initialization, memory pressure and Russian answer quality. Collect a disjoint labelled dialogue set and evaluate the Android and Python classifiers separately; do not compare their checkpoints as if they shared feature IDs.
