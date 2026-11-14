@@ -241,6 +241,15 @@ interface LocalResponseEngine {
         memoryContext: List<LocalWorkspaceMemory>,
         signalContext: ConversationSignalContext?,
     ): String = respond(prompt, recentHistory)
+
+    /** Versioned Core analysis is advisory evidence, never an action authorization. */
+    fun respond(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage>,
+        memoryContext: List<LocalWorkspaceMemory>,
+        signalContext: ConversationSignalContext?,
+        understandingContext: LocalUnderstanding?,
+    ): String = respond(prompt, recentHistory)
 }
 
 /** Deterministic command/greeting fallback; it deliberately is not an LLM. */
@@ -250,6 +259,21 @@ class LocalFallbackResponseEngine : LocalResponseEngine {
     override fun respond(
         prompt: String,
         recentHistory: List<LocalConversationMessage>,
+    ): String = respond(prompt, recentHistory, emptyList(), null, null)
+
+    override fun respond(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage>,
+        memoryContext: List<LocalWorkspaceMemory>,
+        signalContext: ConversationSignalContext?,
+    ): String = respond(prompt, recentHistory, memoryContext, signalContext, null)
+
+    override fun respond(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage>,
+        memoryContext: List<LocalWorkspaceMemory>,
+        signalContext: ConversationSignalContext?,
+        understandingContext: LocalUnderstanding?,
     ): String {
         val normalized = prompt.trim().lowercase(Locale.ROOT)
             .trimEnd('.', '!', '?', ',', ';', ':')
@@ -265,13 +289,38 @@ class LocalFallbackResponseEngine : LocalResponseEngine {
                     "Для этого диалога не нужны Termux, сервер или интернет. " +
                     "Языковая модель и нейронный runtime пока не подключены; внешние действия выключены."
             }
-            normalized in setOf(
+            understandingContext?.intent == "greeting" || normalized in setOf(
                 "привет", "здравствуй", "здравствуйте", "доброе утро",
                 "добрый день", "добрый вечер", "hello", "hi",
             ) || normalized.startsWith("привет ") -> {
                 "Привет! Я JARVIS. Диалог сохраняется локально на этом устройстве. " +
                     "Пока я использую базовый ответчик, а не полноценную языковую модель. " +
                     "Напиши /help, чтобы увидеть доступные команды."
+            }
+            understandingContext?.intent == "thanks" -> {
+                "Пожалуйста. Я распознал благодарность на уровне локального анализа JARVIS."
+            }
+            understandingContext?.intent == "farewell" -> {
+                "До связи. История диалога сохранена локально."
+            }
+            understandingContext != null -> {
+                val plan = understandingContext.reasoningPlan
+                buildString {
+                    append("Ядро JARVIS выполнило предварительный разбор: ")
+                    append(understandingContext.intent)
+                    append(" (уверенность эвристики ")
+                    append(String.format(Locale.ROOT, "%.2f", understandingContext.intentConfidence))
+                    append("). ")
+                    if (plan.requiresClarification && plan.clarificationQuestion.isNotBlank()) {
+                        append(plan.clarificationQuestion)
+                    } else {
+                        append("Сформирован предварительный план из ")
+                        append(plan.steps.size)
+                        append(" шагов. ")
+                    }
+                    append("Это ограниченный анализ и шаблонный план, не глубокое понимание. ")
+                    append("Для свободного содержательного ответа установи языковую модель.")
+                }
             }
             else -> {
                 "Я получил и сохранил сообщение локально, но пока не могу дать содержательный " +
