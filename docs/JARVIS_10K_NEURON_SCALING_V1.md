@@ -60,10 +60,14 @@ The boundary tests are in `tools/neuron_runtime/test_network_limits.py`. They co
 
 1. Run smoke and pilot on a PC, inspect all correctness and resource results, and fix regressions.
 2. Run the 10,000-node full profile only after smaller profiles are acceptable; record the machine, Python version, memory and timing.
-3. Integrate the compact working set only after adding a network-level timestamp transaction coordinator; preserve candidate isolation and publish events only after the required durable commit.
+3. Implement the single-container group-commit design in docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md; do not combine per-neuron commits across the 128-shard prototype.
 4. Implement the same versioned numerical contract in native Kotlin, then add Python/Kotlin golden-vector parity tests.
 5. Measure Android RAM, CPU, latency, battery and thermal behavior before enabling a larger network in the phone app.
 
-## 6. Verification status
+## 6. Network-level persistence design
+
+The required next architecture is specified in docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md: one JPVR container per network, neuron and scheduler indexes, and one COMMIT covering every changed neuron plus the pending-event queue and network clock for a timestamp. The current 128-shard per-neuron working set cannot provide this cross-neuron atomicity and must remain an isolated persistence prototype until the group transaction store exists.
+
+## 7. Verification status
 
 The topology-limit tests and sparse-chain benchmark from the previous increment remain **AUTHORED, NOT RUN**. The compact-codec and working-set tests are also **AUTHORED, NOT RUN**. The working-set prototype is source-level only and is not connected to the network scheduler. The uncertain-commit mutation guard has been added at source level; its focused regression test is AUTHORED, NOT RUN. No Python test, benchmark, import/syntax check, Android/PC runtime, Gradle build, APK/AAB, CI or device measurement has been performed for this increment.

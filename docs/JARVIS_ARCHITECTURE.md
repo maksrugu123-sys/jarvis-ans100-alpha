@@ -4678,3 +4678,24 @@ Both mutation entry points now reject an uncertain resident entry with NeuronWor
 The focused test extends the uncertain-commit path to assert that another batch is rejected and the resident neuron state remains unchanged before reconciliation. The change preserves the NCC single-writer and recovery invariants; it does not introduce network-wide transactions.
 
 **Verification:** source readback/static review only. Test not run; no benchmark, build, or device measurement.
+
+
+### 3.63. Network-Level JNVM Timestamp Transaction V1
+
+**Status:** specified, not implemented. Full contract: docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md.
+
+The existing NetworkRuntime timestamp batch is a logical atomic unit: all affected neuron candidates, generated outgoing events, pending queue and network clock must become visible together. The per-neuron NeuronWorkingSet uses 128 separate JPVR shard containers; separate container commits cannot provide this invariant. Do not connect it directly to NetworkRuntime.
+
+The specified next storage topology is one JPVR container per network with:
+- a neuron COW INDEX mapping stable neuron IDs to immutable neuron checkpoint records;
+- a network-state COW INDEX mapping the network ID to the bounded scheduler checkpoint;
+- one typed JPVR transaction containing all changed neuron records, all changed INDEX locators and the scheduler checkpoint;
+- one MANIFEST/COMMIT/Superblock publication as the visibility boundary.
+
+The scheduler checkpoint owns the clock, pending queue, event-ID deduplication state, topology version and transaction sequence. Candidate neuron state and generated outgoing events are prepared and validated before commit. In-memory state is published only after durable commit. An uncertain commit freezes the writer until reopen/reconciliation proves whether the exact transaction became active.
+
+The existing JPVR typed transaction builder supports multiple DATA/BLOB records and index mutations in one transaction request, but the current neuron checkpoint facade exposes only single-neuron saves. A dedicated group checkpoint store is required. The 128-shard manager remains an isolated per-neuron experiment, not the network execution backend.
+
+Acceptance includes all-or-none multi-neuron visibility, crash/failpoint recovery, differential scheduler tests, queue/clock invariants, bounded cache/compaction and measured scale profiles through 10,000 nodes. Python implementation and measurements precede any Kotlin port. Android's two-neuron native path and optional-Termux boundary remain unchanged.
+
+**Verification:** design/static API review only. No group transaction implementation, tests, benchmark, build or device measurement.

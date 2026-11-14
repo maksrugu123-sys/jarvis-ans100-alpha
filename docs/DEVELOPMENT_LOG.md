@@ -2021,3 +2021,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Tests:** one test method is AUTHORED, NOT RUN. No tests or builds were run.
 
 **Reason:** without explicit validation, values such as None could leak a Python TypeError from the page-count comparison instead of producing the repository's JPVRFormatError.
+
+
+## 2026-11-14 — Specify atomic multi-neuron JNVM transaction boundary
+
+**Finding:** the compact LRU prototype uses 128 separate JPVR shard containers. Since JPVR commits are container-local, this layout cannot atomically publish all neurons affected by one NetworkRuntime timestamp.
+
+**Decision:** do not connect the per-neuron working set directly to NetworkRuntime. Specify a dedicated single-container-per-network store with neuron and scheduler COW indexes, all changed neuron records plus scheduler queue/clock state in one typed transaction, and one COMMIT/Superblock publication boundary. In-memory state and outgoing events publish only after durable commit; uncertain outcomes freeze the writer until recovery reconciliation.
+
+**Added:** docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md, architecture section 3.63 and a corresponding gate in the 10k scaling roadmap.
+
+**Verification:** architecture and existing JPVR API review only. This is a design specification, not an implementation. No tests, benchmarks, builds or device measurements.
