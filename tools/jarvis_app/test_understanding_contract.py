@@ -126,6 +126,12 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertFalse(result["contains_negation"])
         self.assertFalse(result["refers_to_previous_context"])
 
+    def test_tokenizer_preserves_unicode_letters_outside_latin_and_cyrillic(self) -> None:
+        result = analyze_text("Vergleiche Größe und Straße")
+        self.assertIn("vergleiche", result["key_terms"])
+        self.assertIn("größe", result["key_terms"])
+        self.assertIn("straße", result["key_terms"])
+
     def test_entity_extraction_handles_cyrillic_and_latin_names(self) -> None:
         result = analyze_text("Сравни Qwen3 и Джарвис")
         self.assertIn("Qwen3", result["entities"])
