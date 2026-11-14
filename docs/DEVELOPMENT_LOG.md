@@ -2423,3 +2423,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Tests:** two new Android instrumentation cases added; the complete network test class now contains seven cases. They are **AUTHORED, NOT RUN**. No Kotlin compile, Gradle build, APK, Android instrumentation, device measurement, Python test, PC browser or local-model runtime check was performed.
 
 **Limitations / next:** implement explicit, bounded plasticity on the 10k graph with durable synapse updates and per-feedback idempotency before claiming that the phone's spiking network learns from dialogue. Then test on the target Android device for queue stability, SQLite write cost, resident-set behavior, RAM, latency, battery and thermal load.
+
+
+## 2026-11-14 — Harden native Android dialogue reward handoff
+
+**Objective:** prevent delayed reward callbacks from corrupting the feedback state of a newer chat turn and make missing eligibility traces visible rather than reporting a false successful update.
+
+**Changed:**
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` — delayed native reward completion and error callbacks now compare the originating context ID with the currently displayed feedback context. They clear or update context-specific UI state only when they still own that context. A reward that updates zero synapses is reported as a missing/expired eligibility trace rather than a successful learning update.
+- `docs/JARVIS_ARCHITECTURE.md` — added §3.79 describing the Android 10k dialogue topology's explicit eligibility/reward path, context ownership, bounded behavior and unverified status.
+- `README.md` — corrected the Android status so it distinguishes the hashed four-label classifier from the native spiking graph and records that explicit feedback may update both separate learners.
+
+**Tests:** the Android instrumentation cases added for positive/negative synapse changes, untouched-synapse isolation, duplicate reward consumption, SQLite persistence and invalid reward rejection remain **AUTHORED, NOT RUN**. No additional test was added in this callback-only correction; a deterministic stale-callback regression test is still desirable.
+
+**Verification:** fetched current branch files, applied exact-content replacements, and verified GitHub update responses. No executable test, Kotlin compile, Gradle build, APK, CI, device runtime or performance measurement was run, in accordance with repository instructions.
+
+**Limitations / next:** the Android dialogue graph is a bounded numeric feature-to-four-output learner, not a semantic reasoner. The next high-value engineering task is a static review of the existing Python JNVM working-set integration and its recovery/dirty-eviction invariants, followed by tests only when separately authorized. Automatic sync, PC browser/model runtime and Android build remain unverified.
