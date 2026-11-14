@@ -129,7 +129,7 @@ class LocalConversationRuntimeTest {
         assertTrue(!engineCalled)
         assertTrue(messages.last().text.contains("ANS-100"))
         assertTrue(messages.last().text.contains("не интегрирован"))
-        assertTrue(messages.last().text.contains("долговременная JPVR-память"))
+        assertTrue(messages.last().text.contains("Долговременная JPVR-память"))
         assertTrue(coordinator.backendLabel.startsWith("JARVIS Core"))
     }
 
