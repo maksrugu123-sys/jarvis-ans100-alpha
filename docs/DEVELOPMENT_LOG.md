@@ -2359,3 +2359,18 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Learning boundary:** the 10k sparse LIF-DT runtime currently emits an observable signal only. The existing explicit 👍/👎 reward still updates the separate sparse feature classifier; LIF synaptic weights are not yet reward-trained. No semantic reasoning or autonomous decision capability is claimed.
 
 **Verification:** GitHub source/readback and static replacement checks only. New and existing Android tests remain **AUTHORED, NOT RUN**. No Gradle build, APK, device runtime, PC browser/model run, resource measurement, CI or GitHub Actions workflow was executed.
+
+## 2026-11-14 — Expose confirmed read-only Task Loop execution in Android
+
+**Objective:** connect the existing Python Task Loop to the Android Compose task registry without widening the action surface.
+
+**Changed:**
+- `LocalRuntimeBridgeClient.kt` adds a strict request builder for exactly one `memory.search` step and a bounded result decoder. It validates task identity, returned state, allowed capability, query provenance and at most five excerpts.
+- `JarvisViewModel.kt` adds a dedicated execution operation that requires a connected authenticated Termux bridge and a still-queued task with the exact current revision.
+- `MainActivity.kt` adds a per-task confirmation dialog explaining that the operation searches only explicitly approved memories. The UI requires an open owning session and limits the query to 240 characters.
+- Added `LocalRuntimeBridgeClientTest.kt` for exact capability payload and rejection of blank/oversized/NUL queries and negative revisions.
+- Updated the safe-actions contract, autonomous milestone plan and README.
+
+**Safety boundary:** Android currently exposes only `memory.search`. The existing server-side allow-list remains authoritative. Browser, shell, arbitrary Python, file writes, uploads, messaging and purchases remain unavailable. A successful source implementation is not a runtime verification.
+
+**Verification:** GitHub source readback and static review only. New Android unit tests and existing Python Task Loop tests are **AUTHORED, NOT RUN**. No Termux end-to-end request, Gradle build, APK, device UI, Python test, browser or local-model run was performed.

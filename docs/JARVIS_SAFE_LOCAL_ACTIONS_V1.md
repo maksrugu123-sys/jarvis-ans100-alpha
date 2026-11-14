@@ -45,3 +45,11 @@ Reversible writes and external/irreversible actions remain disabled. Before addi
 ## Verification
 
 Four Python tests are authored for allow-listing, approved-memory filtering and Task Loop persistence; they are **AUTHORED, NOT RUN**. Visible Playwright browser launch, PWA interaction and local LLM inference have not been verified in a PC environment.
+
+## Android Task Loop bridge
+
+The native Android Compose panel now exposes one execution path for a queued task: a user-confirmed, single-step `memory.search` over explicitly approved workspace memories. The client sends the exact task revision, accepts only the `memory.search` capability, validates the returned task identity/status and bounded result shape, then refreshes the JPVR state. It does not expose browser, shell, file-write, message, upload or purchase capabilities.
+
+The Android confirmation dialog displays the query before the authenticated run request. Only tasks whose owning session is open and whose revision/status still match are offered for execution. A stale revision fails closed and requires refresh. The server still owns Task Loop planning, policy checks, action budgeting and JPVR persistence.
+
+The Android payload-builder tests are **AUTHORED, NOT RUN**. No end-to-end Termux run or Android UI/device verification has occurred.

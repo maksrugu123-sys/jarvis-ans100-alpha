@@ -54,7 +54,7 @@
 - Verify against a local PC TLS server using a test certificate before enabling automatic sync.
 
 ### F. Controlled action execution
-- Connect the existing Task Loop run endpoint to Android and desktop UI with exact task revision and visible preview.
+- Android now connects the Task Loop run endpoint for exactly one confirmed `memory.search` read-only step; the client validates task ID/revision, capability and bounded results. Desktop/PWA UI execution remains to be verified.
 - Keep V1 read-only. Require explicit per-run confirmation even for read-only operations.
 - Any future write capability needs a signed, expiring, exact-payload approval, durable revocation, idempotency and result reconciliation. Never expose a general shell executor.
 
