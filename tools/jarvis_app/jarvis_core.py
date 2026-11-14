@@ -6,6 +6,7 @@ workspace-memory retrieval, capability reporting and explicit integration limits
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import hashlib
 import re
 from typing import Any
 
@@ -260,6 +261,86 @@ class JarvisCore:
         plan = self._reasoning_engine.analyze(self._build_reasoning_request(payload))
         return self._plan_view(plan)
 
+    def _reasoning_request_from_understanding(
+        self,
+        prompt: str,
+        history: Sequence[Mapping[str, object]],
+        understanding: Mapping[str, object],
+    ) -> dict[str, object] | None:
+        """Translate trusted Core-produced template steps into a non-executable DAG candidate."""
+        intent = understanding.get("intent")
+        plan = understanding.get("reasoning_plan")
+        if intent not in {"action_request", "comparison", "explanation", "question"}:
+            return None
+        if not isinstance(plan, Mapping) or plan.get("schema") != "JARVIS_REASONING_PLAN_V1":
+            return None
+        if plan.get("requires_clarification") is True:
+            return None
+
+        raw_steps = plan.get("steps")
+        if not isinstance(raw_steps, (list, tuple)):
+            return None
+        steps = [
+            item.strip()[:512]
+            for item in raw_steps[:MAX_REASONING_SUBTASKS]
+            if isinstance(item, str) and item.strip()
+        ]
+        if len(steps) < 2:
+            return None
+
+        objective = prompt.strip()[:2048]
+        if not objective:
+            return None
+        recent_context = [
+            str(item.get("content", ""))[:MAX_HISTORY_MESSAGE_CHARS]
+            for item in history[-4:]
+            if isinstance(item, Mapping)
+            and item.get("role") in {"user", "assistant"}
+            and isinstance(item.get("content"), str)
+        ]
+        identity_payload = "\\0".join((
+            objective,
+            str(intent),
+            "\\n".join(recent_context),
+            "\\n".join(steps),
+        ))
+        digest = hashlib.sha256(identity_payload.encode("utf-8")).hexdigest()
+        subtasks = []
+        for index, step in enumerate(steps, start=1):
+            task_id = f"step-{index:02d}"
+            dependencies = [f"step-{index - 1:02d}"] if index > 1 else []
+            subtasks.append({
+                "task_id": task_id,
+                "title": step,
+                "depends_on": dependencies,
+                "criteria": [],
+            })
+        focus_terms = plan.get("focus_terms", [])
+        safe_focus_terms = [
+            item[:48] for item in focus_terms[:6]
+            if isinstance(item, str) and item.strip()
+        ] if isinstance(focus_terms, (list, tuple)) else []
+        assumptions = [
+            "The detected intent and focus terms are heuristic hints and may be incorrect.",
+        ]
+        if safe_focus_terms:
+            assumptions.append(
+                "Core focus terms: " + ", ".join(safe_focus_terms)
+            )
+        return {
+            "request_id": f"chat-{digest[:24]}",
+            "idempotency_key": f"chat-{digest}",
+            "objective": objective,
+            "subtasks": subtasks,
+            "hypotheses": [],
+            "evidence": [],
+            "constraints": [
+                "This is a candidate reasoning plan only; do not execute steps or external actions.",
+                "Check every template step against the original user message and available evidence.",
+            ],
+            "assumptions": assumptions,
+        }
+
     @staticmethod
     def _language_plan_context(plan: Mapping[str, object]) -> dict[str, object]:
         """Keep the prompt-side plan summary small enough for the mobile-sized LLM."""
@@ -379,8 +460,9 @@ class JarvisCore:
             "reasoning_engine": {
                 "state": "structured_planning_available",
                 "integrated_into_chat": True,
-                "invocation_mode": "explicit_structured_request_only",
-                "natural_language_decomposition": False,
+                "invocation_mode": "explicit_or_core_generated_candidate",
+                "natural_language_decomposition": True,
+                "decomposition_scope": "bounded_intent_template_to_structured_dag",
                 "outcome_review": "caller_supplied_observations_only",
                 "plan_persistence": False,
                 "execution_enabled": False,
@@ -422,9 +504,25 @@ class JarvisCore:
             if isinstance(natural_language_plan, Mapping) else []
         )
         reasoning_context = None
-        if reasoning_request is not None:
-            reasoning_plan = self.plan_structured_task(reasoning_request)
-            reasoning_context = self._language_plan_context(reasoning_plan)
+        reasoning_origin = "none"
+        candidate_request = reasoning_request
+        if candidate_request is None:
+            candidate_request = self._reasoning_request_from_understanding(
+                prompt, history, understanding_context,
+            )
+            if candidate_request is not None:
+                reasoning_origin = "core_understanding_template"
+        else:
+            reasoning_origin = "explicit_structured_request"
+        if candidate_request is not None:
+            try:
+                reasoning_plan = self.plan_structured_task(candidate_request)
+                reasoning_context = self._language_plan_context(reasoning_plan)
+                reasoning_context["origin"] = reasoning_origin
+            except ReasoningEngineError:
+                # A rejected candidate plan must not block the user's ordinary conversation.
+                reasoning_context = None
+                reasoning_origin = "rejected_candidate"
         signal_context = None
         signal_error = False
         try:
@@ -510,7 +608,12 @@ class JarvisCore:
             ),
             "ans100_signal_error": signal_error,
             "reasoning_engine_invoked": reasoning_context is not None,
-            "reasoning_status": "plan_generated" if reasoning_context is not None else "not_requested",
+            "reasoning_origin": reasoning_origin,
+            "reasoning_status": (
+                "plan_generated" if reasoning_context is not None
+                else "candidate_rejected" if reasoning_origin == "rejected_candidate"
+                else "not_requested"
+            ),
             "reasoning_plan_id": reasoning_context["plan_id"] if reasoning_context is not None else None,
             "reasoning_step_count": len(reasoning_context["steps"]) if reasoning_context is not None else 0,
             "reasoning_execution_authorized": False,
