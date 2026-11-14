@@ -7,7 +7,7 @@ from collections.abc import Sequence
 MAX_INPUT_CHARS = 900
 MAX_TOKENS = 128
 _TOKEN = re.compile(r"[A-Za-zА-Яа-яЁё0-9]+", re.UNICODE)
-_ENTITY = re.compile(r"(?<![\\w])[A-ZА-ЯЁ][\\w-]{1,47}(?![\\w])", re.UNICODE)
+_ENTITY = re.compile(r"(?<![\w])[A-ZА-ЯЁ][\w-]{1,47}(?![\w])", re.UNICODE)
 _STOP = frozenset({
     "это", "для", "или", "что", "чтобы", "мне", "могу", "можно",
     "когда", "где", "почему", "который", "которая", "которые", "есть",
