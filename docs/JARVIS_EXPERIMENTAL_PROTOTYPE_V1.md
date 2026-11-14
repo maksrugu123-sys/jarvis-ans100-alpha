@@ -29,6 +29,16 @@ python3 -m tools.jarvis_app --port 8765 --platform desktop --model /absolute/pat
 
 The model is not downloaded automatically or included in the repository. Model compatibility, Russian-language quality, speed, memory use and thermal behavior remain unverified.
 
+### JARVIS Core understanding and pre-generation planning
+
+Every ordinary conversation turn is first processed by JARVIS Core on both platforms, before the response engine is called. Android uses `LocalUnderstandingPipeline`; PC/PWA uses `tools.jarvis_app.understanding.analyze_text`. Both produce the bounded `JARVIS_UNDERSTANDING_V1` record: a heuristic intent, task type, key terms, possible entities, negation and context indicators, plus a short evidence list.
+
+Core also creates a `JARVIS_REASONING_PLAN_V1` template plan of up to five steps for question, explanation, comparison, action request, continuation, correction or basic social intents. Some ambiguous requests carry one clarification question. The plan is advisory and explicitly has `execution_authorized=false`.
+
+When Qwen is installed, the original user message and this Core-produced analysis are both passed to the language adapter; Qwen formulates the natural-language answer. The adapters bound and validate the V1 context. When no model is installed, the local fallback still receives the Core analysis and can display a basic intent/plan notice, but it cannot provide open-ended factual conversation.
+
+This is the beginning of independent JARVIS processing, not proof of deep semantic intelligence. The parser uses explicit rules and the plan uses templates; neither is a trained general-purpose reasoning model. A shared TSV fixture is read by both Android and Python test sources. Nine understanding tests per platform plus two Android Core integration tests are AUTHORED, NOT RUN. No cross-platform runtime parity or quality measurement is claimed.
+
 The PC interface includes:
 - local conversation history stored in the JPVR workspace;
 - explicitly approved workspace memories and bounded lexical recall;
@@ -70,7 +80,7 @@ The checkpoint stores numeric weights and a training counter, not the original t
 
 The existing Jetpack Compose client remains in `app/` (application ID `org.jarvis.ans100.alpha`). Its source includes:
 - local chat and bounded chat history without Termux;
-- a deterministic greeting/help/status fallback when no model is imported;
+- a deterministic Core-analysis-aware fallback for basic social replies and intent/plan notices when no model is imported;
 - optional local LiteRT-LM model, installed through an in-app resumable download or manual import;
 - approved local memories;
 - an in-process ten-neuron Kotlin ANS-100 signal pass;
@@ -89,7 +99,7 @@ The download implementation is source-level only. No APK build, device download,
 
 **Important platform boundary:** native Android now has its own sparse 10,000-slot classifier in `LocalDialogFeatureClassifier.kt`. It maps up to 256 Unicode tokens and adjacent pairs into a sparse subset of the 10,000-slot bank, predicts four simple intent labels, and starts untrained. The Compose panel shows active-feature count and a heuristic label only when its score margin is large enough. The user must explicitly choose one of four feedback labels to update weights. The Android checkpoint contains numeric weights and a training counter, not raw utterances. The Python implementation uses BLAKE2-based hashing while Kotlin uses SHA-256, so their feature IDs and checkpoints are not interchangeable. This classifier is separate from the ten-neuron Kotlin ANS-100 signal pass and from Qwen; it does not generate text, perform semantic understanding, route actions or enter Qwen's prompt as a reasoning result.
 
-No APK is included or claimed. The seven sparse-classifier tests and four model-download validation tests are AUTHORED, NOT RUN. Android compilation, installation, actual download/resume and device inference remain unverified.
+No APK is included or claimed. The seven sparse-classifier tests, nine understanding tests, two Core handoff/fallback tests and four model-download validation tests are AUTHORED, NOT RUN. Android compilation, installation, actual download/resume and device inference remain unverified.
 
 ### Visible PC research browser
 
