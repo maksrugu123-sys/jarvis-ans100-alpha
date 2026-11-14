@@ -76,7 +76,7 @@
 
 The Android chat graph no longer uses the generic 10,000-node sparse chain. `initializeSparseDialogueNetwork()` creates 9,996 feature neurons with four terminal readout neurons and 39,984 directed edges. Each active feature neuron can fan out to the four readouts; readout spikes do not propagate further, so a single chat turn cannot leave a long chain cascade queued for later turns. The 10,000 hashed feature IDs map modulo the 9,996 input slots.
 
-The new graph uses a V2 SQLite filename so an existing V1 chain database is preserved. Two instrumentation cases were added for graph counts and bounded feature-to-output propagation. The network remains an observable numeric side channel; it does not learn synaptic weights or control the response. All Android tests remain AUTHORED, NOT RUN.
+The new graph uses a V2 SQLite filename so an existing V1 chain database is preserved. Two instrumentation cases were initially added for graph counts and bounded feature-to-output propagation. This topology-only status was superseded by the later explicit eligibility/reward integration described in §3.79: bounded feature-to-output weights can now change only after a matching spike trace and explicit user feedback/label. The network remains an observable numeric side channel and does not control the response. All Android tests remain AUTHORED, NOT RUN.
 
 ## Current verification status
 
@@ -90,6 +90,6 @@ The first Android integration batch now connects ordinary non-command chat turns
 - `AndroidSparseNeuronNetwork.scheduleInputs()` writes the same-timestamp feature batch in one SQLite transaction. Duplicate IDs, mixed timestamps, missing neurons and queue overflow reject the batch without partial insertion.
 - The ViewModel queues the sparse pass on its dedicated executor. It does not wait for the neural pass before sending the message to JARVIS Core/Qwen. A neural error is reported separately and never fails the ordinary chat turn.
 - The Compose status now displays real network counts because escaped Kotlin string templates in the prior UI/probe source are corrected.
-- **Boundary:** this network currently contributes only an observable low-level spike signal. It does not yet choose the response, update synaptic weights, or receive STDP/R-STDP reward. Existing 👍/👎 updates still train the separate sparse dialogue classifier. No claim of independent reasoning or full 10k-network dialogue learning is made.
+- **Boundary:** this network contributes only an observable low-level spike signal and never chooses or changes the response. It now supports bounded delayed R-STDP weight updates after explicit 👍/👎 feedback or expected-label selection, but the output readout is not competitive: all four outputs can spike for one active feature. The separate hashed classifier/user label supplies the reward class. This is supervised numeric association, not independent semantic reasoning or a demonstrated 10k-network dialogue learner.
 
-The added batch-input and feature-ID regression tests are **AUTHORED, NOT RUN**. No Kotlin/Python test, Gradle build, APK, device, memory, latency or thermal check was performed for this increment.
+The added batch-input and feature-ID regression tests are **AUTHORED, NOT RUN**. The first authorized APK workflow run `43616668545` reached `:app:compileDebugKotlin` but failed on source errors; upload was skipped and no APK was produced. The current follow-up batch corrects the logged compiler errors. No Kotlin/Python unit test, device, memory, latency or thermal check has been performed.

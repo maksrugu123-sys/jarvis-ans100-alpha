@@ -1,6 +1,8 @@
 # JARVIS ANS-100 Alpha
 
-> **Integrated experimental prototype:** see [JARVIS Experimental Integrated Prototype V1](docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md). This branch combines the Android client and PC local console, adds a no-model desktop fallback, and connects separate 10,000-slot sparse dialogue-feature classifiers to the native Android and Python conversation paths. It remains experimental and source-level: no APK, build, runtime or test result is claimed.
+> **Integrated experimental prototype:** see [JARVIS Experimental Integrated Prototype V1](docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md). This branch combines the Android client and PC local console, a no-model desktop fallback, optional LiteRT-LM inference, separate Android/Python dialogue classifiers, and an Android SQLite-backed sparse LIF-DT side channel. It remains experimental and source-level; a successful APK build, device runtime and test pass are not yet verified.
+
+> **Latest Android build status (14 November 2026):** Actions run [#5](https://github.com/maksrugu123-sys/jarvis-ans100-alpha/actions/runs/43616668545) passed JDK/Gradle/SDK setup but failed at `:app:compileDebugKotlin`; no APK artifact was produced. The compile errors are being corrected on this experiment branch; the next push-triggered run must verify the fixes.
 
 > **First APK path:** [build and install the first Android prototype](docs/FIRST_ANDROID_PROTOTYPE.md). The `Android first prototype` workflow assembles a debug APK on GitHub Actions; it does not require a local Gradle Wrapper.
 

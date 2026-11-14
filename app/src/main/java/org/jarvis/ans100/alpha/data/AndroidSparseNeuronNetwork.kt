@@ -404,6 +404,8 @@ class AndroidSparseNeuronNetwork(
         const val MAX_PENDING_EVENTS = 100_000
         const val MAX_HOT_SET_CAPACITY = 4_096
         const val DIALOGUE_OUTPUT_NEURONS = 4
+        const val MAX_DIALOGUE_FEATURES_PER_TURN = 128
+        const val MAX_DIALOGUE_PAIR_DELAY_NS = 10_000_000L
         const val DIALOGUE_FEATURE_NEURONS = MAX_NEURONS - DIALOGUE_OUTPUT_NEURONS
         const val DEFAULT_HOT_SET_CAPACITY = 128
         const val MAX_EVENTS_PER_TIMESTAMP = 10_000
@@ -805,7 +807,7 @@ private class AndroidNeuronSqliteStore(
             }
             for (state in changedStates) updateNeuron(db, state)
             val remaining = scalar(db, "SELECT COUNT(*) FROM events")
-            if (remaining + generated.size > AndroidNeuronNetwork.MAX_PENDING_EVENTS) {
+            if (remaining + generated.size > AndroidSparseNeuronNetwork.MAX_PENDING_EVENTS) {
                 throw AndroidNeuronBackpressureException("generated events exceed the pending-event bound")
             }
             for (event in generated) insertEvent(db, event)

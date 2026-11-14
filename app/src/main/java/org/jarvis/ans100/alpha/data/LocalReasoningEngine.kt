@@ -1,5 +1,19 @@
 package org.jarvis.ans100.alpha.data
 
+private object LocalReasoningRules {
+    const val MAX_ACTIONS = 48
+    const val MAX_FACTS = 256
+    const val MAX_DEPTH = 12
+    const val MAX_EXPANDED_STATES = 10_000
+    const val MAX_SUMMARY_CHARS = 256
+    val IDENTIFIER = Regex("^[a-z][a-z0-9_]{0,63}$")
+    val SOCIAL_INTENTS = setOf("greeting", "thanks", "farewell")
+    fun validateFacts(facts: Set<String>, name: String) {
+        require(facts.size <= MAX_FACTS) { "$name contains too many facts" }
+        require(facts.all { IDENTIFIER.matches(it) }) { "$name contains an invalid fact identifier" }
+    }
+}
+
 /**
  * Bounded symbolic planner owned by JARVIS Core.
  *
@@ -21,13 +35,13 @@ data class LocalReasoningAction(
     val deleteFacts: Set<String> = emptySet(),
 ) {
     init {
-        require(IDENTIFIER.matches(actionId)) { "actionId is not a stable identifier" }
-        require(summary.isNotBlank() && summary.length <= MAX_SUMMARY_CHARS) {
+        require(LocalReasoningRules.IDENTIFIER.matches(actionId)) { "actionId is not a stable identifier" }
+        require(summary.isNotBlank() && summary.length <= LocalReasoningRules.MAX_SUMMARY_CHARS) {
             "summary is empty or too long"
         }
-        validateFacts(preconditions, "preconditions")
-        validateFacts(addFacts, "addFacts")
-        validateFacts(deleteFacts, "deleteFacts")
+        LocalReasoningRules.validateFacts(preconditions, "preconditions")
+        LocalReasoningRules.validateFacts(addFacts, "addFacts")
+        LocalReasoningRules.validateFacts(deleteFacts, "deleteFacts")
         require(addFacts.isNotEmpty() || deleteFacts.isNotEmpty()) {
             "an action must change at least one fact"
         }
@@ -44,14 +58,14 @@ data class LocalReasoningProblem(
     val maxDepth: Int = 8,
 ) {
     init {
-        validateFacts(initialFacts, "initialFacts")
-        validateFacts(goalFacts, "goalFacts")
+        LocalReasoningRules.validateFacts(initialFacts, "initialFacts")
+        LocalReasoningRules.validateFacts(goalFacts, "goalFacts")
         require(goalFacts.isNotEmpty()) { "goalFacts must not be empty" }
-        require(actions.size <= MAX_ACTIONS) { "too many actions" }
+        require(actions.size <= LocalReasoningRules.MAX_ACTIONS) { "too many actions" }
         require(actions.map { it.actionId }.distinct().size == actions.size) {
             "action IDs must be unique"
         }
-        require(maxDepth in 1..MAX_DEPTH) { "maxDepth is outside its bound" }
+        require(maxDepth in 1..LocalReasoningRules.MAX_DEPTH) { "maxDepth is outside its bound" }
     }
 }
 
@@ -84,7 +98,7 @@ class LocalReasoningEngine(
     private val maxExpandedStates: Int = 512,
 ) {
     init {
-        require(maxExpandedStates in 1..MAX_EXPANDED_STATES) {
+        require(maxExpandedStates in 1..LocalReasoningRules.MAX_EXPANDED_STATES) {
             "maxExpandedStates is outside its bound"
         }
     }
@@ -102,7 +116,7 @@ class LocalReasoningEngine(
         val seen = mutableSetOf(stateKey(initial))
         var expanded = 0
         var depthLimited = false
-        var bestFacts = initial
+        var bestFacts: Set<String> = initial
 
         while (queue.isNotEmpty()) {
             if (expanded >= maxExpandedStates) {
@@ -164,7 +178,7 @@ class LocalReasoningEngine(
         if (hasFocus) facts += "focus_available"
         if (contextResolved) facts += "context_reference_resolved"
         if (understanding.reasoningPlan.requiresClarification) facts += "clarification_requested"
-        if (understanding.intent in SOCIAL_INTENTS) facts += "social_intent"
+        if (understanding.intent in LocalReasoningRules.SOCIAL_INTENTS) facts += "social_intent"
 
         val actions = mutableListOf(
             LocalReasoningAction(
@@ -239,7 +253,7 @@ class LocalReasoningEngine(
                 initialFacts = facts,
                 goalFacts = setOf("response_context_ready"),
                 actions = actions,
-                maxDepth = MAX_DEPTH,
+                maxDepth = LocalReasoningRules.MAX_DEPTH,
             ),
         )
     }
@@ -261,18 +275,4 @@ class LocalReasoningEngine(
 
     private fun stateKey(facts: Set<String>): String = facts.sorted().joinToString("\u0001")
 
-    companion object {
-        private const val MAX_ACTIONS = 48
-        private const val MAX_FACTS = 256
-        private const val MAX_DEPTH = 12
-        private const val MAX_EXPANDED_STATES = 10_000
-        private const val MAX_SUMMARY_CHARS = 256
-        private val IDENTIFIER = Regex("^[a-z][a-z0-9_]{0,63}$")
-        private val SOCIAL_INTENTS = setOf("greeting", "thanks", "farewell")
-
-        private fun validateFacts(facts: Set<String>, name: String) {
-            require(facts.size <= MAX_FACTS) { "$name contains too many facts" }
-            require(facts.all { IDENTIFIER.matches(it) }) { "$name contains an invalid fact identifier" }
-        }
-    }
 }

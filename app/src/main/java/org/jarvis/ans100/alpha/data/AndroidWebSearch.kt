@@ -226,7 +226,7 @@ class AndroidWebSearchService(
             .replace(Regex("(?is)<style\\b[^>]*>.*?</style>"), " ")
         return decodeHtml(withoutActiveContent)
             .replace(Regex("\\s+"), " ")
-            .filter { it == '\\t' || it == '\\n' || it.code >= 0x20 }
+            .filter { it == '\t' || it == '\n' || it.code >= 0x20 }
             .trim()
             .take(limit)
     }

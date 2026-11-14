@@ -2569,3 +2569,23 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Changed:** added `gradle.properties` to `.github/workflows/android-prototype.yml` push path filters so Gradle configuration changes trigger the Android prototype workflow.
 
 **Verification:** source correction committed on the experiment branch. A new Actions run must still complete and upload `jarvis-ans100-debug-apk` before an APK can be claimed. No build result is claimed in this entry.
+
+
+## 2026-11-14 — Fix first Android Kotlin compilation blockers and reconcile integration status
+
+**Trigger:** authorized Android prototype workflow run `43616668545` (commit `37cf0578e8d58b3e86e22b96a1cdd980042cc312`) completed runner, JDK 17, Gradle 8.9 and Android SDK setup, then failed in `:app:compileDebugKotlin`. The actual compiler log reported unresolved `runOptionalSignalPass`, a Compose `weight` import error, missing `RuntimeTaskSnapshot`, missing dialogue bounds, a stale `AndroidNeuronNetwork` type reference, invalid Kotlin tab/newline escapes, reasoner rules hidden in a class companion while used by top-level data classes, a `SortedSet` inference mismatch, and a malformed decryption `try` expression. APK upload was skipped; no APK was produced.
+
+**Changed:**
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt`: made the optional in-process signal pass explicitly non-blocking with `runCatching(...).getOrNull()`, so a signal failure does not fail the chat turn.
+- `app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt`: removed the invalid top-level Compose `weight` import and imported the missing `RuntimeTaskSnapshot` type.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidSparseNeuronNetwork.kt`: added explicit per-turn feature/pair-delay bounds (128 features; 10 ms pair window) and corrected the sparse-network class reference.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidWebSearch.kt`: corrected Kotlin control-character literals.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/LocalReasoningEngine.kt`: moved reusable validation/bound rules to a file-level object accessible to the top-level problem/action data classes and explicitly typed the best-state set.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCrypto.kt`: changed the malformed decryption expression to a scoped `run` block while preserving key/plaintext/passphrase zeroization.
+- Updated README, architecture, 10k scaling, Android milestone and project handoff text to reconcile the native Android 10k SQLite graph and explicit reward path with older statements that predated those additions.
+
+**Tests:** no tests were added or executed in this correction batch. Existing Python and Android suites remain **AUTHORED, NOT RUN**. No model inference, device runtime, installation, memory, latency, battery or thermal check was performed.
+
+**Verification:** read and filtered the actual GitHub Actions log for run `43616668545`; statically compared each named source location and the related architecture/status documents. The next push-triggered `:app:assembleDebug` run is the compile verification gate. No successful build or APK is claimed by this entry.
+
+**Limitations / next:** further Kotlin/compiler errors may become visible after this batch. Preserve the optional Termux boundary; keep the Android LIF-DT graph a numeric side channel, not semantic reasoning. Do not change `main`.

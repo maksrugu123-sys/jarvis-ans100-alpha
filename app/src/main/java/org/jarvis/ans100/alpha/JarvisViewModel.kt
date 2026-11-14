@@ -630,10 +630,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                     ),
                                 )
                             }
-                            runOptionalSignalPass { localSignalRuntime.analyze(clean) }
+                            runCatching { localSignalRuntime.analyze(clean) }.getOrNull()
                         }
                     } else {
-                        runOptionalSignalPass { localSignalRuntime.analyze(clean) }
+                        runCatching { localSignalRuntime.analyze(clean) }.getOrNull()
                     }
                     if (signal == null) {
                         mainHandler.post {

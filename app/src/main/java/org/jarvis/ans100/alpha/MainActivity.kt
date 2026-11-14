@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -81,6 +80,7 @@ import org.jarvis.ans100.alpha.data.RuntimePlanningAction
 import org.jarvis.ans100.alpha.data.OptionalTermuxExtensionStatus
 import org.jarvis.ans100.alpha.data.resolveOptionalTermuxExtensionStatus
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
+import org.jarvis.ans100.alpha.data.RuntimeTaskSnapshot
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -160,7 +160,7 @@ object WorkspaceTransferCrypto {
                 require(ciphertext.size in 17..(MAX_PLAINTEXT_BYTES + 16)) {
                     "Размер зашифрованных данных недопустим."
                 }
-                val plaintext = try {
+                val plaintext = run {
                     val keyBytes = deriveKey(passphrase, salt)
                     try {
                         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
