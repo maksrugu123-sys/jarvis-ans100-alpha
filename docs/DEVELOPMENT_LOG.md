@@ -2010,3 +2010,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Docs:** corrected the 10k scaling note: compact F64 state exists as a separate partial working-set prototype, while NetworkRuntime still retains its full object graph and is not integrated with the manager. Added architecture section 3.62.
 
 **Verification:** source-level edits and static string/readback review only. Tests and benchmarks remain NOT RUN; no builds or device measurements.
+
+
+## 2026-11-14 — Preserve JPVR lazy-load argument validation
+
+**Objective:** retain the original materialized loader's strict max_pages contract after switching checkpoint reads to a lazy page catalog.
+
+**Changed:** tools/neuron_runtime/jpvr_store.py now rejects booleans, non-integers and negative values before selecting a Superblock. tools/neuron_runtime/test_jpvr_store.py adds a regression contract for invalid bound values.
+
+**Tests:** one test method is AUTHORED, NOT RUN. No tests or builds were run.
+
+**Reason:** without explicit validation, values such as None could leak a Python TypeError from the page-count comparison instead of producing the repository's JPVRFormatError.

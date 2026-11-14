@@ -149,6 +149,14 @@ class JPVRNeuronCheckpointStoreTests(unittest.TestCase):
         with self.assertRaises(JPVRFormatError):
             self.checkpoints.load("bounded-read", max_pages=1)
 
+
+    def test_lazy_load_rejects_invalid_page_bound_types(self):
+        self.checkpoints.save("invalid-bound", _runtime(), clock_epoch_id=CLOCK_EPOCH)
+        for invalid in (True, -1, None, 1.5):
+            with self.subTest(max_pages=invalid):
+                with self.assertRaises(JPVRFormatError):
+                    self.checkpoints.load("invalid-bound", max_pages=invalid)
+
     def test_update_advances_record_version_and_publishes_new_locator(self):
         first = self.checkpoints.save(
             "neuron-A", _runtime(), clock_epoch_id=CLOCK_EPOCH

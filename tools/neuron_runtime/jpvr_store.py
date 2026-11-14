@@ -320,6 +320,8 @@ class JPVRNeuronCheckpointStore:
         self, max_pages: int
     ) -> tuple[Superblock, _LazyPageCatalog, Manifest | None]:
         """Pin one active prefix and resolve its referenced pages on demand."""
+        if isinstance(max_pages, bool) or not isinstance(max_pages, int) or max_pages < 0:
+            raise JPVRFormatError("max_pages must be a non-negative integer")
         active = self.storage.get_superblock()
         page_count = max(0, active.durable_tail_page_no - 1)
         if page_count > max_pages:
