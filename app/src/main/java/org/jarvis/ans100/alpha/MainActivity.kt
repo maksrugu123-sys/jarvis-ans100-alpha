@@ -6,7 +6,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,13 +23,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AlertDialog
@@ -50,10 +60,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -237,7 +253,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         .padding(horizontal = 16.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Header()
+                    Header(isBusy = ui.conversation.isBusy)
                     when (selectedTab) {
                         0 -> {
                         SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
@@ -1076,7 +1092,7 @@ private fun WorkspaceMemoryPanel(
 }
 
 @Composable
-private fun Header() {
+private fun Header(isBusy: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1095,15 +1111,63 @@ private fun Header() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.secondaryContainer,
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
+            ActivityStatusPill(isBusy = isBusy)
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                border = BorderStroke(1.dp, Color(0x664DA3FF)),
+            ) {
+                Text(
+                    "V0.6",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityStatusPill(isBusy: Boolean) {
+    val pulseScale by animateFloatAsState(
+        targetValue = if (isBusy) 1.35f else 1f,
+        animationSpec = if (isBusy) {
+            infiniteRepeatable(
+                animation = tween(durationMillis = 850),
+                repeatMode = RepeatMode.Reverse,
+            )
+        } else {
+            tween(durationMillis = 180)
+        },
+        label = "jarvis-activity-pulse",
+    )
+    val accent = if (isBusy) Color(0xFF73D7FF) else Color(0xFF62B5FF)
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = Color(0xFF0A2038),
+        border = BorderStroke(1.dp, Color(0x9952AFFF)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .scale(pulseScale)
+                    .background(accent, CircleShape),
+            )
             Text(
-                "V0.6",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                if (isBusy) "ОБРАБОТКА" else "ГОТОВ",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
             )
         }
     }
@@ -1114,6 +1178,8 @@ private fun SystemStatusCard(storageReady: Boolean, notice: String?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, Color(0x8851AFFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -1302,9 +1368,13 @@ private fun RuntimeBridgePanel(
         it.sessionId == selectedSessionId
     } ?: snapshot?.sessions?.firstOrNull { it.status == "open" }
 
+    val uriHandler = LocalUriHandler.current
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, Color(0x8851AFFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -1335,6 +1405,8 @@ private fun RuntimeBridgePanel(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0x6656B9FF)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -1355,18 +1427,90 @@ private fun RuntimeBridgePanel(
                         }
                     }
                     if (showTermuxGuide) {
-                        Text("1. Установите Termux из F-Droid или официального GitHub проекта. Не используйте устаревшую версию из Google Play.")
-                        Text("2. Откройте Termux и установите инструменты:")
-                        Text("pkg update && pkg upgrade\npkg install python git")
-                        Text("3. Скачайте репозиторий JARVIS и перейдите в его папку:")
-                        Text("git clone https://github.com/maksrugu123-sys/jarvis-ans100-alpha.git\ncd jarvis-ans100-alpha")
-                        Text("4. Запустите локальный мост:")
-                        Text("python -m tools.jarvis_app --port 8765 --platform android")
-                        Text("5. Скопируйте выданный токен из Termux, вернитесь сюда, вставьте его в поле ниже и нажмите «Сохранить токен», затем «Подключить расширение».")
-                        Text("Не отправляйте токен другим людям: он даёт доступ к локальному мосту JARVIS.",
+                        Text(
+                            "Шаг 1. Скачайте F-Droid только с официального сайта. Не используйте рекламные APK-сайты, случайные зеркала и ссылки из комментариев.",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        OutlinedButton(
+                            onClick = { uriHandler.openUri("https://f-droid.org/") },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Открыть официальный сайт F-Droid") }
+                        Text(
+                            "На сайте нажмите Download F-Droid, скачайте APK и откройте его. Android может попросить временно разрешить браузеру установку неизвестных приложений. Разрешите установку только для этого браузера, установите F-Droid, а затем при желании отключите это разрешение обратно.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Шаг 2. Запустите F-Droid и дождитесь первой загрузки каталога. Если список приложений пустой, подождите окончания обновления репозитория или откройте вкладку «Обновления» и потяните её вниз.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Шаг 3. Найдите именно приложение «Termux» (пакет com.termux) в официальном каталоге F-Droid. Не путайте его с Termux:API, Termux:Widget и другими дополнениями.",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        OutlinedButton(
+                            onClick = { uriHandler.openUri("https://f-droid.org/packages/com.termux/") },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Открыть страницу оригинального Termux") }
+                        Text(
+                            "Нажмите «Установить» и дождитесь завершения. Это будет последняя версия Termux, которую F-Droid уже опубликовал в своём каталоге. Она не обязательно совпадает с самым новым релизом GitHub в тот же день: публикация F-Droid иногда задерживается на несколько дней или дольше.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Важно: не смешивайте источники Termux и его дополнений. Если Termux установлен из F-Droid, все его дополнения тоже устанавливайте из F-Droid. APK из F-Droid и GitHub имеют разные подписи и могут не обновлять друг друга. Если Termux уже установлен из другого источника, сначала сделайте резервную копию его данных; удаление Termux без копии может стереть файлы и настройки.",
                             color = MaterialTheme.colorScheme.tertiary,
-                            style = MaterialTheme.typography.bodySmall)
-                        Text("Termux должен оставаться запущенным, пока используется расширение. Основной чат JARVIS продолжит работать и без него.")
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text("Шаг 4. Откройте Termux. При первом запуске он подготовит базовую среду — дождитесь окончания, не закрывайте приложение. Затем выполните команды по одной или вставьте весь блок:")
+                        Text(
+                            "pkg update\npkg upgrade -y\npkg install -y python git gh",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            "Если обновление репозитория завершается ошибкой, выполните termux-change-repo, выберите Main repository и доступное зеркало, затем повторите pkg update.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Шаг 5. Репозиторий JARVIS сейчас закрытый, поэтому обычный git clone без авторизации не сработает. Установленный GitHub CLI запросит вход через официальный сайт GitHub. Используйте аккаунт, которому открыт доступ к этому репозиторию:",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "gh auth login --hostname github.com --git-protocol https --web\ngh auth setup-git",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            "Termux покажет код для входа. Откройте официальный github.com, введите этот одноразовый код и подтвердите вход. Не отправляйте код, пароль или токены в чат и никому их не показывайте.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text("Шаг 6. Скачайте именно рабочую экспериментальную ветку JARVIS (не main):")
+                        Text(
+                            "git clone --branch experiment/jarvis-integrated-prototype-v1 --single-branch https://github.com/maksrugu123-sys/jarvis-ans100-alpha.git\ncd jarvis-ans100-alpha",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text("Шаг 7. Запустите локальное расширение:")
+                        Text(
+                            "python3 -m tools.jarvis_app --port 8765 --platform android",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            "При первом запуске в Termux появится одноразовый ANDROID / PWA ACCESS TOKEN. Скопируйте его сразу, вернитесь в JARVIS → Система, вставьте токен, нажмите «Сохранить токен», затем «Подключить расширение». Токен нельзя публиковать или пересылать.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Если токен потерян: остановите сервер сочетанием Ctrl+C и запустите заново команду python3 -m tools.jarvis_app --port 8765 --platform android --rotate-token. Старый токен перестанет работать.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Чтобы обновить исходный код позже, остановите сервер, откройте папку проекта и выполните: cd ~/jarvis-ans100-alpha && git pull --ff-only origin experiment/jarvis-integrated-prototype-v1. Затем снова запустите команду из шага 7.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Пока расширение нужно, Termux и процесс JARVIS должны оставаться запущенными. Чтобы остановить сервер, нажмите Ctrl+C. Основной чат, локальная память и обработка сообщений в Android-приложении продолжают работать без Termux.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             }
@@ -1897,6 +2041,60 @@ private fun runtimeStatusLabel(status: String): String = when (status) {
     else -> status
 }
 
+
+private val JARVIS_HTTP_URL_PATTERN = Regex("""https?://[^\s<>"]+""")
+private const val JARVIS_URL_ANNOTATION = "jarvis-source-url"
+
+@Composable
+private fun MessageBodyText(message: String) {
+    val uriHandler = LocalUriHandler.current
+    val annotatedMessage = remember(message) {
+        buildAnnotatedString {
+            var cursor = 0
+            JARVIS_HTTP_URL_PATTERN.findAll(message).forEach { match ->
+                if (match.range.first < cursor) return@forEach
+                val cleanUrl = match.value.trimEnd('.', ',', ';', ':', '!', '?', ']', '}')
+                if (cleanUrl.isNotEmpty()) {
+                    val urlEnd = match.range.first + cleanUrl.length
+                    append(message.substring(cursor, match.range.first))
+                    pushStringAnnotation(
+                        tag = JARVIS_URL_ANNOTATION,
+                        annotation = cleanUrl,
+                    )
+                    withStyle(
+                        SpanStyle(
+                            color = Color(0xFF83C8FF),
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                    ) {
+                        append(cleanUrl)
+                    }
+                    pop()
+                    append(message.substring(urlEnd, match.range.last + 1))
+                    cursor = match.range.last + 1
+                }
+            }
+            append(message.substring(cursor))
+        }
+    }
+
+    ClickableText(
+        text = annotatedMessage,
+        style = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+        ),
+        onClick = { offset ->
+            annotatedMessage.getStringAnnotations(
+                tag = JARVIS_URL_ANNOTATION,
+                start = offset,
+                end = offset,
+            ).firstOrNull()?.item?.let { url ->
+                runCatching { uriHandler.openUri(url) }
+            }
+        },
+    )
+}
+
 @Composable
 private fun ConversationComposer(
     input: String,
@@ -1954,6 +2152,13 @@ private fun ConversationPanel(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            if (state.isBusy) 1.5.dp else 1.dp,
+            if (state.isBusy) Color(0xFF73D7FF) else Color(0x8851AFFF),
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (state.isBusy) 8.dp else 4.dp,
+        ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -2068,10 +2273,7 @@ private fun ConversationPanel(
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
                                 )
-                                Text(
-                                    message.text,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
+                                MessageBodyText(message.text)
                             }
                         }
                     }
