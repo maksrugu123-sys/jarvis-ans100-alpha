@@ -2471,3 +2471,18 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** source/readback comparison only. No Python/Kotlin tests, syntax execution, Gradle build, APK, CI or device runtime was run.
 
 **Limitations / next:** peer sync is manual, additive/upsert-only and not end-to-end verified. Automatic sync must be opt-in and should not begin until pairing, failure handling and deletion semantics are defined. Python per-neuron LRU remains separate from atomic NetworkJNVMCoordinator timestamp commits.
+
+
+## 2026-11-14 — Audit Android R-STDP readout selectivity
+
+**Objective:** document a limitation found during static review before describing the native Android reward path as a dialogue classifier.
+
+**Changed:**
+- `docs/JARVIS_ARCHITECTURE.md` §3.79 records that equal output drive and equal initial weights can cause all four output neurons to spike for one active feature. The current graph therefore has no exclusive class prediction; its reward label comes from the separate classifier or an explicit user label.
+- `README.md` and `docs/JARVIS_AUTONOMOUS_CORE_MILESTONE_V1.md` now state the same readout limitation.
+
+**Tests:** no new tests were added. Existing nine Android instrumentation cases remain **AUTHORED, NOT RUN**; the current topology test deliberately asserts four output spikes from one input feature.
+
+**Verification:** static source arithmetic review: with 0.90 output drive, 20 ms membrane time constant, 1 ms connection delay and 0.15 initial synapse weight, the decayed drive plus one incoming feature weight exceeds the 1.0 threshold for each of the four outputs. No executable test, Kotlin compile, Gradle build, APK, CI or device run was performed.
+
+**Limitations / next:** the current native graph performs explicit reward-modulated association but does not independently select a dialogue class. Next implement a calibrated competitive readout (or clearly keep the graph as an association experiment), with deterministic tests for neutral inputs, single/multiple feature patterns, winner selection, ties, reward reversal, and held-out label discrimination. Do not feed its output into replies until those checks and a separate user-authorized runtime validation pass.
