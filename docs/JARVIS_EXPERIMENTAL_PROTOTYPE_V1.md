@@ -4,7 +4,7 @@
 **Base:** `mobile-first-offline-v1` plus the sparse dialogue-neuron experiment  
 **Status:** source-integrated prototype; builds and runtime verification have not been performed.
 
-This branch is the first integrated experimental JARVIS client, not a standalone neuron demo. It reuses the Android application and the PC local console already present in the project, and connects the Python 10,000-feature dialogue layer to the PC conversation path.
+This branch is the first integrated experimental JARVIS client, not a standalone neuron demo. It reuses the existing Android application and Python local console, and connects the 10,000-feature dialogue layer to the Python conversation path, usable on a PC or through the Termux-hosted Android PWA. The classifier is not yet part of the native Android Compose conversation runtime.
 
 ## What is available in the prototype
 
