@@ -4885,3 +4885,10 @@ One timestamp is committed as a single SQLite transaction containing consumed ev
 The default initializer creates a sparse chain for deterministic capacity validation. This runtime is not yet wired into the ordinary chat pipeline; the existing ten-neuron Kotlin ANS-100 signal pre-pass remains the chat default. No automatic STDP/R-STDP learning is implied. 10,000-node performance, SQL transaction latency, flash write amplification, RAM, battery, thermal behavior and crash recovery remain unmeasured.
 
 Three Android instrumentation tests are AUTHORED, NOT RUN: 10,000-node sparse initialization with a bounded resident set, timestamp-level propagation, and state/queue reopen. See `docs/JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md`.
+
+
+### 3.75 Explicit reward-modulated dialogue plasticity V1 (14 November 2026)
+
+The native Android sparse dialogue-feature classifier now supports an explicit user reward for the latest assistant turn. Each active text feature acts as a presynaptic event; the current confident classifier output is treated as a postsynaptic event one bounded model interval later. An exponentially decayed pair eligibility trace is formed, then a user-selected +1 (useful) or -1 (not useful) reward scales the numeric weight change. Positive feedback potentiates the selected output's active feature weights; negative feedback depresses them. Updates are write-before-publish and stored in the versioned numeric checkpoint. V1 checkpoint state is migrated with a zero reward counter.
+
+This is a small reward-modulated sparse classifier experiment, not a general dialogue-learning system or a learned language model. Feedback is explicit; no reward is inferred from silence, message length or continued use. It only adjusts the current confident four-label intent output and cannot change the LIF-DT runtime, create actions or grant permissions. User messages are not copied into the classifier checkpoint. Tests for positive/negative reward, checkpoint persistence and V1 migration are AUTHORED, NOT RUN.

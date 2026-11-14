@@ -40,6 +40,9 @@ import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import org.jarvis.ans100.alpha.data.shouldUseTermuxSignal
 import org.jarvis.ans100.alpha.data.AndroidWebSearchService
+import org.jarvis.ans100.alpha.data.AndroidSparseNeuronNetwork
+import org.jarvis.ans100.alpha.data.AndroidNeuronNetworkStats
+import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
 import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
 import java.io.ByteArrayOutputStream
@@ -56,6 +59,11 @@ data class LocalConversationUiState(
     val modelDownloadStatus: String? = null,
     val dialogFeaturePrediction: DialogFeaturePrediction? = null,
     val dialogFeatureError: String? = null,
+    val lastRewardedAssistantMessageId: String? = null,
+    val nativeNetworkStats: AndroidNeuronNetworkStats? = null,
+    val nativeNetworkBusy: Boolean = false,
+    val nativeNetworkError: String? = null,
+    val nativeNetworkMessage: String? = null,
 )
 
 data class RuntimeBridgeUiState(
@@ -133,6 +141,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         application.applicationContext, modelStore,
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
+    private val nativeNetworkExecutor = Executors.newSingleThreadExecutor()
+    private val nativeNeuronNetwork = AndroidSparseNeuronNetwork(application.applicationContext)
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
     private val localSignalRuntime = LocalConversationSignalRuntime(
@@ -200,6 +210,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
         reload()
         reloadConversation()
+        refreshNativeNeuronNetwork()
         if (extensionInstalled && mutableState.value.runtime.hasAccessToken) {
             // Only attempt optional bridge discovery when the companion app is installed.
             connectRuntime()
@@ -527,6 +538,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 error = null,
                                 dialogFeaturePrediction = null,
                                 dialogFeatureError = null,
+                                lastRewardedAssistantMessageId = null,
                             ),
                         )
                     }
@@ -611,6 +623,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             error = null,
                             dialogFeaturePrediction = dialogPredictionResult.first,
                             dialogFeatureError = dialogPredictionResult.second,
+                            lastRewardedAssistantMessageId = null,
                         ),
                     )
                 }
@@ -658,6 +671,170 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         conversation = current.conversation.copy(
                             isBusy = false,
                             dialogFeatureError = error.message ?: "Не удалось сохранить обучение.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+
+    fun applyDialogRewardFeedback(reward: Double) {
+        if (reward != -1.0 && reward != 1.0) return
+        val before = mutableState.value
+        if (before.conversation.isBusy) return
+        val assistantMessage = before.conversation.messages.lastOrNull {
+            it.role == org.jarvis.ans100.alpha.data.ConversationRole.ASSISTANT
+        } ?: return
+        if (before.conversation.lastRewardedAssistantMessageId == assistantMessage.id) return
+        val assistantIndex = before.conversation.messages.indexOfLast { it.id == assistantMessage.id }
+        val userMessage = before.conversation.messages.take(assistantIndex).lastOrNull {
+            it.role == org.jarvis.ans100.alpha.data.ConversationRole.USER
+        } ?: return
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(isBusy = true, dialogFeatureError = null),
+        )
+        conversationExecutor.execute {
+            try {
+                val prediction = dialogFeatureClassifier.applyReward(userMessage.text, reward)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            dialogFeaturePrediction = prediction,
+                            dialogFeatureError = null,
+                            lastRewardedAssistantMessageId = assistantMessage.id,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            dialogFeatureError = error.message ?: "Не удалось применить reward-сигнал.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun refreshNativeNeuronNetwork() {
+        nativeNetworkExecutor.execute {
+            try {
+                val stats = nativeNeuronNetwork.stats()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkStats = stats,
+                            nativeNetworkError = null,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkError = error.message ?: "Не удалось прочитать состояние JNVM.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun initializeNativeNeuronNetwork() {
+        val before = mutableState.value
+        if (before.conversation.nativeNetworkBusy) return
+        if ((before.conversation.nativeNetworkStats?.neuronCount ?: 0) > 0) return
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(
+                nativeNetworkBusy = true,
+                nativeNetworkError = null,
+                nativeNetworkMessage = "Создание разреженной сети из 10 000 нейронов…",
+            ),
+        )
+        nativeNetworkExecutor.execute {
+            try {
+                nativeNeuronNetwork.initializeSparseChain(AndroidSparseNeuronNetwork.MAX_NEURONS)
+                val stats = nativeNeuronNetwork.stats()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkBusy = false,
+                            nativeNetworkStats = stats,
+                            nativeNetworkError = null,
+                            nativeNetworkMessage = "Сеть создана. Активная память ограничена LRU-кэшем; остальные состояния находятся в SQLite JNVM.",
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkBusy = false,
+                            nativeNetworkError = error.message ?: "Не удалось создать сеть.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun runNativeNeuronProbe() {
+        val before = mutableState.value
+        if (before.conversation.nativeNetworkBusy) return
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(
+                nativeNetworkBusy = true,
+                nativeNetworkError = null,
+                nativeNetworkMessage = "Обработка ограниченного пакета нейронных событий…",
+            ),
+        )
+        nativeNetworkExecutor.execute {
+            try {
+                val prior = nativeNeuronNetwork.stats()
+                if (prior.neuronCount == 0) {
+                    throw IllegalStateException("Сначала создай сеть из 10 000 нейронов.")
+                }
+                if (prior.currentTimeNs > Long.MAX_VALUE - 10_000_000L) {
+                    throw IllegalStateException("Модельные часы JNVM достигли предела.")
+                }
+                val nextTime = prior.currentTimeNs + 10_000_000L
+                nativeNeuronNetwork.scheduleInput(
+                    eventId = "phone-probe-\${UUID.randomUUID()}",
+                    timeNs = nextTime,
+                    neuronId = 0,
+                    strength = 1.0,
+                )
+                val result = nativeNeuronNetwork.run(maxEvents = 4_096, maxTimestamps = 32)
+                val stats = nativeNeuronNetwork.stats()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkBusy = false,
+                            nativeNetworkStats = stats,
+                            nativeNetworkError = null,
+                            nativeNetworkMessage = "Обработано событий: \${result.processedEvents}; импульсов: \${result.emittedSpikes.size}; осталось в очереди: \${result.pendingEvents}.",
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkBusy = false,
+                            nativeNetworkStats = runCatching { nativeNeuronNetwork.stats() }.getOrNull(),
+                            nativeNetworkError = error.message ?: "Импульсный тест не выполнен.",
                         ),
                     )
                 }
@@ -1734,7 +1911,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         // Disconnect it first so the worker can finish and close the model engine.
         modelStore.cancelDownload()
         conversationExecutor.execute { conversationResponseEngine.close() }
+        nativeNetworkExecutor.execute { nativeNeuronNetwork.close() }
         conversationExecutor.shutdown()
+        nativeNetworkExecutor.shutdown()
         runtimeExecutor.shutdownNow()
         super.onCleared()
     }

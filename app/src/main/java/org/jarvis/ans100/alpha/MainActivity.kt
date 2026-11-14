@@ -265,6 +265,9 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onCancelDownload = viewModel::cancelConversationModelDownload,
                             onRemoveModel = viewModel::removeConversationModel,
                             onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
+                            onRewardDialogFeature = viewModel::applyDialogRewardFeedback,
+                            onInitializeNativeNetwork = viewModel::initializeNativeNeuronNetwork,
+                            onRunNativeNetworkProbe = viewModel::runNativeNeuronProbe,
                         )
                         }
                         1 -> {
@@ -2139,6 +2142,9 @@ private fun ConversationPanel(
     onCancelDownload: () -> Unit,
     onRemoveModel: () -> Unit,
     onTrainDialogFeature: (String) -> Unit,
+    onRewardDialogFeature: (Double) -> Unit,
+    onInitializeNativeNetwork: () -> Unit,
+    onRunNativeNetworkProbe: () -> Unit,
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
     var showModelDownloadConfirmation by remember { mutableStateOf(false) }
@@ -2274,9 +2280,76 @@ private fun ConversationPanel(
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 MessageBodyText(message.text)
+                                val latestAssistantId = state.messages.lastOrNull {
+                                    it.role == ConversationRole.ASSISTANT
+                                }?.id
+                                if (!userMessage && message.id == latestAssistantId) {
+                                    if (state.lastRewardedAssistantMessageId == message.id) {
+                                        Text(
+                                            "Обратная связь сохранена в reward-эксперименте.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    } else {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            TextButton(
+                                                onClick = { onRewardDialogFeature(-1.0) },
+                                                enabled = !state.isBusy,
+                                            ) { Text("👎 Неудачно") }
+                                            TextButton(
+                                                onClick = { onRewardDialogFeature(1.0) },
+                                                enabled = !state.isBusy,
+                                            ) { Text("👍 Полезно") }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Text("Нативная сеть ANS-100 / JNVM", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    val networkStats = state.nativeNetworkStats
+                    Text(
+                        if (networkStats == null) "Состояние локального JNVM загружается…"
+                        else "Нейронов: \${networkStats.neuronCount} · связей: \${networkStats.connectionCount} · событий: \${networkStats.pendingEvents} · в RAM-кэше: \${networkStats.residentNeuronCount}/\${networkStats.hotSetCapacity}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if ((networkStats?.neuronCount ?: 0) == 0) {
+                        Button(
+                            onClick = onInitializeNativeNetwork,
+                            enabled = !state.nativeNetworkBusy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Создать разреженную сеть · 10 000 нейронов") }
+                    } else {
+                        OutlinedButton(
+                            onClick = onRunNativeNetworkProbe,
+                            enabled = !state.nativeNetworkBusy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Подать импульс и обработать до 32 отметок") }
+                    }
+                    if (state.nativeNetworkBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    state.nativeNetworkMessage?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall)
+                    }
+                    state.nativeNetworkError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text(
+                        "Это отдельный тестовый runtime. Он не заменяет пока десятинейронный проход обычного диалога. Состояния сохраняются в SQLite JNVM; активный LRU-кэш ограничен.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             if (state.messages.any { it.role == ConversationRole.USER }) {
@@ -2299,7 +2372,7 @@ private fun ConversationPanel(
                         )
                         Text(
                             "Активно: ${featurePrediction?.activeFeatureCount ?: 0} · " +
-                                "обучено примеров: ${featurePrediction?.trainedExamples ?: 0}",
+                                "обучено примеров: ${featurePrediction?.trainedExamples ?: 0} · reward-событий: ${featurePrediction?.rewardUpdates ?: 0}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
@@ -2327,7 +2400,7 @@ private fun ConversationPanel(
                             )
                         }
                         Text(
-                            "Проверь категорию последнего сообщения и выбери правильную метку:",
+                            "Проверь категорию последнего сообщения и выбери правильную метку. После ответа можно отдельно дать reward-сигнал:",
                             style = MaterialTheme.typography.labelSmall,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -2352,7 +2425,7 @@ private fun ConversationPanel(
                         }
                         Text(
                             "Сохраняются только числовые веса; исходные сообщения не записываются в checkpoint. " +
-                                "Это отдельный классификатор, не языковая модель и не 10 000 работающих спайковых нейронов.",
+                                "Reward создаёт ограниченный след STDP для активных признаков, а 👍/👎 модулирует его вес. Это экспериментальный классификатор, не языковая модель и не 10 000 активных спайковых нейронов.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

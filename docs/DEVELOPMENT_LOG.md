@@ -2270,3 +2270,24 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** source written through a single Git tree/commit and read back from GitHub. No Kotlin compilation, instrumentation tests, Gradle build, APK, device runtime or resource benchmark was run. Three Android instrumentation tests are **AUTHORED, NOT RUN**.
 
 **Limitations / next:** test SQLite transaction rollback and uncertain process death on a real device; measure 1/10/100/1,000/10,000-node profiles, RAM, I/O, CPU and thermal behavior; integrate a bounded learning path and explicit feedback before routing chat through this network.
+
+
+## 2026-11-14 — Connect native 10k JNVM runtime to Android UI and add explicit reward-modulated dialogue learning
+
+**Objective:** expose the native sparse network on the phone without running it on every chat turn, and let users explicitly reward or correct a confident dialogue-classifier output.
+
+**Changed / added:**
+- `AndroidSparseNeuronNetwork.kt` — make the network exception base open so the dedicated backpressure exception can inherit from it.
+- `LocalDialogFeatureClassifier.kt` — add bounded pair-eligibility trace plus explicit +1/-1 reward modulation; add reward counter and V1-to-V2 numeric checkpoint migration.
+- `LocalDialogFeatureClassifierTest.kt` — add positive-reward, negative-reward and V1 migration cases.
+- `JarvisViewModel.kt` — add a separate background executor and lifecycle for the native SQLite network; add explicit 10,000-node initialization, bounded impulse probe and one-feedback-per-latest-answer flow.
+- `MainActivity.kt` — add native network controls/metrics and explicit Useful/Not useful feedback buttons for the latest answer.
+- Documentation: README, architecture §3.75 and the dialogue-neuron contract.
+
+**Behavior / boundaries:** network initialization is user-triggered; it does not run at app startup or replace the existing 10-neuron conversation signal pass. The impulse probe processes at most 4,096 events and 32 timestamps per tap. Dialogue reward learning requires an already confident four-label prediction and an explicit user tap; no automatic reward is inferred.
+
+**Tests:** three reward/migration JVM tests are added; the three Android sparse-network instrumentation tests remain from the preceding batch. All are AUTHORED, NOT RUN.
+
+**Verification:** source changes are committed to the experimental branch and read-back verification is pending in this batch. No Kotlin compile, unit/instrumentation run, Gradle build, APK, device interaction or performance measurement is claimed.
+
+**Limitations / next:** this reward mechanism is a small pair-eligibility classifier, not yet STDP across the full 10k spiking network. The next learning stage must record explicit sequence timing/eligibility and evaluate on disjoint conversations with neutral/rewarded controls. PC/phone memory sync and exact-action one-shot approval/execution remain open.

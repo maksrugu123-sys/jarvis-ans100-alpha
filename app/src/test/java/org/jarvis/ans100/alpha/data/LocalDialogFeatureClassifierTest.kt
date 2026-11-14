@@ -48,6 +48,43 @@ class LocalDialogFeatureClassifierTest {
     }
 
     @Test
+    fun explicitPositiveRewardStrengthensTheCurrentOutputThroughEligibilityTrace() {
+        val storage = MemoryStorage()
+        val classifier = LocalDialogFeatureClassifier(storage)
+        repeat(8) { classifier.learn("привет джарвис здравствуй", "greeting") }
+        val before = classifier.analyze("привет джарвис")
+        val after = classifier.applyReward("привет джарвис", 1.0)
+
+        assertEquals("greeting", after.predictedLabel)
+        assertTrue(after.confidenceMargin > before.confidenceMargin)
+        assertEquals(1, after.rewardUpdates)
+        assertTrue(storage.value.orEmpty().contains("R\t1"))
+        assertFalse(storage.value.orEmpty().contains("привет джарвис"))
+    }
+
+    @Test
+    fun explicitNegativeRewardWeakensTheCurrentOutput() {
+        val storage = MemoryStorage()
+        val classifier = LocalDialogFeatureClassifier(storage)
+        repeat(8) { classifier.learn("привет джарвис здравствуй", "greeting") }
+        val before = classifier.analyze("привет джарвис")
+        val after = classifier.applyReward("привет джарвис", -1.0)
+
+        assertTrue(after.confidenceMargin < before.confidenceMargin)
+        assertEquals(1, after.rewardUpdates)
+    }
+
+    @Test
+    fun versionOneCheckpointMigratesWithZeroRewardUpdates() {
+        val storage = MemoryStorage(
+            value = "JARVIS_ANDROID_DIALOG_FEATURES\t1\nT\t3\nW\tgreeting\t7\t0.5",
+        )
+        val prediction = LocalDialogFeatureClassifier(storage).analyze("обычный текст")
+        assertEquals(3, prediction.trainedExamples)
+        assertEquals(0, prediction.rewardUpdates)
+    }
+
+    @Test
     fun learnedWeightsAndPredictionsSurviveClassifierRecreation() {
         val storage = MemoryStorage()
         val first = LocalDialogFeatureClassifier(storage)

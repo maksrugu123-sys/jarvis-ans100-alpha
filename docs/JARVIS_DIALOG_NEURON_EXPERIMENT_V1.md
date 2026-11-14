@@ -68,3 +68,8 @@ Android conversation pipeline. It must initially run in shadow mode: record
 predictions and confidence locally, do not control user-visible replies, and
 do not silently train from private conversation text. User feedback must be
 explicit and revocable.
+
+
+## Native Android explicit reward-modulated update V1
+
+The Android classifier now exposes an explicit reward operation. Active hashed features create a bounded pre/post eligibility trace; the currently predicted intent output is adjusted only after an explicit user +1/-1 feedback action. The checkpoint advances from V1 to V2 while retaining V1 read compatibility. This is a small four-label classifier experiment, not general semantic dialogue learning and not automatic self-training. See architecture §3.75. Reward tests are AUTHORED, NOT RUN.
