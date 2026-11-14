@@ -341,6 +341,7 @@ class JarvisCore:
     ) -> dict[str, object]:
         engine = self._language_engine
         configured = engine is not None
+        model_configured = bool(getattr(engine, "language_model_configured", configured)) if configured else False
         runtime_available = bool(getattr(engine, "runtime_available", False)) if configured else False
         backend_label = (
             str(getattr(engine, "backend_label", "Локальный языковой модуль"))
@@ -352,6 +353,8 @@ class JarvisCore:
             "orchestration": "active",
             "language_engine": {
                 "configured": configured,
+                "language_model_configured": model_configured,
+                "mode": "local_model" if model_configured else "deterministic_fallback" if configured else "unavailable",
                 "runtime_available": runtime_available,
                 "inference_verified": False,
                 "backend_label": backend_label,
