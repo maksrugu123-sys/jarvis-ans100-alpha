@@ -2343,3 +2343,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Constraints:** `main` remains untouched. No Python tests, Android tests, PC browser/model runtime, Gradle build, APK, CI or device benchmark was run. Existing unrun suites remain AUTHORED / NOT RUN. The Gradle Wrapper is still absent.
 
 **Next implementation priority:** integrate explicit, auditable conversation-event learning into a bounded neural subnetwork and connect the existing Android 10k sparse runtime to ordinary chat as an optional side channel without blocking the language/chat path. In parallel, implement the Android TLS certificate-pinned peer-memory client and task-run UI. Keep external side effects disabled.
+
+## 2026-11-14 — Connect Android sparse LIF-DT network to ordinary chat
+
+**Objective:** connect the existing SQLite-backed sparse Android network to the native conversation path without blocking chat, and make the event handoff bounded and atomic.
+
+**Changed:**
+- `LocalDialogFeatureClassifier.kt` now exposes up to 128 stable hashed feature-slot IDs in its prediction record; the checkpoint continues to store numeric weights only.
+- `AndroidSparseNeuronNetwork.kt` adds `scheduleInputs()`, which validates one same-timestamp feature batch and inserts all events in one SQLite transaction. Duplicate event IDs, mixed timestamps, unknown neurons and queue overflow fail the whole batch.
+- `JarvisViewModel.kt` now queues a best-effort feature-to-neuron pass for normal chat turns on the dedicated native-network executor. It is optional, does not block the conversation executor, and does not feed unverified neural output into Qwen.
+- `MainActivity.kt` and the ViewModel's manual probe now use real Kotlin string interpolation; the previous escaped templates displayed literal placeholders and reused a literal probe event ID.
+- Added instrumentation coverage for atomic multi-feature scheduling and duplicate-ID rejection; added unit assertions for stable bounded feature IDs.
+- Updated the autonomous milestone plan and README to record the integration boundary.
+
+**Learning boundary:** the 10k sparse LIF-DT runtime currently emits an observable signal only. The existing explicit 👍/👎 reward still updates the separate sparse feature classifier; LIF synaptic weights are not yet reward-trained. No semantic reasoning or autonomous decision capability is claimed.
+
+**Verification:** GitHub source/readback and static replacement checks only. New and existing Android tests remain **AUTHORED, NOT RUN**. No Gradle build, APK, device runtime, PC browser/model run, resource measurement, CI or GitHub Actions workflow was executed.

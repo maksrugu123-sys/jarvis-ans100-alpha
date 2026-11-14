@@ -76,3 +76,15 @@
 ## Current verification status
 
 All newly authored or previously unrun suites remain **AUTHORED / NOT RUN** until executed. The Android sparse network, PC browser, peer TLS transport, LLM inference and integrated action loop are **SOURCE-LEVEL / NOT VERIFIED** in a live environment. This plan itself is not evidence that any gate has passed.
+
+## Implementation update — Android sparse chat side channel
+
+The first Android integration batch now connects ordinary non-command chat turns to the existing SQLite-backed sparse LIF-DT runtime, provided the user has initialized the 10,000-neuron topology in the UI.
+
+- The dialogue feature classifier exposes at most 128 deterministic hashed feature-slot IDs per turn. Raw message text is not written into the sparse-network database.
+- `AndroidSparseNeuronNetwork.scheduleInputs()` writes the same-timestamp feature batch in one SQLite transaction. Duplicate IDs, mixed timestamps, missing neurons and queue overflow reject the batch without partial insertion.
+- The ViewModel queues the sparse pass on its dedicated executor. It does not wait for the neural pass before sending the message to JARVIS Core/Qwen. A neural error is reported separately and never fails the ordinary chat turn.
+- The Compose status now displays real network counts because escaped Kotlin string templates in the prior UI/probe source are corrected.
+- **Boundary:** this network currently contributes only an observable low-level spike signal. It does not yet choose the response, update synaptic weights, or receive STDP/R-STDP reward. Existing 👍/👎 updates still train the separate sparse dialogue classifier. No claim of independent reasoning or full 10k-network dialogue learning is made.
+
+The added batch-input and feature-ID regression tests are **AUTHORED, NOT RUN**. No Kotlin/Python test, Gradle build, APK, device, memory, latency or thermal check was performed for this increment.
