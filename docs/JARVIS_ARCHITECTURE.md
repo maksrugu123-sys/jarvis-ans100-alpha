@@ -4682,7 +4682,7 @@ The focused test extends the uncertain-commit path to assert that another batch 
 
 ### 3.63. Network-Level JNVM Timestamp Transaction V1
 
-**Status:** specified, not implemented. Full contract: docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md.
+**Status:** the group checkpoint storage facade is implemented at source level; scheduler V2 version manifest and exact-snapshot restore are in §3.66. NetworkRuntime.run() remains not integrated. Full contract: docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md.
 
 The existing NetworkRuntime timestamp batch is a logical atomic unit: all affected neuron candidates, generated outgoing events, pending queue and network clock must become visible together. The per-neuron NeuronWorkingSet uses 128 separate JPVR shard containers; separate container commits cannot provide this invariant. Do not connect it directly to NetworkRuntime.
 
@@ -4734,6 +4734,7 @@ These mappings are derived by the canonical builder while it stages records; app
 - The store is not wired into NetworkRuntime.run(); caller-side candidate preparation and post-commit in-memory publication remain required. This is not yet a persistent event loop.
 - The 128-shard LRU remains an isolated per-neuron experiment, not the network backend. Save planning still materializes a bounded JPVR catalog; page reclamation/compaction is absent.
 - Pending queue IDs are validated for uniqueness. NetworkRuntime does not currently persist a historical processed-event deduplication ledger.
+- **Scheduler V2 consistency manifest:** each scheduler checkpoint stores the exact version of every neuron record. Group saves compare all current neuron INDEX versions against the previous map, and restore rejects any mismatch. Direct standalone neuron writes cannot silently create a mixed-version network. V1 scheduler records have no automatic migration.
 
 **Tests:** tools/neuron_runtime/test_network_jnvm_store.py is AUTHORED, NOT RUN. It covers initial group restore, shared commit identity, partial neuron updates, stale scheduler/neuron versions, topology immutability and uncertain-publication recovery.
 

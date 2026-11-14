@@ -1,6 +1,6 @@
 # JARVIS Network JNVM Transaction V1
 
-**Status:** the single-container group checkpoint storage facade is implemented at source level in tools/neuron_runtime/network_jnvm_store.py; focused tests are AUTHORED, NOT RUN. NetworkRuntime.run() integration, measured scaling and production readiness remain NOT IMPLEMENTED / NOT MEASURED.
+**Status:** single-container group checkpoint storage facade implemented at source level; scheduler V2 carries a complete neuron-record-version manifest. Focused tests AUTHORED, NOT RUN. NetworkRuntime.run() integration, measured scaling and production readiness remain NOT IMPLEMENTED / NOT MEASURED.
 
 ## 1. Why a network-level transaction is required
 
@@ -97,3 +97,11 @@ The facade checks expected scheduler and changed-neuron versions, rejects V1 top
 This does not integrate NetworkRuntime.run(). A future caller must calculate candidates and routed events, call the group store, then publish the same candidates and queue/clock state only after durable success. The 128-shard per-neuron store is not the network backend. Pending event IDs are checked for uniqueness while queued; a historical processed-event deduplication ledger is not implemented.
 
 Focused store tests are AUTHORED, NOT RUN. No syntax/import check, test, benchmark, build or device measurement has been performed for this increment.
+
+
+## 5B. Scheduler V2 neuron-version manifest
+
+The scheduler payload and record schema are now V2. Each scheduler record stores a complete neuron_id -> record_version map. The map must cover the topology exactly, and every persisted version must be positive. On save, the group facade reads all neuron index versions from the same active JPVR snapshot, requires them to match the previous scheduler map, increments only changed neurons, and stores the full resulting map. On restore, it compares each neuron locator version against that map before rebuilding the NetworkRuntime.
+
+This detects a standalone neuron checkpoint written outside the network group transaction. Such an update is not silently mixed into the restored graph; restore and subsequent group saves fail closed with a version conflict. The scheduler locator wire version is also 2. V1 experimental scheduler records are not automatically migrated; use a new V2 container or add an explicit migration separately.
+

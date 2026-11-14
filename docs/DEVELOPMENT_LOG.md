@@ -2071,3 +2071,21 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Limitations:** NetworkRuntime.run() remains in-memory and is not integrated. The caller must prepare candidates and persist them before publishing corresponding in-memory state. Topology and clock epoch are immutable in V1. Save planning still materializes the bounded JPVR page catalog; compaction and page reclamation are absent. Pending IDs are checked for uniqueness, but no historical processed-event deduplication ledger exists.
 
 **Next:** add a fail-closed timestamp coordinator around NetworkRuntime.run() that stages candidate neurons, generated events and clock state; invoke the group store before publishing in-memory state, and freeze/reconcile on uncertain commits. Keep Android's native two-neuron path unchanged until Python/Kotlin parity is designed.
+
+
+## 2026-11-14 — Add complete neuron-version manifest to network scheduler V2
+
+**Objective:** prevent a standalone per-neuron checkpoint update from being silently combined with older scheduler state and the other neuron records.
+
+**Changed:**
+- tools/neuron_runtime/network_jnvm_store.py: scheduler payload/record schema and locator wire version advanced to V2. Every scheduler snapshot stores a complete neuron_id -> record_version map.
+- save_timestamp() reads every neuron locator from the same active JPVR snapshot, requires the map to match the previous scheduler record, checks expected versions for changed neurons, increments only those entries, and stores the full next-version map with the scheduler.
+- restore_network() compares each neuron locator version against the scheduler map before decoding/rebuilding the network.
+- tools/neuron_runtime/test_network_jnvm_store.py: added regression tests for correct map persistence, restore rejection after an out-of-band single-neuron save, and group-save rejection of version drift.
+- Updated docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md, docs/JARVIS_ARCHITECTURE.md and README.md.
+
+**Tests:** AUTHORED, NOT RUN. No syntax/import check, unit test, benchmark, build, CI or device measurement was executed.
+
+**Compatibility:** V1 experimental scheduler records are not automatically migrated. Use a fresh V2 container or implement a separately reviewed migration.
+
+**Next:** implement a fail-closed in-memory timestamp coordinator around NetworkRuntime.run(), persisting the complete candidate via the group store before publishing state. Keep Android's native two-neuron path unchanged until Python/Kotlin parity exists.
