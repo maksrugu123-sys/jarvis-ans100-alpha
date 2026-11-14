@@ -71,6 +71,97 @@ class AndroidSparseNeuronNetworkTest {
     }
 
     @Test
+    fun explicitDialogueRewardChangesOnlyRecordedFeatureSynapsesAndPersists() {
+        val contextId = "dialog-feedback-test"
+        val featureIds = listOf(0, 4, 9)
+        val firstOutput = AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS
+        val selectedOutput = firstOutput + 1
+        val initialWeight = 0.15
+
+        AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 4).use { network ->
+            network.initializeSparseDialogueNetwork(weight = initialWeight)
+            val startTime = 10_000_000L
+            val featureEvents = featureIds.mapIndexed { index, featureId ->
+                AndroidNeuronEvent("feedback-feature-$index", startTime, featureId, 1.0)
+            }
+            val outputDriveEvents = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).map { index ->
+                AndroidNeuronEvent(
+                    "feedback-drive-$index",
+                    startTime,
+                    firstOutput + index,
+                    0.90,
+                )
+            }
+            network.scheduleInputs(featureEvents + outputDriveEvents)
+            val result = network.run(maxEvents = 64, maxTimestamps = 4)
+            val outputSpikes = result.emittedSpikes.map { it.first }
+                .filter { it in firstOutput until AndroidSparseNeuronNetwork.MAX_NEURONS }
+                .distinct()
+            assertEquals(4, outputSpikes.size)
+
+            val recorded = network.recordDialogueEligibility(
+                contextId = contextId,
+                featureNeuronIds = featureIds,
+                outputNeuronIds = outputSpikes,
+                preTimeNs = startTime,
+                postTimeNs = result.currentTimeNs,
+            )
+            assertEquals(featureIds.size * 4, recorded)
+
+            val weightsBefore = (0 until 4).associateWith { index ->
+                network.dialogueSynapseWeight(0, firstOutput + index)
+            }
+            val rewards = (0 until 4).associate { index ->
+                (firstOutput + index) to if (index == 1) 1.0 else -1.0 / 3.0
+            }
+            val applied = network.applyDialogueReward(contextId, featureIds, rewards)
+            assertEquals(featureIds.size * 4, applied.updatedSynapses)
+            assertEquals(0, applied.expiredSynapses)
+
+            assertTrue(network.dialogueSynapseWeight(0, selectedOutput) > weightsBefore.getValue(1))
+            for (index in 0 until 4) {
+                if (index != 1) {
+                    assertTrue(
+                        network.dialogueSynapseWeight(0, firstOutput + index) <
+                            weightsBefore.getValue(index),
+                    )
+                }
+            }
+            assertEquals(initialWeight, network.dialogueSynapseWeight(12, selectedOutput), 0.000001)
+            val afterFirstReward = network.dialogueSynapseWeight(0, selectedOutput)
+            val duplicate = network.applyDialogueReward(contextId, featureIds, rewards)
+            assertEquals(0, duplicate.updatedSynapses)
+            assertEquals(afterFirstReward, network.dialogueSynapseWeight(0, selectedOutput), 0.000001)
+        }
+
+        AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 1).use { reopened ->
+            assertTrue(reopened.dialogueSynapseWeight(0, selectedOutput) > initialWeight)
+            assertTrue(reopened.dialogueSynapseWeight(0, firstOutput) < initialWeight)
+            assertEquals(initialWeight, reopened.dialogueSynapseWeight(12, selectedOutput), 0.000001)
+        }
+    }
+
+    @Test
+    fun invalidDialogueRewardIsRejectedBeforeAnyWeightChanges() {
+        AndroidSparseNeuronNetwork(context, databaseName).use { network ->
+            network.initializeSparseDialogueNetwork(weight = 0.15)
+            val before = network.dialogueSynapseWeight(0, AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS)
+            var rejected = false
+            try {
+                network.applyDialogueReward(
+                    contextId = "invalid-reward-test",
+                    featureNeuronIds = listOf(0),
+                    outputRewards = mapOf(AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS to Double.NaN),
+                )
+            } catch (_: IllegalArgumentException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+            assertEquals(before, network.dialogueSynapseWeight(0, AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS), 0.000001)
+        }
+    }
+
+    @Test
     fun timestampCommitPropagatesSpikeAndPersistsQueue() {
         AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 2).use { network ->
             network.initializeSparseChain(3, delayNs = 1_000_000L, weight = 1.0)
