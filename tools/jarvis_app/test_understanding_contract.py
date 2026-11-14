@@ -64,7 +64,7 @@ class UnderstandingContractTests(unittest.TestCase):
         for row in rows[1:]:
             if not row.strip():
                 continue
-            text, intent, negation, previous, explanation = row.split("\\t")
+            text, intent, negation, previous, explanation = row.split("\t")
             result = analyze_text(text)
             self.assertEqual(intent, result["intent"], text)
             self.assertEqual(negation == "true", result["contains_negation"], text)
