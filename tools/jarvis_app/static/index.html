@@ -66,7 +66,29 @@
         <textarea id="chat-input" rows="2" maxlength="900" placeholder="Спросите что-нибудь…" required></textarea>
         <button id="chat-send" class="wide-button" type="submit" disabled>Отправить локальной модели</button>
       </form>
-      <p class="muted">Модель и история остаются в локальном workspace этого ПК. Автозагрузка модели, облачный ИИ и выполнение команд отключены.</p>
+      <p class="muted">Модель и история остаются в локальном workspace этого ПК. При отсутствии модели доступен базовый офлайн-ответчик; облачный ИИ и выполнение команд отключены.</p>
+    </section>
+
+    <section class="panel neuron-panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">ANS-100 EXPERIMENT · DIALOGUE</div><h2>Экспериментальные диалоговые нейроны</h2></div>
+        <span class="tag">10 000 ПРИЗНАКОВЫХ</span>
+      </div>
+      <p class="panel-copy">Разреженный классификатор анализирует форму текста и учится только на примерах, которые вы явно помечаете. Это не языковая модель и не полноценное понимание смысла. Сохраняются числовые веса, а не исходные фразы.</p>
+      <div id="dialog-neuron-status" class="neuron-status" role="status" aria-live="polite">Загрузка состояния диалогового слоя…</div>
+      <form id="dialog-neuron-form" class="stack-form">
+        <label for="dialog-neuron-sample">Пример для явного обучения</label>
+        <textarea id="dialog-neuron-sample" rows="2" maxlength="900" placeholder="Например: Привет, JARVIS! Рад снова тебя видеть." required></textarea>
+        <label for="dialog-neuron-label">Правильная метка</label>
+        <select id="dialog-neuron-label" required>
+          <option value="greeting">Приветствие</option>
+          <option value="question">Вопрос</option>
+          <option value="thanks">Благодарность</option>
+          <option value="farewell">Прощание</option>
+        </select>
+        <button id="dialog-neuron-train" class="wide-button" type="submit">Обучить на этом примере</button>
+      </form>
+      <p class="muted">JARVIS не обучается незаметно на переписке. Передача примера в обучение происходит только после нажатия этой кнопки.</p>
     </section>
 
     <section class="panel browser-panel">
