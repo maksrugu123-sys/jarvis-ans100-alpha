@@ -44,13 +44,75 @@ class AndroidWebSearchTest {
     }
 
     @Test
-    fun replyContainsSourceLinksAndDisclosesThatPagesWereNotRead() {
+    fun ranksTitleMatchesAheadOfSnippetOnlyAndDiversifiesHosts() {
+        val html = """
+            <li class="b_algo">
+              <h2><a href="https://example.org/snippet">General guide</a></h2>
+              <p>JARVIS Android search reference</p>
+            </li>
+            <li class="b_algo">
+              <h2><a href="https://www.example.org/guide">JARVIS Android native search</a></h2>
+              <p>Implementation guide</p>
+            </li>
+            <li class="b_algo">
+              <h2><a href="https://second.example.net/reference">JARVIS Android reference</a></h2>
+              <p>Technical overview</p>
+            </li>
+            <li class="b_algo">
+              <h2><a href="https://third.example.com/overview">Browser overview</a></h2>
+              <p>General browser notes</p>
+            </li>
+            <li class="b_algo">
+              <h2><a href="https://fourth.example.com/another">Another guide</a></h2>
+              <p>General notes</p>
+            </li>
+        """.trimIndent()
+
+        val results = AndroidWebSearchService().parseResults(html, "JARVIS Android")
+        assertEquals(
+            listOf(
+                "https://www.example.org/guide",
+                "https://second.example.net/reference",
+                "https://third.example.com/overview",
+                "https://fourth.example.com/another",
+                "https://example.org/snippet",
+            ),
+            results.map { it.url },
+        )
+    }
+
+    @Test
+    fun removesExactDuplicatesAndCommonTrackingParameters() {
+        val html = """
+            <li class="b_algo">
+              <h2><a href="https://www.example.org/article?utm_source=bing">First copy</a></h2>
+              <p>First snippet</p>
+            </li>
+            <li class="b_algo">
+              <h2><a href="https://example.org/article">Duplicate copy</a></h2>
+              <p>Duplicate snippet</p>
+            </li>
+            <li class="b_algo">
+              <h2><a href="https://other.example.net/article">Other result</a></h2>
+              <p>Other snippet</p>
+            </li>
+        """.trimIndent()
+
+        val results = AndroidWebSearchService().parseResults(html)
+        assertEquals(2, results.size)
+        assertEquals("First copy", results.first().title)
+    }
+
+    @Test
+    fun replyExplainsMatchBasisAndDoesNotClaimToVerifyTrust() {
         val reply = formatAndroidWebSearchReply(
             "test query",
             listOf(AndroidWebSearchResult("Title", "https://example.org", "Snippet")),
         )
         assertTrue(reply.contains("https://example.org"))
-        assertTrue(reply.contains("сами сайты не открывались"))
+        assertTrue(reply.contains("Сопоставление:"))
+        assertTrue(reply.contains("не проверка надёжности"))
+        assertTrue(reply.contains("страницы не открывались"))
     }
 
     @Test
