@@ -252,21 +252,21 @@ class AndroidWebSearchService(
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36"
         private val RESULT_BLOCK = Regex(
-            """<li\\b[^>]*class\\s*=\\s*["'][^"']*\\bb_algo\\b[^"']*["'][^>]*>[\\s\\S]*?</li>""",
+            """<li\b[^>]*class\s*=\s*["'][^"']*\bb_algo\b[^"']*["'][^>]*>[\s\S]*?</li>""",
             RegexOption.IGNORE_CASE,
         )
         private val RESULT_ANCHOR = Regex(
-            """<h2\\b[^>]*>[\\s\\S]*?<a\\b[^>]*href\\s*=\\s*["']([^"']+)["'][^>]*>([\\s\\S]*?)</a>[\\s\\S]*?</h2>""",
+            """<h2\b[^>]*>[\s\S]*?<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)</a>[\s\S]*?</h2>""",
             RegexOption.IGNORE_CASE,
         )
         private val RESULT_SNIPPET = Regex(
-            """<p\\b[^>]*>([\\s\\S]*?)</p>""",
+            """<p\b[^>]*>([\s\S]*?)</p>""",
             RegexOption.IGNORE_CASE,
         )
     }
 }
 
-private val ANDROID_SEARCH_TOKEN_REGEX = Regex("""[\\p{L}\\p{N}]{2,}""")
+private val ANDROID_SEARCH_TOKEN_REGEX = Regex("""[\p{L}\p{N}]{2,}""")
 private val ANDROID_SEARCH_STOP_WORDS = setOf(
     "и", "в", "во", "на", "по", "для", "как", "что", "это", "или", "при",
     "the", "and", "for", "with", "from", "how", "what", "into", "about",
