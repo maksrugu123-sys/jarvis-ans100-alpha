@@ -19,10 +19,13 @@ data class LocalUnderstanding(
     val refersToPreviousContext: Boolean,
     val asksForExplanation: Boolean,
     val evidence: List<String>,
+    val schema: String = "JARVIS_UNDERSTANDING_V1",
+    val scope: String = "bounded_heuristic_pre_generation_analysis",
 ) {
     fun toModelContext(): String = buildString {
         append("JARVIS CORE — ПРЕДВАРИТЕЛЬНЫЙ АНАЛИЗ (эвристический, не абсолютная истина):\n")
-        append("Язык: ").append(language)
+        append("Схема: ").append(schema).append("; границы: ").append(scope).append('\n')
+        append("Язык/письменность: ").append(language)
         append("; намерение: ").append(intent)
         append("; уверенность эвристики: ").append(String.format(Locale.ROOT, "%.2f", intentConfidence))
         append("; тип задачи: ").append(taskKind).append('\n')
