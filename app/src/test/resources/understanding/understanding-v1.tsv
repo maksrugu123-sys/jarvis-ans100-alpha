@@ -1,0 +1,11 @@
+input	intent	contains_negation	refers_to_previous_context	asks_for_explanation
+Почему это не работает?	question	true	true	false
+Найди ошибки и исправь их в проекте	action_request	false	false	false
+Что лучше: трансформер или нейронная сеть?	comparison	false	false	false
+Объясни, зачем это нужно	explanation	false	true	true
+Привет, Джарвис!	greeting	false	false	false
+This notebook contains little details.	statement_or_unknown	false	false	false
+Продолжай с предыдущей задачей	continuation	false	true	false
+необычный текст	statement_or_unknown	false	false	false
+Thank you	thanks	false	false	false
+What is JARVIS?	question	false	false	false
