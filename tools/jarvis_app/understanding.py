@@ -139,6 +139,7 @@ def _build_reasoning_plan(
     return {
         "schema": "JARVIS_REASONING_PLAN_V1",
         "goal": intent,
+        "focus_terms": non_action_terms[:6],
         "steps": templates[intent][:5],
         "requires_clarification": clarification,
         "clarification_question": (
