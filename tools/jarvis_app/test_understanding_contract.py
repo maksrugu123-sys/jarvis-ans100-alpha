@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import unittest
+from pathlib import Path
 
 from tools.jarvis_app.jarvis_core import JarvisCore
 from tools.jarvis_app.local_fallback import LocalFallbackResponseEngine
@@ -52,6 +53,23 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertTrue(result["contains_negation"])
         self.assertTrue(result["refers_to_previous_context"])
         self.assertFalse(result["asks_for_explanation"])
+
+    def test_matches_the_shared_desktop_and_android_understanding_fixtures(self) -> None:
+        fixture = (
+            Path(__file__).resolve().parents[2]
+            / "app" / "src" / "test" / "resources" / "understanding" / "understanding-v1.tsv"
+        )
+        rows = fixture.read_text(encoding="utf-8").splitlines()
+        self.assertGreater(len(rows), 1)
+        for row in rows[1:]:
+            if not row.strip():
+                continue
+            text, intent, negation, previous, explanation = row.split("\\t")
+            result = analyze_text(text)
+            self.assertEqual(intent, result["intent"], text)
+            self.assertEqual(negation == "true", result["contains_negation"], text)
+            self.assertEqual(previous == "true", result["refers_to_previous_context"], text)
+            self.assertEqual(explanation == "true", result["asks_for_explanation"], text)
 
     def test_explicit_action_comparison_and_explanation_markers(self) -> None:
         self.assertEqual("action_request", analyze_text("Найди ошибки и исправь их")["intent"])
