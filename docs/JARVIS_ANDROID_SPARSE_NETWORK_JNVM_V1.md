@@ -19,11 +19,14 @@ Events at a timestamp are never split. Per-run and per-timestamp limits bound wo
 
 - This is a sparse event-driven reference runtime, not a dense 10,000 × 10,000 matrix.
 - Flash-backed SQLite is persistence, not physical RAM. Active state still enters the LRU/heap for computation.
-- The default graph builder creates a sparse chain for deterministic capacity probing; task-specific topology and trained synapses require separate configuration.
-- The runtime is not yet connected to the ordinary chat turn. The existing ten-neuron ANS-100 signal pre-pass remains the default conversation diagnostic.
-- Android STDP/R-STDP dialogue learning is a separate milestone; this network does not silently train itself from unlabelled conversations.
+- `initializeSparseChain()` remains a generic sparse-chain fixture for scheduler and propagation tests.
+- The chat-specific `initializeSparseDialogueNetwork()` topology creates 9,996 feature neurons and four terminal output neurons, with 39,984 directed feature-to-output connections. A feature spike reaches the four readouts and stops; it cannot cascade down a 10,000-node chain.
+- The 10,000 classifier hash slots map modulo the 9,996 feature-neuron slots. The chat side-channel sends only bounded feature IDs, not raw utterance text, and runs on a dedicated executor.
+- The dialogue topology uses a separate V2 SQLite database filename. Existing V1 sparse-chain data is preserved; it is not destructively migrated or overwritten.
+- The ten-neuron ANS-100 signal pass remains the response-context diagnostic. The 10k graph is an optional numeric side-channel and does not control Qwen or the reply.
+- Android STDP/R-STDP learning on the 10k LIF synapses is still not implemented. Existing explicit 👍/👎 feedback trains a separate sparse dialogue-feature classifier; it does not update this graph.
 - SQLite atomicity is not a measured hardware-level power-loss guarantee. File-system/SQLite behavior, latency, RAM, flash writes and thermal cost must be measured on a named device.
 
 ## Verification
 
-`AndroidSparseNeuronNetworkTest.kt` contains instrumentation tests for 10,000-node sparse initialization, bounded LRU residency, atomic timestamp propagation, durable queued events and reopen. Tests are **AUTHORED, NOT RUN**. No APK, Kotlin compile, instrumentation run, benchmark or device measurement is claimed.
+`AndroidSparseNeuronNetworkTest.kt` contains seven instrumentation cases covering generic 10,000-node chain initialization, 10,000-node dialogue topology and 39,984 edges, bounded feature-to-output propagation, LRU residency, atomic timestamp batches, duplicate rejection, durable queued events and reopen. Tests are **AUTHORED, NOT RUN**. No APK, Kotlin compile, instrumentation run, benchmark or device measurement is claimed.
