@@ -36,7 +36,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         recentHistory,
         memoryContext,
         signalContext,
-        LocalUnderstandingPipeline().analyze(prompt),
+        LocalUnderstandingPipeline().analyze(prompt, recentHistory),
     )
 
     override fun respond(
