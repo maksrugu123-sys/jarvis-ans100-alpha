@@ -97,6 +97,48 @@ class LocalUnderstandingPipelineTest {
         assertTrue(result.hasRecentUserContext)
         assertTrue(result.reasoningPlan.contextAvailable)
         assertFalse(result.reasoningPlan.requiresClarification)
+        assertEquals("selected", result.contextReference.status)
+    }
+
+    @Test
+    fun selectsThePriorUserTurnThatMatchesAContextAnchor() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Обсуждаем Chromium браузер", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Речь шла о браузере Chromium.", 2L),
+            LocalConversationMessage("user-2", ConversationRole.USER, "Обсуждаем JARVIS память", 3L),
+            LocalConversationMessage("assistant-2", ConversationRole.ASSISTANT, "Память JARVIS хранит заметки.", 4L),
+        )
+        val result = pipeline.analyze("Продолжай про Chromium", history)
+        assertEquals("selected", result.contextReference.status)
+        assertEquals("lexical_turn_match", result.contextReference.method)
+        assertTrue(result.contextReference.sourceUserMessage.contains("Chromium"))
+        assertTrue(result.contextReference.matchedTerms.contains("chromium"))
+    }
+
+    @Test
+    fun asksForClarificationWhenRecentTurnsMatchEqually() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Обсуждаем JARVIS сеть", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Сеть JARVIS ограничена.", 2L),
+            LocalConversationMessage("user-2", ConversationRole.USER, "Обсуждаем JARVIS интерфейс", 3L),
+            LocalConversationMessage("assistant-2", ConversationRole.ASSISTANT, "Интерфейс JARVIS ещё экспериментальный.", 4L),
+        )
+        val result = pipeline.analyze("Продолжай про JARVIS", history)
+        assertEquals("ambiguous", result.contextReference.status)
+        assertTrue(result.reasoningPlan.requiresClarification)
+    }
+
+    @Test
+    fun affirmativeFollowThroughSelectsTheAdjacentAssistantOffer() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Добавить выбор контекстной ссылки", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Могу начать этот этап.", 2L),
+        )
+        val result = pipeline.analyze("Давай", history)
+        assertEquals("continuation", result.intent)
+        assertEquals("selected", result.contextReference.status)
+        assertEquals("adjacent_assistant_offer", result.contextReference.method)
+        assertTrue(result.contextReference.sourceAssistantMessage.contains("Могу начать"))
     }
 
     @Test

@@ -20,6 +20,15 @@ data class LocalReasoningPlan(
     val scope: String = "bounded_template_plan_only",
 )
 
+data class LocalContextReference(
+    val status: String = "not_requested",
+    val method: String = "no_context_reference_marker",
+    val sourceUserMessage: String = "",
+    val sourceAssistantMessage: String = "",
+    val matchedTerms: List<String> = emptyList(),
+    val confidence: Double = 0.0,
+)
+
 data class LocalUnderstanding(
     val language: String,
     val intent: String,
@@ -33,6 +42,7 @@ data class LocalUnderstanding(
     val evidence: List<String>,
     val hasRecentUserContext: Boolean,
     val reasoningPlan: LocalReasoningPlan,
+    val contextReference: LocalContextReference = LocalContextReference(),
     val schema: String = "JARVIS_UNDERSTANDING_V1",
     val scope: String = "bounded_heuristic_pre_generation_analysis",
 ) {
@@ -58,7 +68,13 @@ data class LocalUnderstanding(
         reasoningPlan.steps.forEachIndexed { index, step ->
             append(index + 1).append(". ").append(step).append('\n')
         }
-        append("Предыдущий контекст доступен: ").append(reasoningPlan.contextAvailable).append('\n')
+        append("Недавняя история присутствует (это не выбор точной ссылки): ").append(reasoningPlan.contextAvailable).append('\n')
+        append("Кандидат контекстной ссылки: статус=").append(contextReference.status)
+            .append("; метод=").append(contextReference.method)
+            .append("; уверенность эвристики=").append(String.format(Locale.ROOT, "%.2f", contextReference.confidence)).append('\n')
+        if (contextReference.sourceUserMessage.isNotBlank()) append("Кандидат — сообщение пользователя: ").append(contextReference.sourceUserMessage).append('\n')
+        if (contextReference.sourceAssistantMessage.isNotBlank()) append("Ответ рядом с кандидатом: ").append(contextReference.sourceAssistantMessage).append('\n')
+        if (contextReference.matchedTerms.isNotEmpty()) append("Совпавшие термины: ").append(contextReference.matchedTerms.joinToString(", ")).append('\n')
         append("Выполнение разрешено: ").append(reasoningPlan.executionAuthorized).append('\n')
         if (reasoningPlan.requiresClarification) {
             append("Требуется уточнение: ").append(reasoningPlan.clarificationQuestion).append('\n')
@@ -75,11 +91,16 @@ class LocalUnderstandingPipeline {
         val text = input.trim().take(MAX_INPUT_CHARS)
         val normalized = text.lowercase(Locale.ROOT)
         val tokens = TOKEN.findAll(normalized).map { it.value }.take(MAX_TOKENS).toList()
+        val historyWindow = recentHistory.takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
+        val hasRecentUserContext = historyWindow.any { it.role == ConversationRole.USER && it.text.isNotBlank() }
+        val affirmativeFollowThrough = tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
+            tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }
         val uniqueTerms = tokens.filter { it.length >= MIN_TERM_LENGTH && it !in STOP_WORDS }
             .distinct().take(MAX_KEY_TERMS)
         val evidence = mutableListOf<String>()
         val hasQuestion = '?' in text || QUESTION_WORDS.any { it in tokens }
-        val refersBack = CONTEXT_REFERENCES.any { marker -> marker in tokens || tokens.any { it.startsWith(marker) && marker.length >= 4 } } || containsAnyPhrase(tokens, CONTEXT_PHRASES)
+        val refersBack = CONTEXT_REFERENCES.any { marker -> marker in tokens || tokens.any { it.startsWith(marker) && marker.length >= 4 } } ||
+            containsAnyPhrase(tokens, CONTEXT_PHRASES) || (affirmativeFollowThrough && hasRecentUserContext)
         val negation = NEGATIONS.any { it in tokens }
         val greeting = tokens.firstOrNull()?.let { it in GREETINGS } == true
         val thanks = containsAnyPhrase(tokens, THANKS)
@@ -111,9 +132,7 @@ class LocalUnderstandingPipeline {
         val entities = ENTITY.findAll(text).map { it.value.trim() }
             .filter { it.length in 2..48 && it.lowercase(Locale.ROOT) !in COMMON_ENTITY_STOPWORDS }
             .distinctBy { it.lowercase(Locale.ROOT) }.take(MAX_ENTITIES).toList()
-        val hasRecentUserContext = recentHistory
-            .takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
-            .any { it.role == ConversationRole.USER && it.text.isNotBlank() }
+        val contextReference = if (refersBack) selectContextReference(tokens, historyWindow) else LocalContextReference()
         val language = when {
             CYRILLIC.containsMatchIn(text) -> "ru_or_cyrillic"
             LATIN.containsMatchIn(text) -> "en_or_latin"
@@ -131,11 +150,75 @@ class LocalUnderstandingPipeline {
             asksForExplanation = explanation,
             evidence = evidence.distinct().take(MAX_EVIDENCE),
             hasRecentUserContext = hasRecentUserContext,
-            reasoningPlan = buildReasoningPlan(intent, uniqueTerms, entities, refersBack, hasRecentUserContext),
+            reasoningPlan = buildReasoningPlan(intent, uniqueTerms, entities, refersBack, hasRecentUserContext, contextReference),
+            contextReference = contextReference,
         )
     }
 
 
+
+
+    private data class ContextCandidate(val index: Int, val userMessage: String, val assistantMessage: String)
+
+    private fun selectContextReference(tokens: List<String>, history: List<LocalConversationMessage>): LocalContextReference {
+        val candidates = mutableListOf<ContextCandidate>()
+        history.forEachIndexed { index, message ->
+            if (message.role != ConversationRole.USER || message.text.isBlank()) return@forEachIndexed
+            val assistant = history.drop(index + 1).takeWhile { it.role != ConversationRole.USER }
+                .lastOrNull { it.role == ConversationRole.ASSISTANT }?.text.orEmpty()
+            candidates += ContextCandidate(index, cleanExcerpt(message.text), cleanExcerpt(assistant))
+        }
+        if (candidates.isEmpty()) return LocalContextReference(status = "unavailable", method = "no_recent_user_turn")
+        val follow = tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
+            tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }
+        val latest = candidates.last()
+        if (follow) return LocalContextReference(
+            status = "selected",
+            method = if (latest.assistantMessage.isNotBlank()) "adjacent_assistant_offer" else "latest_user_turn",
+            sourceUserMessage = latest.userMessage, sourceAssistantMessage = latest.assistantMessage,
+            confidence = if (latest.assistantMessage.isNotBlank()) 0.72 else 0.62,
+        )
+        val queryTerms = tokens.filter { it.length >= MIN_TERM_LENGTH && it !in REFERENCE_STOP }.toSet()
+        if (queryTerms.isEmpty()) return if (candidates.size == 1) LocalContextReference(
+            status = "selected", method = "single_recent_user_turn",
+            sourceUserMessage = latest.userMessage, sourceAssistantMessage = latest.assistantMessage, confidence = 0.62,
+        ) else LocalContextReference(
+            status = "ambiguous", method = "ambiguous_recent_turns",
+            sourceUserMessage = latest.userMessage, sourceAssistantMessage = latest.assistantMessage, confidence = 0.42,
+        )
+        val ranked = candidates.map { candidate ->
+            val userMatches = queryTerms.intersect(contextTerms(candidate.userMessage))
+            val assistantMatches = queryTerms.intersect(contextTerms(candidate.assistantMessage))
+            Triple(3 * userMatches.size + assistantMatches.size, candidate, (userMatches + assistantMatches).distinct().sorted())
+        }.sortedWith(compareByDescending<Triple<Int, ContextCandidate, List<String>>> { it.first }.thenByDescending { it.second.index })
+        val score = ranked.first().first
+        val best = ranked.first().second
+        val matches = ranked.first().third
+        val tied = ranked.size > 1 && ranked[1].first == score
+        if (score > 0 && !tied) {
+            val userCount = queryTerms.intersect(contextTerms(best.userMessage)).size
+            val assistantCount = queryTerms.intersect(contextTerms(best.assistantMessage)).size
+            return LocalContextReference(
+                status = "selected", method = "lexical_turn_match",
+                sourceUserMessage = best.userMessage, sourceAssistantMessage = best.assistantMessage,
+                matchedTerms = matches.take(6),
+                confidence = (0.56 + 0.12 * userCount + 0.05 * assistantCount).coerceAtMost(0.92),
+            )
+        }
+        return LocalContextReference(
+            status = "ambiguous", method = if (score == 0) "no_distinctive_turn_match" else "tied_turn_matches",
+            sourceUserMessage = best.userMessage, sourceAssistantMessage = best.assistantMessage,
+            matchedTerms = matches.take(6), confidence = 0.42,
+        )
+    }
+
+    private fun contextTerms(value: String): Set<String> =
+        TOKEN.findAll(value.lowercase(Locale.ROOT)).map { it.value }
+            .filter { it.length >= MIN_TERM_LENGTH && it !in REFERENCE_STOP }.toSet()
+
+    private fun cleanExcerpt(value: String): String =
+        value.filter { it >= ' ' && it != '\u007f' }.replace(Regex("\\s+"), " ").trim()
+            .take(MAX_CONTEXT_EXCERPT_CHARS)
 
     private fun buildReasoningPlan(
         intent: String,
@@ -143,9 +226,10 @@ class LocalUnderstandingPipeline {
         entities: List<String>,
         refersBack: Boolean,
         hasRecentUserContext: Boolean,
+        contextReference: LocalContextReference,
     ): LocalReasoningPlan {
         val nonActionTerms = keyTerms.filterNot { it in ACTION_TERMS }
-        val unresolvedContext = refersBack && !hasRecentUserContext
+        val unresolvedContext = refersBack && contextReference.status != "selected"
         val requiresClarification = when {
             intent == "statement_or_unknown" -> true
             unresolvedContext -> true
@@ -155,7 +239,8 @@ class LocalUnderstandingPipeline {
             else -> false
         }
         val clarificationQuestion = if (unresolvedContext) {
-            "К какому предыдущему сообщению относится «это»? Напомните контекст."
+            if (contextReference.status == "ambiguous") "В истории есть несколько возможных тем. Уточните, к какой именно вернуться."
+            else "К какому предыдущему сообщению относится ссылка? Напомните контекст."
         } else when (intent) {
             "question" -> "Какой именно объект или ситуацию вы имеете в виду?"
             "action_request" -> "Что именно нужно изменить, создать или проверить?"
@@ -234,6 +319,7 @@ class LocalUnderstandingPipeline {
         private const val MAX_PLAN_STEPS = 5
         private const val MAX_FOCUS_TERMS = 6
         private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 4
+        private const val MAX_CONTEXT_EXCERPT_CHARS = 240
         private const val MIN_TERM_LENGTH = 3
         private val TOKEN = Regex("[\\p{L}\\p{N}]+")
         private val ENTITY = Regex("(?<![\\p{L}\\p{N}_])[A-ZА-ЯЁ][\\p{L}\\p{N}_-]{1,47}(?![\\p{L}\\p{N}_])")
@@ -265,5 +351,10 @@ class LocalUnderstandingPipeline {
             "the", "and", "for", "with", "that", "this",
         )
         private val CONTEXT_PHRASES = listOf("как раньше", "в прошлый раз")
+        private val AFFIRMATIVE_FOLLOW_THROUGH = setOf("давай", "да", "ок", "окей", "ладно", "поехали", "согласен", "yes", "yeah", "ok", "okay", "sure", "go")
+        private val REFERENCE_STOP = STOP_WORDS + ACTION_TERMS + CONTEXT_REFERENCES.toSet() + setOf(
+            "этим", "этого", "этой", "этому", "предыдущий", "предыдущая", "предыдущую",
+            "предыдущей", "предыдущего", "сюда", "туда", "previous", "continue", "those",
+        )
     }
 }

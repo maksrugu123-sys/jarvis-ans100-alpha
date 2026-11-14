@@ -603,6 +603,14 @@ class JarvisCore:
                 natural_language_plan.get("context_available") is True
                 if isinstance(natural_language_plan, Mapping) else False
             ),
+            "natural_language_context_reference_status": (
+                understanding_context.get("context_reference", {}).get("status", "unavailable")
+                if isinstance(understanding_context.get("context_reference"), Mapping) else "unavailable"
+            ),
+            "natural_language_context_reference_resolved": (
+                isinstance(understanding_context.get("context_reference"), Mapping)
+                and understanding_context["context_reference"].get("status") == "selected"
+            ),
             "natural_language_plan_execution_authorized": False,
             "ans100_signal_invoked": signal_context is not None,
             "ans100_attention_gate_active": (

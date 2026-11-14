@@ -81,6 +81,8 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertTrue(context["has_recent_user_context"])
         self.assertTrue(context["reasoning_plan"]["context_available"])
         self.assertFalse(context["reasoning_plan"]["requires_clarification"])
+        self.assertEqual("selected", context["context_reference"]["status"])
+        self.assertTrue(trace["natural_language_context_reference_resolved"])
 
     def test_context_reference_can_use_recent_user_history(self) -> None:
         history = [
@@ -91,6 +93,44 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertTrue(result["has_recent_user_context"])
         self.assertTrue(result["reasoning_plan"]["context_available"])
         self.assertFalse(result["reasoning_plan"]["requires_clarification"])
+        self.assertEqual("selected", result["context_reference"]["status"])
+
+    def test_context_reference_selects_the_lexically_matching_prior_turn(self) -> None:
+        history = [
+            {"role": "user", "content": "Обсуждаем Chromium браузер"},
+            {"role": "assistant", "content": "Речь шла о браузере Chromium."},
+            {"role": "user", "content": "Обсуждаем JARVIS память"},
+            {"role": "assistant", "content": "Память JARVIS хранит заметки."},
+        ]
+        reference = analyze_text("Продолжай про Chromium", history)["context_reference"]
+        self.assertEqual("selected", reference["status"])
+        self.assertEqual("lexical_turn_match", reference["method"])
+        self.assertIn("Chromium", reference["source_user_message"])
+        self.assertIn("chromium", reference["matched_terms"])
+
+    def test_context_reference_marks_equal_topic_matches_as_ambiguous(self) -> None:
+        history = [
+            {"role": "user", "content": "Обсуждаем JARVIS сеть"},
+            {"role": "assistant", "content": "Сеть JARVIS ограничена."},
+            {"role": "user", "content": "Обсуждаем JARVIS интерфейс"},
+            {"role": "assistant", "content": "Интерфейс JARVIS ещё экспериментальный."},
+        ]
+        result = analyze_text("Продолжай про JARVIS", history)
+        self.assertEqual("ambiguous", result["context_reference"]["status"])
+        self.assertTrue(result["reasoning_plan"]["requires_clarification"])
+        self.assertIn("несколько", result["reasoning_plan"]["clarification_question"])
+
+    def test_affirmative_follow_through_targets_the_adjacent_assistant_turn(self) -> None:
+        history = [
+            {"role": "user", "content": "Добавить выбор контекстной ссылки"},
+            {"role": "assistant", "content": "Могу начать этот этап."},
+        ]
+        result = analyze_text("Давай", history)
+        reference = result["context_reference"]
+        self.assertEqual("continuation", result["intent"])
+        self.assertEqual("selected", reference["status"])
+        self.assertEqual("adjacent_assistant_offer", reference["method"])
+        self.assertIn("Могу начать", reference["source_assistant_message"])
 
     def test_matches_the_shared_desktop_and_android_understanding_fixtures(self) -> None:
         fixture = (
