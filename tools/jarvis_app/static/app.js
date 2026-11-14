@@ -1151,6 +1151,27 @@ async function refreshConversation() {
   return state;
 }
 
+function renderDialogTurnTrace(trace) {
+  const root = $("#chat-neuron-trace");
+  if (!trace || typeof trace !== "object") {
+    root.textContent = "Диалоговая нейронная сводка для последнего хода недоступна.";
+    return;
+  }
+  const count = Number(trace.dialog_neuron_count || 0).toLocaleString("ru-RU");
+  const active = Number(trace.dialog_neuron_active_features || 0).toLocaleString("ru-RU");
+  const trained = Number(trace.dialog_neuron_trained_examples || 0).toLocaleString("ru-RU");
+  const label = trace.dialog_neuron_predicted_label || "нет уверенной метки";
+  const classifier = trace.dialog_neuron_context_invoked
+    ? "10 000-признаковый слой: " + count + " адресуемых нейронов · активно признаков: " + active +
+      " · метка: " + label + " · обучающих примеров: " + trained
+    : "Диалоговый классификатор не смог обработать этот ход.";
+  const signal = trace.ans100_signal_invoked
+    ? "ANS-100: сигнальный проход выполнен · attention gate: " +
+      (trace.ans100_attention_gate_active ? "активен" : "не активен")
+    : "ANS-100: сигнальный проход недоступен для этого хода.";
+  root.textContent = classifier + ". " + signal + ". Классификация признаков не является пониманием смысла.";
+}
+
 async function refreshDialogNeurons() {
   const root = $("#dialog-neuron-status");
   try {
@@ -1204,6 +1225,7 @@ $("#chat-form").addEventListener("submit", async event => {
     const result = await api("/api/conversation", {text, expected_revision: before.revision});
     input.value = "";
     renderConversation(result);
+    renderDialogTurnTrace(result.turn_trace);
     setNotice("Ответ JARVIS сохранён в локальном workspace.", "success");
   } catch (error) {
     setNotice(error.message, "error");
