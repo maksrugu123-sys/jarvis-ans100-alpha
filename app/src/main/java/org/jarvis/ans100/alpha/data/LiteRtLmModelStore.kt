@@ -147,6 +147,7 @@ class LiteRtLmModelStore(context: Context) {
             ) partialDownload.delete()
             throw error
         } catch (error: Exception) {
+            if (cancelRequested) throw LiteRtLmDownloadCancelledException()
             throw LiteRtLmModelException(
                 "Ошибка загрузки: ${error.message ?: "проверьте интернет-соединение"}. Частичная загрузка сохранена.",
             )
