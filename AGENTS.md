@@ -22,7 +22,7 @@ These instructions apply to every AI assistant, coding agent, and automated cont
 ## 3. Git and change permissions
 
 - The user has authorized creating commits and pushing project changes to GitHub without asking for confirmation for each ordinary documentation or code change.
-- The current user-authorized working branch is `mobile-first-offline-v1`. Fetch/read the latest state of this branch before editing; use the latest file/blob SHA for updates. Do not overwrite a newer change based on a stale SHA.
+- The default user-authorized working branch is `mobile-first-offline-v1`. For the integrated Android/PC prototype task, the user has separately authorized `experiment/jarvis-integrated-prototype-v1`; continue on that experiment branch while that task remains active. Fetch/read the current target branch and use the latest file/blob SHA for updates. Do not overwrite a newer change based on a stale SHA.
 - Do not commit to, merge into, or move `main` unless the user explicitly changes this instruction in a later message.
 - After writing, fetch the changed file again and verify the committed contents. Report the actual commit SHA and link when available.
 - Do not force-push, rewrite shared history, delete project data, change repository visibility, alter secrets/permissions, or make other destructive/account-level changes without explicit permission.
