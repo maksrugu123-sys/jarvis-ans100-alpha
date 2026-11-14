@@ -7,8 +7,10 @@ import unittest
 from unittest.mock import patch
 
 from tools.jpvr_reference.storage import JPVRCommitUncertainError, JPVRStorage
-from tools.neuron_runtime.network import NetworkConnection, NetworkRuntime
+from tools.neuron_runtime.network import NetworkConnection, NetworkRuntime, NetworkRuntimeError
 from tools.neuron_runtime.network_jnvm_coordinator import (
+    NetworkInput,
+    NetworkRewardInput,
     NetworkJNVMCoordinator,
     NetworkJNVMCoordinatorFrozenError,
 )

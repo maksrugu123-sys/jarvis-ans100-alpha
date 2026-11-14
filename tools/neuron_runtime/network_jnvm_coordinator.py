@@ -48,6 +48,32 @@ class CoordinatedReward:
 
 
 @dataclass(frozen=True)
+class NetworkInput:
+    time_ns: int
+    neuron_id: str
+    synapse_id: str
+    event_id: str
+    strength: float
+    attention: float = 0.0
+
+
+@dataclass(frozen=True)
+class NetworkRewardInput:
+    neuron_id: str
+    synapse_id: str
+    time_ns: int
+    reward_value: float
+    baseline_before: float
+    learning_context_id: str | None
+
+
+@dataclass(frozen=True)
+class CoordinatedRewardBatch:
+    updates: tuple[tuple[str, str, RewardUpdate], ...]
+    commit: SavedNetworkTimestamp
+
+
+@dataclass(frozen=True)
 class NetworkJNVMCoordinatorStatus:
     network_id: str
     network_record_version: int
@@ -227,6 +253,63 @@ class NetworkJNVMCoordinator:
                 time_ns, neuron_id, synapse_id, event_id, strength, attention,
             )
             return self._commit_candidate(candidate, ())
+
+    def schedule_inputs(self, inputs: tuple[NetworkInput, ...] | list[NetworkInput]) -> SavedNetworkTimestamp:
+        """Durably enqueue a bounded batch of external inputs in one JPVR COMMIT."""
+        if not isinstance(inputs, (tuple, list)) or not 1 <= len(inputs) <= 100_000:
+            raise NetworkJNVMCoordinatorError("inputs must contain 1..100000 NetworkInput records")
+        if any(not isinstance(item, NetworkInput) for item in inputs):
+            raise NetworkJNVMCoordinatorError("every input must be a NetworkInput")
+        event_ids = [item.event_id for item in inputs]
+        if len(event_ids) != len(set(event_ids)):
+            raise NetworkJNVMCoordinatorError("input batch contains duplicate event IDs")
+        with self._lock:
+            self._require_writable()
+            candidate = deepcopy(self._runtime)
+            for item in inputs:
+                candidate.schedule_input(
+                    item.time_ns,
+                    item.neuron_id,
+                    item.synapse_id,
+                    item.event_id,
+                    item.strength,
+                    item.attention,
+                )
+            return self._commit_candidate(candidate, ())
+
+    def apply_rewards_batch(
+        self,
+        rewards: tuple[NetworkRewardInput, ...] | list[NetworkRewardInput],
+    ) -> CoordinatedRewardBatch:
+        """Apply many same-time R-STDP rewards and publish all affected neurons atomically."""
+        if not isinstance(rewards, (tuple, list)) or not 1 <= len(rewards) <= 100_000:
+            raise NetworkJNVMCoordinatorError("rewards must contain 1..100000 NetworkRewardInput records")
+        if any(not isinstance(item, NetworkRewardInput) for item in rewards):
+            raise NetworkJNVMCoordinatorError("every reward must be a NetworkRewardInput")
+        timestamps = {item.time_ns for item in rewards}
+        if len(timestamps) != 1:
+            raise NetworkJNVMCoordinatorError("one reward batch must use a single model timestamp")
+        targets = [(item.neuron_id, item.synapse_id) for item in rewards]
+        if len(targets) != len(set(targets)):
+            raise NetworkJNVMCoordinatorError("reward batch contains duplicate neuron/synapse targets")
+        with self._lock:
+            self._require_writable()
+            candidate = deepcopy(self._runtime)
+            updates = []
+            changed_neurons = set()
+            for item in rewards:
+                update = candidate.apply_reward(
+                    item.neuron_id,
+                    item.synapse_id,
+                    item.time_ns,
+                    item.reward_value,
+                    item.baseline_before,
+                    item.learning_context_id,
+                )
+                updates.append((item.neuron_id, item.synapse_id, update))
+                changed_neurons.add(item.neuron_id)
+            saved = self._commit_candidate(candidate, tuple(sorted(changed_neurons)))
+            return CoordinatedRewardBatch(tuple(updates), saved)
 
     def apply_reward(
         self,
