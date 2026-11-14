@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.jarvis.ans100.alpha.data.LocalConversationCoordinator
 import org.jarvis.ans100.alpha.data.LocalConversationSignalRuntime
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationSignalStorage
+import org.jarvis.ans100.alpha.data.DialogFeaturePrediction
+import org.jarvis.ans100.alpha.data.LocalDialogFeatureClassifier
+import org.jarvis.ans100.alpha.data.SharedPreferencesDialogFeatureStorage
 import org.jarvis.ans100.alpha.data.LocalConversationMessage
 import org.jarvis.ans100.alpha.data.LocalConversationRepository
 import org.jarvis.ans100.alpha.data.LocalWorkspaceMemory
@@ -48,6 +51,8 @@ data class LocalConversationUiState(
     val modelStatus: String = "Модель не установлена.",
     val modelDownloadProgress: Float? = null,
     val modelDownloadStatus: String? = null,
+    val dialogFeaturePrediction: DialogFeaturePrediction? = null,
+    val dialogFeatureError: String? = null,
 )
 
 data class RuntimeBridgeUiState(
@@ -128,6 +133,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
     private val localSignalRuntime = LocalConversationSignalRuntime(
         SharedPreferencesConversationSignalStorage(application.applicationContext),
+    )
+    private val dialogFeatureClassifier = LocalDialogFeatureClassifier(
+        SharedPreferencesDialogFeatureStorage(application.applicationContext),
     )
     private val workspaceMemoryCache = LocalWorkspaceMemoryCache(
         SharedPreferencesLocalWorkspaceMemoryStorage(application.applicationContext),
@@ -501,6 +509,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
         conversationExecutor.execute {
             try {
+                // The sparse intent classifier is an optional side channel; it never blocks chat.
+                val dialogPredictionResult = try {
+                    dialogFeatureClassifier.analyze(clean) to null
+                } catch (error: Exception) {
+                    null to (error.message ?: "Диалоговые признаки временно недоступны.")
+                }
                 val runtimeState = mutableState.value.runtime
                 val signalContext = if (!clean.startsWith("/")) {
                     val useTermuxSignal = shouldUseTermuxSignal(
@@ -558,6 +572,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             messages = messages,
                             isBusy = false,
                             error = null,
+                            dialogFeaturePrediction = dialogPredictionResult.first,
+                            dialogFeatureError = dialogPredictionResult.second,
                         ),
                     )
                 }
@@ -568,6 +584,43 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         conversation = current.conversation.copy(
                             isBusy = false,
                             error = error.message ?: "Локальный ответ не сохранён.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun trainDialogFeatureClassifier(expectedLabel: String) {
+        if (expectedLabel !in LocalDialogFeatureClassifier.LABELS) return
+        val before = mutableState.value
+        if (before.conversation.isBusy) return
+        val latestUserMessage = before.conversation.messages.lastOrNull {
+            it.role == org.jarvis.ans100.alpha.data.ConversationRole.USER
+        } ?: return
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(isBusy = true, dialogFeatureError = null),
+        )
+        conversationExecutor.execute {
+            try {
+                val prediction = dialogFeatureClassifier.learn(latestUserMessage.text, expectedLabel)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            dialogFeaturePrediction = prediction,
+                            dialogFeatureError = null,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            dialogFeatureError = error.message ?: "Не удалось сохранить обучение.",
                         ),
                     )
                 }
@@ -591,6 +644,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             messages = emptyList(),
                             isBusy = false,
                             error = null,
+                            dialogFeaturePrediction = null,
+                            dialogFeatureError = null,
                         ),
                     )
                 }
