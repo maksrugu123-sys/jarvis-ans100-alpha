@@ -196,27 +196,45 @@ data class ConversationSignalContext(
  * They do not replace open-ended language-model replies.
  */
 internal object LocalDialogueFastPaths {
-    fun assistantIdentityReply(prompt: String): String? {
-        val normalized = prompt.lowercase(Locale.ROOT)
+    fun assistantIdentityReply(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage> = emptyList(),
+    ): String? {
+        fun normalize(value: String): String = value.lowercase(Locale.ROOT)
             .replace('ё', 'е')
             .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
+
+        fun introducedName(value: String): String? {
+            val normalizedValue = normalize(value)
+            return Regex("меня зовут\\s+([\\p{L}][\\p{L}-]{1,29})")
+                .find(normalizedValue)?.groupValues?.getOrNull(1)
+                ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+        }
+
+        val normalized = normalize(prompt)
         val asksIdentity = normalized.contains("а тебя") ||
             normalized.contains("как тебя зовут") ||
             normalized.contains("твое имя") ||
             normalized.contains("назови свое имя") ||
             normalized.contains("назвать свое имя")
         if (!asksIdentity) return null
-        val name = Regex("меня зовут\\s+([\\p{L}][\\p{L}-]{1,29})")
-            .find(normalized)?.groupValues?.getOrNull(1)
-            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+
+        val name = introducedName(prompt) ?: recentHistory.asReversed().asSequence()
+            .take(MAX_RECENT_NAME_LOOKBACK)
+            .filter { it.role == ConversationRole.USER }
+            .mapNotNull { introducedName(it.text) }
+            .firstOrNull()
+
         return if (name.isNullOrBlank()) {
             "Меня зовут JARVIS. Я локальный помощник, который работает на этом устройстве."
         } else {
             "Меня зовут JARVIS. Приятно познакомиться, $name!"
         }
     }
+
+    private const val MAX_RECENT_NAME_LOOKBACK = 12
 }
 
 /**
@@ -346,7 +364,7 @@ class JarvisCore(
                     emptyList()
                 }
                 lastRetrievedMemoryCount = memories.size
-                LocalDialogueFastPaths.assistantIdentityReply(clean)
+                LocalDialogueFastPaths.assistantIdentityReply(clean, context)
                     ?: languageEngine.respond(clean, context, memories, signalContext, understanding)
             }
         }

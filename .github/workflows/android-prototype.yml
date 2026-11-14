@@ -55,6 +55,9 @@ jobs:
           yes | "$SDKMANAGER" --licenses
           "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Run Android unit tests
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
+
       - name: Assemble debug APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
 
