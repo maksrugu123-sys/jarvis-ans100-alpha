@@ -2520,3 +2520,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Limitations:** successful assembly will not prove device installation, UI stability, model inference, Russian quality, memory behavior, JNVM/LRU integration, PC parity or automatic sync. The LiteRT-LM model weights are not bundled in the APK and must be imported separately.
 
 **Next:** inspect the workflow run and fix compile/build blockers on this experiment branch only; after a successful artifact, install on Android and perform first-launch checks. Do not touch `main`.
+
+
+## 2026-11-14 — Fix Android SDK bootstrap in first prototype workflow
+
+**Trigger:** the automatic push workflow ran on commit `9017e17e16bf50deb813c4b0634355669f23c036` but failed before Gradle assembly. Job `132507477499` failed in `android-actions/setup-android@v3`: the action attempted to install obsolete SDK package `tools`, which sdkmanager no longer provides. The Gradle assembly and artifact upload steps were skipped; no APK was produced.
+
+**Changed:** removed the failing setup-android action; use the runner's preinstalled SDK at `/usr/local/lib/android/sdk`, add cmdline-tools/platform-tools to PATH, accept licenses and install only `platform-tools`, `platforms;android-35` and `build-tools;35.0.0`. Updated checkout/setup-java to v5 and documented the correction.
+
+**Verification:** based on the actual failed run and decoded job log. Workflow source updated; the next push should trigger a fresh run. No successful build or APK is claimed yet.

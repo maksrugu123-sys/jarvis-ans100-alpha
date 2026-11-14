@@ -15,7 +15,7 @@
 
 ## Сборка через GitHub Actions
 
-Ветка не содержит Gradle Wrapper. Чтобы не блокировать первый APK, workflow устанавливает Gradle 8.9 на GitHub-hosted runner и использует JDK 17 и Android SDK 35. Это не создаёт локальный `gradlew`; wrapper можно добавить отдельным шагом после получения первого артефакта.
+Ветка не содержит Gradle Wrapper. Workflow устанавливает Gradle 8.9 на GitHub-hosted runner, использует JDK 17 и стандартный предустановленный Android SDK runner image, затем через sdkmanager устанавливает Android SDK 35. Не используем устаревший пакет SDK `tools`. Это не создаёт локальный `gradlew`; wrapper можно добавить отдельным шагом после получения первого артефакта.
 
 Workflow: `.github/workflows/android-prototype.yml`.
 
