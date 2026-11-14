@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 MAX_INPUT_CHARS = 750
 MAX_TOKENS = 128
@@ -65,6 +65,8 @@ def _build_reasoning_plan(
     intent: str,
     key_terms: list[str],
     entities: list[str],
+    refers_back: bool,
+    has_recent_context: bool,
 ) -> dict[str, object]:
     """Create a bounded template plan; this does not execute or prove a task."""
     templates = {
@@ -114,7 +116,10 @@ def _build_reasoning_plan(
         ],
     }
     non_action_terms = [term for term in key_terms if term not in _ACTION_TERMS]
+    unresolved_context = refers_back and not has_recent_context
     if intent == "statement_or_unknown":
+        clarification = True
+    elif unresolved_context:
         clarification = True
     elif intent == "question":
         clarification = not bool(key_terms or entities)
@@ -136,13 +141,20 @@ def _build_reasoning_plan(
         "goal": intent,
         "steps": templates[intent][:5],
         "requires_clarification": clarification,
-        "clarification_question": clarification_questions.get(intent, ""),
+        "clarification_question": (
+            "К какому предыдущему сообщению относится «это»? Напомните контекст."
+            if unresolved_context else clarification_questions.get(intent, "")
+        ),
+        "context_reference_resolved": bool(refers_back and has_recent_context),
         "execution_authorized": False,
         "scope": "bounded_template_plan_only",
     }
 
 
-def analyze_text(value: str) -> dict[str, object]:
+def analyze_text(
+    value: str,
+    history: Sequence[Mapping[str, object]] = (),
+) -> dict[str, object]:
     """Return the JARVIS_UNDERSTANDING_V1 record; this is not a semantic model."""
     if not isinstance(value, str):
         value = ""
@@ -207,6 +219,13 @@ def analyze_text(value: str) -> dict[str, object]:
         match.group(0) for match in _ENTITY.finditer(text)
         if match.group(0).casefold() not in _ENTITY_STOPWORDS
     ))[:5]
+    has_recent_context = any(
+        isinstance(item, Mapping)
+        and item.get("role") == "user"
+        and isinstance(item.get("content"), str)
+        and bool(item.get("content", "").strip())
+        for item in (history[-4:] if isinstance(history, (list, tuple)) else ())
+    )
     language = "ru_or_cyrillic" if re.search(r"[\u0400-\u04ff]", text) else (
         "en_or_latin" if re.search(r"[A-Za-z]", text) else "unknown"
     )
@@ -222,6 +241,7 @@ def analyze_text(value: str) -> dict[str, object]:
         "refers_to_previous_context": refers_back,
         "asks_for_explanation": explanation,
         "evidence": evidence[:5],
-        "reasoning_plan": _build_reasoning_plan(intent, key_terms, entities),
+        "has_recent_user_context": has_recent_context,
+        "reasoning_plan": _build_reasoning_plan(intent, key_terms, entities, refers_back, has_recent_context),
         "scope": "bounded_heuristic_pre_generation_analysis",
     }
