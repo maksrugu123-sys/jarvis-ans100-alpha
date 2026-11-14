@@ -1,6 +1,6 @@
 # JARVIS Network JNVM Transaction V1
 
-**Status:** single-container group checkpoint storage facade implemented at source level; scheduler V2 carries a complete neuron-record-version manifest. Focused tests AUTHORED, NOT RUN. NetworkRuntime.run() integration, measured scaling and production readiness remain NOT IMPLEMENTED / NOT MEASURED.
+**Status:** single-container group checkpoint storage facade and fail-closed `NetworkJNVMCoordinator` are implemented at source level; scheduler V2 carries a complete neuron-record-version manifest. Focused store/coordinator tests AUTHORED, NOT RUN. Runtime correctness, crash-injection verification, measured scaling and production readiness remain NOT VERIFIED / NOT MEASURED.
 
 ## 1. Why a network-level transaction is required
 
@@ -26,7 +26,7 @@ The container owns:
 - immutable DATA/BLOB records for changed neuron states, scheduler state and topology snapshots;
 - one MANIFEST and one COMMIT per published transaction.
 
-A timestamp transaction writes only changed neuron records plus one scheduler checkpoint, and applies all corresponding INDEX mutations in the same JPVR typed transaction. The scheduler checkpoint includes the network clock, has_processed, bounded pending-event queue, event-ID deduplication state, topology version and transaction sequence. The commit's single Superblock publication is the visibility boundary.
+A timestamp transaction writes only changed neuron records plus one scheduler checkpoint, and applies all corresponding INDEX mutations in the same JPVR typed transaction. The scheduler checkpoint includes the network clock, has_processed, bounded pending-event queue, pending-event ID uniqueness, topology version and transaction sequence. It does not yet retain a historical ledger of already processed event IDs. The commit's single Superblock publication is the visibility boundary.
 
 The existing JPVR typed transaction builder already accepts multiple DATA/BLOB records and multiple index mutations in one transaction request. The current one-neuron checkpoint facade does not expose that group operation; a dedicated NetworkCheckpointStore must own validation, planning and recovery rather than looping over individual saves.
 
@@ -94,9 +94,11 @@ The initial single-container group checkpoint facade is present in tools/neuron_
 
 The facade checks expected scheduler and changed-neuron versions, rejects V1 topology/clock-epoch migration, and restores scheduler metadata plus every neuron from one pinned active snapshot. Initial empty INDEX initialization is a separate commit; the first complete network state is one later group commit.
 
-This does not integrate NetworkRuntime.run(). A future caller must calculate candidates and routed events, call the group store, then publish the same candidates and queue/clock state only after durable success. The 128-shard per-neuron store is not the network backend. Pending event IDs are checked for uniqueness while queued; a historical processed-event deduplication ledger is not implemented.
+The current source now integrates a single-writer `NetworkJNVMCoordinator` around `NetworkRuntime` without putting per-neuron commits inside the scheduler. `NetworkRuntime.run(max_timestamps=1)` stops only after a complete same-timestamp batch; it never splits the timestamp. The coordinator works on a detached runtime copy, identifies the neurons processed during that timestamp, calls `save_timestamp()` with those neuron IDs and the complete scheduler candidate, and replaces its authoritative in-memory copy only after the group store confirms the durable COMMIT. The coordinator exposes `schedule_input()` and `apply_reward()` through the same group transaction boundary, so an input is not reported accepted before its queue insertion is durable.
 
-Focused store tests are AUTHORED, NOT RUN. No syntax/import check, test, benchmark, build or device measurement has been performed for this increment.
+A normal pre-publication storage error discards the detached candidate and leaves the coordinator's prior runtime active. `JPVRCommitUncertainError` freezes the coordinator. `reconcile_after_reopen()` requires a newly opened handle to the same JPVR path and adopts only either the exact uncertain commit ID/generation or the exact previous scheduler/neuron-version identity; any other snapshot remains frozen. A definite compare-and-swap/version conflict marks the coordinator stale, and `reload_after_conflict()` can adopt a fresh fully validated group snapshot from a new handle. The 128-shard per-neuron store is not the network backend. Pending event IDs are checked for uniqueness while queued; a historical processed-event deduplication ledger is not implemented.
+
+Focused store and coordinator tests are AUTHORED, NOT RUN. No syntax/import check, test, benchmark, build or device measurement has been performed for this increment.
 
 
 ## 5B. Scheduler V2 neuron-version manifest
@@ -105,3 +107,20 @@ The scheduler payload and record schema are now V2. Each scheduler record stores
 
 This detects a standalone neuron checkpoint written outside the network group transaction. Such an update is not silently mixed into the restored graph; restore and subsequent group saves fail closed with a version conflict. The scheduler locator wire version is also 2. V1 experimental scheduler records are not automatically migrated; use a new V2 container or add an explicit migration separately.
 
+
+
+## 5C. Timestamp coordinator integration
+
+`tools/neuron_runtime/network_jnvm_coordinator.py` binds a restored `NetworkRuntime` to `JPVRNetworkJNVMStore`:
+
+- `NetworkJNVMCoordinator.restore(store, network_id)` restores all neurons and scheduler state from one JPVR snapshot.
+- `schedule_input()` stages an external event in a detached runtime and commits a scheduler-only checkpoint before returning success.
+- `apply_reward()` stages the affected neuron and scheduler candidate and publishes only after one group COMMIT.
+- `run_next_timestamp()` calls `NetworkRuntime.run(max_timestamps=1)`, preserving the scheduler's complete timestamp boundary, then commits changed neurons and the updated queue/clock together.
+- A confirmed storage error does not publish the candidate. An uncertain Superblock publication freezes the writer until `reconcile_after_reopen()` proves the exact new or exact prior snapshot. A stale version conflict freezes mutation until `reload_after_conflict()` validates a fresh network snapshot.
+
+The coordinator is source-level reference code and continues to keep the complete `NetworkRuntime` and its neuron objects in process RAM. It is not integrated with the 128-way `NeuronWorkingSet`, does not provide multi-process writer leadership, and is not a production NCC. The JPVR facade's page-catalog bound, append-only growth and lack of compaction remain limiting factors. Historical processed-event deduplication is still absent.
+
+**Tests:** `tools/neuron_runtime/test_network_jnvm_coordinator.py` is AUTHORED, NOT RUN. It covers two successive timestamp commits, scheduler-only durable input admission, pre-commit failure isolation, uncertain-commit freeze/reopen/reconciliation, stale writer reload and idle no-op.
+
+**Verification:** source readback/static review only. No unit test, failpoint run, benchmark, build, CI or device measurement has been executed.

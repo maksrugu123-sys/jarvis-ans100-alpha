@@ -243,16 +243,24 @@ class NetworkRuntime:
             heapq.heappush(self._queue, event)
 
     def run(self, *, learning_context_id: str | None = None,
-            max_events: int | None = None) -> NetworkRunResult:
+            max_events: int | None = None,
+            max_timestamps: int | None = None) -> NetworkRunResult:
+        """Process queued events deterministically, optionally stopping after complete timestamps.
+
+        max_timestamps is a scheduler boundary, not a partial-batch limit. Every
+        selected timestamp is processed as one atomic in-memory candidate batch.
+        """
         if self._running:
             raise NetworkRuntimeError("run() is not re-entrant")
         budget = self._run_limit if max_events is None else _limit("max_events", max_events)
         if budget > self._run_limit:
             raise NetworkRuntimeError("max_events exceeds max_events_per_run")
+        timestamp_budget = None if max_timestamps is None else _limit("max_timestamps", max_timestamps)
         if self._queue and any(n.learning_rule == "rstdp" for n in self._neurons.values()):
             _id("learning_context_id", learning_context_id)
 
         processed, batches = 0, 0
+        timestamps_processed = 0
         spikes: list[NetworkSpike] = []
         exhausted = False
         self._running = True
@@ -318,6 +326,9 @@ class NetworkRuntime:
                 spikes.extend(batch_spikes)
                 self._current_time_ns = timestamp
                 self._has_processed = True
+                timestamps_processed += 1
+                if timestamp_budget is not None and timestamps_processed >= timestamp_budget:
+                    break
         finally:
             self._running = False
         return NetworkRunResult(processed, batches, tuple(spikes), len(self._queue), exhausted, self._current_time_ns)

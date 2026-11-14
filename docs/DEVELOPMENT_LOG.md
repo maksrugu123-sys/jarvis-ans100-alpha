@@ -2132,3 +2132,24 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Builds / CI / GitHub Actions:** NOT RUN; no workflow was dispatched and no Actions artifacts or caches were created.
 
 **Limitations:** API and Android code remain uncompiled/unexecuted. The existing V1 ConversationSignalContext fixture in the older conversation orchestration test is intentionally retained to exercise legacy bridge compatibility. Continue with device validation only after separate authorization.
+
+
+## 2026-11-14 — Integrate fail-closed atomic timestamp coordinator with network JNVM
+
+**Objective:** connect the existing one-container JPVR group store to the in-memory NetworkRuntime without exposing partial timestamp batches or publishing candidate state before durable commit.
+
+**Changed / added:**
+- `tools/neuron_runtime/network.py` — adds `max_timestamps` to `NetworkRuntime.run()`; it stops only after a complete timestamp batch, leaving later events queued.
+- `tools/neuron_runtime/network_jnvm_coordinator.py` — new single-writer coordinator. Durable scheduler-only input admission, atomic reward/state update, one-timestamp execution, changed-neuron detection, post-COMMIT in-memory publication, uncertainty freeze, exact commit/prior-state reconciliation after reopen, and stale-version reload from a new handle.
+- `tools/neuron_runtime/test_network_jnvm_coordinator.py` — new tests for atomic two-neuron fan-in at one timestamp, a later target timestamp, scheduler-only input persistence, pre-publication failure isolation, uncertain commit/reopen outcomes, stale writer reload, durable R-STDP reward update and empty-queue no-op.
+- `docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md` — documents source-level coordinator integration and remaining JNVM limits.
+- `docs/JARVIS_ARCHITECTURE.md` — appends §3.68 with the timestamp coordinator API, commit boundary, recovery states and limitations.
+- `README.md` — updates atomic network JNVM and scheduler integration status.
+
+**Verification:** GitHub source/blob/static review only. Tests are **AUTHORED, NOT RUN**. No test command, failure-injection process, benchmark, build, CI or device measurement was executed.
+
+**Builds / APK/AAB / CI / GitHub Actions:** **NOT RUN**. No workflow was dispatched; no Actions artifacts or caches were created.
+
+**Limitations:** the coordinator still holds a complete in-memory NetworkRuntime; it is not production NCC or multi-process writer leadership. The per-neuron 128-shard working set is not integrated. JPVR page-catalog bounds, append-only growth, absent compaction/reclamation and missing historical processed-event deduplication remain. Correctness and resource use are not runtime-verified or measured.
+
+**Next step:** after separate authorization, run the focused Python store/coordinator/network tests and deterministic failpoint recovery checks; then compare coordinator outcomes against the in-memory NetworkRuntime and measure profiles at 1/10/100/1,000/10,000 neurons on a named PC.

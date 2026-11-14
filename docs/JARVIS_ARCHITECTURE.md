@@ -4778,3 +4778,20 @@ STDP/R-STDP диалоговое обучение выключено. Ни 10 н
 #### 3.67.5. Проверки и открытые ограничения
 
 Авторские регрессионные тесты покрывают десятинейронный маршрут, число событий/пакетов, адаптацию между ходами, persistence/reopen, миграцию двухнейронного состояния, нейтральный запрос и fail-closed для повреждённого checkpoint/ошибки записи. Эти тесты пока AUTHORED, NOT RUN. Gradle, Python unit tests, сборки, CI и GitHub Actions не запускались. Потребление RAM, latency, battery/thermal impact, Android/Python numerical parity и практическая пригодность порогов не измерены.
+
+
+---
+
+### 3.68. Fail-closed Network JNVM timestamp coordinator
+
+**Статус:** IMPLEMENTED на уровне Python reference source; тесты AUTHORED, NOT RUN; runtime correctness/crash recovery/resource scaling NOT VERIFIED / NOT MEASURED.
+
+`tools/neuron_runtime/network_jnvm_coordinator.py` связывает `NetworkRuntime` с атомарным `JPVRNetworkJNVMStore`. Он восстанавливает сеть и scheduler из одного snapshot, а для каждого state-changing вызова работает через detached candidate. `schedule_input()` сохраняет внешнее событие вместе с обновлённой scheduler queue до того, как вернуть подтверждение. `apply_reward()` сохраняет изменённый neuron record и scheduler в одном group COMMIT. `run_next_timestamp()` использует `NetworkRuntime.run(max_timestamps=1)` и фиксирует ровно один полный timestamp batch; все затронутые neuron records, очередь событий, clock и scheduler manifest публикуются одним JPVR COMMIT.
+
+Активный runtime в координаторе заменяется только после подтверждённого успешного COMMIT. Обычный отказ до публикации отбрасывает candidate и оставляет старое состояние. `JPVRCommitUncertainError` замораживает новые записи. `reconcile_after_reopen()` требует заново открытый handle того же файла и принимает только exact uncertain commit ID/generation либо точную прежнюю scheduler/neuron-version identity; иной результат остаётся fail-closed. Обычный CAS/version conflict помечает состояние stale; `reload_after_conflict()` позволяет принять целый новый network snapshot только после восстановления на новом handle.
+
+Это пока single-writer Python reference coordinator, не production NCC и не multi-process leader. Вся сеть `NetworkRuntime` остаётся в RAM; per-neuron 128-shard LRU/JNVM working set не подключён к этому координатору. JPVR page catalog по-прежнему bounded, append-only и не имеет compaction/reclamation; historical processed-event deduplication отсутствует. Новая интеграция не подтверждает измеренную поддержку 10 000 нейронов.
+
+**Тесты:** `tools/neuron_runtime/test_network_jnvm_coordinator.py` AUTHORED, NOT RUN. Сценарии: один COMMIT на timestamp, scheduler-only persistence внешнего input, отказ до публикации, неопределённая публикация и reopen/reconciliation, stale writer reload и idle no-op.
+
+**Проверка:** статическое чтение исходников и API; никакие тесты, failpoint experiments, benchmarks, builds, CI или device measurements не запускались.
