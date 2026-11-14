@@ -4,7 +4,7 @@
 **Base:** `mobile-first-offline-v1` plus the sparse dialogue-neuron experiment  
 **Status:** source-integrated prototype; builds and runtime verification have not been performed.
 
-This branch is the first integrated experimental JARVIS client, not a standalone neuron demo. It reuses the existing Android application and Python local console, and connects the 10,000-feature dialogue layer to the Python conversation path, usable on a PC or through the Termux-hosted Android PWA. The classifier is not yet part of the native Android Compose conversation runtime.
+This branch is the first integrated experimental JARVIS client, not a standalone neuron demo. It reuses the existing Android application and Python local console. A sparse 10,000-feature dialogue classifier is connected to both the Python conversation path and the native Android Compose chat, using separate platform checkpoints and hash mappings.
 
 ## What is available in the prototype
 
@@ -71,14 +71,15 @@ The checkpoint stores numeric weights and a training counter, not the original t
 The existing Jetpack Compose client remains in `app/` (application ID `org.jarvis.ans100.alpha`). Its source includes:
 - local chat and bounded chat history without Termux;
 - a deterministic greeting/help/status fallback when no model is imported;
-- optional user-imported local LiteRT-LM model;
+- optional local LiteRT-LM model, installed through an in-app resumable download or manual import;
 - approved local memories;
 - an in-process ten-neuron Kotlin ANS-100 signal pass;
+- a separate 10,000-slot sparse dialogue-intent classifier with four labels, local numeric checkpoint, metrics display and explicit feedback buttons;
 - optional Termux extension for the authenticated loopback Python bridge, shared workspace, task/session administration, symbolic reasoning preview, and encrypted workspace transfer/backup.
 
 #### In-app language-model installation
 
-The native Android chat offers a **Download language model** action when no model is installed. It downloads the Qwen3-0.6B INT4 no-think LiteRT-LM artifact once from a pinned Hugging Face revision, displays progress, supports cancellation and HTTP Range resume, verifies the exact 347,251,840-byte size and SHA-256 before publishing the file, and stores it under the app-private `files/models` directory. The base APK does not contain model weights. Internet access is needed only for the initial download; inference after installation is local and offline. The user can also import the same model file manually.
+The native Android chat offers a **Download language model** action when no model is installed. The source implementation downloads the Qwen3-0.6B INT4 no-think LiteRT-LM artifact from a pinned Hugging Face revision, displays progress, supports cancellation and HTTP Range resume, verifies the exact 347,251,840-byte size and SHA-256 before publishing the file, and stores it under the app-private `files/models` directory. The base APK does not contain model weights. After a successful install the design uses local offline inference; the actual download and inference have not yet been verified on a device. The user can also import the same model file manually.
 
 Pinned source: [litert-community/Qwen3-0.6B-int4](https://huggingface.co/litert-community/Qwen3-0.6B-int4), revision `6aa2daf8aba4aa456797fb8040b36a3948bcfda7`. Artifact: `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm`; SHA-256: `2df6821ec12702dafd33915e7a1a1adc7c4b053f3672fd9555dfaf3a114c4139`. The model card declares Apache-2.0. This file matches the app's current LiteRT-LM 0.17.1 dependency; do not silently replace it with the newer dynamic export, which has different runtime requirements.
 
@@ -86,7 +87,7 @@ The Android downloader also checks the full HTTP byte-range bounds and rejects e
 
 The download implementation is source-level only. No APK build, device download, inference, memory benchmark or runtime compatibility test has been performed. The model's measured RAM use and generation speed on the target TECNO phone are unknown; a 331 MiB file can require substantially more RAM while running.
 
-**Important platform boundary:** the 10,000-feature Python dialogue classifier is connected to the Python console path, which can run on a desktop or as a Termux-hosted PWA on Android. The native Android Compose client remains separate and currently runs its ten-neuron Kotlin signal pre-pass. Do not describe the native Compose app as running the Python 10k classifier.
+**Important platform boundary:** native Android now has its own sparse 10,000-slot classifier in `LocalDialogFeatureClassifier.kt`. It maps up to 256 Unicode tokens and adjacent pairs into a sparse subset of the 10,000-slot bank, predicts four simple intent labels, and starts untrained. The Compose panel shows active-feature count and a heuristic label only when its score margin is large enough. The user must explicitly choose one of four feedback labels to update weights. The Android checkpoint contains numeric weights and a training counter, not raw utterances. The Python implementation uses BLAKE2-based hashing while Kotlin uses SHA-256, so their feature IDs and checkpoints are not interchangeable. This classifier is separate from the ten-neuron Kotlin ANS-100 signal pass and from Qwen; it does not generate text, perform semantic understanding, route actions or enter Qwen's prompt as a reasoning result.
 
 No APK is included or claimed. Android compilation, installation and device inference remain unverified.
 
@@ -108,7 +109,7 @@ The browser opens a visible Chromium window and provides bounded search, open, r
 - A queued task is only a record; it is not running.
 - A reasoning plan is a symbolic preview; it is not an approval or completed action.
 - The reference Task Loop, safety gate, CQE and persistence components are not yet assembled into a trusted autonomous action service.
-- The 10k sparse classifier does not provide general semantic understanding, text generation or human-like reasoning.
+- The 10k sparse classifier does not provide general semantic understanding, text generation or human-like reasoning, and its Android/Python checkpoints are not cross-platform compatible.
 - The local language model is a separate generation component; it is not the ANS-100 network.
 
 ## Data and safety
