@@ -356,6 +356,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun downloadConversationModel() {
         val before = mutableState.value
         if (before.conversation.isBusy || modelStore.installedFile() != null) return
+        modelStore.prepareDownload()
         mutableState.value = before.copy(conversation = before.conversation.copy(
             isBusy = true,
             error = null,
