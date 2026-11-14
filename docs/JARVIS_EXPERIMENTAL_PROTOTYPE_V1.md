@@ -37,14 +37,14 @@ Core also creates a `JARVIS_REASONING_PLAN_V1` template plan with up to six focu
 
 When Qwen is installed, the original user message and this Core-produced analysis are both passed to the language adapter; Qwen formulates the natural-language answer. The adapters bound and validate the V1 context. When no model is installed, the local fallback still receives the Core analysis and can display a basic intent/plan notice, but it cannot provide open-ended factual conversation.
 
-This is the beginning of independent JARVIS processing, not proof of deep semantic intelligence. The parser uses explicit rules and the plan uses templates; neither is a trained general-purpose reasoning model. A shared TSV fixture is read by both Android and Python test sources. Twelve Android understanding tests, thirteen Python contract tests and three Android Core integration tests are AUTHORED, NOT RUN. No cross-platform runtime parity or quality measurement is claimed.
+On PC/PWA, non-ambiguous question/explanation/comparison/action-request plans are also converted by Core into bounded candidate DAGs and passed through `ReasoningEngineV01` for dependency validation. This graph is not executable, and Android native Kotlin has not yet received the same adapter. This is the beginning of independent JARVIS processing, not proof of deep semantic intelligence. The parser uses explicit rules and the plan uses templates; neither is a trained general-purpose reasoning model. A shared TSV fixture is read by both Android and Python test sources. Twelve Android understanding tests, fifteen Python contract/reasoning-integration tests and three Android Core integration tests are AUTHORED, NOT RUN. No cross-platform runtime parity or quality measurement is claimed.
 
 The PC interface includes:
 - local conversation history stored in the JPVR workspace;
 - explicitly approved workspace memories and bounded lexical recall;
 - ANS-100 ten-neuron signal preprocessing on conversation turns;
 - a 10,000-addressable-feature sparse dialogue classifier, with explicit example labelling and a private numeric checkpoint;
-- structured symbolic reasoning preview and plan review; these are not natural-language task decomposition or execution;
+- structured symbolic reasoning preview and plan review; PC Core now converts selected heuristic intent templates into candidate DAGs, still without execution;
 - JPVR task/session lifecycle administration;
 - visible, read-only research browser using a separate headed Chromium profile;
 - encrypted JWS workspace merge and JWB backup/restore.
@@ -99,7 +99,7 @@ The download implementation is source-level only. No APK build, device download,
 
 **Important platform boundary:** native Android now has its own sparse 10,000-slot classifier in `LocalDialogFeatureClassifier.kt`. It maps up to 256 Unicode tokens and adjacent pairs into a sparse subset of the 10,000-slot bank, predicts four simple intent labels, and starts untrained. The Compose panel shows active-feature count and a heuristic label only when its score margin is large enough. The user must explicitly choose one of four feedback labels to update weights. The Android checkpoint contains numeric weights and a training counter, not raw utterances. The Python implementation uses BLAKE2-based hashing while Kotlin uses SHA-256, so their feature IDs and checkpoints are not interchangeable. This classifier is separate from the ten-neuron Kotlin ANS-100 signal pass and from Qwen; it does not generate text, perform semantic understanding, route actions or enter Qwen's prompt as a reasoning result.
 
-No APK is included or claimed. The seven sparse-classifier tests, twelve Android understanding tests, thirteen Python contract tests and three Core handoff/history/fallback tests and four model-download validation tests are AUTHORED, NOT RUN. Android compilation, installation, actual download/resume and device inference remain unverified.
+No APK is included or claimed. The seven sparse-classifier tests, twelve Android understanding tests, fifteen Python contract/reasoning-integration tests and three Core handoff/history/fallback tests and four model-download validation tests are AUTHORED, NOT RUN. Android compilation, installation, actual download/resume and device inference remain unverified.
 
 ### Visible PC research browser
 
