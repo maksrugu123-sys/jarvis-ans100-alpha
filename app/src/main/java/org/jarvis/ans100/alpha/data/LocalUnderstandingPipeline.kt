@@ -48,7 +48,7 @@ data class LocalUnderstanding(
         append("Отрицание присутствует: ").append(containsNegation)
         append("; ссылка на предыдущий контекст: ").append(refersToPreviousContext)
         append("; недавний контекст пользователя доступен: ").append(hasRecentUserContext).append('\n')
-        append("; запрос объяснения: ").append(asksForExplanation).append('\n')
+        append("Запрос объяснения: ").append(asksForExplanation).append('\n')
         if (evidence.isNotEmpty()) append("Основания классификации: ").append(evidence.joinToString("; ")).append('\n')
         append("План JARVIS (").append(reasoningPlan.schema).append("; ")
             .append(reasoningPlan.scope).append("):\n")
