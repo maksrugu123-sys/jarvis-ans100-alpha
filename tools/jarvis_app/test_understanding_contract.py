@@ -112,7 +112,9 @@ class UnderstandingContractTests(unittest.TestCase):
             self.assertFalse(plan["execution_authorized"])
 
     def test_explicit_action_comparison_and_explanation_markers(self) -> None:
-        self.assertEqual("action_request", analyze_text("Найди ошибки и исправь их")["intent"])
+        action = analyze_text("Найди ошибки и исправь их в проекте")
+        self.assertEqual("action_request", action["intent"])
+        self.assertEqual(["ошибки", "проекте"], action["reasoning_plan"]["focus_terms"])
         self.assertEqual("comparison", analyze_text("Что лучше: Qwen3 или ANS-100?")["intent"])
         self.assertEqual("explanation", analyze_text("Объясни, зачем это нужно")["intent"])
 
@@ -165,6 +167,7 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertLessEqual(len(safe["key_terms"][0]), 48)
         self.assertNotIn("unexpected_instruction", safe)
         self.assertEqual("JARVIS_REASONING_PLAN_V1", safe["reasoning_plan"]["schema"])
+        self.assertLessEqual(len(safe["reasoning_plan"]["focus_terms"]), 6)
         self.assertFalse(safe["reasoning_plan"]["execution_authorized"])
         self.assertIsNone(_bounded_understanding_context({"schema": "unknown"}))
 
