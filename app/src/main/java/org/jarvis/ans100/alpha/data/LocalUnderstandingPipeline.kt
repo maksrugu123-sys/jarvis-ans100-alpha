@@ -145,9 +145,9 @@ class LocalUnderstandingPipeline {
         val requiresClarification = when {
             intent == "statement_or_unknown" -> true
             unresolvedContext -> true
-            "question" -> keyTerms.isEmpty() && entities.isEmpty()
-            "action_request" -> nonActionTerms.isEmpty() && entities.isEmpty()
-            "comparison" -> nonActionTerms.size + entities.size < 2
+            intent == "question" -> keyTerms.isEmpty() && entities.isEmpty()
+            intent == "action_request" -> nonActionTerms.isEmpty() && entities.isEmpty()
+            intent == "comparison" -> nonActionTerms.size + entities.size < 2
             else -> false
         }
         val clarificationQuestion = if (unresolvedContext) {
