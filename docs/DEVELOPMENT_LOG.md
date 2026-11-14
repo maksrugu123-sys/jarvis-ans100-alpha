@@ -2407,3 +2407,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Boundaries:** this is a four-output-neuron research readout with 256 feature synapses per output, not a 10,000-neuron runtime and not a general reasoning system. It trains only on explicit expected labels. No silent learning, text logging, or evaluation-set training is enabled.
 
 **Verification:** source/readback only. The new Python tests are **AUTHORED, NOT RUN**. No Python test, syntax/import execution, Gradle build, APK, PC browser/model runtime or device measurement was run.
+
+## 2026-11-14 — Replace Android chat chain with bounded feed-forward 10k topology
+
+**Objective:** prevent ordinary chat feature events from cascading through a long sparse chain and accumulating pending work across turns.
+
+**Changed:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidSparseNeuronNetwork.kt` — added `initializeSparseDialogueNetwork()`, a task-specific topology with 9,996 feature neurons and four terminal output neurons (39,984 directed connections). The generic chain initializer remains available for scheduler tests. The default SQLite filename now uses V2 so existing V1 chain data is preserved.
+- `app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt` — initializes the feed-forward topology for the native chat side-channel and maps bounded classifier feature slots into the 9,996 input-neuron range.
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidSparseNeuronNetworkTest.kt` — added two instrumentation cases: exact 10,000-neuron/39,984-edge topology counts and a feature-spike fan-out to all four terminal outputs with no pending chain backlog.
+- Updated `README.md`, `docs/JARVIS_ARCHITECTURE.md` §3.74, `docs/JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md` and `docs/JARVIS_AUTONOMOUS_CORE_MILESTONE_V1.md`.
+
+**Behavior:** a feature spike now fans out to four terminal readout neurons and stops. It cannot propagate down a 10,000-node chain. The graph remains a numeric diagnostic side-channel; it does not train LIF synapses or control Qwen. Existing V1 database files are not deleted or overwritten.
+
+**Tests:** two new Android instrumentation cases added; the complete network test class now contains seven cases. They are **AUTHORED, NOT RUN**. No Kotlin compile, Gradle build, APK, Android instrumentation, device measurement, Python test, PC browser or local-model runtime check was performed.
+
+**Limitations / next:** implement explicit, bounded plasticity on the 10k graph with durable synapse updates and per-feedback idempotency before claiming that the phone's spiking network learns from dialogue. Then test on the target Android device for queue stability, SQLite write cost, resident-set behavior, RAM, latency, battery and thermal load.
