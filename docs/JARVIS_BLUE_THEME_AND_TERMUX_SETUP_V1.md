@@ -87,7 +87,7 @@ gh auth setup-git
 
 Follow the prompts. Choose GitHub.com and HTTPS if asked. Termux will show a one-time device code; open the official GitHub site in the browser, enter that code and approve the sign-in with the GitHub account that has access to this repository.
 
-Do not paste a GitHub password, personal access token or one-time code into this chat. Do not use the insecure-storage option for GitHub CLI authentication.
+Do not paste a GitHub password, personal access token or one-time code into this chat. Do not use the insecure-storage option. GitHub CLI documents that it may fall back to a plain-text config file when a system credential store is unavailable; treat the Termux GitHub CLI configuration as private, protect the phone with a screen lock, and do not share Termux backups or the gh config directory. When you no longer need private-repository updates, sign out with gh auth logout --hostname github.com.
 
 ## Download the correct JARVIS branch
 
