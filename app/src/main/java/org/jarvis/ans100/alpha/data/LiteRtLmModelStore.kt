@@ -298,7 +298,8 @@ class LiteRtLmModelStore(context: Context) {
             if (expectedStart < 0L || expectedTotal <= 0L || expectedStart >= expectedTotal) {
                 return false
             }
-            val match = value?.let(CONTENT_RANGE_REGEX::matchEntire) ?: return false
+            val header = value ?: return false
+            val match = CONTENT_RANGE_REGEX.matchEntire(header) ?: return false
             val start = match.groupValues[1].toLongOrNull() ?: return false
             val end = match.groupValues[2].toLongOrNull() ?: return false
             val total = match.groupValues[3].toLongOrNull() ?: return false
