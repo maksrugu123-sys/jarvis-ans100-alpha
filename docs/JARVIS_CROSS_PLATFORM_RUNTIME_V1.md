@@ -21,12 +21,12 @@ This is a shared product and data contract, not a claim that the current impleme
 | Area | Existing source | Current limitation |
 |---|---|---|
 | Desktop runtime | Python modules under tools/ | Reference/research components; no packaged desktop product yet |
-| Desktop UI | PWA served by tools.jarvis_app | Local task/session console and symbolic planner preview, not a full conversational assistant |
+| Desktop UI | PWA served by tools.jarvis_app | Local task/session console and optional local-model conversation through JARVIS Core; source-level only, not runtime verified |
 | Android UI | Kotlin + Jetpack Compose under app/ | Native V0.5 source exists |
-| Android runtime connection | LocalRuntimeBridgeClient → 127.0.0.1:8765 | Requires a separate Python process on the same phone, currently typically Termux |
-| Neural runtime | Python NeuronRuntime / NetworkRuntime | Reference coordinators, not production mobile runtime |
+| Android runtime connection | LocalRuntimeBridgeClient → 127.0.0.1:8765 | Optional developer bridge for JPVR workspace memory refresh and the ANS-100 signal pre-pass; core chat and recent history remain in-process and do not require Termux |
+| Neural runtime | Python NeuronRuntime / NetworkRuntime | Reference coordinators; a bounded two-neuron signal pre-pass is now called by desktop Core and optionally by Android through Termux, but it is not full cognition, dialogue learning, or a native mobile runtime |
 | Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | No native Kotlin JPVR implementation or automatic cross-device sync yet |
-| Offline language model | No integrated production local model established | Offline natural-language conversation is not yet a delivered capability |
+| Offline language model | Optional LiteRT-LM Qwen3 adapters called by JARVIS Core on Android and desktop/PWA | Source-level only; no inference or target-device performance has been verified |
 
 The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists. The shared workspace JSON contract, JPVR workspace store, authenticated local API V1, Android Compose memory manager and desktop PWA memory manager are present on `mobile-first-offline-v1`; both UIs support explicit-consent memory creation, search, listing and confirmed deletion. Manual encrypted `.jws` transfer is implemented on both platforms; the phone and PC still keep separate loopback-local files until the user explicitly moves a file between them.
 
@@ -197,18 +197,22 @@ The capability registry reports actual limits and active backends. A PC may use 
 - Add cross-language golden fixtures consumed by Python and Kotlin.
 - Verify deterministic encoding, integrity checks, size bounds, migrations, and conflict handling.
 
-### Batch 5 — Local inference
+### Batch 5 — Local inference and JARVIS Core
 
-**Implemented at source level:** Android and desktop/PWA now have optional LiteRT-LM 0.17.1 adapters for the same manually supplied Qwen3-0.6B INT4 no-think artifact. Android imports through SAF and persists its conversation in app-private SharedPreferences; desktop uses --model and persists chat in the JPVR-backed portable workspace. Both adapters are pluggable and report the configured backend.
+**Implemented at source level:** Android and desktop/PWA now have JARVIS Core conversation orchestrators. They own the turn boundary and call optional LiteRT-LM 0.17.1 adapters for the same manually supplied Qwen3-0.6B INT4 no-think artifact. Android imports through SAF and keeps recent chat in app-private SharedPreferences; desktop uses --model and persists chat in the JPVR-backed portable workspace. Desktop Core retrieves bounded JPVR memory; Android Core retrieves from an in-memory cache of user-approved JPVR records after an authenticated bridge refresh/import/restore.
 
-**Remaining acceptance work:** no actual Android/desktop inference, browser flow, model integrity verification, target-device resource measurement or cross-platform history round-trip has been run. Android and desktop histories are still separate; manual transfer of Android conversation into the shared workspace is the next data-contract task. Measure RAM, storage, latency, throughput, battery/thermal impact and quality on each target independently.
+**Remaining acceptance work:** Android memory cache still depends on the optional Termux bridge and is not a native durable in-process JPVR store. Android and desktop histories remain separate; manual transfer of Android conversation into the shared workspace is not yet implemented. No actual inference, browser flow, model integrity verification, memory relevance evaluation, target-device resource measurement or cross-platform history round-trip has been run.
 
 ### Batch 6 — Shared ANS-100 runtime behavior
 
-- Port bounded neural state transitions to Kotlin or a portable native library.
-- Differentially compare Python reference and device implementation using the same fixtures.
+**Implemented at source level:** a bounded two-neuron ALIF-DT conversation-signal pre-pass uses the existing Python NeuronRuntime, NetworkRuntime and Numerical Oracle. Desktop Core calls it directly; Android may call it through the authenticated Termux loopback endpoint. The pass consumes explicit request-shape features and returns a numeric attention-gate summary to the language engine.
+
+**Limit:** this is preprocessing only, not semantic understanding, full cognition, adaptive dialogue learning or persistent neural state. The Android bridge is optional and fail-open; a native Kotlin/portable mobile implementation does not exist yet.
+
+- Port the bounded neural state transitions behind an in-process Kotlin or audited portable-native interface.
+- Differentially compare Python reference and device implementation using shared fixtures.
 - Add versioned checkpoint compatibility and recovery tests.
-- Do not enable online learning by default until stability and resource behavior are established.
+- Keep dialogue-driven/online learning disabled until stability and resource behavior are established.
 
 ### Batch 7 — Optional pairing and sync
 

@@ -147,6 +147,52 @@ class LocalRuntimeBridgeClient {
     fun getWorkspace(): RuntimeWorkspaceSnapshot =
         decodeWorkspace(request("GET", "/api/workspace"))
 
+    /** Optional low-latency request to the real Termux ANS-100 signal runtime. */
+    fun analyzeConversationSignal(prompt: String): ConversationSignalContext {
+        val clean = prompt.trim()
+        if (clean.isEmpty() || clean.length > 4_000 || clean.any { it == '\u0000' }) {
+            throw RuntimeBridgeException("Запрос для ANS-100 должен содержать от 1 до 4 000 символов.")
+        }
+        val response = request(
+            "POST",
+            "/api/ans100/conversation-signal",
+            JSONObject().put("prompt", clean),
+            connectTimeoutMs = 800,
+            readTimeoutMs = 1_800,
+        )
+        if (requiredString(response, "runtime_version") !=
+            "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
+            response.opt("learning_enabled") != false ||
+            response.opt("state_persisted") != false ||
+            requiredString(response, "scope") != "low_level_signal_preprocessing_only"
+        ) {
+            throw RuntimeBridgeException("Локальный сервис вернул неподдерживаемую сводку ANS-100.")
+        }
+        val active = response.opt("attention_gate_active") as? Boolean
+            ?: throw RuntimeBridgeException("Сводка ANS-100 не содержит состояние attention gate.")
+        val features = response.optJSONObject("features")
+            ?: throw RuntimeBridgeException("Сводка ANS-100 не содержит числовые признаки.")
+        fun feature(name: String): Double {
+            val raw = features.opt(name) as? Number
+                ?: throw RuntimeBridgeException("Признак ANS-100 $name имеет неверный тип.")
+            val value = raw.toDouble()
+            if (!value.isFinite() || value !in 0.0..1.0) {
+                throw RuntimeBridgeException("Признак ANS-100 $name находится вне диапазона.")
+            }
+            return value
+        }
+        return ConversationSignalContext(
+            runtimeVersion = requiredString(response, "runtime_version"),
+            processedEvents = requiredInt(response, "processed_events"),
+            processedBatches = requiredInt(response, "processed_batches"),
+            spikeCount = requiredInt(response, "spike_count"),
+            attentionGateActive = active,
+            tokenVolume = feature("token_volume"),
+            lexicalDiversity = feature("lexical_diversity"),
+            questionMarker = feature("question_marker"),
+        )
+    }
+
     fun saveWorkspace(
         document: JSONObject,
         expectedRevision: Long,
@@ -745,6 +791,8 @@ class LocalRuntimeBridgeClient {
         method: String,
         path: String,
         body: JSONObject? = null,
+        connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
+        readTimeoutMs: Int = READ_TIMEOUT_MS,
     ): JSONObject {
         if (!path.startsWith("/") || path.startsWith("//") || path.contains("..") ||
             path.contains('\\') || path.contains('?') || path.contains('#')
@@ -752,11 +800,16 @@ class LocalRuntimeBridgeClient {
             throw RuntimeBridgeException("Недопустимый локальный API-путь.")
         }
 
+        if (connectTimeoutMs !in 250..CONNECT_TIMEOUT_MS ||
+            readTimeoutMs !in 250..READ_TIMEOUT_MS
+        ) {
+            throw RuntimeBridgeException("Тайм-аут локального запроса недопустим.")
+        }
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection)
         try {
             connection.requestMethod = method
-            connection.connectTimeout = CONNECT_TIMEOUT_MS
-            connection.readTimeout = READ_TIMEOUT_MS
+            connection.connectTimeout = connectTimeoutMs
+            connection.readTimeout = readTimeoutMs
             connection.instanceFollowRedirects = false
             connection.useCaches = false
             connection.setRequestProperty("Accept", "application/json")

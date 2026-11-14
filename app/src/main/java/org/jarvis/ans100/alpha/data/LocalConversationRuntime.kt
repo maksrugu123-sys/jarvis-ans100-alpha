@@ -233,6 +233,14 @@ interface LocalResponseEngine {
         prompt: String,
         recentHistory: List<LocalConversationMessage>,
     ): String
+
+    /** Optional context-aware path; legacy engines safely ignore new context inputs. */
+    fun respond(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage>,
+        memoryContext: List<LocalWorkspaceMemory>,
+        signalContext: ConversationSignalContext?,
+    ): String = respond(prompt, recentHistory)
 }
 
 /** Deterministic command/greeting fallback; it deliberately is not an LLM. */

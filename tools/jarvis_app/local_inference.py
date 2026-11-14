@@ -24,7 +24,8 @@ SYSTEM_MESSAGE = (
     "Ты не являешься всем JARVIS и не управляешь его памятью, нейронным runtime или инструментами. "
     "Отвечай по-русски кратко и прямо. Если не знаешь ответ или не уверен — так и скажи. "
     "Не утверждай, что ANS-100, Reasoning Engine, память, сеть, файлы, приложения или внешние действия "
-    "использовались, если ядро явно не передало такой результат. Не выдумывай факты и не проси пароли."
+    "использовались, если ядро явно не передало такой результат. Числовая оценка ANS-100 не является "
+    "семантическим пониманием или полноценным рассуждением. Не выдумывай факты и не проси пароли."
 )
 
 
@@ -115,6 +116,7 @@ class LiteRtLmLocalEngine:
         history: list[dict[str, str]],
         *,
         memory_context: Sequence[Mapping[str, str]] = (),
+        signal_context: Mapping[str, object] | None = None,
     ) -> str:
         clean = prompt.strip()
         if not clean or len(clean) > MAX_PROMPT_CHARS or "\x00" in clean:
@@ -150,6 +152,21 @@ class LiteRtLmLocalEngine:
                             "факты и учитывай, что заметка может быть устаревшей:\n"
                             + json.dumps(safe_memories, ensure_ascii=False, separators=(",", ":"))
                         )
+                if signal_context is not None:
+                    signal_fields = {
+                        key: signal_context.get(key)
+                        for key in (
+                            "runtime_version", "processed_events", "processed_batches",
+                            "spike_count", "attention_gate_active", "features", "scope",
+                        )
+                    }
+                    system_message += (
+                        "\n\nANS-100 передал низкоуровневую числовую оценку входного сигнала. "
+                        "Это результат ограниченного ALIF-DT NetworkRuntime, а не понимание смысла, "
+                        "план или доказательство истинности. Не называй его рассуждением или обученным "
+                        "решением. Данные:\n"
+                        + json.dumps(signal_fields, ensure_ascii=False, separators=(",", ":"))
+                    )
                 conversation = engine.create_conversation(
                     messages=messages,
                     system_message=system_message,

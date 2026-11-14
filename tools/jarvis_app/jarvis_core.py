@@ -9,6 +9,8 @@ from collections.abc import Mapping, Sequence
 import re
 from typing import Any
 
+from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
+
 MAX_MEMORY_SCAN = 2_000
 MAX_RETRIEVED_MEMORIES = 3
 MAX_MEMORY_CHARS = 700
@@ -28,6 +30,7 @@ class JarvisCore:
 
     def __init__(self, language_engine: Any | None) -> None:
         self._language_engine = language_engine
+        self._signal_runtime = ConversationSignalRuntime()
 
     @staticmethod
     def _tokens(value: str) -> set[str]:
@@ -53,6 +56,9 @@ class JarvisCore:
         total_chars = 0
         for index, record in enumerate(memories[:MAX_MEMORY_SCAN]):
             if not isinstance(record, Mapping):
+                continue
+            # Only explicit, user-approved memories may enter the model context.
+            if record.get("user_approved") is not True:
                 continue
             content = record.get("content")
             if not isinstance(content, str) or not content.strip():
@@ -83,6 +89,10 @@ class JarvisCore:
             selected.append(item)
             total_chars += size
         return selected
+
+    def analyze_signal(self, prompt: str) -> dict[str, object]:
+        """Run the bounded ALIF-DT/NetworkRuntime pre-pass without persistence."""
+        return self._signal_runtime.analyze(prompt).to_dict()
 
     def status(
         self,
@@ -120,8 +130,11 @@ class JarvisCore:
                 "integrated_into_chat": False,
             },
             "ans100_network": {
-                "state": "not_integrated",
-                "integrated_into_chat": False,
+                "state": "signal_preprocessor_only",
+                "signal_preprocessing_integrated_into_chat": True,
+                "full_cognitive_loop_integrated": False,
+                "learning_enabled": False,
+                "persistent_state": False,
             },
             "external_actions": {"state": "disabled", "enabled": False},
         }
@@ -136,13 +149,28 @@ class JarvisCore:
         if engine is None:
             raise RuntimeError("JARVIS Core has no configured language engine")
         recalled = self.retrieve_memories(prompt, memories)
-        answer = engine.respond(prompt, history, memory_context=recalled)
+        signal_context = None
+        signal_error = False
+        try:
+            signal_context = self.analyze_signal(prompt)
+        except Exception:
+            # The neural pre-pass is optional; a failure must not break local chat.
+            signal_error = True
+        answer = engine.respond(
+            prompt, history, memory_context=recalled, signal_context=signal_context,
+        )
         if not isinstance(answer, str) or not answer.strip() or len(answer) > 4_000 or chr(0) in answer:
             raise RuntimeError("The language component returned an invalid response")
         return answer, {
             "core_version": self.VERSION,
             "retrieved_memory_count": len(recalled),
+            "ans100_signal_invoked": signal_context is not None,
+            "ans100_attention_gate_active": (
+                bool(signal_context["attention_gate_active"])
+                if signal_context is not None else False
+            ),
+            "ans100_signal_error": signal_error,
             "reasoning_engine_invoked": False,
-            "ans100_invoked": False,
+            "ans100_full_cognition_invoked": False,
             "external_actions_invoked": False,
         }

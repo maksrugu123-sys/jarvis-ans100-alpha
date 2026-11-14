@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.jarvis.ans100.alpha.data.LocalConversationCoordinator
 import org.jarvis.ans100.alpha.data.LocalConversationMessage
 import org.jarvis.ans100.alpha.data.LocalConversationRepository
+import org.jarvis.ans100.alpha.data.LocalWorkspaceMemory
+import org.jarvis.ans100.alpha.data.LocalWorkspaceMemoryCache
 import org.jarvis.ans100.alpha.data.LiteRtLmModelStore
 import org.jarvis.ans100.alpha.data.LiteRtLmResponseEngine
 import org.jarvis.ans100.alpha.data.LocalFallbackResponseEngine
@@ -102,11 +104,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         application.applicationContext, modelStore,
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
+    private val workspaceMemoryCache = LocalWorkspaceMemoryCache()
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
         ),
         conversationResponseEngine,
+        workspaceMemoryCache,
     )
     private val runtimeClient = LocalRuntimeBridgeClient()
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
@@ -134,6 +138,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
         reload()
         reloadConversation()
+        if (mutableState.value.runtime.hasAccessToken) {
+            // Refresh the approved JPVR-memory cache after process restart when a token exists.
+            connectRuntime()
+        }
     }
 
     fun saveRuntimeAccessToken(value: String) {
@@ -174,6 +182,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         try {
             runtimeTokenStore.clear()
             runtimeClient.setAccessToken(null)
+            workspaceMemoryCache.clear()
             mutableState.value = mutableState.value.copy(
                 runtime = RuntimeBridgeUiState(message = "Токен доступа удалён."),
                 workspace = RuntimeWorkspaceUiState(),
@@ -313,7 +322,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
         conversationExecutor.execute {
             try {
-                val messages = conversationCoordinator.send(clean)
+                val signalContext = if (
+                    !clean.startsWith("/") &&
+                        mutableState.value.conversation.modelInstalled &&
+                        mutableState.value.runtime.hasAccessToken
+                ) {
+                    runCatching { runtimeClient.analyzeConversationSignal(clean) }.getOrNull()
+                } else {
+                    null
+                }
+                val messages = conversationCoordinator.send(clean, signalContext)
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
@@ -706,6 +724,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         updatedAt = item.getString("updated_at"),
                     )
                 }
+                val approvedMemories = (0 until array.length()).mapNotNull { index ->
+                    val item = array.getJSONObject(index)
+                    if (!item.optBoolean("user_approved", false)) return@mapNotNull null
+                    LocalWorkspaceMemory(
+                        id = item.getString("id"),
+                        content = item.getString("content"),
+                        category = item.getString("category"),
+                        updatedAt = item.getString("updated_at"),
+                        userApproved = true,
+                    )
+                }
+                workspaceMemoryCache.replace(approvedMemories)
                 pendingWorkspaceRestore = null
                 pendingWorkspaceBackupRevision = null
                 mainHandler.post {
@@ -852,6 +882,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         updatedAt = item.getString("updated_at"),
                     )
                 }
+                val approvedMemories = (0 until array.length()).mapNotNull { index ->
+                    val item = array.getJSONObject(index)
+                    if (!item.optBoolean("user_approved", false)) return@mapNotNull null
+                    LocalWorkspaceMemory(
+                        id = item.getString("id"),
+                        content = item.getString("content"),
+                        category = item.getString("category"),
+                        updatedAt = item.getString("updated_at"),
+                        userApproved = true,
+                    )
+                }
+                workspaceMemoryCache.replace(approvedMemories)
                 pendingWorkspaceMerge = null
                 mainHandler.post {
                     val current = mutableState.value
@@ -1084,6 +1126,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         updatedAt = item.getString("updated_at"),
                     )
                 }
+                val approvedMemories = (0 until array.length()).mapNotNull { index ->
+                    val item = array.getJSONObject(index)
+                    if (!item.optBoolean("user_approved", false)) return@mapNotNull null
+                    LocalWorkspaceMemory(
+                        id = item.getString("id"),
+                        content = item.getString("content"),
+                        category = item.getString("category"),
+                        updatedAt = item.getString("updated_at"),
+                        userApproved = true,
+                    )
+                }
+                workspaceMemoryCache.replace(approvedMemories)
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(

@@ -2,17 +2,103 @@ package org.jarvis.ans100.alpha.data
 
 import java.util.Locale
 
+data class LocalWorkspaceMemory(
+    val id: String,
+    val content: String,
+    val category: String,
+    val updatedAt: String,
+    val userApproved: Boolean,
+)
+
+data class LocalWorkspaceMemorySnapshot(
+    val loaded: Boolean,
+    val records: List<LocalWorkspaceMemory>,
+)
+
+class LocalWorkspaceMemoryCache {
+    @Volatile private var loaded: Boolean = false
+    @Volatile private var records: List<LocalWorkspaceMemory> = emptyList()
+
+    @Synchronized
+    fun replace(values: List<LocalWorkspaceMemory>) {
+        records = values
+            .filter { it.userApproved && it.content.isNotBlank() }
+            .takeLast(MAX_CACHED_RECORDS)
+            .map { memory ->
+                memory.copy(
+                    content = memory.content.trim().take(MAX_MEMORY_CHARS),
+                    category = memory.category.trim().take(MAX_CATEGORY_CHARS),
+                )
+            }
+        loaded = true
+    }
+
+    @Synchronized
+    fun clear() {
+        records = emptyList()
+        loaded = false
+    }
+
+    fun snapshot(): LocalWorkspaceMemorySnapshot =
+        LocalWorkspaceMemorySnapshot(loaded, records.toList())
+
+    companion object {
+        const val MAX_CACHED_RECORDS = 2_000
+        const val MAX_MEMORY_CHARS = 700
+        const val MAX_CATEGORY_CHARS = 64
+    }
+}
+
+/** Validated low-level summary returned by the real ANS-100 NetworkRuntime bridge. */
+data class ConversationSignalContext(
+    val runtimeVersion: String,
+    val processedEvents: Int,
+    val processedBatches: Int,
+    val spikeCount: Int,
+    val attentionGateActive: Boolean,
+    val tokenVolume: Double,
+    val lexicalDiversity: Double,
+    val questionMarker: Double,
+) {
+    init {
+        if (runtimeVersion != "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
+            processedEvents !in 0..8 || processedBatches !in 0..8 || spikeCount !in 0..2 ||
+            !tokenVolume.isFinite() || tokenVolume !in 0.0..1.0 ||
+            !lexicalDiversity.isFinite() || lexicalDiversity !in 0.0..1.0 ||
+            !questionMarker.isFinite() || questionMarker !in 0.0..1.0
+        ) {
+            throw RuntimeBridgeException("Сводка сигнала ANS-100 содержит недопустимые значения.")
+        }
+    }
+
+    fun toModelContext(): String = buildString {
+        appendLine("Runtime: $runtimeVersion")
+        appendLine("Обработано событий: $processedEvents; пакетов: $processedBatches; импульсов: $spikeCount.")
+        appendLine("Attention gate активирован: $attentionGateActive.")
+        appendLine(
+            "Числовые признаки: token_volume=${String.format(Locale.ROOT, "%.3f", tokenVolume)}, " +
+                "lexical_diversity=${String.format(Locale.ROOT, "%.3f", lexicalDiversity)}, " +
+                "question_marker=${String.format(Locale.ROOT, "%.3f", questionMarker)}.",
+        )
+        append("Область: только низкоуровневая обработка сигнала; это не семантическое понимание и не полноценное рассуждение.")
+    }
+}
+
 /**
- * Owns one complete conversation turn. Language generation is a component of
- * JARVIS; this class remains responsible for routing, capability truth and persistence.
+ * Owns every Android conversation turn. Language generation, read-only JPVR
+ * recall and the optional ANS-100 signal pass are separate components.
  */
 data class JarvisCoreStatus(
     val languageBackend: String,
     val languageModelConfigured: Boolean,
     val recentConversationMemoryAvailable: Boolean = true,
     val longTermMemoryIntegrated: Boolean = false,
+    val longTermMemoryRecordCount: Int = 0,
+    val memoriesRetrievedLastTurn: Int = 0,
     val reasoningIntegratedIntoConversation: Boolean = false,
     val ans100IntegratedIntoConversation: Boolean = false,
+    val ans100SignalProcessorActive: Boolean = false,
+    val ans100AttentionGateActive: Boolean = false,
     val externalActionsEnabled: Boolean = false,
 ) {
     fun toUserMessage(): String {
@@ -21,13 +107,24 @@ data class JarvisCoreStatus(
         } else {
             "языковая модель не установлена, используется базовый локальный ответчик"
         }
+        val memory = when {
+            !longTermMemoryIntegrated -> "общий JPVR workspace ещё не загружен в это приложение"
+            longTermMemoryRecordCount == 0 -> "workspace загружен, подтверждённых воспоминаний нет"
+            else -> "кэшировано $longTermMemoryRecordCount подтверждённых записей; найдено для прошлого запроса: $memoriesRetrievedLastTurn"
+        }
+        val neural = when {
+            !ans100SignalProcessorActive -> "для последнего запроса нет результата сигнального прохода (мост не запускался или был недоступен)"
+            ans100AttentionGateActive -> "ограниченный ALIF-DT сигнальный проход выполнен; attention gate активирован"
+            else -> "ограниченный ALIF-DT сигнальный проход выполнен; attention gate не активирован"
+        }
         return buildString {
             appendLine("JARVIS Core · состояние компонентов")
-            appendLine("Языковой модуль: ${language} (${languageBackend}).")
+            appendLine("Языковой модуль: $language ($languageBackend).")
             appendLine("Кратковременная память диалога: ${if (recentConversationMemoryAvailable) "активна, история хранится локально" else "недоступна"}.")
-            appendLine("Долговременная JPVR-память: ${if (longTermMemoryIntegrated) "подключена к этому диалогу" else "пока не подключена к Android-диалогу"}.")
-            appendLine("Reasoning Engine: ${if (reasoningIntegratedIntoConversation) "участвует в обработке запросов" else "существует отдельно; автоматическая интеграция в диалог ещё не выполнена"}.")
-            appendLine("ANS-100: ${if (ans100IntegratedIntoConversation) "интегрирован в цикл диалога" else "нейронный runtime пока не интегрирован в цикл диалога"}.")
+            appendLine("Долговременная JPVR-память: $memory.")
+            appendLine("Reasoning Engine: ${if (reasoningIntegratedIntoConversation) "участвует в обработке запросов" else "символьный preview пока не подключён к обычному диалогу"}.")
+            appendLine("ANS-100: $neural.")
+            appendLine("Обучение ANS-100 на диалогах и сохранение состояния нейросети пока выключены.")
             append("Внешние действия: ${if (externalActionsEnabled) "разрешены отдельной политикой" else "выключены"}.")
         }
     }
@@ -36,18 +133,34 @@ data class JarvisCoreStatus(
 class JarvisCore(
     private val repository: LocalConversationRepository,
     private val languageEngine: LocalResponseEngine,
+    private val memoryCache: LocalWorkspaceMemoryCache = LocalWorkspaceMemoryCache(),
 ) {
+    private var lastSignalContext: ConversationSignalContext? = null
+    private var lastRetrievedMemoryCount: Int = 0
+
     val backendLabel: String
         get() = "JARVIS Core → ${languageEngine.backendLabel}"
 
-    fun status(): JarvisCoreStatus = JarvisCoreStatus(
-        languageBackend = languageEngine.backendLabel,
-        languageModelConfigured = languageEngine.languageModelConfigured,
-    )
+    fun status(): JarvisCoreStatus {
+        val snapshot = memoryCache.snapshot()
+        val signal = lastSignalContext
+        return JarvisCoreStatus(
+            languageBackend = languageEngine.backendLabel,
+            languageModelConfigured = languageEngine.languageModelConfigured,
+            longTermMemoryIntegrated = snapshot.loaded,
+            longTermMemoryRecordCount = snapshot.records.size,
+            memoriesRetrievedLastTurn = lastRetrievedMemoryCount,
+            ans100SignalProcessorActive = signal != null,
+            ans100AttentionGateActive = signal?.attentionGateActive == true,
+        )
+    }
 
     fun history(): List<LocalConversationMessage> = repository.load()
 
-    fun send(prompt: String): List<LocalConversationMessage> {
+    fun send(
+        prompt: String,
+        signalContext: ConversationSignalContext? = null,
+    ): List<LocalConversationMessage> {
         val clean = prompt.trim()
         if (clean.isEmpty() || clean.length > LocalConversationRepository.MAX_MESSAGE_CHARS ||
             clean.any { it == '\u0000' }
@@ -59,7 +172,16 @@ class JarvisCore(
         val response = when (clean.lowercase(Locale.ROOT)) {
             "/status" -> status().toUserMessage()
             "/help" -> HELP_MESSAGE
-            else -> languageEngine.respond(clean, context)
+            else -> {
+                lastSignalContext = signalContext
+                val memories = if (languageEngine.languageModelConfigured) {
+                    retrieveMemories(clean)
+                } else {
+                    emptyList()
+                }
+                lastRetrievedMemoryCount = memories.size
+                languageEngine.respond(clean, context, memories, signalContext)
+            }
         }
         if (response.isBlank() ||
             response.length > LocalConversationRepository.MAX_MESSAGE_CHARS ||
@@ -70,14 +192,64 @@ class JarvisCore(
         return repository.appendExchange(clean, response)
     }
 
+    fun replaceWorkspaceMemories(records: List<LocalWorkspaceMemory>) =
+        memoryCache.replace(records)
+
+    fun clearWorkspaceMemories() = memoryCache.clear()
+
+    private fun retrieveMemories(prompt: String): List<LocalWorkspaceMemory> {
+        val snapshot = memoryCache.snapshot()
+        if (!snapshot.loaded) return emptyList()
+        val queryTokens = tokens(prompt)
+        if (queryTokens.isEmpty()) return emptyList()
+        val ranked = snapshot.records.mapIndexedNotNull { index, memory ->
+            val textTokens = tokens(memory.content + " " + memory.category)
+            val score = queryTokens.intersect(textTokens).size
+            if (score == 0) null else Triple(score, index, memory)
+        }.sortedWith(compareByDescending<Triple<Int, Int, LocalWorkspaceMemory>> { it.first }
+            .thenBy { it.second })
+
+        val selected = ArrayList<LocalWorkspaceMemory>(MAX_RETRIEVED_MEMORIES)
+        var totalChars = 0
+        for ((_, _, memory) in ranked) {
+            if (selected.size >= MAX_RETRIEVED_MEMORIES) break
+            val candidate = memory.copy(
+                content = memory.content.trim().take(MAX_MEMORY_CHARS),
+                category = memory.category.trim().take(64),
+            )
+            val size = candidate.content.length + candidate.category.length + 32
+            if (totalChars + size > MAX_MEMORY_CONTEXT_CHARS) continue
+            selected += candidate
+            totalChars += size
+        }
+        return selected
+    }
+
+    private fun tokens(value: String): Set<String> =
+        TOKEN_PATTERN.findAll(value.lowercase(Locale.ROOT))
+            .map { it.value }
+            .filterNot { it in STOP_WORDS }
+            .toSet()
+
     fun clear() = repository.clear()
 
     private companion object {
         const val MAX_CONTEXT_MESSAGES = 24
+        const val MAX_RETRIEVED_MEMORIES = 3
+        const val MAX_MEMORY_CHARS = 700
+        const val MAX_MEMORY_CONTEXT_CHARS = 1_800
+        val TOKEN_PATTERN = Regex("[a-zа-яё0-9]{3,}")
+        val STOP_WORDS = setOf(
+            "the", "and", "for", "with", "that", "this", "from",
+            "как", "это", "для", "или", "что", "чтобы", "мне",
+            "могу", "можно", "когда", "где", "почему", "который",
+            "которая", "которые", "есть",
+        )
         const val HELP_MESSAGE =
             "Я — JARVIS. JARVIS Core управляет ходом диалога, а языковая модель формирует текст ответа. " +
-            "Команды: /help — справка, /status — реальное состояние подключённых компонентов. " +
-            "ANS-100, автоматическое рассуждение и внешние действия пока не подключены к обычному диалогу."
+            "Подтверждённые воспоминания JPVR могут передаваться как контекст. ANS-100 выполняет только " +
+            "ограниченную числовую обработку входного сигнала; обучение на диалоге пока выключено. " +
+            "Команды: /help — справка, /status — состояние компонентов."
     }
 }
 
@@ -85,12 +257,19 @@ class JarvisCore(
 class LocalConversationCoordinator(
     repository: LocalConversationRepository,
     responseEngine: LocalResponseEngine,
+    private val memoryCache: LocalWorkspaceMemoryCache = LocalWorkspaceMemoryCache(),
 ) {
-    private val core = JarvisCore(repository, responseEngine)
+    private val core = JarvisCore(repository, responseEngine, memoryCache)
 
     val backendLabel: String get() = core.backendLabel
     fun status(): JarvisCoreStatus = core.status()
     fun history(): List<LocalConversationMessage> = core.history()
-    fun send(prompt: String): List<LocalConversationMessage> = core.send(prompt)
+    fun send(
+        prompt: String,
+        signalContext: ConversationSignalContext? = null,
+    ): List<LocalConversationMessage> = core.send(prompt, signalContext)
+    fun replaceWorkspaceMemories(records: List<LocalWorkspaceMemory>) =
+        core.replaceWorkspaceMemories(records)
+    fun clearWorkspaceMemories() = core.clearWorkspaceMemories()
     fun clear() = core.clear()
 }

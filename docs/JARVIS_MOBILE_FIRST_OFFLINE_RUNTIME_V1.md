@@ -88,13 +88,11 @@ Optional remote features must be separately permissioned, visibly indicated, and
 
 ### Phase B — Durable local memory
 
-- Store conversation messages and explicit memories in app-private storage.
-- Use transactional writes and schema/version migration.
-- Distinguish conversation history from durable user memories.
-- Support memory inspection, correction, and deletion.
-- Define retention and backup/export behavior; do not store secrets as ordinary memories.
+**Implemented at source level:** Android retains recent conversation history in app-private SharedPreferences. JARVIS Core can also cache user-approved JPVR workspace memories after an authenticated Termux bridge refresh, confirmed import, or restore, and retrieves at most three lexical matches as untrusted model context. The cache is in-memory, bounded to 2,000 compact records, and cleared when the bridge token is removed. Desktop/PWA retrieves from the portable JPVR workspace directly.
 
-**Acceptance:** data survives process death and device restart; interrupted writes do not corrupt the store; deletion is reflected in retrieval.
+**Not yet complete:** Android does not yet own a native in-process JPVR store for durable user memories; the optional cache requires a workspace snapshot supplied by the loopback service and is not a substitute for a local persistent memory implementation. There is no live cross-device synchronization. Memory retrieval uses keyword overlap, not semantic search.
+
+**Acceptance:** Android must load, inspect, correct, delete, persist and retrieve user-approved memories without Termux; deletion and process/device restart must be covered by authorized tests.
 
 ### Phase C — Offline response engine
 
@@ -120,13 +118,11 @@ Optional remote features must be separately permissioned, visibly indicated, and
 
 ### Phase E — ANS-100 integration
 
-- Integrate the compact neural runtime behind a Kotlin-facing interface.
-- Start with inference/state update and checkpoint restore; keep experimental learning rules opt-in.
-- Bound neuron count, topology, event queues, per-turn compute, and checkpoint size.
-- Use versioned, checksummed checkpoints and atomic replacement.
-- Keep research metrics separate from user-facing claims.
+**Implemented at source level:** a bounded two-neuron ALIF-DT signal pre-pass now invokes the existing Python NeuronRuntime, NetworkRuntime and Numerical Oracle. It converts transparent request-shape features (token volume, lexical diversity, question punctuation) into neural input events and routes a spike to an attention-gate neuron. Desktop/PWA invokes it directly; Android may request the same pass through the authenticated Termux bridge with a short timeout. This is low-level signal preprocessing only.
 
-**Acceptance:** runtime can initialize, process a bounded input, save, restore, and produce equivalent state under a documented deterministic test.
+**Not yet implemented:** a native in-process Kotlin ANS-100 runtime, full cognitive integration, semantic processing, adaptive learning from dialogue, persistent conversation-linked neural state, and checkpoint restore in the mobile conversation path. Each request currently creates a fresh in-memory two-neuron network; learning and persistence are disabled. Missing Termux does not block Android chat, but it means the optional ANS-100 signal summary is absent.
+
+**Acceptance:** port the selected bounded neural runtime to Kotlin or an audited portable native library, differentially compare Python/device results, and verify versioned checkpoint save/restore and recovery before calling ANS-100 a complete conversation runtime.
 
 ### Phase F — Offline voice
 
@@ -194,11 +190,12 @@ Required offline regression scenarios:
 
 1. **Completed at source level:** Android UI-to-conversation coordinator, replaceable response-engine boundary and in-process path independent of Termux/network.
 2. **Completed at source level:** optional LiteRT-LM adapter and manual model import on Android; matching optional local model adapter and PWA endpoint on desktop.
-3. **Next implementation batch:** bring Android conversations into the portable workspace/JWS/JWB contract so the same conversation can be manually transferred between phone and PC; preserve local-only operation when no transfer is performed.
-4. Add targeted model-store, inference lifecycle, failure, low-memory and conversation-persistence regression tests; keep them AUTHORED, NOT RUN until test execution is explicitly authorized.
+3. **Next implementation batch:** make Android user-approved JPVR memory persistent and retrievable in-process without Termux; then connect Android conversation records to the portable workspace/JWS/JWB contract without removing local-only operation.
+4. Port the bounded ANS-100 signal runtime into an in-process Kotlin/native adapter using shared deterministic fixtures. Keep the current Termux signal endpoint optional until the native path exists; do not claim full cognitive integration or enable dialogue learning.
+5. Add targeted model-store, inference lifecycle, JPVR retrieval, ANS-100 bridge/runtime, failure, low-memory and conversation-persistence regression tests; keep them AUTHORED, NOT RUN until test execution is explicitly authorized.
 5. Add bounded cancellation and streaming/progress reporting so long inference does not leave the user without control.
 6. Obtain and validate a trusted model digest, then measure the actual model on the target phone and desktop: cold/warm load, peak RSS, first-token and total latency, token throughput, energy/thermal behavior and Russian quality. Do not infer phone performance from another device's benchmark.
-7. Integrate user-approved memory retrieval and bounded reasoning behind the local coordinator, then compare Python reference and Android ANS-100 behavior using shared fixtures.
+7. Integrate bounded symbolic reasoning behind the local coordinator as a separate verifiable component, and compare Python reference and Android ANS-100 behavior using shared fixtures.
 8. Add offline voice only after text interaction, cancellation and memory have been verified.
 
 ## 10. Definition of the first usable JARVIS

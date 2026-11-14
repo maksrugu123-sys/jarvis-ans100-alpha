@@ -223,6 +223,20 @@ class LocalConsoleHttpTests(unittest.TestCase):
             created["revision"] + 1,
         )
 
+    def test_ans100_signal_endpoint_requires_auth_and_returns_runtime_summary(self):
+        payload = {"prompt": "Как подключить ANS-100 к JARVIS?"}
+        with self.assertRaises(HTTPError) as missing_auth:
+            self._post("/api/ans100/conversation-signal", payload, authenticated=False)
+        self.assertEqual(missing_auth.exception.code, 401)
+
+        status, result = self._post("/api/ans100/conversation-signal", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["runtime_version"], "JARVIS_ANS100_CONVERSATION_SIGNAL_V1")
+        self.assertTrue(result["attention_gate_active"])
+        self.assertFalse(result["learning_enabled"])
+        self.assertFalse(result["state_persisted"])
+        self.assertEqual(result["scope"], "low_level_signal_preprocessing_only")
+
     def test_workspace_endpoint_supports_authenticated_cas_round_trip(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/workspace", timeout=3)
@@ -263,6 +277,19 @@ class LocalConsoleHttpTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as conflict:
             urlopen(stale, timeout=3)
         self.assertEqual(conflict.exception.code, 409)
+
+    def test_ans100_signal_service_is_bounded_and_does_not_mutate_workspace(self):
+        before = self.service.workspace_state()["revision"]
+        result = self.service.analyze_conversation_signal("Как подключить ANS-100?")
+
+        self.assertEqual(
+            result["runtime_version"],
+            "JARVIS_ANS100_CONVERSATION_SIGNAL_V1",
+        )
+        self.assertTrue(result["attention_gate_active"])
+        self.assertFalse(result["learning_enabled"])
+        self.assertFalse(result["state_persisted"])
+        self.assertEqual(self.service.workspace_state()["revision"], before)
 
     def test_health_advertises_versioned_android_bridge_contract(self):
         with urlopen(self.base_url + "/api/health", timeout=3) as response:

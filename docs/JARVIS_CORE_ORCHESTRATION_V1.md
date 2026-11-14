@@ -16,7 +16,7 @@ JARVIS Core is the owner of a conversation turn. A local language model is a lan
 5. Validate the generated response.
 6. Persist the user/assistant exchange with the platform's existing storage mechanism.
 
-The Android implementation currently uses app-private SharedPreferences conversation history. It does not yet retrieve the separate JPVR workspace memories into the Android chat. The desktop/PWA implementation uses the workspace's `memories` records for lexical recall. This is not semantic or vector search.
+The Android implementation uses app-private SharedPreferences for recent conversation history and a read-only in-memory cache of approved JPVR workspace memories after a successful authenticated bridge refresh, confirmed import, or restore. The cache is cleared when the bridge token is removed. When no workspace snapshot has been loaded, Android continues with local conversation history only. Desktop/PWA reads the workspace's `memories` records directly. Both use bounded lexical overlap, not semantic or vector search.
 
 ## Component boundaries
 
@@ -27,7 +27,7 @@ The Android implementation currently uses app-private SharedPreferences conversa
 | Recent conversation memory | Available from bounded conversation history |
 | Long-term JPVR memory | Lexically retrieved by desktop/PWA; not yet integrated into Android chat |
 | Reasoning Engine | Separate symbolic planning preview; not automatically invoked for free-text chat |
-| ANS-100 NetworkRuntime | Exists as a separate runtime; not yet part of the conversation turn |
+| ANS-100 NetworkRuntime | A bounded two-neuron ALIF-DT signal pre-pass runs on desktop/PWA turns; Android can request the same pass through the authenticated Termux bridge. This is low-level numeric signal preprocessing only, not semantic reasoning, adaptive learning, or persistent neural state |
 | External actions/tool execution | Disabled |
 
 ## Memory retrieval contract
@@ -52,3 +52,24 @@ This first retrieval implementation is intentionally simple and bounded. It does
 ## Verification still required
 
 No tests, builds, APK generation, runtime inference or device benchmarks were run for this source change. The added tests are authored but unexecuted. Next verification should cover the Python core and server conversation endpoint, Android command routing and fallback behavior, real LiteRT-LM inference, memory retrieval quality, and resource use on the target phone.
+
+
+## JPVR Android recall and ANS-100 signal pass V1
+
+Android memory retrieval:
+- loads only records with `user_approved=true` from an authenticated workspace snapshot;
+- retains at most 2,000 compact cached records, with content capped at 700 characters;
+- retrieves at most three lexical-overlap matches for a prompt, within 1,800 total context characters;
+- passes selected notes to LiteRT-LM as untrusted reference data, never as instructions;
+- keeps the last loaded in-process snapshot available when Termux goes offline, but clears it when the access token is explicitly removed.
+
+ANS-100 signal pass:
+- invokes the existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle;
+- feeds three transparent request-shape features (normalized token volume, lexical diversity, question punctuation) into an ALIF-DT request-integrator neuron;
+- propagates a source spike over a bounded network edge to an attention-gate neuron;
+- uses a fresh in-memory network for each request, `learning_rule="none"`, an eight-event work budget, and no persistent checkpoint;
+- passes only the numeric feature summary and gate status to the language model.
+
+This is real execution of the existing ANS-100 reference runtime, but it is a narrow signal preprocessor. It does not understand natural language, infer intent, retrieve memories, learn from dialogue, plan, or prove correctness. The full ANS-100 cognitive loop remains unintegrated. On Android the neural pre-pass is optional and is requested from the authenticated loopback Termux service with a short timeout; unavailable Termux does not block local conversation.
+
+No tests, builds, APK generation, runtime inference or device benchmarks were run for this source change. Added tests are authored but not executed.

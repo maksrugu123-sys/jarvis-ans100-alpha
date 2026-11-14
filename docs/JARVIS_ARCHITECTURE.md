@@ -4522,3 +4522,30 @@ The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,
 **Verification:** GitHub source readback and static cross-file review only. No Python tests, Kotlin tests, Gradle sync/build, APK/AAB, actual model load/inference, Android or PC runtime, browser/PWA flow, airplane-mode check, RAM/latency/throughput/battery/thermal benchmark, CI or GitHub Actions was run. No device measurement is claimed.
 
 **Next:** unify Android conversation storage with the existing portable workspace contract; add model-store/backend regression tests, cancellation and streaming; obtain a trusted model digest and validate model contents where the distribution provides one; then, only after separate user authorization, measure the model on the target Android phone and a desktop. Keep LLM capability, symbolic reasoning and ANS-100 research status separate.
+
+### 3.56. JARVIS Core JPVR recall and ANS-100 conversation signal pass V1
+
+**Status:** IMPLEMENTED at source level on `mobile-first-offline-v1`; tests are AUTHORED, NOT RUN; no runtime/device verification is claimed.
+
+**JARVIS Core ownership**
+- Android `JarvisCore` owns the conversation turn, keeps the bounded SharedPreferences history boundary, selects reference memories and passes optional signal diagnostics to the language component.
+- Desktop/PWA `tools/jarvis_app/jarvis_core.py` owns the same desktop conversation turn and invokes the optional Python signal pre-pass.
+- Qwen/LiteRT-LM remains a language-generation component, not the JARVIS Core or the ANS-100 network.
+
+**Android JPVR memory path**
+- After authenticated workspace fetch, confirmed merge/import or confirmed restore, the ViewModel loads only records with `user_approved=true` into `LocalWorkspaceMemoryCache`.
+- Cache bounds: at most 2,000 records, 700 characters per memory, and 64 characters per category. Explicit bridge-token removal clears the cache. A process restart with a stored token attempts a fresh bridge/workspace load.
+- Core selects at most three lexical-overlap records, with a total selected-context limit of 1,800 characters, and passes them to LiteRT-LM as explicitly untrusted reference notes. The LLM is instructed not to treat notes as instructions.
+- This cache is in-memory and depends on the optional Termux loopback bridge for refresh/import/restore. Android does not yet own a native durable JPVR store; when no workspace snapshot is loaded, local conversation continues using SharedPreferences history only. There is no live PC/Android memory sync. Retrieval is keyword overlap, not semantic search.
+
+**ANS-100 signal pass**
+- `tools/neuron_runtime/conversation_signal.py` creates a fresh bounded two-neuron ALIF-DT network for each turn using existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle code.
+- It converts three explicit text-shape features (normalized token volume, lexical diversity and question punctuation) to input events, then propagates a spike to an attention-gate neuron through a bounded connection.
+- Queue/run budget is eight events. Learning is disabled; the network state is not persisted or checkpointed. The result is a numeric signal diagnostic only, not natural-language understanding, intent recognition, answer validation, planning, or dialogue learning.
+- Desktop Core calls this pass directly. Android optionally calls authenticated `POST /api/ans100/conversation-signal` through the loopback Termux service using short timeouts; failure is fail-open and does not block chat.
+- Full ANS-100 cognitive integration, native Kotlin neural runtime, learning from conversation, and persistent neural state remain NOT IMPLEMENTED.
+
+**Safety and verification boundary**
+- Retrieved memory is reference data, not authority or instructions.
+- No external tool or action execution was added. Reasoning Engine remains a separate symbolic preview.
+- No Python/Kotlin tests, Gradle build, APK/AAB, inference, browser/device runtime or benchmark was run for this batch.

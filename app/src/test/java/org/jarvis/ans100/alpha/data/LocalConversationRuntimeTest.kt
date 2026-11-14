@@ -128,7 +128,7 @@ class LocalConversationRuntimeTest {
 
         assertTrue(!engineCalled)
         assertTrue(messages.last().text.contains("ANS-100"))
-        assertTrue(messages.last().text.contains("не интегрирован"))
+        assertTrue(messages.last().text.contains("нет результата сигнального прохода"))
         assertTrue(messages.last().text.contains("Долговременная JPVR-память"))
         assertTrue(coordinator.backendLabel.startsWith("JARVIS Core"))
     }
@@ -155,6 +155,98 @@ class LocalConversationRuntimeTest {
         assertEquals("language-generated reply", messages.last().text)
         assertTrue(coordinator.status().languageModelConfigured)
         assertTrue(!coordinator.status().ans100IntegratedIntoConversation)
+    }
+
+    @Test
+    fun coreUsesOnlyApprovedWorkspaceMemoriesAndPassesNeuralSignalToLanguageEngine() {
+        val cache = LocalWorkspaceMemoryCache()
+        cache.replace(listOf(
+            LocalWorkspaceMemory(
+                id = "approved-android",
+                content = "Android local offline browser memory",
+                category = "device",
+                updatedAt = "2026-11-14T00:00:00Z",
+                userApproved = true,
+            ),
+            LocalWorkspaceMemory(
+                id = "unapproved-android",
+                content = "Android local offline secrets",
+                category = "private",
+                updatedAt = "2026-11-14T00:00:00Z",
+                userApproved = false,
+            ),
+        ))
+        var seenMemories: List<LocalWorkspaceMemory> = emptyList()
+        var seenSignal: ConversationSignalContext? = null
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake-language-engine"
+            override val languageModelConfigured = true
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+            ): String = "legacy reply"
+
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+                memoryContext: List<LocalWorkspaceMemory>,
+                signalContext: ConversationSignalContext?,
+            ): String {
+                seenMemories = memoryContext
+                seenSignal = signalContext
+                return "context-aware reply"
+            }
+        }
+        val signal = ConversationSignalContext(
+            runtimeVersion = "JARVIS_ANS100_CONVERSATION_SIGNAL_V1",
+            processedEvents = 4,
+            processedBatches = 2,
+            spikeCount = 2,
+            attentionGateActive = true,
+            tokenVolume = 0.4,
+            lexicalDiversity = 1.0,
+            questionMarker = 0.35,
+        )
+        val coordinator = LocalConversationCoordinator(
+            repository(MemoryStorage()), engine, cache,
+        )
+
+        val messages = coordinator.send("Android local offline настройка?", signal)
+
+        assertEquals("context-aware reply", messages.last().text)
+        assertEquals(listOf("approved-android"), seenMemories.map { it.id })
+        assertEquals(signal, seenSignal)
+        assertTrue(coordinator.status().longTermMemoryIntegrated)
+        assertEquals(1, coordinator.status().longTermMemoryRecordCount)
+        assertEquals(1, coordinator.status().memoriesRetrievedLastTurn)
+        assertTrue(coordinator.status().ans100SignalProcessorActive)
+        assertTrue(coordinator.status().ans100AttentionGateActive)
+    }
+
+    @Test
+    fun fallbackDoesNotClaimThatCachedMemoryWasUsedByAnUnavailableLanguageModel() {
+        val cache = LocalWorkspaceMemoryCache()
+        cache.replace(listOf(
+            LocalWorkspaceMemory(
+                id = "approved",
+                content = "Android offline JARVIS",
+                category = "device",
+                updatedAt = "2026-11-14T00:00:00Z",
+                userApproved = true,
+            ),
+        ))
+        val coordinator = LocalConversationCoordinator(
+            repository(MemoryStorage()),
+            LocalFallbackResponseEngine(),
+            cache,
+        )
+
+        coordinator.send("Как работает Android offline JARVIS?")
+
+        assertTrue(coordinator.status().longTermMemoryIntegrated)
+        assertEquals(1, coordinator.status().longTermMemoryRecordCount)
+        assertEquals(0, coordinator.status().memoriesRetrievedLastTurn)
+        assertTrue(!coordinator.status().languageModelConfigured)
     }
 
     @Test

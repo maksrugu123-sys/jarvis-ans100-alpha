@@ -1860,3 +1860,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Desktop capability status exposes model/runtime availability without claiming inference verification. Reasoning remains a separate symbolic preview; ANS-100 NetworkRuntime remains separate; external actions stay disabled.
 - Updated model instructions to describe the LLM as JARVIS's language component, not the entire system.
 - Added Android and Python regression tests. Tests/builds/device inference were **not run**; changes are source-level only and require verification on Android and desktop.
+
+## 2026-11-14 — JPVR Android recall and ANS-100 signal pre-pass V1 (source implementation)
+
+- Android JARVIS Core now retrieves up to three approved JPVR workspace memories using bounded lexical overlap (2,000-record in-memory cache, 700 characters per cached memory, 1,800 total supplied context characters). The cache is populated only after an authenticated workspace read, confirmed import, or confirmed restore; explicitly removing the bridge token clears it. Without a loaded workspace snapshot, chat continues with local conversation history only.
+- LiteRT-LM Android receives selected memories as explicitly untrusted reference notes. The original response-engine interface remains backward compatible; the deterministic fallback does not pretend to reason over notes when the language model is unavailable.
+- Added `tools/neuron_runtime/conversation_signal.py`: a real, bounded two-neuron ALIF-DT pass built on the existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle. It processes normalized token volume, lexical diversity, and question punctuation, then routes a source spike through an attention-gate neuron.
+- Desktop/PWA JARVIS Core invokes this pass during each language turn and provides only its numeric summary to the language engine. Android requests the same pass through a new authenticated loopback endpoint in the Termux service with a short timeout; an unavailable service is fail-open and does not block local chat.
+- This is signal preprocessing only: no semantic understanding, no dialogue-driven learning, no persistent neural checkpoint, no automatic Reasoning Engine call, and no external actions. ANS-100's full cognitive integration remains incomplete.
+- Added Python and Android regression tests, including an authenticated endpoint contract and tests for bounded recall and fail-open behavior. Tests/builds/device inference were **not run**; source-level implementation only.

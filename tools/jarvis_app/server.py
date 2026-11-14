@@ -375,6 +375,13 @@ class LocalConsoleService:
                 "turn_trace": turn_trace,
             }
 
+    def analyze_conversation_signal(self, prompt: object) -> dict[str, object]:
+        clean = _required_text(prompt, "prompt", maximum=4_000)
+        try:
+            return self.jarvis_core.analyze_signal(clean)
+        except (TypeError, ValueError, RuntimeError) as exc:
+            raise LocalConsoleError("ANS-100 signal preprocessing is unavailable") from exc
+
     def _candidate(self) -> TaskSessionManager:
         try:
             return TaskSessionManager.restore_snapshot(self.manager.encode_snapshot())
@@ -744,6 +751,11 @@ def create_http_server(
                         raise LocalConsoleError("неверный путь или expected_revision")
                     result = service.cancel_queued_task(task_id, payload["expected_revision"])
                     self._send(200, {"task": result, "state": service.state()})
+                    return
+                if path == "/api/ans100/conversation-signal":
+                    if set(payload) != {"prompt"}:
+                        raise LocalConsoleError("ожидалось поле prompt")
+                    self._send(200, service.analyze_conversation_signal(payload["prompt"]))
                     return
                 if path == "/api/reasoning/preview":
                     self._send(200, service.preview_reasoning(payload))
