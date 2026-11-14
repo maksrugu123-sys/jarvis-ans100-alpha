@@ -67,6 +67,13 @@ data class LocalConversationUiState(
     val nativeNetworkBusy: Boolean = false,
     val nativeNetworkError: String? = null,
     val nativeNetworkMessage: String? = null,
+    val nativeDialogueContextId: String? = null,
+    val nativeDialogueFeatureIds: List<Int> = emptyList(),
+)
+
+private data class NativeDialogueFeedbackContext(
+    val contextId: String,
+    val featureNeuronIds: List<Int>,
 )
 
 data class RuntimeBridgeUiState(
@@ -158,6 +165,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val conversationExecutor = Executors.newSingleThreadExecutor()
     private val nativeNetworkExecutor = Executors.newSingleThreadExecutor()
     private val nativeNeuronNetwork = AndroidSparseNeuronNetwork(application.applicationContext)
+    @Volatile private var nativeDialogueGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
     private val localSignalRuntime = LocalConversationSignalRuntime(
@@ -537,8 +545,15 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val searchIntent = AndroidWebSearchIntent.extract(clean)
+        val dialogueGeneration = nativeDialogueGeneration + 1L
+        nativeDialogueGeneration = dialogueGeneration
         mutableState.value = before.copy(
-            conversation = before.conversation.copy(isBusy = true, error = null),
+            conversation = before.conversation.copy(
+                isBusy = true,
+                error = null,
+                nativeDialogueContextId = null,
+                nativeDialogueFeatureIds = emptyList(),
+            ),
         )
         if (searchIntent != null) {
             conversationExecutor.execute {
@@ -556,6 +571,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 dialogFeaturePrediction = null,
                                 dialogFeatureError = null,
                                 lastRewardedAssistantMessageId = null,
+                                nativeDialogueContextId = null,
+                                nativeDialogueFeatureIds = emptyList(),
                             ),
                         )
                     }
@@ -582,9 +599,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     null to (error.message ?: "Диалоговые признаки временно недоступны.")
                 }
                 val activeFeatureIds = dialogPredictionResult.first?.activeFeatureIds.orEmpty()
-                if (!clean.startsWith("/") && activeFeatureIds.isNotEmpty()) {
-                    enqueueNativeDialogueFeatures(activeFeatureIds)
-                }
+                val nativeFeedbackContext = if (!clean.startsWith("/") && activeFeatureIds.isNotEmpty()) {
+                    enqueueNativeDialogueFeatures(activeFeatureIds, dialogueGeneration)
+                } else null
                 val runtimeState = mutableState.value.runtime
                 val signalContext = if (!clean.startsWith("/")) {
                     val useTermuxSignal = shouldUseTermuxSignal(
@@ -645,6 +662,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             dialogFeaturePrediction = dialogPredictionResult.first,
                             dialogFeatureError = dialogPredictionResult.second,
                             lastRewardedAssistantMessageId = null,
+                            nativeDialogueContextId = nativeFeedbackContext?.contextId,
+                            nativeDialogueFeatureIds = nativeFeedbackContext?.featureNeuronIds.orEmpty(),
                         ),
                     )
                 }
@@ -675,6 +694,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute {
             try {
                 val prediction = dialogFeatureClassifier.learn(latestUserMessage.text, expectedLabel)
+                val nativeContextId = before.conversation.nativeDialogueContextId
+                val nativeFeatures = before.conversation.nativeDialogueFeatureIds
+                if (nativeContextId != null && nativeFeatures.isNotEmpty()) {
+                    enqueueNativeDialogueLabelReward(nativeContextId, nativeFeatures, expectedLabel)
+                }
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
@@ -718,6 +742,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute {
             try {
                 val prediction = dialogFeatureClassifier.applyReward(userMessage.text, reward)
+                val nativeContextId = before.conversation.nativeDialogueContextId
+                val nativeFeatures = before.conversation.nativeDialogueFeatureIds
+                val predictedLabel = before.conversation.dialogFeaturePrediction?.predictedLabel
+                if (nativeContextId != null && nativeFeatures.isNotEmpty() && predictedLabel != null) {
+                    enqueueNativeDialogueReward(
+                        nativeContextId,
+                        nativeFeatures,
+                        mapOf(dialogueOutputNeuronId(predictedLabel) to reward),
+                    )
+                }
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
@@ -744,65 +778,84 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Best-effort bridge from ordinary chat turns into the native sparse LIF-DT
-     * network. The dedicated executor keeps neural work off the chat path.
-     * Results are diagnostic only; they do not control Qwen or authorize actions.
+     * Feeds a bounded text-feature batch through the 9,996-input/4-output
+     * SQLite LIF-DT graph. Output bias events arrive with the feature batch;
+     * delayed feature→output events determine which output neurons spike.
+     * Eligibility is stored only for pairs that actually participated in a
+     * postsynaptic spike. Ordinary chat never changes synaptic weights.
      */
-    private fun enqueueNativeDialogueFeatures(featureIds: List<Int>) {
+    private fun enqueueNativeDialogueFeatures(
+        featureIds: List<Int>,
+        generation: Long,
+    ): NativeDialogueFeedbackContext? {
         val boundedIds = featureIds.asSequence()
-            .filter { it in 0 until AndroidSparseNeuronNetwork.MAX_NEURONS }
+            .map { it % AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS }
             .distinct()
             .take(MAX_DIALOGUE_FEATURE_EVENTS)
             .toList()
-        if (boundedIds.isEmpty()) return
+        if (boundedIds.isEmpty()) return null
 
+        val contextId = "dialog-${UUID.randomUUID()}"
+        val feedbackContext = NativeDialogueFeedbackContext(contextId, boundedIds)
         nativeNetworkExecutor.execute {
             try {
                 val prior = nativeNeuronNetwork.stats()
-                if (prior.neuronCount == 0) {
+                if (prior.neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS) {
                     mainHandler.post {
                         val current = mutableState.value
                         mutableState.value = current.copy(
                             conversation = current.conversation.copy(
-                                nativeNetworkMessage = "Нейронный проход пропущен: сначала создай сеть JNVM. Основной чат работает независимо.",
+                                nativeNetworkMessage = "Нативная диалоговая сеть ещё не создана. Чат продолжен независимо.",
                             ),
                         )
                     }
                     return@execute
                 }
-                val usableIds = boundedIds
-                    .map { it % AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS }
-                    .distinct()
-                    .take(MAX_DIALOGUE_FEATURE_EVENTS)
-                if (usableIds.isEmpty() || prior.neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS) {
-                    mainHandler.post {
-                        val current = mutableState.value
-                        mutableState.value = current.copy(
-                            conversation = current.conversation.copy(
-                                nativeNetworkMessage = "В текущей сети нет слотов для признаков этого сообщения; ответ сформирован независимо.",
-                            ),
-                        )
-                    }
-                    return@execute
-                }
-                if (prior.currentTimeNs > Long.MAX_VALUE - DIALOGUE_INPUT_STEP_NS) {
+                if (prior.currentTimeNs > Long.MAX_VALUE - DIALOGUE_INPUT_STEP_NS - AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS) {
                     throw IllegalStateException("Модельные часы JNVM достигли предела.")
                 }
                 val nextTime = prior.currentTimeNs + DIALOGUE_INPUT_STEP_NS
-                val turnId = UUID.randomUUID().toString()
-                val events = usableIds.mapIndexed { index, neuronId ->
+                val featureEvents = boundedIds.mapIndexed { index, neuronId ->
                     AndroidNeuronEvent(
-                        eventId = "chat-$turnId-$index",
+                        eventId = "chat-$contextId-feature-$index",
                         timeNs = nextTime,
                         targetNeuronId = neuronId,
                         strength = 1.0,
                     )
                 }
-                nativeNeuronNetwork.scheduleInputs(events)
+                val outputDriveEvents = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).map { index ->
+                    AndroidNeuronEvent(
+                        eventId = "chat-$contextId-drive-$index",
+                        timeNs = nextTime,
+                        targetNeuronId = AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index,
+                        strength = DIALOGUE_OUTPUT_BIAS,
+                    )
+                }
+                nativeNeuronNetwork.scheduleInputs(featureEvents + outputDriveEvents)
                 val result = nativeNeuronNetwork.run(
-                    maxEvents = MAX_DIALOGUE_FEATURE_EVENTS * 2,
+                    maxEvents = MAX_DIALOGUE_EVENTS_PER_TURN,
                     maxTimestamps = MAX_DIALOGUE_TIMESTAMPS_PER_TURN,
                 )
+                val outputSpikes = result.emittedSpikes.asSequence()
+                    .map { it.first }
+                    .filter {
+                        it in AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS until
+                            AndroidSparseNeuronNetwork.MAX_NEURONS
+                    }
+                    .distinct()
+                    .toList()
+                val eligibilityCount = if (outputSpikes.isEmpty()) {
+                    0
+                } else {
+                    nativeNeuronNetwork.recordDialogueEligibility(
+                        contextId = contextId,
+                        featureNeuronIds = boundedIds,
+                        outputNeuronIds = outputSpikes,
+                        preTimeNs = nextTime,
+                        postTimeNs = result.currentTimeNs,
+                    )
+                }
+                if (generation != nativeDialogueGeneration) return@execute
                 val stats = nativeNeuronNetwork.stats()
                 mainHandler.post {
                     val current = mutableState.value
@@ -810,7 +863,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         conversation = current.conversation.copy(
                             nativeNetworkStats = stats,
                             nativeNetworkError = null,
-                            nativeNetworkMessage = "Диалоговый ANS-100: признаков ${events.size}; событий ${result.processedEvents}; импульсов ${result.emittedSpikes.size}; очередь ${result.pendingEvents}. Сигнал не управляет ответом Qwen.",
+                            nativeNetworkMessage =
+                                "Спайковая сеть: признаков ${featureEvents.size}, выходных спайков ${outputSpikes.size}, " +
+                                    "eligibility-связей ${eligibilityCount}, обработано событий ${result.processedEvents}. " +
+                                    "Веса меняются только после явной оценки/метки.",
                         ),
                     )
                 }
@@ -821,6 +877,71 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         conversation = current.conversation.copy(
                             nativeNetworkError = error.message ?: "Диалоговый нейронный проход недоступен.",
                             nativeNetworkMessage = "Чат продолжен без нейронного сигнала.",
+                        ),
+                    )
+                }
+            }
+        }
+        return feedbackContext
+    }
+
+    private fun dialogueOutputNeuronId(label: String): Int {
+        val index = when (label) {
+            "greeting" -> 0
+            "question" -> 1
+            "thanks" -> 2
+            "farewell" -> 3
+            else -> throw IllegalArgumentException("Неизвестная метка диалога.")
+        }
+        return AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index
+    }
+
+    /** Explicit class selection rewards the selected output and weakens alternatives. */
+    private fun enqueueNativeDialogueLabelReward(
+        contextId: String,
+        featureIds: List<Int>,
+        expectedLabel: String,
+    ) {
+        val selected = dialogueOutputNeuronId(expectedLabel)
+        val rewards = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).associate { index ->
+            val outputId = AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index
+            outputId to if (outputId == selected) 1.0 else -1.0 / 3.0
+        }
+        enqueueNativeDialogueReward(contextId, featureIds, rewards)
+    }
+
+    /** User feedback is attached to the latest assistant response and its pending spike trace. */
+    private fun enqueueNativeDialogueReward(
+        contextId: String,
+        featureIds: List<Int>,
+        rewards: Map<Int, Double>,
+    ) {
+        nativeNetworkExecutor.execute {
+            try {
+                val result = nativeNeuronNetwork.applyDialogueReward(contextId, featureIds, rewards)
+                val stats = nativeNeuronNetwork.stats()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkStats = stats,
+                            nativeNetworkError = null,
+                            nativeNetworkMessage =
+                                "R-STDP reward сохранён: обновлено синапсов ${result.updatedSynapses}; " +
+                                    "просрочено eligibility: ${result.expiredSynapses}.",
+                            nativeDialogueContextId = null,
+                            nativeDialogueFeatureIds = emptyList(),
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkError = error.message ?: "Не удалось применить R-STDP reward.",
+                            nativeDialogueContextId = null,
+                            nativeDialogueFeatureIds = emptyList(),
                         ),
                     )
                 }
@@ -867,7 +988,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
         nativeNetworkExecutor.execute {
             try {
-                nativeNeuronNetwork.initializeSparseDialogueNetwork(AndroidSparseNeuronNetwork.MAX_NEURONS)
+                nativeNeuronNetwork.initializeSparseDialogueNetwork(
+                    neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
+                    weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
+                )
                 val stats = nativeNeuronNetwork.stats()
                 mainHandler.post {
                     val current = mutableState.value
@@ -2132,8 +2256,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val TERMUX_PACKAGE_NAME = "com.termux"
         private const val MAX_DIALOGUE_FEATURE_EVENTS = 128
+        private const val MAX_DIALOGUE_EVENTS_PER_TURN =
+            MAX_DIALOGUE_FEATURE_EVENTS * (AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS + 1) +
+                AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS
         private const val MAX_DIALOGUE_TIMESTAMPS_PER_TURN = 4
         private const val DIALOGUE_INPUT_STEP_NS = 10_000_000L
+        private const val DIALOGUE_OUTPUT_BIAS = 0.90
+        private const val DIALOGUE_INITIAL_SYNAPSE_WEIGHT = 0.15
     }
 
     override fun onCleared() {
