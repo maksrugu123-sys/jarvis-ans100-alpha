@@ -2368,13 +2368,18 @@ private fun ConversationPanel(
                     Row(modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = if (userMessage) Arrangement.End else Arrangement.Start) {
                         Surface(
-                            modifier = Modifier.fillMaxWidth(0.90f),
+                            modifier = Modifier.fillMaxWidth(0.90f).then(
+                                if (!userMessage && message.id == latestAssistantId) {
+                                    rememberGlowBorder(glowEnabled, 20.dp)
+                                } else Modifier
+                            ),
                             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp,
                                 bottomStart = if (userMessage) 20.dp else 6.dp,
                                 bottomEnd = if (userMessage) 6.dp else 20.dp),
                             color = if (userMessage) MaterialTheme.colorScheme.secondaryContainer
                                 else MaterialTheme.colorScheme.surfaceVariant,
-                            border = if (!userMessage && glowEnabled) BorderStroke(1.dp, Color(0x6655BFFF)) else null,
+                            border = if (!userMessage && glowEnabled && message.id != latestAssistantId)
+                                BorderStroke(1.dp, Color(0x6655BFFF)) else null,
                         ) {
                             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
                                 verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -2461,7 +2466,7 @@ private fun SettingsPanel(
     onOpenTermux: () -> Unit,
 ) {
     val categories = listOf("appearance" to "Внешний вид", "model" to "Языковая модель",
-        "neural" to "ANS-100", "system" to "Система", "about" to "О приложении")
+        "speed" to "Скорость", "neural" to "ANS-100", "system" to "Система", "about" to "О приложении")
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Настройки", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -2522,15 +2527,29 @@ private fun SettingsPanel(
                         }
                     }
                 }
+            }
+            "speed" -> {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SectionHeading("Скорость ответа", "измерения на этом устройстве")
-                        Text("Инициализация модели: ${conversation.modelInitializationMs} мс")
-                        Text("Генерация последнего ответа: ${conversation.responseGenerationMs} мс")
-                        Text("Весь ход диалога: ${conversation.lastTurnDurationMs} мс")
-                        Text("Оценка количества слов: ${conversation.responseTokenEstimate}")
-                        Text("Счётчик слов приблизительный; это не токенизатор языковой модели.",
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (conversation.lastTurnDurationMs <= 0L) {
+                            Text("Пока нет измерений. Отправь сообщение в чат, чтобы JARVIS записал время загрузки модели и генерации.")
+                        } else {
+                            Text("Инициализация модели: ${conversation.modelInitializationMs} мс")
+                            Text("Генерация последнего ответа: ${conversation.responseGenerationMs} мс")
+                            Text("Весь ход диалога: ${conversation.lastTurnDurationMs} мс")
+                            Text("Оценка количества слов: ${conversation.responseTokenEstimate}")
+                        }
+                        Text(
+                            "Время инициализации измеряется отдельно от генерации. Первый запуск может быть дольше; следующий ответ обычно использует уже подготовленный движок, пока Android не выгрузит приложение.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Количество слов — приблизительная оценка, не настоящий токенизатор и не скорость токенов в секунду.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

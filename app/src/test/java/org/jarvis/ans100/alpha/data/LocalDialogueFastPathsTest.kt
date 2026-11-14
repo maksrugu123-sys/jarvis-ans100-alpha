@@ -31,4 +31,24 @@ class LocalDialogueFastPathsTest {
     fun leavesUnrelatedQuestionsToTheLanguageModel() {
         assertNull(LocalDialogueFastPaths.assistantIdentityReply("Почему не работает сеть?"))
     }
+
+    @Test
+    fun answersQuestionAboutUsersNameFromEarlierConversation() {
+        val history = listOf(
+            LocalConversationMessage("user-name", ConversationRole.USER, "Меня зовут Максим.", 1L),
+            LocalConversationMessage("assistant-name", ConversationRole.ASSISTANT, "Приятно познакомиться!", 2L),
+        )
+        assertEquals(
+            "Тебя зовут Максим. Ты сообщил это в нашей переписке.",
+            LocalDialogueFastPaths.assistantIdentityReply("Как меня зовут?", history),
+        )
+    }
+
+    @Test
+    fun doesNotInventANameWhenNoNameWasShared() {
+        assertEquals(
+            "Ты ещё не называл мне своё имя в сохранённой истории этого чата.",
+            LocalDialogueFastPaths.assistantIdentityReply("Как меня зовут?"),
+        )
+    }
 }

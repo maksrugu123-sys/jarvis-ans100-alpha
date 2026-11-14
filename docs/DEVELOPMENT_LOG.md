@@ -1,3 +1,21 @@
+# Development update — Chat polish and conversation recall
+
+Date: 2026-11-14
+Branch: `experiment/jarvis-integrated-prototype-v1`
+Base: `d9d09d2978dccc8fa8b17febf6201385f95e8678`
+
+## Changes
+- Kept the current dedicated chat layout and applied the animated gradient border to the newest JARVIS response bubble; older messages keep a low-cost static border.
+- Separated response timing from model installation controls into its own Settings → Speed category.
+- Added deterministic recall for a user's name when asked “Как меня зовут?”. It only answers from an explicit name in recent saved chat history and has unit coverage for both known and unknown names.
+- Existing settings continue to persist accent color and flowing glow. The model's measured initialization/generation/turn metrics and ANS-100 counters remain visible in settings.
+
+## Verification
+- JVM tests and debug APK build are triggered by this commit; outcomes will be added after the Actions run completes.
+- No claims are made about faster generation or autonomous semantic reasoning without measurements and tests.
+
+---
+
 # JARVIS Development Log
 
 This is the append-only record of meaningful implementation, test, experiment, architecture, and documentation work.

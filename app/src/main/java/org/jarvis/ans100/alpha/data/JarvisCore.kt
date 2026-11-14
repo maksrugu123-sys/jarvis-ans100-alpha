@@ -214,6 +214,22 @@ internal object LocalDialogueFastPaths {
         }
 
         val normalized = normalize(prompt)
+        val asksUserName = normalized.contains("как меня зовут") ||
+            normalized.contains("ты помнишь мое имя") ||
+            normalized.contains("мое имя")
+        if (asksUserName) {
+            val rememberedName = recentHistory.asReversed().asSequence()
+                .take(MAX_RECENT_NAME_LOOKBACK)
+                .filter { it.role == ConversationRole.USER }
+                .mapNotNull { introducedName(it.text) }
+                .firstOrNull()
+            return if (rememberedName.isNullOrBlank()) {
+                "Ты ещё не называл мне своё имя в сохранённой истории этого чата."
+            } else {
+                "Тебя зовут $rememberedName. Ты сообщил это в нашей переписке."
+            }
+        }
+
         val asksIdentity = normalized.contains("а тебя") ||
             normalized.contains("как тебя зовут") ||
             normalized.contains("твое имя") ||
