@@ -145,7 +145,7 @@ def _build_reasoning_plan(
             "К какому предыдущему сообщению относится «это»? Напомните контекст."
             if unresolved_context else clarification_questions.get(intent, "")
         ),
-        "context_reference_resolved": bool(refers_back and has_recent_context),
+        "context_available": bool(refers_back and has_recent_context),
         "execution_authorized": False,
         "scope": "bounded_template_plan_only",
     }
