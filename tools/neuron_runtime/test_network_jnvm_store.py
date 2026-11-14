@@ -9,6 +9,7 @@ from tools.jpvr_reference.storage import JPVRCommitUncertainError, JPVRStorage
 from tools.neuron_runtime.network import NetworkConnection, NetworkRuntime
 from tools.neuron_runtime.network_jnvm_store import JPVRNetworkJNVMConflict, JPVRNetworkJNVMStore
 from tools.neuron_runtime.runtime import NeuronRuntime
+from tools.neuron_runtime.jpvr_store import JPVRNeuronCheckpointConflict
 
 EPOCH = bytes.fromhex("abcdefabcdefabcdefabcdefabcdefab")
 
@@ -53,6 +54,8 @@ class NetworkJNVMStoreTests(unittest.TestCase):
         self.assertEqual(restored.runtime.pending_events, runtime.pending_events)
         self.assertEqual(restored.runtime.current_time_ns, runtime.current_time_ns)
         self.assertEqual(restored.clock_epoch_id, EPOCH)
+        scheduler = self.store.load_scheduler("network-A")
+        self.assertEqual(dict(scheduler.snapshot.neuron_record_versions), {"source": 1, "target": 1})
 
     def test_changed_neuron_and_scheduler_share_one_commit(self):
         runtime, first = self.initial_save()
@@ -108,6 +111,38 @@ class NetworkJNVMStoreTests(unittest.TestCase):
                 expected_network_record_version=first.network_record_version,
                 expected_neuron_record_versions={},
             )
+
+    def test_restore_rejects_neuron_version_changed_outside_group_commit(self):
+        _, saved = self.initial_save()
+        loaded = self.store._neurons.load("target")
+        self.store._neurons.save(
+            "target",
+            loaded.snapshot.runtime,
+            clock_epoch_id=EPOCH,
+            expected_record_version=saved.neuron_record_versions["target"],
+        )
+        with self.assertRaises(JPVRNetworkJNVMConflict):
+            self.store.restore_network("network-A")
+
+    def test_group_save_rejects_neuron_version_drift(self):
+        runtime, first = self.initial_save()
+        loaded = self.store._neurons.load("target")
+        self.store._neurons.save(
+            "target",
+            loaded.snapshot.runtime,
+            clock_epoch_id=EPOCH,
+            expected_record_version=first.neuron_record_versions["target"],
+        )
+        before = self.storage.get_superblock()
+        runtime.run()
+        with self.assertRaises(JPVRNetworkJNVMConflict):
+            self.store.save_timestamp(
+                "network-A", runtime, ("source",),
+                clock_epoch_id=EPOCH,
+                expected_network_record_version=first.network_record_version,
+                expected_neuron_record_versions={"source": first.neuron_record_versions["source"]},
+            )
+        self.assertEqual(self.storage.get_superblock(), before)
 
     def test_uncertain_commit_is_reconciled_after_reopen(self):
         runtime, first = self.initial_save()

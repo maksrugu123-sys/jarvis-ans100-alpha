@@ -19,10 +19,10 @@ from .network import MAX_NETWORK_CONNECTIONS, MAX_NETWORK_NEURONS, NetworkConnec
 
 SCHEDULER_RECORD_TYPE = 0x0103
 SCHEDULER_SCHEMA_ID = 0x4A4E5343
-SCHEDULER_SCHEMA_VERSION = 1
-SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V1"
+SCHEDULER_SCHEMA_VERSION = 2
+SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V2"
 SCHEDULER_LOCATOR_MAGIC = b"JNSL"
-SCHEDULER_LOCATOR_VERSION = 1
+SCHEDULER_LOCATOR_VERSION = 2
 SCHEDULER_LOCATOR = struct.Struct("<4sHBBHHI16sQQIQQ16s16s")
 SCHEDULER_ID_DOMAIN = b"JARVIS:JNVM:NETWORK-SCHEDULER:V1\x00"
 INTERNAL_EVENT_PREFIX = "jarvis-network:"
@@ -46,6 +46,7 @@ class NetworkSchedulerSnapshot:
     network_id: str
     clock_epoch_id: bytes
     neuron_ids: tuple[str, ...]
+    neuron_record_versions: Mapping[str, int]
     connections: tuple[NetworkConnection, ...]
     pending_events: tuple[tuple, ...]
     max_pending_events: int
@@ -158,7 +159,13 @@ def _exact_object(name: str, value: object, fields: set[str]) -> dict:
     return value
 
 
-def encode_network_scheduler_snapshot(network_id: str, runtime: NetworkRuntime, *, clock_epoch_id: bytes) -> bytes:
+def encode_network_scheduler_snapshot(
+    network_id: str,
+    runtime: NetworkRuntime,
+    *,
+    clock_epoch_id: bytes,
+    neuron_record_versions: Mapping[str, int],
+) -> bytes:
     name, epoch = _id("network_id", network_id), _epoch(clock_epoch_id)
     if not isinstance(runtime, NetworkRuntime):
         raise JPVRNetworkJNVMError("runtime must be a NetworkRuntime")
@@ -169,12 +176,19 @@ def encode_network_scheduler_snapshot(network_id: str, runtime: NetworkRuntime, 
         pending = tuple(sorted(state["pending_events"]))
         if not 1 <= len(neuron_ids) <= MAX_NETWORK_NEURONS or len(connections) > MAX_NETWORK_CONNECTIONS:
             raise JPVRNetworkJNVMError("scheduler topology exceeds network limits")
+        if not isinstance(neuron_record_versions, Mapping) or set(neuron_record_versions) != set(neuron_ids):
+            raise JPVRNetworkJNVMError("neuron_record_versions must cover the complete network topology")
+        version_map = {
+            neuron_id: _uint(f"neuron record version for {neuron_id}", neuron_record_versions[neuron_id], minimum=1)
+            for neuron_id in neuron_ids
+        }
         document = {
             "format": SCHEDULER_FORMAT,
             "schema_version": SCHEDULER_SCHEMA_VERSION,
             "network_id": name,
             "clock_epoch_id": epoch.hex(),
             "neuron_ids": list(neuron_ids),
+            "neuron_record_versions": version_map,
             "connections": [{
                 "connection_id": c.connection_id,
                 "source_neuron_id": c.source_neuron_id,
@@ -221,7 +235,7 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         raise JPVRNetworkJNVMError(f"invalid scheduler JSON: {exc}") from exc
     top = _exact_object("scheduler", doc, {
         "format", "schema_version", "network_id", "clock_epoch_id", "neuron_ids",
-        "connections", "pending_events", "max_pending_events", "max_events_per_run",
+        "neuron_record_versions", "connections", "pending_events", "max_pending_events", "max_events_per_run",
         "current_time_ns", "has_processed",
     })
     version = top["schema_version"]
@@ -243,6 +257,13 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
     neuron_ids = tuple(_id("neuron_id", item, 128) for item in raw_ids)
     if neuron_ids != tuple(sorted(set(neuron_ids))):
         raise JPVRNetworkJNVMError("neuron_ids must be uniquely sorted")
+    raw_versions = top["neuron_record_versions"]
+    if not isinstance(raw_versions, dict) or set(raw_versions) != set(neuron_ids):
+        raise JPVRNetworkJNVMError("neuron_record_versions must cover every neuron exactly once")
+    neuron_record_versions = {
+        neuron_id: _uint(f"neuron record version for {neuron_id}", raw_versions[neuron_id], minimum=1)
+        for neuron_id in neuron_ids
+    }
     queue_limit = _uint("max_pending_events", top["max_pending_events"], 1_000_000, 1)
     run_limit = _uint("max_events_per_run", top["max_events_per_run"], 1_000_000, 1)
     current_time = _uint("current_time_ns", top["current_time_ns"])
@@ -310,7 +331,10 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         keys.append((t, event_id, target_neuron, target_synapse))
     if keys != sorted(keys):
         raise JPVRNetworkJNVMError("pending events are not in canonical order")
-    return NetworkSchedulerSnapshot(network_id, epoch, neuron_ids, tuple(connections), tuple(pending), queue_limit, run_limit, current_time, has_processed)
+    return NetworkSchedulerSnapshot(
+        network_id, epoch, neuron_ids, MappingProxyType(neuron_record_versions),
+        tuple(connections), tuple(pending), queue_limit, run_limit, current_time, has_processed,
+    )
 
 
 def _validate_locator(locator: NetworkSchedulerLocator) -> None:
@@ -468,6 +492,11 @@ class JPVRNetworkJNVMStore:
             locator, version = self._neurons._lookup_existing(neuron_id, neuron_runtime_object_id(neuron_id), manifest, active, catalog)
             if locator is None:
                 raise JPVRNetworkJNVMNotFound(f"network neuron {neuron_id!r} has no checkpoint")
+            expected_version = scheduler.snapshot.neuron_record_versions[neuron_id]
+            if version != expected_version:
+                raise JPVRNetworkJNVMConflict(
+                    f"neuron {neuron_id!r} index version {version} differs from scheduler version {expected_version}"
+                )
             decoded = self._neurons._decode_locator_record(neuron_id, locator, active, catalog)
             if decoded.clock_epoch_id != scheduler.snapshot.clock_epoch_id:
                 raise JPVRNetworkJNVMConflict(f"neuron {neuron_id!r} has a different clock epoch")
@@ -514,7 +543,6 @@ class JPVRNetworkJNVMStore:
             neurons = state["neurons"]
             if any(key not in neurons for key in changed):
                 raise JPVRNetworkJNVMError("changed_neuron_ids contains unknown neuron")
-            scheduler_payload = encode_network_scheduler_snapshot(network_id, runtime, clock_epoch_id=epoch)
         except JPVRNetworkJNVMError:
             raise
         except NetworkRuntimeError as exc:
@@ -546,11 +574,11 @@ class JPVRNetworkJNVMStore:
         else:
             old = previous.snapshot
             if old.clock_epoch_id != epoch:
-                raise JPVRNetworkJNVMConflict("clock epoch is immutable in JNVM V1")
+                raise JPVRNetworkJNVMConflict("clock epoch is immutable in JNVM V2")
             if old.neuron_ids != tuple(sorted(neurons)):
-                raise JPVRNetworkJNVMConflict("network neuron set is immutable in JNVM V1")
+                raise JPVRNetworkJNVMConflict("network neuron set is immutable in JNVM V2")
             if old.connections != tuple(sorted(state["connections"], key=lambda item: item.connection_id)):
-                raise JPVRNetworkJNVMConflict("network topology is immutable in JNVM V1")
+                raise JPVRNetworkJNVMConflict("network topology is immutable in JNVM V2")
         if expected_network_version != old_network_version:
             raise JPVRNetworkJNVMConflict(
                 f"expected network version {expected_network_version}, current version is {old_network_version}"
@@ -559,9 +587,28 @@ class JPVRNetworkJNVMStore:
             raise JPVRNetworkJNVMError("scheduler record version is exhausted")
         next_network_version = old_network_version + 1
 
-        next_neuron_versions = {}
+        # The scheduler's complete version map is the consistency manifest.
+        current_neuron_versions = {}
+        for neuron_id in sorted(neurons):
+            locator, version = self._neurons._lookup_existing(
+                neuron_id, neuron_runtime_object_id(neuron_id), manifest, active, catalog,
+            )
+            if previous is None:
+                if locator is not None or version != 0:
+                    raise JPVRNetworkJNVMConflict(
+                        f"initial group checkpoint found an existing record for neuron {neuron_id!r}"
+                    )
+            else:
+                expected_persisted = previous.snapshot.neuron_record_versions[neuron_id]
+                if version != expected_persisted:
+                    raise JPVRNetworkJNVMConflict(
+                        f"neuron {neuron_id!r} index version {version} differs from scheduler version {expected_persisted}"
+                    )
+            current_neuron_versions[neuron_id] = version
+
+        next_neuron_versions = dict(current_neuron_versions)
         for neuron_id in changed:
-            _, version = self._neurons._lookup_existing(neuron_id, neuron_runtime_object_id(neuron_id), manifest, active, catalog)
+            version = current_neuron_versions[neuron_id]
             if expected_versions[neuron_id] != version:
                 raise JPVRNetworkJNVMConflict(
                     f"neuron {neuron_id!r} expected version {expected_versions[neuron_id]}, current {version}"
@@ -569,6 +616,11 @@ class JPVRNetworkJNVMStore:
             if version == _U64_MAX:
                 raise JPVRNetworkJNVMError(f"neuron {neuron_id!r} record version is exhausted")
             next_neuron_versions[neuron_id] = version + 1
+
+        scheduler_payload = encode_network_scheduler_snapshot(
+            network_id, runtime, clock_epoch_id=epoch,
+            neuron_record_versions=next_neuron_versions,
+        )
 
         data_inputs, data_owners, blob_inputs, blob_owners = [], [], [], []
         for neuron_id in changed:
