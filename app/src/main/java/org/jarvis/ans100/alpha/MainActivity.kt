@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -475,7 +476,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     "Локальный режим · ничего не отправляется в Python-движок и не исполняется.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )                        }
+                )
+                        }
                         else -> {
                             SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
                 RuntimeBridgePanel(
@@ -1073,7 +1075,7 @@ private fun Header() {
             color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
             Text(
-                "V0.5",
+                "V0.6",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1846,6 +1848,13 @@ private fun ConversationPanel(
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
     var showModelDownloadConfirmation by remember { mutableStateOf(false) }
+    val messageListState = rememberLazyListState()
+
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
+            messageListState.animateScrollToItem(state.messages.lastIndex)
+        }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -1936,8 +1945,12 @@ private fun ConversationPanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    state.messages.takeLast(8).forEach { message ->
+                LazyColumn(
+                    state = messageListState,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 440.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(state.messages, key = { it.id }) { message ->
                         val userMessage = message.role == ConversationRole.USER
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -1962,17 +1975,9 @@ private fun ConversationPanel(
                                 Text(
                                     message.text,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 8,
                                 )
                             }
                         }
-                    }
-                    if (state.messages.size > 8) {
-                        Text(
-                            "Показаны последние 8 сообщений из ${state.messages.size}.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
