@@ -17,33 +17,42 @@ class LocalConversationSignalRuntimeTest {
     }
 
     @Test
-    fun textFeaturesDriveBothNeuronsAndRespectTheEventBudget() {
+    fun textFeaturesFlowThroughTenNeuronsWithinBoundedEventBudget() {
         val storage = MemoryStorage()
-        val result = LocalConversationSignalRuntime(storage).analyze("Привет?")
+        val result = LocalConversationSignalRuntime(storage).analyze(
+            "Как подключить ANS-100 к JARVIS?",
+        )
 
-        assertEquals("JARVIS_ANS100_CONVERSATION_SIGNAL_V1", result.runtimeVersion)
-        assertEquals(4, result.processedEvents)
-        assertEquals(2, result.processedBatches)
-        assertEquals(2, result.spikeCount)
+        assertEquals("JARVIS_ANS100_CONVERSATION_SIGNAL_V2", result.runtimeVersion)
+        assertEquals(10, result.networkNeuronCount)
+        assertEquals(10, result.activeNeuronCount)
+        assertEquals(15, result.processedEvents)
+        assertEquals(10, result.processedBatches)
+        assertEquals(10, result.spikeCount)
         assertTrue(result.attentionGateActive)
-        assertEquals(1.0 / 12.0, result.tokenVolume, 1e-12)
+        assertEquals(5.0 / 12.0, result.tokenVolume, 1e-12)
         assertEquals(1.0, result.lexicalDiversity, 1e-12)
         assertEquals(0.35, result.questionMarker, 1e-12)
+        assertTrue(result.punctuationDensity > 0.0)
+        assertTrue(result.sentenceDensity > 0.0)
+        assertTrue(result.uppercaseRatio > 0.0)
         assertEquals(0.2, result.integratorAdaptation, 1e-12)
-        assertEquals(1.1, result.effectiveThreshold, 1e-12)
-        assertEquals(10_000_001L, result.modelTimeNs)
+        assertEquals(1.6, result.effectiveThreshold, 1e-12)
+        assertEquals(10_000_003L, result.modelTimeNs)
         assertTrue(result.statePersisted)
-        assertTrue(storage.value!!.startsWith("JARVIS_ANS100_ANDROID_SIGNAL_V1|1|"))
+        assertTrue(storage.value!!.startsWith("JARVIS_ANS100_ANDROID_SIGNAL_V2|1|"))
     }
 
     @Test
     fun emptyFeatureSetDoesNotAdvanceClockOrWriteCheckpoint() {
         val storage = MemoryStorage()
-        val result = LocalConversationSignalRuntime(storage).analyze("ok")
+        val result = LocalConversationSignalRuntime(storage).analyze("hi")
 
         assertEquals(0, result.processedEvents)
         assertEquals(0, result.processedBatches)
         assertEquals(0, result.spikeCount)
+        assertEquals(0, result.activeNeuronCount)
+        assertEquals(10, result.networkNeuronCount)
         assertFalse(result.attentionGateActive)
         assertEquals(0L, result.modelTimeNs)
         assertFalse(result.statePersisted)
@@ -58,10 +67,30 @@ class LocalConversationSignalRuntimeTest {
 
         assertTrue(first.attentionGateActive)
         assertTrue(second.attentionGateActive)
-        assertEquals(2L, second.checkpointVersion.toLong())
-        assertEquals(20_000_002L, second.modelTimeNs)
+        assertEquals(2L, second.checkpointVersion)
+        assertEquals(20_000_006L, second.modelTimeNs)
         assertTrue(second.integratorAdaptation > first.integratorAdaptation)
         assertTrue(second.integratorAdaptation < 0.4)
+        assertEquals(10, second.networkNeuronCount)
+    }
+
+    @Test
+    fun legacyTwoNeuronCheckpointMigratesAndKeepsAdaptiveState() {
+        val legacy = listOf(
+            "JARVIS_ANS100_ANDROID_SIGNAL_V1",
+            "1", "10000001",
+            "0.0", "0.2", "10000000", "12000000", "1",
+            "0.0", "0.0", "10000001", "12000001", "1",
+        ).joinToString("|")
+        val storage = MemoryStorage(value = legacy)
+
+        val result = LocalConversationSignalRuntime(storage).analyze("Привет?")
+
+        assertEquals(10, result.networkNeuronCount)
+        assertEquals(2L, result.checkpointVersion)
+        assertTrue(result.integratorAdaptation > 0.2)
+        assertTrue(result.attentionGateActive)
+        assertTrue(storage.value!!.startsWith("JARVIS_ANS100_ANDROID_SIGNAL_V2|2|"))
     }
 
     @Test
@@ -77,6 +106,32 @@ class LocalConversationSignalRuntimeTest {
         assertEquals(null, storage.value)
     }
 
+    @Test
+    fun malformedCheckpointIsRejectedInsteadOfSilentlyReset() {
+        val storage = MemoryStorage("corrupted")
+        var rejected = false
+        try {
+            LocalConversationSignalRuntime(storage).analyze("Привет?")
+        } catch (_: LocalConversationSignalException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertEquals("corrupted", storage.value)
+    }
+
+    @Test
+    fun punctuationOnlyInputActivatesSensorsButNotTheOutputGate() {
+        val storage = MemoryStorage()
+        val result = LocalConversationSignalRuntime(storage).analyze("?")
+
+        assertEquals(7, result.processedEvents)
+        assertEquals(5, result.processedBatches)
+        assertEquals(4, result.spikeCount)
+        assertEquals(4, result.activeNeuronCount)
+        assertFalse(result.attentionGateActive)
+        assertEquals(0.0, result.integratorAdaptation, 1e-12)
+        assertEquals(0.35, result.questionMarker, 1e-12)
+    }
 
     @Test
     fun v2SignalContextAcceptsTenNeuronMetricsAndRejectsOutOfBudgetCounts() {
@@ -107,31 +162,5 @@ class LocalConversationSignalRuntimeTest {
             rejected = true
         }
         assertTrue(rejected)
-    }
-
-    @Test
-    fun malformedCheckpointIsRejectedInsteadOfSilentlyReset() {
-        val storage = MemoryStorage("corrupted")
-        var rejected = false
-        try {
-            LocalConversationSignalRuntime(storage).analyze("Привет?")
-        } catch (_: LocalConversationSignalException) {
-            rejected = true
-        }
-        assertTrue(rejected)
-        assertEquals("corrupted", storage.value)
-    }
-
-    @Test
-    fun ordinaryPunctuationAloneDoesNotActivateTheAttentionGate() {
-        val storage = MemoryStorage()
-        val result = LocalConversationSignalRuntime(storage).analyze("?")
-
-        assertEquals(1, result.processedEvents)
-        assertEquals(1, result.processedBatches)
-        assertEquals(0, result.spikeCount)
-        assertFalse(result.attentionGateActive)
-        assertEquals(0.0, result.integratorAdaptation, 1e-12)
-        assertEquals(0.35, result.questionMarker, 1e-12)
     }
 }

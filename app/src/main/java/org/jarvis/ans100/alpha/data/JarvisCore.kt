@@ -131,6 +131,8 @@ data class JarvisCoreStatus(
     val ans100SignalProcessorActive: Boolean = false,
     val ans100AttentionGateActive: Boolean = false,
     val ans100AdaptiveStatePersisted: Boolean = false,
+    val ans100NetworkNeuronCount: Int = 10,
+    val ans100ActiveNeuronCount: Int = 0,
     val externalActionsEnabled: Boolean = false,
 ) {
     fun toUserMessage(): String {
@@ -155,7 +157,8 @@ data class JarvisCoreStatus(
             appendLine("Кратковременная память диалога: ${if (recentConversationMemoryAvailable) "активна, история хранится локально" else "недоступна"}.")
             appendLine("Долговременная JPVR-память: $memory.")
             appendLine("Reasoning Engine: ${if (reasoningIntegratedIntoConversation) "участвует в обработке запросов" else "символьный preview пока не подключён к обычному диалогу"}.")
-            appendLine("ANS-100: $neural.")
+            appendLine("ANS-100: сеть из $ans100NetworkNeuronCount нейронов; активно в последнем проходе: $ans100ActiveNeuronCount.")
+            appendLine("Результат: $neural.")
             appendLine("STDP-обучение на диалоге выключено; адаптивное состояние ALIF сохранено отдельно: $ans100AdaptiveStatePersisted.")
             append("Внешние действия: ${if (externalActionsEnabled) "разрешены отдельной политикой" else "выключены"}.")
         }
@@ -185,6 +188,8 @@ class JarvisCore(
             ans100SignalProcessorActive = signal != null,
             ans100AttentionGateActive = signal?.attentionGateActive == true,
             ans100AdaptiveStatePersisted = signal?.statePersisted == true,
+            ans100NetworkNeuronCount = signal?.networkNeuronCount ?: 10,
+            ans100ActiveNeuronCount = signal?.activeNeuronCount ?: 0,
         )
     }
 
@@ -281,7 +286,7 @@ class JarvisCore(
         const val HELP_MESSAGE =
             "Я — JARVIS. JARVIS Core управляет ходом диалога, а языковая модель формирует текст ответа. " +
             "Подтверждённые воспоминания JPVR могут передаваться как контекст. ANS-100 выполняет только " +
-            "ограниченную числовую обработку входного сигнала; обучение на диалоге пока выключено. " +
+            "ограниченную числовую обработку входного сигнала сетью из 10 нейронов; обучение на диалоге пока выключено. " +
             "Команды: /help — справка, /status — состояние компонентов."
     }
 }

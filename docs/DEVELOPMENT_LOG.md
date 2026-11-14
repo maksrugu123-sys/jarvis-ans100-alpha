@@ -2115,3 +2115,20 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Limitations:** the V2 implementation has not been compiled or executed. The signal features are request-shape measurements only; dialogue-driven learning remains disabled. Android/Python differential parity, actual resource use, and 10-neuron runtime latency on a phone/PC are not measured. The 10,000-neuron general-network ceiling remains a separate unmeasured capacity limit, not a claim that the phone runs 10,000 neurons during every dialog turn.
 
 **Next step:** once explicitly authorized, run the focused Python and Kotlin tests and then device/resource validation; separately implement the proposed visible PC browser and atomic JNVM network integration.
+
+
+## 2026-11-14 — Complete V2 conversation contract regression coverage and Android status display
+
+**Objective:** complete the ten-neuron V2 migration batch by updating remaining server/API assertions and making the native Android status command report the active signal topology.
+
+**Changed:**
+- app/src/main/java/org/jarvis/ans100/alpha/data/JarvisCore.kt — Android /status now reports configured signal network size and number of active neurons in the most recent pass; default topology is ten when no signal result exists, while a validated V1 compatibility result reports two.
+- app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationRuntimeTest.kt — verifies that /status reports the ten-neuron native topology.
+- app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntimeTest.kt — replaces obsolete V1/two-neuron behavior expectations with V2 ten-neuron propagation, legacy checkpoint migration and bounded signal-context validation.
+- tools/jarvis_app/test_server.py — both authenticated endpoint and service-level tests assert V2, ten neurons, 15 processed events, 10 scheduler batches and the extended feature fields.
+
+**Verification:** GitHub source readback and static consistency review only. Tests are AUTHORED, NOT RUN. No Python test process or Android test/build process was started.
+
+**Builds / CI / GitHub Actions:** NOT RUN; no workflow was dispatched and no Actions artifacts or caches were created.
+
+**Limitations:** API and Android code remain uncompiled/unexecuted. The existing V1 ConversationSignalContext fixture in the older conversation orchestration test is intentionally retained to exercise legacy bridge compatibility. Continue with device validation only after separate authorization.

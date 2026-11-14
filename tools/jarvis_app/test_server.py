@@ -231,11 +231,18 @@ class LocalConsoleHttpTests(unittest.TestCase):
 
         status, result = self._post("/api/ans100/conversation-signal", payload)
         self.assertEqual(status, 200)
-        self.assertEqual(result["runtime_version"], "JARVIS_ANS100_CONVERSATION_SIGNAL_V1")
+        self.assertEqual(result["runtime_version"], "JARVIS_ANS100_CONVERSATION_SIGNAL_V2")
+        self.assertEqual(result["network_neuron_count"], 10)
+        self.assertEqual(result["active_neuron_count"], 10)
+        self.assertEqual(result["processed_events"], 15)
+        self.assertEqual(result["processed_batches"], 10)
         self.assertTrue(result["attention_gate_active"])
         self.assertFalse(result["learning_enabled"])
         self.assertTrue(result["state_persisted"])
         self.assertIn("integrator_adaptation", result["features"])
+        self.assertIn("punctuation_density", result["features"])
+        self.assertIn("sentence_density", result["features"])
+        self.assertIn("uppercase_ratio", result["features"])
         self.assertIn("effective_threshold", result["features"])
         self.assertEqual(result["scope"], "low_level_signal_preprocessing_only")
 
@@ -286,8 +293,12 @@ class LocalConsoleHttpTests(unittest.TestCase):
 
         self.assertEqual(
             result["runtime_version"],
-            "JARVIS_ANS100_CONVERSATION_SIGNAL_V1",
+            "JARVIS_ANS100_CONVERSATION_SIGNAL_V2",
         )
+        self.assertEqual(result["network_neuron_count"], 10)
+        self.assertEqual(result["active_neuron_count"], 10)
+        self.assertEqual(result["processed_events"], 15)
+        self.assertEqual(result["processed_batches"], 10)
         self.assertTrue(result["attention_gate_active"])
         self.assertFalse(result["learning_enabled"])
         self.assertTrue(result["state_persisted"])
