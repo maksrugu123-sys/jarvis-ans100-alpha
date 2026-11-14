@@ -304,7 +304,7 @@ class JarvisCore(
             "/help" -> HELP_MESSAGE
             else -> {
                 // JARVIS Core analyses every normal message before any response engine is called.
-                val understanding = LocalUnderstandingPipeline().analyze(clean)
+                val understanding = LocalUnderstandingPipeline().analyze(clean, context)
                 lastUnderstanding = understanding
                 lastSignalContext = signalContext
                 val memories = if (languageEngine.languageModelConfigured) {
