@@ -53,6 +53,7 @@ class PeerMemorySyncStore:
         self,
         records: object,
         expected_revision: object,
+        deleted_ids: object = (),
     ) -> dict[str, object]:
         if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 0:
             raise PeerMemorySyncError("expected_revision must be a non-negative integer")
@@ -62,6 +63,15 @@ class PeerMemorySyncStore:
         incoming_ids = [item["id"] for item in normalized]
         if len(incoming_ids) != len(set(incoming_ids)):
             raise PeerMemorySyncError("incoming memory IDs must be unique")
+        if not isinstance(deleted_ids, (list, tuple)) or len(deleted_ids) > self.MAX_RECORDS:
+            raise PeerMemorySyncError("deleted_ids must be a bounded list")
+        clean_deleted = []
+        for record_id in deleted_ids:
+            if not isinstance(record_id, str) or not self._ID.fullmatch(record_id):
+                raise PeerMemorySyncError("deleted memory ID is invalid")
+            clean_deleted.append(record_id)
+        if len(clean_deleted) != len(set(clean_deleted)) or set(clean_deleted) & set(incoming_ids):
+            raise PeerMemorySyncError("deleted IDs must be unique and disjoint from incoming records")
 
         with self._lock:
             current = self._read()
@@ -70,6 +80,7 @@ class PeerMemorySyncStore:
             merged = {item["id"]: dict(item) for item in current["memories"]}
             added = 0
             updated = 0
+            deleted = 0
             conflicts = 0
             for item in normalized:
                 previous = merged.get(item["id"])
@@ -85,7 +96,10 @@ class PeerMemorySyncStore:
                     updated += 1
                 else:
                     conflicts += 1
-            if added or updated:
+            for record_id in clean_deleted:
+                if merged.pop(record_id, None) is not None:
+                    deleted += 1
+            if added or updated or deleted:
                 if current["revision"] >= (1 << 63) - 1:
                     raise PeerMemorySyncError("peer memory revision counter is exhausted")
                 next_value = {
@@ -98,6 +112,7 @@ class PeerMemorySyncStore:
                 "revision": current["revision"],
                 "added": added,
                 "updated": updated,
+                "deleted": deleted,
                 "conflicts": conflicts,
                 "memories": [dict(item) for item in current["memories"]],
             }

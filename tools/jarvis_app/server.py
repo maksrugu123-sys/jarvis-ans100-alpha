@@ -663,8 +663,9 @@ class LocalConsoleService:
         self,
         records: object,
         expected_revision: object,
+        deleted_ids: object = (),
     ) -> dict[str, object]:
-        return self.peer_memory_store.merge(records, expected_revision)
+        return self.peer_memory_store.merge(records, expected_revision, deleted_ids)
 
     def read_only_memory_workspace(self) -> dict[str, object]:
         workspace = self.workspace_state()["workspace"]
@@ -1094,11 +1095,14 @@ def create_http_server(
                     return
 
                 if path == "/api/peer-sync/memories":
+                    allowed = {"expected_revision", "memories"}
+                    with_deletes = allowed | {"deleted_ids"}
+                    if set(payload) not in (allowed, with_deletes):
+                        raise LocalConsoleError("peer sync expects expected_revision, memories and optional deleted_ids")
                     self._send(200, service.merge_peer_memories(
-                        payload.get("memories"),
-                        payload.get("expected_revision"),
-                    ) if set(payload) == {"expected_revision", "memories"} else (_ for _ in ()).throw(
-                        LocalConsoleError("peer sync expects exactly expected_revision and memories")
+                        payload["memories"],
+                        payload["expected_revision"],
+                        payload.get("deleted_ids", []),
                     ))
                     return
                 if path == "/api/workspace/restore":

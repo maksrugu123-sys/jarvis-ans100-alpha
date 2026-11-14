@@ -2323,3 +2323,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Security/data boundary:** only explicitly approved memory records are accepted. Tokens are carried over the TLS peer listener, not cleartext LAN HTTP. The certificate must contain the private LAN IP in its SAN; the planned Android client must verify a pinned SHA-256 certificate fingerprint. The PC's normal local HTTP console remains bound to loopback. No wildcard/public binding is enabled.
 
 **Limitations:** this commit creates only the PC transport/store. Android credential storage, pinned TLS client, UI pairing, automatic sync trigger and end-to-end sync are not implemented yet. V1 is additive and timestamp-based; deletions/chat history are not synchronized. Four Python tests are AUTHORED, NOT RUN. TLS browser/Android connection and firewall behavior are NOT VERIFIED.
+
+
+## 2026-11-14 — Add deletion tombstones to peer-memory sync V1
+
+**Objective:** ensure a user-confirmed local memory deletion can propagate through the revisioned peer sync protocol without treating absence from a partial upload as deletion.
+
+**Changed:** `PeerMemorySyncStore.merge()` now accepts an explicit bounded `deleted_ids` list, rejects duplicate IDs and overlap with incoming records, removes only exact matching IDs, and increments the CAS revision when additions, newer updates or deletions occur. The authenticated API accepts the tombstone list as an optional third field. Added two Python tests and updated the sync contract.
+
+**Verification:** source/readback only. New tombstone tests are AUTHORED, NOT RUN. No Android client or end-to-end LAN sync has been executed.

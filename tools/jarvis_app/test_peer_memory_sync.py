@@ -40,6 +40,21 @@ class PeerMemorySyncStoreTests(unittest.TestCase):
             self.assertEqual(updated["updated"], 1)
             self.assertEqual(updated["memories"][0]["content"], "new")
 
+    def test_tombstones_remove_remote_records_and_advance_revision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = PeerMemorySyncStore(Path(directory) / "peer.json")
+            store.merge([record("phone-1", "note")], 0)
+            deleted = store.merge([], 1, ["phone-1"])
+            self.assertEqual(deleted["deleted"], 1)
+            self.assertEqual(deleted["revision"], 2)
+            self.assertEqual(deleted["memories"], [])
+
+    def test_tombstones_cannot_overlap_incoming_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = PeerMemorySyncStore(Path(directory) / "peer.json")
+            with self.assertRaises(PeerMemorySyncError):
+                store.merge([record("same", "note")], 0, ["same"])
+
     def test_stale_revision_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             store = PeerMemorySyncStore(Path(directory) / "peer.json")
