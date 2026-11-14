@@ -22,6 +22,7 @@ class LocalFallbackResponseEngine:
         history: list[dict[str, str]],
         *,
         memory_context: Sequence[Mapping[str, str]] = (),
+        understanding_context: Mapping[str, object] | None = None,
         signal_context: Mapping[str, object] | None = None,
         reasoning_context: Mapping[str, object] | None = None,
         external_context: Mapping[str, object] | None = None,
@@ -77,18 +78,22 @@ class LocalFallbackResponseEngine:
             )
             return " ".join(parts)
 
+        understood_intent = (
+            understanding_context.get("intent")
+            if isinstance(understanding_context, Mapping) else None
+        )
         if normalized in {"привет", "здравствуй", "здравствуйте", "доброе утро",
-                          "добрый день", "добрый вечер", "hello", "hi"}:
+                          "добрый день", "добрый вечер", "hello", "hi"} or understood_intent == "greeting":
             return (
                 "Привет! Я JARVIS. Базовый локальный режим активен, история сохраняется "
                 "в локальном рабочем пространстве. Для содержательного свободного диалога "
                 "подключите поддерживаемую локальную языковую модель."
             )
 
-        if normalized in {"спасибо", "благодарю", "thanks", "thank you"}:
+        if normalized in {"спасибо", "благодарю", "thanks", "thank you"} or understood_intent == "thanks":
             return "Пожалуйста. Я сохранил этот ход в локальной истории."
 
-        if normalized in {"пока", "до свидания", "увидимся", "bye", "goodbye"}:
+        if normalized in {"пока", "до свидания", "увидимся", "bye", "goodbye"} or understood_intent == "farewell":
             return "До связи. Локальная история диалога останется на этом устройстве."
 
         if reasoning_context is not None:
@@ -108,10 +113,25 @@ class LocalFallbackResponseEngine:
                 "содержимое страницы останется недоверенным источником."
             )
 
+        intent = (
+            understood_intent
+            if isinstance(understood_intent, str) and len(understood_intent) <= 48
+            else "не определено"
+        )
+        confidence = (
+            understanding_context.get("intent_confidence", 0.0)
+            if isinstance(understanding_context, Mapping) else 0.0
+        )
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            confidence = 0.0
+        confidence = min(1.0, max(0.0, float(confidence)))
         return (
-            "Я получил сообщение и передал его через локальное ядро JARVIS, но базовый "
-            "ответчик не умеет формировать свободные содержательные ответы. Подключите "
-            "локальную языковую модель для полноценного диалога. Никакие внешние действия "
+            "Ядро JARVIS выполнило предварительный анализ сообщения. "
+            f"Эвристически определённый тип запроса: {intent} "
+            f"(оценка уверенности {confidence:.2f}). "
+            "Это ограниченная классификация признаков текста, а не глубокое понимание. "
+            "Сейчас базовый режим не умеет формировать свободный содержательный ответ; "
+            "для него нужна подключённая языковая модель. Никакие внешние действия "
             "по этому сообщению не выполнялись."
         )
 
