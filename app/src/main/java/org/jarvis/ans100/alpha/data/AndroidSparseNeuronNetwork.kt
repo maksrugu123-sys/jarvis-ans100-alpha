@@ -72,7 +72,7 @@ data class AndroidNeuronRunResult(
     val currentTimeNs: Long,
 )
 
-class AndroidNeuronNetworkException(message: String) : IllegalStateException(message)
+open class AndroidNeuronNetworkException(message: String) : IllegalStateException(message)
 class AndroidNeuronBackpressureException(message: String) : AndroidNeuronNetworkException(message)
 
 /**

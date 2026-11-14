@@ -3,6 +3,7 @@ package org.jarvis.ans100.alpha.data
 import android.content.Context
 import java.security.MessageDigest
 import java.util.Locale
+import kotlin.math.exp
 import kotlin.math.sqrt
 
 data class DialogFeaturePrediction(
@@ -11,6 +12,7 @@ data class DialogFeaturePrediction(
     val activeFeatureCount: Int,
     val trainedExamples: Int,
     val neuronCount: Int,
+    val rewardUpdates: Int = 0,
 )
 
 interface DialogFeatureStorage {
@@ -43,6 +45,7 @@ class LocalDialogFeatureClassifier(
 ) {
     private var weights: MutableMap<String, MutableMap<Int, Double>> = emptyWeights()
     private var trainedExamples: Int = 0
+    private var rewardUpdates: Int = 0
     private var loaded: Boolean = false
     private var loadError: String? = null
 
@@ -82,12 +85,60 @@ class LocalDialogFeatureClassifier(
         }
 
         val nextCount = trainedExamples + 1
-        val checkpoint = encode(candidate, nextCount)
+        val checkpoint = encode(candidate, nextCount, rewardUpdates)
         if (!storage.write(checkpoint)) {
             throw DialogFeatureClassifierException("Не удалось сохранить веса; прежняя модель оставлена без изменений.")
         }
         weights = candidate
         trainedExamples = nextCount
+        return predict(active)
+    }
+
+
+    /**
+     * User-confirmed reward update. Active text features create a bounded
+     * pre/post eligibility trace; the current confident intent is the
+     * postsynaptic output. The explicit +1/-1 reward gates the weight change.
+     */
+    @Synchronized
+    fun applyReward(text: String, reward: Double): DialogFeaturePrediction {
+        ensureAvailable()
+        validateText(text)
+        if (!reward.isFinite() || reward !in -1.0..1.0 || reward == 0.0) {
+            throw DialogFeatureClassifierException("Награда должна быть числом от -1 до 1, кроме нуля.")
+        }
+        if (rewardUpdates == Int.MAX_VALUE) {
+            throw DialogFeatureClassifierException("Счётчик reward-событий достиг предела.")
+        }
+        val active = extractFeatures(text)
+        if (active.isEmpty()) {
+            throw DialogFeatureClassifierException("В тексте нет словесных признаков для обучения.")
+        }
+        val before = predict(active)
+        val selectedLabel = before.predictedLabel
+            ?: throw DialogFeatureClassifierException(
+                "Нет уверенного прогноза для reward-обучения. Сначала выбери правильную метку диалога.",
+            )
+        val candidate = LABELS.associateWith { label ->
+            weights.getValue(label).toMutableMap()
+        }.toMutableMap()
+        val eligibilityDecay = exp(-PRE_POST_DELAY_NS.toDouble() / ELIGIBILITY_TAU_NS)
+        val selectedWeights = candidate.getValue(selectedLabel)
+        for ((index, presynapticValue) in active) {
+            val eligibility = STDP_A_PLUS * presynapticValue * eligibilityDecay
+            val updated = (selectedWeights[index] ?: 0.0) +
+                REWARD_LEARNING_RATE * reward * eligibility
+            selectedWeights[index] = updated.coerceIn(-MAX_WEIGHT, MAX_WEIGHT)
+        }
+        val nextRewardCount = rewardUpdates + 1
+        val checkpoint = encode(candidate, trainedExamples, nextRewardCount)
+        if (!storage.write(checkpoint)) {
+            throw DialogFeatureClassifierException(
+                "Не удалось сохранить reward-обновление; прежние веса оставлены без изменений.",
+            )
+        }
+        weights = candidate
+        rewardUpdates = nextRewardCount
         return predict(active)
     }
 
@@ -111,6 +162,7 @@ class LocalDialogFeatureClassifier(
             activeFeatureCount = active.size,
             trainedExamples = trainedExamples,
             neuronCount = FEATURE_NEURON_COUNT,
+            rewardUpdates = rewardUpdates,
         )
     }
 
@@ -170,10 +222,12 @@ class LocalDialogFeatureClassifier(
     private fun encode(
         candidate: Map<String, Map<Int, Double>>,
         count: Int,
+        rewardCount: Int,
     ): String {
         val lines = ArrayList<String>()
-        lines += CHECKPOINT_HEADER
+        lines += CHECKPOINT_HEADER_V2
         lines += "T\t$count"
+        lines += "R\t$rewardCount"
         for (label in LABELS) {
             candidate.getValue(label).toSortedMap().forEach { (index, value) ->
                 lines += "W\t$label\t$index\t$value"
@@ -181,7 +235,7 @@ class LocalDialogFeatureClassifier(
         }
         val result = lines.joinToString("\n")
         if (result.length > MAX_CHECKPOINT_CHARS ||
-            lines.size - 2 > MAX_STORED_WEIGHT_ROWS
+            lines.size - 3 > MAX_STORED_WEIGHT_ROWS
         ) {
             throw DialogFeatureClassifierException("Checkpoint диалоговых признаков превысил лимит размера.")
         }
@@ -193,7 +247,9 @@ class LocalDialogFeatureClassifier(
             throw DialogFeatureClassifierException("Checkpoint диалоговых признаков пуст или превышает лимит.")
         }
         val lines = raw.split('\n')
-        if (lines.size < 2 || lines[0] != CHECKPOINT_HEADER) {
+        val versionOne = lines.firstOrNull() == CHECKPOINT_HEADER_V1
+        val versionTwo = lines.firstOrNull() == CHECKPOINT_HEADER_V2
+        if (lines.size < 2 || (!versionOne && !versionTwo)) {
             throw DialogFeatureClassifierException("Неизвестная версия checkpoint диалоговых признаков.")
         }
         val counter = lines[1].split('\t')
@@ -204,9 +260,20 @@ class LocalDialogFeatureClassifier(
             ?.takeIf { it >= 0 }
             ?: throw DialogFeatureClassifierException("Checkpoint содержит неверный счётчик обучения.")
 
+        val restoredRewardCount = if (versionTwo) {
+            val rewardCounter = lines.getOrNull(2)?.split('\t')
+                ?: throw DialogFeatureClassifierException("Checkpoint не содержит счётчик reward-событий.")
+            if (rewardCounter.size != 2 || rewardCounter[0] != "R") {
+                throw DialogFeatureClassifierException("Checkpoint содержит неверный счётчик reward-событий.")
+            }
+            rewardCounter[1].toIntOrNull()?.takeIf { it >= 0 }
+                ?: throw DialogFeatureClassifierException("Checkpoint содержит неверный счётчик reward-событий.")
+        } else 0
+
         val restored = emptyWeights()
         var rows = 0
-        for (line in lines.drop(2)) {
+        val weightStart = if (versionTwo) 3 else 2
+        for (line in lines.drop(weightStart)) {
             val fields = line.split('\t')
             if (fields.size != 4 || fields[0] != "W") {
                 throw DialogFeatureClassifierException("Checkpoint содержит некорректную запись веса.")
@@ -228,6 +295,7 @@ class LocalDialogFeatureClassifier(
         }
         weights = restored
         trainedExamples = restoredCount
+        rewardUpdates = restoredRewardCount
     }
 
     companion object {
@@ -235,10 +303,15 @@ class LocalDialogFeatureClassifier(
         const val MAX_TEXT_CHARS = 900
         val LABELS = listOf("greeting", "question", "thanks", "farewell")
 
-        private const val CHECKPOINT_HEADER = "JARVIS_ANDROID_DIALOG_FEATURES\t1"
+        private const val CHECKPOINT_HEADER_V1 = "JARVIS_ANDROID_DIALOG_FEATURES\t1"
+        private const val CHECKPOINT_HEADER_V2 = "JARVIS_ANDROID_DIALOG_FEATURES\t2"
         private const val MAX_TOKENS = 256
         private const val HASH_BYTES = 8
         private const val LEARNING_RATE = 0.15
+        private const val REWARD_LEARNING_RATE = 0.15
+        private const val STDP_A_PLUS = 1.0
+        private const val PRE_POST_DELAY_NS = 1_000_000L
+        private const val ELIGIBILITY_TAU_NS = 20_000_000.0
         private const val MINIMUM_MARGIN = 0.08
         private const val MAX_WEIGHT = 4.0
         private const val MAX_STORED_WEIGHT_ROWS = 40_000
