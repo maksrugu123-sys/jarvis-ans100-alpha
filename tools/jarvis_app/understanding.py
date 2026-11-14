@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-MAX_INPUT_CHARS = 900
+MAX_INPUT_CHARS = 750
 MAX_TOKENS = 128
 _TOKEN = re.compile(r"[A-Za-zА-Яа-яЁё0-9]+", re.UNICODE)
 _ENTITY = re.compile(r"(?<![\w])[A-ZА-ЯЁ][\w-]{1,47}(?![\w])", re.UNICODE)
@@ -34,6 +34,12 @@ _CONTEXT = (
     "это", "этот", "эта", "эти", "там", "тогда", "продолжай", "дальше",
     "предыдущ", "it", "that", "those", "continue", "previous",
 )
+_CONTEXT_PHRASES = ("как раньше", "в прошлый раз")
+_ENTITY_STOPWORDS = frozenset({
+    "привет", "здравствуй", "здравствуйте", "добрый", "спасибо", "благодарю",
+    "пока", "можешь", "сделай", "создай", "найди", "исправь", "проверь",
+    "напиши", "добавь", "удали", "открой", "помоги", "объясни", "расскажи",
+})
 
 
 def _contains_phrase(tokens: Sequence[str], phrase: str) -> bool:
@@ -61,7 +67,7 @@ def analyze_text(value: str) -> dict[str, object]:
     refers_back = any(
         marker in tokens or (len(marker) >= 4 and any(token.startswith(marker) for token in tokens))
         for marker in _CONTEXT
-    )
+    ) or _contains_any(tokens, _CONTEXT_PHRASES)
     negation = any(token in _NEGATIONS for token in tokens)
     greeting = bool(tokens and tokens[0] in _GREETINGS)
     thanks = _contains_any(tokens, _THANKS)
@@ -73,45 +79,45 @@ def analyze_text(value: str) -> dict[str, object]:
 
     if correction:
         intent, confidence, task = "correction", 0.82, "revise_previous_result"
-        evidence = ["corrective phrase"]
+        evidence = ["correction_marker"]
     elif farewell:
         intent, confidence, task = "farewell", 0.90, "social_response"
-        evidence = ["farewell marker"]
+        evidence = ["farewell_marker"]
     elif thanks:
         intent, confidence, task = "thanks", 0.88, "social_response"
-        evidence = ["gratitude marker"]
+        evidence = ["gratitude_marker"]
     elif greeting:
         intent, confidence, task = "greeting", 0.88, "social_response"
-        evidence = ["greeting marker"]
+        evidence = ["greeting_marker"]
     elif comparison:
         intent, confidence, task = "comparison", 0.76, "compare_options"
-        evidence = ["comparison marker"]
+        evidence = ["comparison_marker"]
     elif action:
         intent, confidence, task = "action_request", 0.68, "plan_or_explain_requested_action"
-        evidence = ["action/request marker"]
+        evidence = ["action_marker"]
     elif explanation:
         intent, confidence, task = "explanation", 0.72, "explain_concept"
-        evidence = ["explicit explanation marker"]
+        evidence = ["explanation_marker"]
     elif has_question:
         intent, confidence, task = "question", 0.70, "answer_question"
-        evidence = ["question marker"]
+        evidence = ["question_marker"]
     elif refers_back:
         intent, confidence, task = "continuation", 0.64, "continue_context"
-        evidence = ["context reference"]
+        evidence = ["context_reference"]
     else:
         intent, confidence, task = "statement_or_unknown", 0.30, "interpret_and_respond"
         evidence = ["no strong intent marker"]
 
     if has_question:
-        evidence.append("question form")
+        evidence.append("question_form")
     if negation:
-        evidence.append("negation detected")
+        evidence.append("negation_marker")
     if refers_back:
-        evidence.append("previous-context reference")
+        evidence.append("previous_context_reference")
 
     entities = list(dict.fromkeys(
         match.group(0) for match in _ENTITY.finditer(text)
-        if match.group(0).casefold() not in _GREETINGS
+        if match.group(0).casefold() not in _ENTITY_STOPWORDS
     ))[:5]
     language = "ru_or_cyrillic" if re.search(r"[\u0400-\u04ff]", text) else (
         "en_or_latin" if re.search(r"[A-Za-z]", text) else "unknown"
