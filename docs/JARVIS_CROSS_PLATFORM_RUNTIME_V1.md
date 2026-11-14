@@ -199,9 +199,9 @@ The capability registry reports actual limits and active backends. A PC may use 
 
 ### Batch 5 — Local inference
 
-- Evaluate and integrate a local language backend separately on PC and Android.
-- Measure memory, storage, latency, throughput, battery/thermal impact, and quality on each target.
-- Keep model backend pluggable and report its identity/capabilities.
+**Implemented at source level:** Android and desktop/PWA now have optional LiteRT-LM 0.17.1 adapters for the same manually supplied Qwen3-0.6B INT4 no-think artifact. Android imports through SAF and persists its conversation in app-private SharedPreferences; desktop uses --model and persists chat in the JPVR-backed portable workspace. Both adapters are pluggable and report the configured backend.
+
+**Remaining acceptance work:** no actual Android/desktop inference, browser flow, model integrity verification, target-device resource measurement or cross-platform history round-trip has been run. Android and desktop histories are still separate; manual transfer of Android conversation into the shared workspace is the next data-contract task. Measure RAM, storage, latency, throughput, battery/thermal impact and quality on each target independently.
 
 ### Batch 6 — Shared ANS-100 runtime behavior
 
@@ -229,7 +229,7 @@ The milestone is reached only when all are true:
 2. Android starts its native app without Termux for the supported in-process operations.
 3. Both platforms can create, save, reload, and retrieve local conversation/memory records.
 4. Both can create and inspect bounded tasks using the same lifecycle semantics.
-5. Both accurately report unavailable inference/voice features.
+5. Both accurately report the actual inference backend and its availability, and neither presents unavailable voice features as implemented.
 6. Airplane mode or disconnected network does not break the core local flow.
 7. A portable workspace exported from one platform imports on the other with stable IDs and integrity validation.
 8. Conflicts are surfaced; no silent overwrite occurs.

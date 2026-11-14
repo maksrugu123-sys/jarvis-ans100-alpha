@@ -1,7 +1,7 @@
 # JARVIS Mobile-First Offline Runtime V1
 
 **Status:** architecture decision / implementation contract  
-**Date:** 2026-11-13  
+**Date:** 2026-11-14  
 **Target:** first usable JARVIS running on the user's Android phone  
 **Default operating mode:** local-first and offline-capable
 
@@ -98,13 +98,16 @@ Optional remote features must be separately permissioned, visibly indicated, and
 
 ### Phase C — Offline response engine
 
-- Add a pluggable local inference backend.
-- Evaluate candidate model/runtime combinations on the actual target phone before selecting one.
-- Track model file size, peak memory, first-token latency, generation speed, battery/thermal impact, and language quality.
-- Provide a small deterministic fallback for commands and app navigation when no language model is installed.
-- Never label a fallback or template engine as a full language model.
+**Implemented at source level:** Android and desktop/PWA now have optional LiteRT-LM 0.17.1 adapters using the manually supplied Qwen3-0.6B INT4 no-think model artifact (approximately 347 MB). Android imports the exact file through SAF into app-private storage and runs a CPU Engine behind LocalResponseEngine; desktop uses the optional pinned Python package and an explicit --model path. Both use bounded prompt/history/output limits and disable automatic tool calling. The deterministic Android fallback remains available when no model is installed.
 
-**Acceptance:** airplane-mode text interaction succeeds using the installed local backend, and the app accurately reports the active backend and its limitations.
+**Not yet verified or complete:**
+- No actual model has been loaded and used for inference in this development cycle.
+- Memory, cold/warm load, first-token latency, generation speed, battery/thermal impact and Russian response quality have not been measured on the target phone or desktop.
+- Android checks only the expected filename and size; a trusted model-content digest is not yet checked.
+- Generation is synchronous from the background/server execution path; cancellation and token streaming are not implemented.
+- The current eight Android tests cover the generic conversation repository/coordinator, not the LiteRT model store/engine. Four desktop fake-runtime tests cover the Python adapter. All are AUTHORED, NOT RUN.
+
+**Acceptance:** NOT YET MET. Airplane-mode text interaction must be demonstrated with the actual installed artifact on the target Android device, with measured memory/latency/thermal behavior and accurate backend reporting. Desktop browser and model runtime must be checked separately; passing one platform does not verify the other.
 
 ### Phase D — Reasoning and task loop
 
@@ -189,13 +192,14 @@ Required offline regression scenarios:
 
 ## 9. Immediate implementation priorities
 
-1. Inspect and document the current Android UI-to-runtime call graph.
-2. Define local engine interfaces and the coordinator without changing user-visible behavior.
-3. Implement a local in-process conversation path that does not depend on the Termux bridge.
-4. Add durable local conversation/memory storage behind a repository interface.
-5. Add offline-mode regression tests.
-6. Only then select and integrate a real on-device language model.
-7. Integrate ANS-100 and offline voice as separate, measured stages.
+1. **Completed at source level:** Android UI-to-conversation coordinator, replaceable response-engine boundary and in-process path independent of Termux/network.
+2. **Completed at source level:** optional LiteRT-LM adapter and manual model import on Android; matching optional local model adapter and PWA endpoint on desktop.
+3. **Next implementation batch:** bring Android conversations into the portable workspace/JWS/JWB contract so the same conversation can be manually transferred between phone and PC; preserve local-only operation when no transfer is performed.
+4. Add targeted model-store, inference lifecycle, failure, low-memory and conversation-persistence regression tests; keep them AUTHORED, NOT RUN until test execution is explicitly authorized.
+5. Add bounded cancellation and streaming/progress reporting so long inference does not leave the user without control.
+6. Obtain and validate a trusted model digest, then measure the actual model on the target phone and desktop: cold/warm load, peak RSS, first-token and total latency, token throughput, energy/thermal behavior and Russian quality. Do not infer phone performance from another device's benchmark.
+7. Integrate user-approved memory retrieval and bounded reasoning behind the local coordinator, then compare Python reference and Android ANS-100 behavior using shared fixtures.
+8. Add offline voice only after text interaction, cancellation and memory have been verified.
 
 ## 10. Definition of the first usable JARVIS
 

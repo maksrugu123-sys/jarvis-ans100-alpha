@@ -1821,3 +1821,33 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** current branch/file readback, static source inspection, and final GitHub readback only. The eight Kotlin tests are **AUTHORED, NOT RUN**. Gradle sync/build, APK/AAB, Android compilation/install, Termux-to-app or airplane-mode runtime checks, performance/RAM/battery measurements, Python tests, CI and GitHub Actions are **NOT RUN**. No build or test command was issued.
 
 **Next meaningful step:** evaluate a real compact offline model on the target phone and implement one backend behind LocalResponseEngine; then unify portable conversation history with the PC workspace contract.
+
+
+## 2026-11-14 — Repository-wide source audit and offline LLM status alignment
+
+**Цель:** сверить всю структуру текущей рабочей ветки после добавления LiteRT-LM, выявить расхождение между фактическими исходниками и статусом в архитектуре/README/handoff, а также зафиксировать реальные границы Android/PC conversation paths.
+
+**Объём аудита:** получено полное Git tree рабочей ветки без truncation (222 файла: app, tools, docs, schemas и root configuration); сверены branch head, сравнение с main, последние commit summaries, Android model store/response engine/ViewModel/Compose UI, desktop inference adapter/server/PWA endpoints, portable workspace path, тестовые inventories, handoff и основные platform contracts. История и исходники просмотрены статически; это не построчная проверка каждого из 222 файлов и не runtime audit.
+
+**Изменено в этом documentation-only batch:**
+- AGENTS.md — current snapshot обновлён: optional Qwen3/LiteRT-LM adapter существует на уровне исходника; fallback остаётся при отсутствии модели; отдельно указаны ограничения хранения и отличие LLM от ANS-100.
+- README.md — current status и platform summary отражают Android/desktop adapters, ручную установку модели, раздельные хранилища истории и отсутствие runtime verification.
+- docs/JARVIS_ARCHITECTURE.md — уточнён §3.54 и добавлен §3.55 с контрактом LiteRT-LM, лимитами, storage boundaries, проверками и следующими задачами.
+- docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md — Phase C и ближайшие приоритеты переведены в фактическое состояние: adapter source implemented, acceptance not yet met.
+- docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md — Batch 5 и критерий доступности backend приведены к текущему source-level состоянию.
+- Никакой source code, runtime dependency, model artifact или test code не менялись в этом batch.
+
+**Подтверждённая реализация на исходном уровне:** Android использует LiteRT-LM 0.17.1, вручную импортируемый Qwen3-0.6B INT4 no-think model file, CPU backend, context ceiling 1,280 tokens, output ceiling 96 tokens и доступную RAM guard 1,280 MiB. Desktop/PWA использует pinned litert-lm-api 0.17.1, CLI --model, bounded prompt/history/output и authenticated conversation endpoints с workspace revision CAS. Модель не bundled и не auto-downloaded. Вызовы не включают automatic tool calling.
+
+**Существенные найденные ограничения:**
+- Android conversation остаётся в app-private SharedPreferences; desktop conversation сохраняется в portable JPVR workspace. Android chat пока не попадает в JWS/JWB, поэтому общая история между телефоном и PC отсутствует; live sync/pairing также нет.
+- Импорт Android проверяет имя и размер файла, но не publisher digest / содержимое модели.
+- В текущем adapter stage нет streaming/cancellation. No-think Qwen adapter не заменяет Reasoning Engine, Memory Retrieval или ANS-100 NetworkRuntime; offline voice не реализован.
+- Восемь Android tests относятся к общему repository/coordinator, а не к LiteRT model store/engine. Четыре desktop adapter tests используют fake runtime. Оба набора **AUTHORED, NOT RUN**.
+- Нет измерений Android/PC RAM, скорости, first-token latency, батареи/температуры или русского качества; наличие исходников не доказывает runtime compatibility.
+
+**Проверки:** GitHub branch/tree/file readback, commit metadata, compare with main и статический cross-file review. Build/test commands не запускались. Python/Kotlin tests, Gradle sync/build, APK/AAB, actual model load/inference, Android device, desktop browser/PWA, airplane mode, CI и GitHub Actions — **NOT RUN**. Executable tests were not applicable to this documentation-only alignment batch.
+
+**Ветки:** изменения планируются только в mobile-first-offline-v1. На момент аудита branch head был 2b2adf83a5d3817fbdc0c46b86c3345ec7cb7c99; main был f8d21607af468e92abfcf1902a915511b2c940c6. Main не изменялся.
+
+**Следующий meaningful step:** интегрировать Android conversation records с portable shared workspace/JWS/JWB contract, сохранив локальный путь; затем добавить model-integrity/cancellation/test coverage и запросить отдельное разрешение на измерение фактической работы модели на телефоне и PC.

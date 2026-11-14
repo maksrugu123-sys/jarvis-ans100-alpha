@@ -4480,7 +4480,7 @@ Task Loop can now pass either legacy `ApprovalGrant` or `SignedApprovalEnvelope`
 
 The native Compose screen now calls JarvisViewModel → LocalConversationCoordinator → LocalConversationRepository and an injected LocalResponseEngine. SharedPreferencesConversationStorage persists a strict V1 snapshot in app-private preferences. Local send/reload/clear operations are performed on the existing background executor. This path does not call LocalRuntimeBridgeClient, open a socket or require Termux or network access.
 
-The current LocalFallbackResponseEngine is intentionally limited to greetings, /help and /status; other prompts receive an explicit message that no language model is integrated. It is not an LLM, natural-language parser, ANS-100 runtime, symbolic planner or Task Loop. No external actions are performed. The UI discloses this limitation and allows explicit deletion of local conversation history.
+When no model is installed, LocalFallbackResponseEngine remains intentionally limited to greetings, /help and /status; other prompts receive an explicit message that the language model is unavailable. The optional LiteRT-LM adapter is documented separately in §3.55. Neither this fallback nor the Qwen language model is the ANS-100 neural runtime, a verified natural-language task parser, the symbolic planner or the Task Loop. No external actions are performed. The UI discloses the active backend and allows explicit deletion of local conversation history.
 
 The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,000 characters per message and 1 MiB encoded state. It requires alternating USER/ASSISTANT messages, unique IDs, positive non-decreasing timestamps, strict UTF-8/Base64URL decoding and full-pair publication. A failed SharedPreferences commit raises an error and does not report the exchange as saved.
 
@@ -4490,4 +4490,35 @@ The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,
 
 **Verification:** GitHub source readback and static cross-file inspection only. Gradle sync/build, Kotlin tests, APK/AAB, emulator/device install, airplane-mode behavior, performance/RAM/battery measurements, CI and GitHub Actions are NOT RUN.
 
-**Next:** evaluate an actual offline language model on the user's Android device and implement it behind LocalResponseEngine; then connect Android conversations to the shared PC/Android workspace contract. Do not spend the next stage expanding signer/enrollment/security infrastructure: the current user-facing priority is a working local assistant. Keep external actions disabled until separately prioritized and all required safety guarantees are independently verified.
+**Next:** the optional model adapter is now present at source level (§3.55), but still needs authorized runtime/device verification. The next implementation priority is to move Android conversations into the portable shared workspace contract and add cancellation/streaming and model-integrity handling. Do not spend the next stage expanding signer/enrollment/security infrastructure: the user-facing priority is a usable local assistant. Keep external actions disabled until separately prioritized and all required safety guarantees are independently verified.
+
+
+### 3.55. Opt-In Offline LiteRT-LM Conversation Backend V0.1
+
+**Status:** IMPLEMENTED at source level for Android and desktop/PWA; runtime compatibility, model inference, performance and device behavior are NOT VERIFIED. This is a language-model adapter, not an implementation of the ANS-100 neural runtime. Model/runtime: LiteRT-LM 0.17.1 with the Qwen3-0.6B INT4 no-think artifact, manually supplied by the user.
+
+**Shared model contract**
+- Artifact filename: `qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm`; model repository: https://huggingface.co/litert-community/Qwen3-0.6B-int4. The file is approximately 347 MB, is not bundled in the repository or APK, and is not downloaded by JARVIS.
+- The selected no-think model is a compact first inference target for short direct answers. It is not selected as a capable multi-step reasoning model. A model file passing the current filename/size checks is not cryptographic or semantic proof that its contents are authentic or compatible.
+- Both adapters use CPU execution, a 1,280-token context ceiling, at most 96 generated tokens, a 900-character user prompt limit, a short four-message history window, and disabled automatic tool calling. There is no cloud fallback, model auto-download, shell/tool integration or external action execution.
+- LiteRT-LM official API references: https://ai.google.dev/edge/litert-lm/android and https://ai.google.dev/edge/litert-lm/python.
+
+**Android source path**
+- `LiteRtLmModelStore` imports the exact expected filename through Android Storage Access Framework into app-private files. It bounds the imported file to 300–400 MiB, writes a temporary file and fsyncs before publication. It currently checks filename and size only; it does not verify a publisher-provided cryptographic digest.
+- `LiteRtLmResponseEngine` lazily initializes a CPU Engine on the conversation background executor, uses a 1,280-token engine limit and 96-token response limit, and closes each Conversation after generation. It rejects model initialization when Android reports low memory or less than 1,280 MiB available. This is a guardrail, not an OOM guarantee or proof that the model fits the target phone.
+- If the artifact is absent, the bounded deterministic greeting/help/status fallback is used and must continue to identify itself as a fallback.
+
+**Desktop/PWA source path**
+- `tools/jarvis_app/local_inference.py` wraps the optional `litert-lm-api==0.17.1` Python package. The console accepts an explicit `--model` path; no model is fetched automatically.
+- Authenticated GET/POST `/api/conversation` expose backend availability and use workspace revision compare-and-swap when persisting messages. The PWA send control remains unavailable unless both the model path and Python runtime package are available.
+- Desktop conversation messages live in portable workspace `records.conversations`, so they can be included in manual JWS/JWB workspace transfer/backup.
+
+**Storage boundary and product limitations**
+- Android conversation history is still stored separately in app-private SharedPreferences. It is not currently imported into or exported through the shared workspace/JWS/JWB path. Desktop and Android therefore do not share one continuous conversation history; there is no live sync or device pairing.
+- The Qwen response engine is not connected to ReasoningEngine, Task Loop, CQE, Memory Retrieval or ANS-100 NetworkRuntime. Offline speech is not implemented.
+- Requests are synchronous within the respective background/server execution path; user-visible streaming and cancellation are not implemented in this adapter stage.
+- The Android app currently has generic conversation repository/coordinator tests, not dedicated LiteRT model-store or model-engine tests. The desktop adapter has fake-runtime tests. All are AUTHORED, NOT RUN under the current execution restriction.
+
+**Verification:** GitHub source readback and static cross-file review only. No Python tests, Kotlin tests, Gradle sync/build, APK/AAB, actual model load/inference, Android or PC runtime, browser/PWA flow, airplane-mode check, RAM/latency/throughput/battery/thermal benchmark, CI or GitHub Actions was run. No device measurement is claimed.
+
+**Next:** unify Android conversation storage with the existing portable workspace contract; add model-store/backend regression tests, cancellation and streaming; obtain a trusted model digest and validate model contents where the distribution provides one; then, only after separate user authorization, measure the model on the target Android phone and a desktop. Keep LLM capability, symbolic reasoning and ANS-100 research status separate.
