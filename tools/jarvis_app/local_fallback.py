@@ -135,6 +135,8 @@ class LocalFallbackResponseEngine:
                 plan_notice = f" Нужно уточнение: {question}"
             else:
                 plan_notice = f" Ядро составило предварительный план из {min(step_count, 5)} шагов."
+                if raw_plan.get("context_available") is True:
+                    plan_notice += " Недавняя история доступна как кандидат; точную связь нужно сверить с ней."
         if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
             confidence = 0.0
         confidence = min(1.0, max(0.0, float(confidence)))

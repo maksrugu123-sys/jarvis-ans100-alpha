@@ -212,6 +212,52 @@ class LocalConversationRuntimeTest {
     }
 
     @Test
+    fun corePassesRecentConversationHistoryIntoPreGenerationContextAnalysis() {
+        val storage = MemoryStorage()
+        val repo = repository(storage)
+        repo.appendExchange(
+            "Мы обсуждаем ошибку в проекте JARVIS",
+            "Я нашёл описание проблемы.",
+        )
+
+        var observedUnderstanding: LocalUnderstanding? = null
+        var observedHistorySize = 0
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake-language-engine"
+            override val languageModelConfigured = true
+
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+            ): String = "legacy reply"
+
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+                memoryContext: List<LocalWorkspaceMemory>,
+                signalContext: ConversationSignalContext?,
+                understandingContext: LocalUnderstanding?,
+            ): String {
+                observedUnderstanding = understandingContext
+                observedHistorySize = recentHistory.size
+                return "model reply"
+            }
+        }
+        val coordinator = LocalConversationCoordinator(repo, engine)
+
+        val messages = coordinator.send("Продолжай с этим")
+
+        val analysis = observedUnderstanding
+            ?: throw AssertionError("JARVIS Core did not pass its analysis")
+        assertEquals("model reply", messages.last().text)
+        assertEquals(2, observedHistorySize)
+        assertTrue(analysis.refersToPreviousContext)
+        assertTrue(analysis.hasRecentUserContext)
+        assertTrue(analysis.reasoningPlan.contextAvailable)
+        assertTrue(!analysis.reasoningPlan.requiresClarification)
+    }
+
+    @Test
     fun coreUsesOnlyApprovedWorkspaceMemoriesAndPassesNeuralSignalToLanguageEngine() {
         val cache = LocalWorkspaceMemoryCache()
         cache.replace(listOf(

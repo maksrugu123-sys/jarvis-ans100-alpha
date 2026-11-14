@@ -314,6 +314,9 @@ class LocalFallbackResponseEngine : LocalResponseEngine {
                     if (plan.requiresClarification && plan.clarificationQuestion.isNotBlank()) {
                         append(plan.clarificationQuestion)
                     } else {
+                        if (plan.contextAvailable && understandingContext.refersToPreviousContext) {
+                            append("Недавняя история доступна как кандидат; точную связь нужно сверить с ней. ")
+                        }
                         append("Сформирован предварительный план из ")
                         append(plan.steps.size)
                         append(" шагов. ")

@@ -73,6 +73,22 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertTrue(result["reasoning_plan"]["context_available"])
         self.assertFalse(result["reasoning_plan"]["requires_clarification"])
 
+    def test_core_trace_reports_history_as_available_not_semantically_resolved(self) -> None:
+        engine = _CaptureLanguageEngine()
+        history = [
+            {"role": "user", "content": "Мы обсуждаем ошибку в проекте JARVIS"},
+            {"role": "assistant", "content": "Я нашёл описание проблемы."},
+        ]
+        core = JarvisCore(engine, signal_runtime=_SignalRuntime())
+        try:
+            answer, trace = core.respond("Продолжай с этим", history)
+        finally:
+            core.close()
+        self.assertEqual("Ответ-заглушка", answer)
+        self.assertTrue(trace["understanding_has_recent_user_context"])
+        self.assertTrue(trace["natural_language_plan_context_available"])
+        self.assertFalse(trace["natural_language_plan_execution_authorized"])
+
     def test_matches_the_shared_desktop_and_android_understanding_fixtures(self) -> None:
         fixture = (
             Path(__file__).resolve().parents[2]
@@ -149,6 +165,7 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertLessEqual(len(safe["key_terms"][0]), 48)
         self.assertNotIn("unexpected_instruction", safe)
         self.assertEqual("JARVIS_REASONING_PLAN_V1", safe["reasoning_plan"]["schema"])
+        self.assertFalse(safe["reasoning_plan"]["context_available"])
         self.assertFalse(safe["reasoning_plan"]["execution_authorized"])
         self.assertIsNone(_bounded_understanding_context({"schema": "unknown"}))
 

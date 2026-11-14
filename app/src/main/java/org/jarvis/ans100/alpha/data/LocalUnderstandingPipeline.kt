@@ -54,7 +54,7 @@ data class LocalUnderstanding(
         reasoningPlan.steps.forEachIndexed { index, step ->
             append(index + 1).append(". ").append(step).append('\n')
         }
-        append("Предыдущий контекст доступен: ").append(reasoningPlan.contextAvailable).append('\n')
+        append("Недавняя история доступна как контекст-кандидат, не как доказательство точной ссылки: ").append(reasoningPlan.contextAvailable).append('\n')
         append("Выполнение разрешено: ").append(reasoningPlan.executionAuthorized).append('\n')
         if (reasoningPlan.requiresClarification) {
             append("Требуется уточнение: ").append(reasoningPlan.clarificationQuestion).append('\n')
@@ -227,7 +227,7 @@ class LocalUnderstandingPipeline {
         private const val MAX_ENTITIES = 5
         private const val MAX_EVIDENCE = 5
         private const val MAX_PLAN_STEPS = 5
-        private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 4
+        private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 2
         private const val MIN_TERM_LENGTH = 3
         private val TOKEN = Regex("[\\p{L}\\p{N}]+")
         private val ENTITY = Regex("(?<![\\p{L}\\p{N}_])[A-ZА-ЯЁ][\\p{L}\\p{N}_-]{1,47}(?![\\p{L}\\p{N}_])")
