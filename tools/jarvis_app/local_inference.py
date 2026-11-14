@@ -81,6 +81,7 @@ def _bounded_understanding_context(
             "steps": steps,
             "requires_clarification": raw_plan.get("requires_clarification") is True,
             "clarification_question": question,
+            "context_reference_resolved": raw_plan.get("context_reference_resolved") is True,
             "execution_authorized": False,
             "scope": "bounded_template_plan_only",
         }
@@ -101,6 +102,7 @@ def _bounded_understanding_context(
         "key_terms": list_field("key_terms", 10),
         "contains_negation": value.get("contains_negation") is True,
         "refers_to_previous_context": value.get("refers_to_previous_context") is True,
+        "has_recent_user_context": value.get("has_recent_user_context") is True,
         "asks_for_explanation": value.get("asks_for_explanation") is True,
         "evidence": list_field("evidence", 5),
         "reasoning_plan": safe_plan,
