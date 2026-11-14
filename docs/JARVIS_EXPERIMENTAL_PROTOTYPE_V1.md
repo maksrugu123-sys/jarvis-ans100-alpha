@@ -46,7 +46,8 @@ The same Python console can run locally on an Android phone through Termux. This
 From Termux, install Git/Python if they are not already present, then run:
 
 ```sh
-pkg install git pythongit clone -b experiment/jarvis-integrated-prototype-v1 https://github.com/maksrugu123-sys/jarvis-ans100-alpha.git
+pkg install git python
+git clone -b experiment/jarvis-integrated-prototype-v1 https://github.com/maksrugu123-sys/jarvis-ans100-alpha.git
 cd jarvis-ans100-alpha
 python3 -m tools.jarvis_app --port 8765 --platform android
 ```
@@ -75,7 +76,7 @@ The existing Jetpack Compose client remains in `app/` (application ID `org.jarvi
 - an in-process ten-neuron Kotlin ANS-100 signal pass;
 - optional Termux extension for the authenticated loopback Python bridge, shared workspace, task/session administration, symbolic reasoning preview, and encrypted workspace transfer/backup.
 
-**Important platform boundary:** the 10,000-feature Python dialogue classifier is currently connected to the PC/Python console path. The native Android client currently runs its separate ten-neuron Kotlin signal pre-pass. Do not describe the Android app as running the Python 10k classifier when the optional Termux bridge is absent.
+**Important platform boundary:** the 10,000-feature Python dialogue classifier is connected to the Python console path, which can run on a desktop or as a Termux-hosted PWA on Android. The native Android Compose client remains separate and currently runs its ten-neuron Kotlin signal pre-pass. Do not describe the native Compose app as running the Python 10k classifier.
 
 No APK is included or claimed. Android compilation, installation and device inference remain unverified.
 
