@@ -121,6 +121,14 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun tokenizerPreservesUnicodeLettersOutsideLatinAndCyrillic() {
+        val result = pipeline.analyze("Vergleiche Größe und Straße")
+        assertTrue(result.keyTerms.contains("vergleiche"))
+        assertTrue(result.keyTerms.contains("größe"))
+        assertTrue(result.keyTerms.contains("straße"))
+    }
+
+    @Test
     fun unknownTextDoesNotPretendToBeUnderstood() {
         val result = pipeline.analyze("абракадабра фывапролд")
         assertEquals("statement_or_unknown", result.intent)
