@@ -325,6 +325,29 @@ class JarvisCore(
         return repository.appendExchange(clean, response)
     }
 
+    fun sendWithExternalResult(
+        prompt: String,
+        assistantResponse: String,
+        signalContext: ConversationSignalContext? = null,
+    ): List<LocalConversationMessage> {
+        val cleanPrompt = prompt.trim()
+        val cleanResponse = assistantResponse.trim()
+        if (cleanPrompt.isEmpty() ||
+            cleanPrompt.length > LocalConversationRepository.MAX_MESSAGE_CHARS ||
+            cleanPrompt.any { it == '\u0000' } ||
+            cleanResponse.isEmpty() ||
+            cleanResponse.length > LocalConversationRepository.MAX_MESSAGE_CHARS ||
+            cleanResponse.any { it == '\u0000' }
+        ) {
+            throw LocalConversationException("Внешний результат поиска или исходный запрос имеет недопустимый размер.")
+        }
+        val context = repository.load().takeLast(MAX_CONTEXT_MESSAGES)
+        lastUnderstanding = LocalUnderstandingPipeline().analyze(cleanPrompt, context)
+        lastSignalContext = signalContext
+        lastRetrievedMemoryCount = 0
+        return repository.appendExchange(cleanPrompt, cleanResponse)
+    }
+
     fun replaceWorkspaceMemories(records: List<LocalWorkspaceMemory>) =
         memoryCache.replace(records)
 
@@ -401,6 +424,12 @@ class LocalConversationCoordinator(
         prompt: String,
         signalContext: ConversationSignalContext? = null,
     ): List<LocalConversationMessage> = core.send(prompt, signalContext)
+    fun sendWithExternalResult(
+        prompt: String,
+        assistantResponse: String,
+        signalContext: ConversationSignalContext? = null,
+    ): List<LocalConversationMessage> =
+        core.sendWithExternalResult(prompt, assistantResponse, signalContext)
     fun replaceWorkspaceMemories(records: List<LocalWorkspaceMemory>) =
         core.replaceWorkspaceMemories(records)
     fun clearWorkspaceMemories() = core.clearWorkspaceMemories()

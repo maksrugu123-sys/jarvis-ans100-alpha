@@ -39,6 +39,9 @@ import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import org.jarvis.ans100.alpha.data.shouldUseTermuxSignal
+import org.jarvis.ans100.alpha.data.AndroidWebSearchService
+import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
+import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
@@ -130,6 +133,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         application.applicationContext, modelStore,
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
+    private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
     private val localSignalRuntime = LocalConversationSignalRuntime(
         SharedPreferencesConversationSignalStorage(application.applicationContext),
@@ -504,9 +508,42 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             )
             return
         }
+        val searchIntent = AndroidWebSearchIntent.extract(clean)
         mutableState.value = before.copy(
             conversation = before.conversation.copy(isBusy = true, error = null),
         )
+        if (searchIntent != null) {
+            conversationExecutor.execute {
+                try {
+                    val results = androidWebSearch.search(searchIntent.query)
+                    val response = formatAndroidWebSearchReply(searchIntent.query, results)
+                    val messages = conversationCoordinator.sendWithExternalResult(clean, response)
+                    mainHandler.post {
+                        val current = mutableState.value
+                        mutableState.value = current.copy(
+                            conversation = current.conversation.copy(
+                                messages = messages,
+                                isBusy = false,
+                                error = null,
+                                dialogFeaturePrediction = null,
+                                dialogFeatureError = null,
+                            ),
+                        )
+                    }
+                } catch (error: Exception) {
+                    mainHandler.post {
+                        val current = mutableState.value
+                        mutableState.value = current.copy(
+                            conversation = current.conversation.copy(
+                                isBusy = false,
+                                error = error.message ?: "Не удалось выполнить интернет-поиск.",
+                            ),
+                        )
+                    }
+                }
+            }
+            return
+        }
         conversationExecutor.execute {
             try {
                 // The sparse intent classifier is an optional side channel; it never blocks chat.
