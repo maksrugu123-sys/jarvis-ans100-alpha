@@ -43,7 +43,7 @@ _ENTITY_STOPWORDS = frozenset({
 
 
 def _contains_phrase(tokens: Sequence[str], phrase: str) -> bool:
-    parts = tuple(phrase.casefold().split())
+    parts = tuple(phrase.lower().split())
     if not parts:
         return False
     width = len(parts)
@@ -160,7 +160,7 @@ def analyze_text(
     if not isinstance(value, str):
         value = ""
     text = value.strip().replace("\x00", "")[:MAX_INPUT_CHARS]
-    tokens = [token.casefold() for token in _TOKEN.findall(text)[:MAX_TOKENS]]
+    tokens = [token.lower() for token in _TOKEN.findall(text)[:MAX_TOKENS]]
     key_terms = list(dict.fromkeys(
         token for token in tokens if len(token) >= 3 and token not in _STOP
     ))[:10]
@@ -218,7 +218,7 @@ def analyze_text(
 
     entities = list(dict.fromkeys(
         match.group(0) for match in _ENTITY.finditer(text)
-        if match.group(0).casefold() not in _ENTITY_STOPWORDS
+        if match.group(0).lower() not in _ENTITY_STOPWORDS
     ))[:5]
     has_recent_context = any(
         isinstance(item, Mapping)
