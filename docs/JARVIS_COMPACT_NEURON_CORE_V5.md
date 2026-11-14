@@ -279,6 +279,6 @@ A compact representation that saves bytes but changes the learning trajectory is
 
 **SPECIFIED / COMPACT F64 CODEC + PYTHON LRU WORKING-SET IMPLEMENTED AT SOURCE LEVEL / TESTS AUTHORED, NOT RUN / RESOURCE BENEFIT NOT MEASURED.**
 
-This specification does not change the Oracle, neuron equations, plasticity rules, STARTER, JPVR format or production architecture. No tests or benchmarks are claimed.
+This specification does not change the Oracle, neuron equations, plasticity rules, STARTER, JPVR format or production architecture. The new codec and working-set tests are authored but not run; no test pass or benchmark result is claimed.
 
 The compact F64 prototype now exists as a resident-state codec plus a bounded per-neuron LRU manager backed by existing JPVR checkpoints. It is not integrated with NetworkRuntime; JPVR disk records remain JSON V1 and multi-neuron timestamp commits remain outside this manager. The next technical action is to compare the existing Python reference representation with the packed working set under the staged 1/10/100/1,000/10,000 scale protocol, then design a network-level transaction boundary. Do not add quantization or alter temporal-memory/learning equations in the same experiment.

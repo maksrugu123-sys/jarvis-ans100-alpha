@@ -4622,7 +4622,7 @@ This is a PC capability only. Android continues independently; remote control of
 - Acceptance remains staged: inspect and verify 1 → 10 → 100 → 1,000 → 10,000. Do not call the 10,000 profile verified or select it as a default until correctness, resource and stability results are recorded on the intended PC environment.
 
 **Storage and platform boundary**
-- `JPVRNetworkCheckpointStore` stores the complete network snapshot in a BLOB plus CHECKPOINT commit. It does not page inactive neurons out of RAM, lazily fault neuron state in, or provide an LRU/JNVM virtual-memory manager. Flash persistence is not equivalent to active RAM.
+- `JPVRNetworkCheckpointStore` stores the complete network snapshot in a BLOB plus CHECKPOINT commit; that whole-network checkpoint path does not page inactive neurons out of RAM or fault them in on demand. A separate per-neuron LRU/JNVM working-set prototype is specified in §3.61, but is not integrated with `NetworkRuntime`. Flash persistence is not equivalent to active RAM.
 - The current Python coordinator is a desktop/Termux reference component. Android's in-process Kotlin signal runtime remains a two-neuron feature; the native Android 10,000-neuron runtime, packed state representation, Android/PC numerical parity, and device RAM/CPU/thermal measurements are NOT IMPLEMENTED / NOT MEASURED.
 - The optional Termux extension must remain optional. The Android app must continue to function without it; this increment does not route ordinary Android chat through a 10,000-node Python network.
 - The 10,000-node capacity ceiling is not evidence of intelligence, semantic understanding, useful learning, or biological equivalence. Dialogue STDP/R-STDP remains disabled.
