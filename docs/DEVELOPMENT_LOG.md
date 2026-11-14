@@ -1959,3 +1959,25 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** static source edits and GitHub readback only. No Python tests, benchmark, import/syntax checks, Gradle build, APK/AAB, CI, Android/PC runtime, or device RAM/CPU/thermal measurement was run. No test or performance result is claimed.
 
 **Next:** execute the 1 → 10 → 100 → 1,000 → 10,000 network scaling protocol on PC, record memory/latency/stability, then design packed-state/JNVM paging and a native Kotlin runtime with numerical parity before claiming 10,000-neuron Android support.
+
+
+## 2026-11-14 — Add compact F64 resident state and bounded JNVM working set V1
+
+**Objective:** establish a first source-level paging layer for individual ANS-100 neuron states, reusing the existing JPVR neuron COW index without changing the Numerical Oracle or requiring Termux for Android conversation.
+
+**Added:**
+- tools/neuron_runtime/compact_state.py: versioned JPCS V1 little-endian packed resident-state codec. It preserves all current neuron/synapse state using exact F64 numerical fields, including independent synapse clocks and R-STDP context metadata; shared immutable parameter bundles are interned by content digest.
+- tools/neuron_runtime/working_set.py: bounded single-writer LRU resident cache, deterministic 128-way JPVR sharding, per-neuron record-version CAS, cold-load, explicit flush/evict, dirty-state write-before-evict, backpressure on persistence failure and uncertain-commit reconciliation.
+- tools/neuron_runtime/test_compact_state.py: codec round-trip, determinism, rule/optional-state and malformed-payload tests.
+- tools/neuron_runtime/test_working_set.py: LRU, dirty flush, backpressure, candidate isolation, uncertain-commit, clock-epoch and real JPVR temporary-directory round-trip tests.
+- docs/JARVIS_JNVM_WORKING_SET_V1.md: contract and limitations.
+
+**Changed:** README.md, docs/JARVIS_ARCHITECTURE.md section 3.61, docs/JARVIS_COMPACT_NEURON_CORE_V5.md and docs/JARVIS_10K_NEURON_SCALING_V1.md now distinguish the compact resident-state prototype from the existing JSON durable record format and whole-network checkpoint.
+
+**Behavior / boundaries:** the Python manager operates on one neuron at a time and is not integrated into NetworkRuntime; it does not provide atomic multi-neuron timestamp commits. JPVR shards use the existing 4,096-page default materialized catalog and append-only store; compaction is absent. Android's in-process Kotlin runtime remains two neurons and remains independent of the optional Termux extension.
+
+**Tests:** the two new focused suites are AUTHORED, NOT RUN. Existing network scheduler/codec/store suites were not run.
+
+**Verification:** GitHub source readback and static cross-file editing only. No Python syntax/import checks, unit tests, benchmark, PC/Android runtime, RAM/latency/thermal measurements, Gradle/APK/AAB build, CI or GitHub Actions were run. No performance saving is claimed.
+
+**Next:** run the staged packed-vs-reference measurement on PC; design network-level timestamp transaction coordination; implement a native Kotlin equivalent with Python/Kotlin golden-vector parity before claiming 10,000-neuron Android support.

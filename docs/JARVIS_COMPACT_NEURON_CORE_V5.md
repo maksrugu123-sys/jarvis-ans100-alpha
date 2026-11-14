@@ -1,7 +1,7 @@
 # JARVIS Compact Adaptive Neuron Core V5
 ## Proposal: maximum useful capability per byte and per operation
 
-**Status:** architecture specified; V5.1 reference resource-baseline harness AUTHORED / NOT RUN; compact-state prototype not yet implemented; no resource benefit measured  
+**Status:** architecture specified; compact F64 resident-state codec and bounded Python LRU JNVM/JPVR working-set prototype IMPLEMENTED at source level; focused tests AUTHORED / NOT RUN; no resource benefit measured  
 **Date:** 7 November 2026  
 **Scope:** first Adaptive LIF-DT neuron, synapse-state representation, event path, and future multi-neuron memory organization  
 **Compatibility rule:** preserve the current Numerical Oracle, V4/V4.1/V4.2 protocols, canonical STARTER values, and simultaneous-event semantics until a separate experiment authorizes a behavioral change.
@@ -277,8 +277,8 @@ A compact representation that saves bytes but changes the learning trajectory is
 
 ## 10. Current status and next decision
 
-**SPECIFIED / V5.1 BASELINE HARNESS AUTHORED, NOT RUN / COMPACT PROTOTYPE NOT IMPLEMENTED / NOT MEASURED.**
+**SPECIFIED / COMPACT F64 CODEC + PYTHON LRU WORKING-SET IMPLEMENTED AT SOURCE LEVEL / TESTS AUTHORED, NOT RUN / RESOURCE BENEFIT NOT MEASURED.**
 
 This specification does not change the Oracle, neuron equations, plasticity rules, STARTER, JPVR format or production architecture. No tests or benchmarks are claimed.
 
-The V4.2 and V4.3 user-run evidence is now available. The next technical action is to run the V5.1 reference-baseline harness on Android Termux. Only after the baseline is recorded should the F64 packed-state prototype be added and compared with the Oracle. Do not implement new temporal-memory or quantization mechanisms in the same change; isolate representation cost and prove behavioural equivalence.
+The compact F64 prototype now exists as a resident-state codec plus a bounded per-neuron LRU manager backed by existing JPVR checkpoints. It is not integrated with NetworkRuntime; JPVR disk records remain JSON V1 and multi-neuron timestamp commits remain outside this manager. The next technical action is to compare the existing Python reference representation with the packed working set under the staged 1/10/100/1,000/10,000 scale protocol, then design a network-level transaction boundary. Do not add quantization or alter temporal-memory/learning equations in the same experiment.

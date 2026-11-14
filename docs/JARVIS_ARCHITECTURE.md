@@ -4630,3 +4630,35 @@ This is a PC capability only. Android continues independently; remote control of
 **Verification:** GitHub source readback and static edit review only. The new tests and scaling benchmark are AUTHORED, NOT RUN. No Python test, benchmark, import/syntax command, Gradle build, APK/AAB, CI, Android/PC runtime, or device resource measurement was run.
 
 **Next:** run the scaling protocol on a PC from the smallest profile upward; use the measured results to design a packed state/JNVM paging layer, then port the same bounded numerical contract to native Kotlin before claiming Android 10,000-neuron support. See [JARVIS 10,000-Neuron Scaling V1](JARVIS_10K_NEURON_SCALING_V1.md).
+
+
+### 3.61. Compact F64 Neuron State and Bounded JNVM Working Set V1
+
+**Status:** source implementation on mobile-first-offline-v1; compact codec and LRU working-set tests AUTHORED, NOT RUN. This is a per-neuron Python reference manager, not a production NCC/JNVM service or an integrated multi-neuron scheduler.
+
+**Compact resident codec**
+- tools/neuron_runtime/compact_state.py defines versioned JPCS V1 little-endian packed state. Numerical fields use exact IEEE-754 binary64; no quantization or numerical equation change is introduced.
+- The codec preserves all current mutable NeuronState and SynapseState values, including optional last-spike time, independent STDP/eligibility clocks, and R-STDP context and start time. Unknown flags/versions, malformed IDs, bad lengths, missing parameter entries and trailing bytes are rejected.
+- Shared immutable parameter bundles are interned in RAM using a 128-bit truncated SHA-256 content key. This is exact-value deduplication only; the runtime has no stable semantic parameter-version registry yet.
+- The codec is the in-memory resident representation. Durable JPVR checkpoint records continue using the existing canonical JSON JNVM V1 schema; no durable packed-format migration or disk-size saving is claimed.
+
+**JPVR backing and LRU**
+- tools/neuron_runtime/working_set.py provides ShardedJPVRNeuronStore and NeuronWorkingSet.
+- The store maps each stable neuron object ID to one of 128 deterministic shard files. Each shard uses the existing JPVR neuron COW INDEX and record-version CAS. Shards are opened for one operation and then closed.
+- The LRU working set defaults to 64 resident neurons and permits an explicit capacity up to 10,000. Cold entries load on demand and active entries move to the most-recently-used end.
+- Mutations are prepared on an isolated one-neuron candidate, packed only after a successful operation, and marked dirty in RAM. Dirty eviction first writes to JPVR; a failed write keeps the dirty entry resident and blocks admission.
+- An uncertain JPVR commit pins the entry. reconcile_neuron must establish whether the candidate was committed before a retry; blind retries are rejected.
+- The caller supplies the 128-bit clock epoch. A checkpoint from another epoch is rejected rather than silently rebased.
+
+**Transaction and scaling limitations**
+- This manager commits one neuron at a time. It is not yet integrated into NetworkRuntime, and it does not provide atomic publication of all neuron candidates touched by a common timestamp. Do not route the multi-neuron network scheduler through these separate commits until a network-level commit coordinator exists.
+- Each shard's existing JPVR API materializes a bounded page catalog (default 4,096 pages). The current writer is append-only and no compaction/free-page reuse is provided here. Long-lived shards can reach the catalog bound; callers receive a persistence error and dirty state remains resident.
+- The complete NetworkRuntime plus JPVRNetworkCheckpointStore path remains a separate whole-network snapshot implementation.
+- Android's standalone Kotlin signal pass remains two neurons. Native Kotlin packed state, Android JPVR/JNVM paging, Python/Kotlin parity and device resource measurements remain NOT IMPLEMENTED / NOT MEASURED. Termux stays optional.
+- One-neuron durable commits do not make cross-neuron event delivery exactly once and do not replace NCC/CQE ownership.
+
+**Tests:** tools/neuron_runtime/test_compact_state.py and tools/neuron_runtime/test_working_set.py are AUTHORED, NOT RUN. They cover all-rule packed round trips, codec corruption/bounds, LRU reload, write-before-evict, storage backpressure, candidate isolation, uncertain-commit reconciliation, epoch mismatch and an actual JPVR temporary-directory round trip.
+
+**Verification:** GitHub source readback and static cross-file review only. No Python syntax/import check, tests, benchmark, Android/PC runtime, build, CI or device measurement was run.
+
+**Next:** compare packed-state versus reference-object memory/time on the PC using the staged scale profiles; design network-level timestamp transactions; only then port the packed representation and working-set rules to native Kotlin and test numerical parity.

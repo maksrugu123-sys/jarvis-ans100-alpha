@@ -51,7 +51,7 @@ The boundary tests are in `tools/neuron_runtime/test_network_limits.py`. They co
 ## 4. What this does not yet provide
 
 - **No Android 10,000-neuron runtime:** the native Kotlin signal pass remains two neurons. The Python network coordinator is available to desktop/Termux-side code only; the optional Termux bridge does not make the native Android app depend on Termux.
-- **No true JNVM paging:** `JPVRNetworkCheckpointStore` writes a complete network snapshot as a BLOB plus CHECKPOINT commit. It does not evict inactive neuron state from RAM, fault it in on demand, or provide an LRU working set. Flash storage is persistence, not active RAM.
+- **Partial JNVM working-set prototype:** NeuronWorkingSet now provides per-neuron compact F64 residency, LRU eviction and JPVR write-back through sharded COW indexes. It is not integrated into NetworkRuntime, and per-neuron commits are not atomic across one network timestamp. The existing whole-network checkpoint remains a separate complete snapshot. Flash storage is persistence, not active RAM.
 - **No packed representation:** the Python object graph remains the reference implementation. No compact array/struct-of-arrays candidate or memory reduction is claimed.
 - **No production scheduler/NCC:** the coordinator is single-threaded, in-memory, and has no concurrent producer protocol.
 - **No demonstrated intelligence:** the benchmark checks deterministic signal propagation only. Dialogue learning, semantic understanding and STDP/R-STDP training from ordinary conversation remain disabled.
@@ -66,4 +66,4 @@ The boundary tests are in `tools/neuron_runtime/test_network_limits.py`. They co
 
 ## 6. Verification status
 
-The code and documentation were reviewed through GitHub source readback. The new tests and benchmark are **AUTHORED, NOT RUN**. No Python test, benchmark, import/syntax check, Android/PC runtime, Gradle build, APK/AAB, CI or device measurement has been performed for this increment.
+The topology-limit tests and sparse-chain benchmark from the previous increment remain **AUTHORED, NOT RUN**. The compact-codec and working-set tests are also **AUTHORED, NOT RUN**. The working-set prototype is source-level only and is not connected to the network scheduler. No Python test, benchmark, import/syntax check, Android/PC runtime, Gradle build, APK/AAB, CI or device measurement has been performed for this increment.
