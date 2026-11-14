@@ -430,12 +430,17 @@ class LocalConsoleService:
             canonical = json.loads(encode_workspace(candidate).decode("utf-8"))
             saved = self.save_workspace(canonical, expected_revision)
             result_record = next(item for item in saved["workspace"]["records"]["conversations"] if item["id"] == "jarvis-local-chat")
+            model_configured = bool(getattr(self.local_inference, "language_model_configured", True))
+            runtime_ready = bool(self.local_inference.runtime_available)
             return {
                 "revision": saved["revision"],
                 "conversation": result_record,
-                "model_configured": True,
-                "runtime_available": True,
+                "model_configured": model_configured,
+                "runtime_available": runtime_ready,
+                "chat_available": runtime_ready,
+                "chat_mode": "local_model" if model_configured else "fallback",
                 "backend_label": self.local_inference.backend_label,
+                "dialogue_neurons": self.dialog_neurons.status(),
                 "core_status": self.jarvis_core.status(memories),
                 "turn_trace": turn_trace,
                 "browser_source": source_record,
