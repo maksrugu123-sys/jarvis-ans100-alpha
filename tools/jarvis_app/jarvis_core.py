@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
+from tools.jarvis_app.understanding import analyze_text
 from tools.reasoning_engine.engine import (
     CriterionObservation, EvidenceItem, HypothesisSpec, ReasoningEngineError,
     ReasoningEngineV01, ReasoningRequest, SubtaskSpec, SuccessCriterion,
@@ -36,7 +37,7 @@ _STOP_WORDS = frozenset({
 class JarvisCore:
     """Single owner of a conversational turn; never executes external actions."""
 
-    VERSION = "1.1"
+    VERSION = "1.2"
 
     def __init__(
         self,
@@ -369,6 +370,12 @@ class JarvisCore:
                 "stored_records": memory_count,
                 "retrieval": "bounded_lexical_overlap_v1",
             },
+            "understanding": {
+                "state": "bounded_heuristic_pre_generation_analysis",
+                "integrated_into_chat": True,
+                "semantic_model": False,
+                "language_generation_owner": "configured_language_engine",
+            },
             "reasoning_engine": {
                 "state": "structured_planning_available",
                 "integrated_into_chat": True,
@@ -407,6 +414,7 @@ class JarvisCore:
         engine = self._language_engine
         if engine is None:
             raise RuntimeError("JARVIS Core has no configured language engine")
+        understanding_context = analyze_text(prompt)
         recalled = self.retrieve_memories(prompt, memories)
         reasoning_context = None
         if reasoning_request is not None:
@@ -457,6 +465,7 @@ class JarvisCore:
             }
         engine_arguments = {
             "memory_context": recalled,
+            "understanding_context": understanding_context,
             "signal_context": signal_context,
             "reasoning_context": reasoning_context,
             "dialog_neuron_context": dialog_neuron_context,
@@ -470,6 +479,10 @@ class JarvisCore:
         return answer, {
             "core_version": self.VERSION,
             "retrieved_memory_count": len(recalled),
+            "understanding_analysis_invoked": True,
+            "understanding_intent": understanding_context["intent"],
+            "understanding_confidence": understanding_context["intent_confidence"],
+            "understanding_scope": understanding_context["scope"],
             "ans100_signal_invoked": signal_context is not None,
             "ans100_attention_gate_active": (
                 bool(signal_context["attention_gate_active"])
