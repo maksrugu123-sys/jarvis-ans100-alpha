@@ -4846,3 +4846,19 @@ The Android app downloads a separately installed Qwen3-0.6B INT4 no-think LiteRT
 The current context budget is 1,280 engine tokens, up to 96 output tokens, a 750-character prompt, at most two prior messages of 160 characters each, at most two approved memories of 120 content characters each, and a compact numeric ANS-100 summary. Character counts are conservative source bounds, not a guaranteed tokenizer budget. The runtime checks for at least 1,280 MiB reported available memory, but this is not an OOM guarantee and has not been measured on the target TECNO device.
 
 Four focused JUnit tests cover valid/malformed/mismatched Content-Range values and accepted/rejected Content-Encoding values. They are AUTHORED, NOT RUN. Actual network interruption/resume, download, checksum on-device, LiteRT-LM compatibility, latency, RAM, battery and thermal behavior remain unverified.
+
+
+### 3.73. JARVIS-owned understanding before language generation V1
+
+**Статус:** Android deterministic pre-generation analysis IMPLEMENTED at source level and connected to the Qwen system context; six focused tests AUTHORED, NOT RUN; Kotlin compilation, Android runtime, language-model behavior and analysis quality NOT VERIFIED. Python/PC orchestration is NOT YET CONNECTED to this contract.
+
+**Разделение ответственности:**
+- JARVIS Core owns the pre-generation analysis. `LocalUnderstandingPipeline` runs before Qwen receives the current turn and produces a bounded `LocalUnderstanding` record.
+- The record contains a heuristic intent, task kind, confidence, possible entities, key terms, negation marker, previous-context reference marker, explanation marker and short evidence list.
+- The analysis is inserted into the model's system context. The original user text is still sent unchanged as the user message, so the model can cross-check the hints instead of treating them as a replacement for the source.
+- Qwen is the language-realization component: it turns the user's text, conversation context and JARVIS analysis into a natural-language answer. It does not own JARVIS memory, neural state or action permissions.
+- Low-confidence or ambiguous classifications must not be presented as certain understanding. The language component is instructed to ask one clarification rather than invent missing details.
+
+**Limits:** V1 is a transparent bounded rule-based parser, not independent human-level understanding, not a trained semantic encoder, and not proof that the ANS-100 network understands natural language. Its intent labels are routing hints, not facts. Entity extraction is heuristic and may miss names or misidentify capitalized words. The 10,000-slot sparse dialogue classifier remains a separate experimental side-channel and is not silently promoted into a semantic engine. The ten-neuron ANS-100 signal pass remains a separate numerical signal summary.
+
+**Next integration boundary:** define the same versioned understanding record for the Python/PC JARVIS Core and connect it before the Python language-model adapter. Keep Android and Python implementations behaviorally aligned through shared fixtures; do not claim identical models or checkpoint compatibility. Only after the pre-analysis is connected on both platforms should it be considered the common JARVIS conversation architecture.
