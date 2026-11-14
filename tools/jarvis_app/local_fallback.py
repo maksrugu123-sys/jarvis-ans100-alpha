@@ -58,10 +58,17 @@ class LocalFallbackResponseEngine:
                     f"нейронов в сигнальном контуре {signal.get('neuron_count', 'не указано')}."
                 )
             if neurons:
+                neuron_count = neurons.get("neuron_count", 10_000)
+                trained_examples = neurons.get("trained_examples", 0)
+                if isinstance(neuron_count, bool) or not isinstance(neuron_count, int) or neuron_count < 0:
+                    neuron_count = 0
+                if isinstance(trained_examples, bool) or not isinstance(trained_examples, int) or trained_examples < 0:
+                    trained_examples = 0
+                neuron_count_display = f"{neuron_count:,}".replace(",", " ")
                 parts.append(
                     "Диалоговый классификатор: "
-                    f"{neurons.get('neuron_count', 10_000)} адресуемых признаковых нейронов, "
-                    f"обучающих примеров {neurons.get('trained_examples', 0)}; "
+                    f"{neuron_count_display} адресуемых признаковых нейронов, "
+                    f"обучающих примеров {trained_examples}; "
                     "это классификация структуры текста, а не понимание смысла."
                 )
             parts.append(
