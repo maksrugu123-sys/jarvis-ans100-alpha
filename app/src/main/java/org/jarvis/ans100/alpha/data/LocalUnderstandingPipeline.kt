@@ -10,6 +10,7 @@ import java.util.Locale
  */
 data class LocalReasoningPlan(
     val goal: String,
+    val focusTerms: List<String>,
     val steps: List<String>,
     val requiresClarification: Boolean,
     val clarificationQuestion: String,
@@ -207,6 +208,7 @@ class LocalUnderstandingPipeline {
         }
         return LocalReasoningPlan(
             goal = intent,
+            focusTerms = nonActionTerms.take(MAX_FOCUS_TERMS),
             steps = steps.take(MAX_PLAN_STEPS),
             requiresClarification = requiresClarification,
             clarificationQuestion = clarificationQuestion,
@@ -227,6 +229,7 @@ class LocalUnderstandingPipeline {
         private const val MAX_ENTITIES = 5
         private const val MAX_EVIDENCE = 5
         private const val MAX_PLAN_STEPS = 5
+        private const val MAX_FOCUS_TERMS = 6
         private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 4
         private const val MIN_TERM_LENGTH = 3
         private val TOKEN = Regex("[\\p{L}\\p{N}]+")
