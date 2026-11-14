@@ -13,11 +13,11 @@
 
 ## Existing source discovered during the 14 November 2026 audit
 
-1. Android already has `AndroidSparseNeuronNetwork`: SQLite-backed sparse LIF-DT event runtime, ceiling 10,000 neurons / 100,000 connections / 100,000 pending events, and a default 128-entry LRU hot set. It is currently initialized and probed manually from the conversation UI; it is not the ordinary chat-turn reasoning network. Its tests are authored, not run.
+1. Android has `AndroidSparseNeuronNetwork`: SQLite-backed sparse LIF-DT event runtime, ceiling 10,000 neurons / 100,000 connections / 100,000 pending events, and a default 128-entry LRU hot set. Its feed-forward 9,996-feature/four-output topology is initialized explicitly; ordinary chat now routes up to 128 hashed feature IDs through it on a separate executor. Explicit feedback/expected-label selection can apply bounded R-STDP rewards to recorded feature/output eligibility traces. It remains a numeric side channel, not the semantic reasoning network. Nine instrumentation tests are authored, not run.
 2. Python already has `NetworkRuntime`, `NetworkJNVMCoordinator`, JPVR checkpoint storage and `NeuronWorkingSet`. The working set is a separate component and must be wired through a network adapter without breaking timestamp-atomic persistence or conflict reconciliation.
-3. Android's ordinary turn still uses the ten-neuron `LocalConversationSignalRuntime` and a sparse text-feature classifier. The existing dialog reward is not equivalent to STDP/R-STDP across the 10k spiking graph.
+3. Android's ordinary turn uses the ten-neuron `LocalConversationSignalRuntime`, a sparse text-feature classifier, and the separate 10k sparse LIF-DT side channel. The 10k graph now has an explicit, bounded R-STDP reward path, but no evidence yet shows useful semantic generalization or improvement to replies.
 4. Python Core, a bounded symbolic Reasoning Engine, a Task Loop and a visible Playwright browser exist. The 14 November source adds an authenticated read-only action endpoint for approved-memory search and browser search/open/read. The UI invocation and real PC browser/model run remain unverified.
-5. PC-side approved-memory peer sync has a TLS listener, revision CAS and deletion tombstones. Android certificate-pinned client, pairing UI, automatic schedule and end-to-end sync are still missing.
+5. PC-side approved-memory peer sync has a TLS listener, revision CAS and deletion tombstones. Android now has a source-level HTTPS client with leaf-certificate pinning, private-IPv4 restrictions and manual pairing/sync UI. Automatic scheduling, Android deletion tombstones and end-to-end TLS/device verification remain missing.
 6. The Android LiteRT-LM integration and the desktop local inference adapter exist in source. Model download/inference and browser integration have not been verified in a live PC environment.
 7. The Android repository currently has no Gradle Wrapper. No build-readiness or APK claim is valid until wrapper/configuration and dependency compatibility are checked.
 
@@ -37,7 +37,7 @@
 
 ### C. Native Android 10k network
 - Preserve the existing SQLite atomic timestamp and LRU design.
-- **Implemented at source level:** the chat-specific feed-forward topology has 9,996 feature neurons and four terminal output neurons (39,984 edges), and ordinary chat routes bounded hashed features to it on a dedicated executor. A V2 DB filename preserves old V1 chain data. Persistent synapse plasticity and reward integration into this 10k graph remain unfinished.
+- **Implemented at source level:** the chat-specific feed-forward topology has 9,996 feature neurons and four terminal output neurons (39,984 edges), and ordinary chat routes bounded hashed features to it on a dedicated executor. A V2 DB filename preserves old V1 chain data. **Implemented at source level:** explicit bounded eligibility/reward updates now persist in SQLite for feature-to-output synapses after user feedback or expected-label selection. Tests are authored, not run; no learning-quality or device-performance claim is made.
 - Connect the network to ordinary conversation as an optional, observable side channel; it must never block or corrupt the chat if the neural path fails.
 - Do not call it 10k-neuron reasoning until the network contributes to measured task decisions and passes held-out evaluation.
 
@@ -48,10 +48,9 @@
 - Measure resident count, bytes, I/O amplification and latency at 10, 100, 1k and 10k neurons.
 
 ### E. Phone/PC memory synchronization
-- Android now has a source-level HTTPS peer client with leaf-certificate SHA-256 pinning, default IP-SAN hostname verification, RFC1918 IPv4-only addressing, the existing Keystore-backed bearer token, bounded JSON and revision CAS.
-- Compose exposes manual pairing by private IPv4 and certificate fingerprint. Only explicitly approved memory records are sent; raw chats, model weights and credentials are excluded.
-- Current Android V1 is additive/upsert-only: deletion tombstones, automatic schedule, pause/revoke UI and end-to-end conflict recovery remain unfinished.
-- Android payload/IP/pin tests are authored, not run. Verify against a local PC TLS server before enabling any automatic sync.
+- **Implemented at source level:** Android has an HTTPS peer client with leaf-certificate SHA-256 pinning, default IP-SAN hostname verification, RFC1918 IPv4-only addressing, the existing Keystore-backed bearer token, bounded JSON and revision CAS. Compose exposes manual pairing by private IPv4 and certificate fingerprint. Only explicitly approved memory records are sent; raw chats, model weights and credentials are excluded.
+- Current Android V1 is additive/upsert-only: it does not send deletion tombstones and has no automatic schedule. Pause/revoke controls and end-to-end conflict recovery remain unfinished.
+- Android payload/IP/pin tests are authored, not run. Verify against a local PC TLS server before enabling automatic sync.
 
 ### F. Controlled action execution
 - Android now connects the Task Loop run endpoint for exactly one confirmed `memory.search` read-only step; the client validates task ID/revision, capability and bounded results. Desktop/PWA UI execution remains to be verified.
