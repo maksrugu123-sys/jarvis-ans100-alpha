@@ -107,7 +107,7 @@ class LocalUnderstandingPipeline {
         val entities = ENTITY.findAll(text).map { it.value.trim() }
             .filter { it.length in 2..48 && it.lowercase(Locale.ROOT) !in COMMON_ENTITY_STOPWORDS }
             .distinctBy { it.lowercase(Locale.ROOT) }.take(MAX_ENTITIES).toList()
-        val hasRecentUserContext = recentHistory.asSequence()
+        val hasRecentUserContext = recentHistory
             .takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
             .any { it.role == ConversationRole.USER && it.text.isNotBlank() }
         val language = when {
