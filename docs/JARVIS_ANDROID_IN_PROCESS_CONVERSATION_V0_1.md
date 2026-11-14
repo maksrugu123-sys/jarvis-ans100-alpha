@@ -97,3 +97,16 @@ Android now provides an app-local approved-memory store and Compose panel which 
 The native Compose chat now includes a separate 10,000-slot sparse text-feature classifier. It hashes up to 256 Unicode tokens and adjacent-token pairs into active slots, then scores four intent labels: greeting, question, thanks and farewell. It begins untrained and abstains until explicit labels have been provided and a minimum score margin is reached. The conversation panel displays the active feature count and any heuristic classification; four explicit feedback buttons train the last user message. The checkpoint stores numeric weights and a counter only. Corrupt checkpoints fail closed, and loading is lazy on the conversation executor.
 
 This classifier is not the ten-neuron ANS-100 ALIF-DT signal runtime, not Qwen and not a general semantic model. It does not generate text or trigger actions. Kotlin uses SHA-256 feature hashing; Python's corresponding classifier uses BLAKE2b, so the separate checkpoints cannot be exchanged. Seven focused Kotlin/JUnit tests are AUTHORED, NOT RUN. The implementation is source-level only.
+
+
+## 2026-11-14 update — pinned in-app model download
+
+The native chat now offers a separately installed Qwen3-0.6B INT4 no-think model download. The exact file is 347,251,840 bytes with SHA-256
+`2df6821ec12702dafd33915e7a1a1adc7c4b053f3672fd9555dfaf3a114c4139`, pinned to Hugging Face revision
+`6aa2daf8aba4aa456797fb8040b36a3948bcfda7`. The app-private base APK still excludes model weights. The downloader validates the full Content-Range start/end/total for resumed responses, rejects non-identity content encodings, validates the completed file before publication, and disconnects active HTTP on explicit cancellation or ViewModel clearing. Manual document-picker import is still available. The four pure validation tests in `LiteRtLmModelStoreValidationTest.kt` are AUTHORED, NOT RUN. No on-device download or inference has been performed.
+
+## 2026-11-14 update — native sparse dialogue-feature classifier
+
+The native Compose chat now includes a separate 10,000-slot sparse text-feature classifier. It hashes up to 256 Unicode tokens and adjacent-token pairs into active slots, then scores four intent labels: greeting, question, thanks and farewell. It begins untrained and abstains until explicit labels have been provided and a minimum score margin is reached. The conversation panel displays the active feature count and any heuristic classification; four explicit feedback buttons train the last user message. The checkpoint stores numeric weights and a counter only. Corrupt checkpoints fail closed, and loading is lazy on the conversation executor.
+
+This classifier is not the ten-neuron ANS-100 ALIF-DT signal runtime, not Qwen and not a general semantic model. It does not generate text or trigger actions. Kotlin uses SHA-256 feature hashing; Python's corresponding classifier uses BLAKE2b, so the separate checkpoints cannot be exchanged. Seven focused Kotlin/JUnit tests are AUTHORED, NOT RUN. The implementation is source-level only.
