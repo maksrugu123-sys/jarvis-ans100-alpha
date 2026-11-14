@@ -89,7 +89,7 @@ The download implementation is source-level only. No APK build, device download,
 
 **Important platform boundary:** native Android now has its own sparse 10,000-slot classifier in `LocalDialogFeatureClassifier.kt`. It maps up to 256 Unicode tokens and adjacent pairs into a sparse subset of the 10,000-slot bank, predicts four simple intent labels, and starts untrained. The Compose panel shows active-feature count and a heuristic label only when its score margin is large enough. The user must explicitly choose one of four feedback labels to update weights. The Android checkpoint contains numeric weights and a training counter, not raw utterances. The Python implementation uses BLAKE2-based hashing while Kotlin uses SHA-256, so their feature IDs and checkpoints are not interchangeable. This classifier is separate from the ten-neuron Kotlin ANS-100 signal pass and from Qwen; it does not generate text, perform semantic understanding, route actions or enter Qwen's prompt as a reasoning result.
 
-No APK is included or claimed. Android compilation, installation and device inference remain unverified.
+No APK is included or claimed. The seven sparse-classifier tests and four model-download validation tests are AUTHORED, NOT RUN. Android compilation, installation, actual download/resume and device inference remain unverified.
 
 ### Visible PC research browser
 
