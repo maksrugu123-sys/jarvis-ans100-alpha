@@ -137,6 +137,9 @@ class LiteRtLmModelStore(context: Context) {
                     output.fd.sync()
                 }
             }
+            if (cancelRequested || Thread.currentThread().isInterrupted) {
+                throw LiteRtLmDownloadCancelledException()
+            }
             if (downloaded != EXPECTED_BYTES) {
                 throw LiteRtLmModelException("Загрузка прервалась: получено ${downloaded / MIB} из ${EXPECTED_BYTES / MIB} МиБ. Нажмите «Продолжить загрузку».")
             }
