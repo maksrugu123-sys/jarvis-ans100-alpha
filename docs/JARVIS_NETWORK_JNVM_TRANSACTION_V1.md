@@ -124,3 +124,9 @@ The coordinator is source-level reference code and continues to keep the complet
 **Tests:** `tools/neuron_runtime/test_network_jnvm_coordinator.py` is AUTHORED, NOT RUN. It covers two successive timestamp commits, scheduler-only durable input admission, pre-commit failure isolation, uncertain-commit freeze/reopen/reconciliation, stale writer reload and idle no-op.
 
 **Verification:** source readback/static review only. No unit test, failpoint run, benchmark, build, CI or device measurement has been executed.
+
+## Atomic network batch operations
+
+`NetworkJNVMCoordinator.schedule_inputs()` writes a bounded group of external events into one scheduler checkpoint COMMIT. `apply_rewards_batch()` applies multiple same-time neuron/synapse rewards to a detached network candidate and publishes all affected neuron records plus the scheduler snapshot in one JPVR COMMIT. A validation or synapse failure discards the entire candidate; an uncertain publication retains the coordinator's existing frozen/reconciliation boundary. `NetworkRuntime.pending_event_ids` exposes a stable immutable view for recovery logic without exposing the mutable event queue.
+
+These APIs are source-level additions. Focused coordinator/runtime tests are **AUTHORED, NOT RUN**.

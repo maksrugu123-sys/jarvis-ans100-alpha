@@ -10,6 +10,8 @@ The repository has entered the first executable Python reference-orchestration s
 
 ## Current status — 14 November 2026
 
+- **Python dialogue R-STDP:** `tools/neuron_runtime/dialog_rstdp.py` adds a persistent, JPVR-backed four-output-neuron ALIF-DT readout with 256 feature synapses per output. Text features arrive before a separate decision pulse; explicit user-selected labels create reward-baseline proposals and an atomic multi-synapse R-STDP COMMIT. Feedback IDs are idempotent, interrupted rewards are reconciled, and raw utterances are not persisted. This is a small research classifier, not a 10k network or independent reasoning engine. Tests are AUTHORED, NOT RUN; it is not yet connected to the ordinary PC/Android chat UI.
+
 - **Android↔PC approved-memory sync:** the app now has a manual HTTPS peer client for the PC TLS listener on port 8766, pins the entered leaf-certificate SHA-256, restricts the target to RFC1918 IPv4, and reuses the Keystore-encrypted Termux token. Only explicitly approved memory records are transferred. Sync is additive/upsert-only; deletion propagation and automatic scheduling are not yet implemented. Unit tests and TLS/device runtime are AUTHORED, NOT RUN.
 
 - **Android read-only Task Loop:** the Compose task list now offers a per-run confirmation for one bounded `memory.search` action over user-approved workspace memories. The client sends an exact task revision, validates the returned capability/task/status and at most five excerpts, then refreshes the JPVR snapshot. No shell, browser, file mutation, message or external write capability is exposed from Android. Payload validation tests are AUTHORED, NOT RUN; Termux end-to-end and device UI remain unverified.

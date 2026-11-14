@@ -2390,3 +2390,20 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Boundary:** Android V1 is additive/upsert-only. It does not send deletion tombstones, so deleting a note on either device does not delete it on the other. Sync is manual; no background schedule is enabled. TLS pinning, IP-SAN verification, authentication, PC firewall and device pairing still require end-to-end runtime validation.
 
 **Verification:** GitHub source/readback and static checks only. New Android tests are **AUTHORED, NOT RUN**. No live TLS exchange, Python peer test, Gradle build, APK or device check was executed.
+
+## 2026-11-14 — Add persistent dialogue ALIF-DT/R-STDP experiment
+
+**Objective:** move dialogue learning beyond a hashed classifier-only reward update by creating a small real spiking readout with delayed eligibility and explicit user labels.
+
+**Changed:**
+- Added `tools/neuron_runtime/dialog_rstdp.py`: four ALIF-DT output neurons, 256 bounded feature synapses per output, hashed unigram/bigram encoding, a feature-before-decision-pulse sequence, R-STDP eligibility and explicit label reward.
+- The network is persisted through `NetworkJNVMCoordinator` and `JPVRNetworkJNVMStore`; per-label reward baselines and pending feedback proposals are stored through `JPVRRewardBaselineStore`.
+- The event journal stores feature/synapse IDs, context IDs, label and reward metadata, not raw utterances.
+- Pending reward proposals are persisted before the network COMMIT. On recovery, active eligibility means apply the reward; cleared eligibility at/after the recorded model time means the network COMMIT already happened and only the reward-baseline ledger is completed.
+- Duplicate feedback IDs are checked across all four label ledgers.
+- Added `tools/neuron_runtime/test_dialog_rstdp.py` for real synaptic weight change, restart, duplicate feedback, interrupted neural reward and interrupted baseline publication.
+- The experiment is intentionally separate from the normal PC/Android conversation path until its tests and held-out evaluation pass.
+
+**Boundaries:** this is a four-output-neuron research readout with 256 feature synapses per output, not a 10,000-neuron runtime and not a general reasoning system. It trains only on explicit expected labels. No silent learning, text logging, or evaluation-set training is enabled.
+
+**Verification:** source/readback only. The new Python tests are **AUTHORED, NOT RUN**. No Python test, syntax/import execution, Gradle build, APK, PC browser/model runtime or device measurement was run.

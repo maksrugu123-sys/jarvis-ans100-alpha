@@ -30,10 +30,10 @@
 - Add adversarial, multi-step and held-out evaluation tasks; compare against a no-reasoning baseline.
 
 ### B. Dialogue learning
-- Replace implicit classifier-only feedback with an explicit event schema containing turn ID, time, feature/event IDs, eligibility trace, reward source, baseline and model version.
-- Implement and test STDP/R-STDP updates with deterministic replay, delayed reward, neutral feedback, duplicate rejection and rollback.
-- Keep separate train/validation/test conversations. No training on evaluation data; no reward inferred from sentiment or user silence.
-- Integrate first into a small, bounded subnetwork. Expand only after held-out benefit is demonstrated.
+- A source-level Python experiment now uses four ALIF-DT output neurons with 256 feature synapses each. Hashed feature events precede a separate decision pulse; only an explicit expected-label selection creates R-STDP reward.
+- `DialogRstdpLearningService` persists the network and reward baseline ledger in separate JPVR containers. PREPARED reward proposals are saved before the atomic network reward COMMIT; duplicate feedback IDs are rejected and pending proposals are recovered without a second reward application.
+- The experiment and regression tests are AUTHORED, NOT RUN. It is not yet connected to the normal PC/Android chat UI, and no held-out accuracy or learning benefit is claimed.
+- Next: connect explicit label-feedback controls to this Python service, build disjoint Russian train/validation/test sets, and compare R-STDP against fixed-weight and no-learning baselines. Do not train on evaluation conversations or infer reward from silence/sentiment.
 
 ### C. Native Android 10k network
 - Preserve the existing SQLite atomic timestamp and LRU design.
