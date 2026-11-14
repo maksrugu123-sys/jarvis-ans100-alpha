@@ -67,6 +67,38 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun asksForContextWhenAReferenceHasNoPreviousUserTurn() {
+        val result = pipeline.analyze("Продолжай с предыдущей задачей")
+        assertTrue(result.refersToPreviousContext)
+        assertFalse(result.hasRecentUserContext)
+        assertTrue(result.reasoningPlan.requiresClarification)
+        assertFalse(result.reasoningPlan.contextAvailable)
+        assertTrue(result.reasoningPlan.clarificationQuestion.isNotBlank())
+    }
+
+    @Test
+    fun makesRecentUserHistoryAvailableForContextDependentMessages() {
+        val history = listOf(
+            LocalConversationMessage(
+                id = "message-user-1",
+                role = ConversationRole.USER,
+                text = "Мы обсуждаем ошибку в проекте JARVIS",
+                createdAtMillis = 1L,
+            ),
+            LocalConversationMessage(
+                id = "message-assistant-1",
+                role = ConversationRole.ASSISTANT,
+                text = "Я нашёл описание проблемы.",
+                createdAtMillis = 2L,
+            ),
+        )
+        val result = pipeline.analyze("Продолжай с этим", history)
+        assertTrue(result.hasRecentUserContext)
+        assertTrue(result.reasoningPlan.contextAvailable)
+        assertFalse(result.reasoningPlan.requiresClarification)
+    }
+
+    @Test
     fun matchesTheSharedDesktopAndAndroidUnderstandingFixtures() {
         val stream = javaClass.getResourceAsStream("/understanding/understanding-v1.tsv")
             ?: error("Shared JARVIS understanding fixture is missing")
