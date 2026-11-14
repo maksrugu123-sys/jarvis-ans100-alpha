@@ -22,6 +22,13 @@ class LiteRtLmModelStore(context: Context) {
     @Volatile
     private var cancelRequested = false
 
+    @Volatile
+    private var activeConnection: HttpURLConnection? = null
+
+    fun prepareDownload() {
+        cancelRequested = false
+    }
+
     fun installedFile(): File? = destination.takeIf {
         it.isFile && it.canRead() && it.length() == EXPECTED_BYTES
     }
@@ -38,7 +45,6 @@ class LiteRtLmModelStore(context: Context) {
     @Synchronized
     @Throws(LiteRtLmModelException::class)
     fun downloadModel(onProgress: (Long, Long) -> Unit): File {
-        cancelRequested = false
         if (!directory.exists() && !directory.mkdirs()) {
             throw LiteRtLmModelException("Не удалось создать приватную папку модели.")
         }
@@ -77,10 +83,11 @@ class LiteRtLmModelStore(context: Context) {
             if (offset > 0L) setRequestProperty("Range", "bytes=$offset-")
         }
 
+        activeConnection = connection
         try {
             connection.connect()
             val code = connection.responseCode
-            if (code == HttpURLConnection.HTTP_REQUESTED_RANGE_NOT_SATISFIABLE && offset == EXPECTED_BYTES) {
+            if (code == 416 && offset == EXPECTED_BYTES) {
                 return verifyAndPublish(digest)
             }
 
@@ -144,12 +151,14 @@ class LiteRtLmModelStore(context: Context) {
                 "Ошибка загрузки: ${error.message ?: "проверьте интернет-соединение"}. Частичная загрузка сохранена.",
             )
         } finally {
+            activeConnection = null
             connection.disconnect()
         }
     }
 
     fun cancelDownload() {
         cancelRequested = true
+        activeConnection?.disconnect()
     }
 
     private fun verifyAndPublish(digest: MessageDigest): File {
