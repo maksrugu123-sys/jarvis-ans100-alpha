@@ -4823,3 +4823,26 @@ The native Compose panel allows the user to explicitly add and delete device-loc
 Both tools/neuron_runtime/test_conversation_signal.py and app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntimeTest.kt consume app/src/test/resources/ans100/conversation-v2.tsv. Cases cover a full six-feature route, structure-only input and a neutral short input. The contract compares normalized features, event/batch/spike counts, adaptive integration state and threshold, gate state and model time.
 
 The fixture reduces divergence between independent implementations but is not a replacement for running the suites or a formal proof. Android/PC device measurements, Python/Kotlin binary/state-format interoperability, dialogue-driven plasticity and full semantic integration remain outside this test.
+
+
+### 3.71. Native Android sparse dialogue-feature classifier V1
+
+**Статус:** Kotlin implementation and seven focused unit tests IMPLEMENTED at source level; tests AUTHORED, NOT RUN; Android compile/runtime, classifier usefulness and resource cost NOT VERIFIED.
+
+`LocalDialogFeatureClassifier` is a bounded optional side-channel in the native Compose conversation. It uses 10,000 addressable sparse text-feature slots. Up to 256 Unicode word tokens and their adjacent pairs map to at most 511 active indices after hashing/collision. Four output labels are currently fixed: greeting, question, thanks and farewell. A fresh model abstains; it only emits a label after explicit training and when the uncalibrated top-score margin reaches the configured minimum.
+
+Learning happens only when the user selects one of the four feedback labels in the conversation panel. A candidate weight update is serialized and synchronously committed before the candidate replaces in-memory state. Weights are bounded to [-4, 4], stored rows to 40,000 and checkpoint text to 4 MiB. The versioned app-private SharedPreferences checkpoint contains numeric weights and an example counter, not source utterances. Loading is lazy on the conversation worker. Invalid or corrupt checkpoint data fails closed and is not silently replaced.
+
+**Strict separation:** this is a sparse linear intent classifier, not a generative language model, not general semantic understanding, not a ten-thousand-neuron spiking network, and not the separate ten-logical-neuron Kotlin ANS-100 ALIF-DT signal pass. It is not fed back into Qwen as a reasoning result and does not control assistant replies or actions. Python's existing prototype uses BLAKE2b feature hashing; Kotlin uses SHA-256, so their feature indices and checkpoints are not interchangeable. No cross-platform checkpoint migration contract exists.
+
+**Tests:** `app/src/test/java/org/jarvis/ans100/alpha/data/LocalDialogFeatureClassifierTest.kt` covers untrained abstention, explicit learning, persistence/reopen, failed commit, corrupt checkpoint, invalid input/label, and bounded deterministic feature extraction. These tests are AUTHORED, NOT RUN. No dataset-level held-out accuracy, language-quality or generalization claim is available.
+
+### 3.72. Android local model installation and compact prompt budget
+
+**Статус:** resumable installer and bounded inference context IMPLEMENTED at source level; regression tests AUTHORED, NOT RUN; Android build, download, model initialization and device inference NOT VERIFIED.
+
+The Android app downloads a separately installed Qwen3-0.6B INT4 no-think LiteRT-LM artifact; the base APK does not bundle its 347,251,840 model bytes. The source pins a Hugging Face revision and SHA-256, checks the exact file size and hash before publishing to app-private storage, and supports HTTP Range resume. A partial response is accepted only when Content-Range start, end and total match the requested offset and expected artifact size; compressed response encodings are rejected for this resumable path. User cancellation and ViewModel clearing disconnect the active HTTP request, while the partial file remains available for a later resume except when integrity validation fails.
+
+The current context budget is 1,280 engine tokens, up to 96 output tokens, a 750-character prompt, at most two prior messages of 160 characters each, at most two approved memories of 120 content characters each, and a compact numeric ANS-100 summary. Character counts are conservative source bounds, not a guaranteed tokenizer budget. The runtime checks for at least 1,280 MiB reported available memory, but this is not an OOM guarantee and has not been measured on the target TECNO device.
+
+Four focused JUnit tests cover valid/malformed/mismatched Content-Range values and accepted/rejected Content-Encoding values. They are AUTHORED, NOT RUN. Actual network interruption/resume, download, checksum on-device, LiteRT-LM compatibility, latency, RAM, battery and thermal behavior remain unverified.
