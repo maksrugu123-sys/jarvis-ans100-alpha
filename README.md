@@ -585,3 +585,7 @@ No network fallback, model auto-download, tools, shell access or external action
 
 
 - **Visible PC browser V0.1:** source-level Playwright controller, dedicated persistent profile, authenticated browser API, PWA panel, manual takeover and model question with bounded untrusted page text/source URL are present. Optional setup: install `playwright>=1.48` via `pip install -r requirements-browser.txt`, then `playwright install chromium`. Browser/UI/Core tests are AUTHORED, NOT RUN; no headed browser or PC runtime has been verified. This is not a secure network sandbox or web agent with action permissions.
+
+## Current autonomous-core milestone
+
+The current implementation sequence and release gates are tracked in [JARVIS Autonomous Core Milestone V1](docs/JARVIS_AUTONOMOUS_CORE_MILESTONE_V1.md). This is a plan/status record, not a claim that the runtime work or verification gates are complete.
