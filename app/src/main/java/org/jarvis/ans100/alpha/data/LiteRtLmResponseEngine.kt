@@ -31,11 +31,27 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         recentHistory: List<LocalConversationMessage>,
         memoryContext: List<LocalWorkspaceMemory>,
         signalContext: ConversationSignalContext?,
+    ): String = respond(
+        prompt,
+        recentHistory,
+        memoryContext,
+        signalContext,
+        LocalUnderstandingPipeline().analyze(prompt),
+    )
+
+    override fun respond(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage>,
+        memoryContext: List<LocalWorkspaceMemory>,
+        signalContext: ConversationSignalContext?,
+        understandingContext: LocalUnderstanding?,
     ): String {
         val clean = prompt.trim()
         if (clean.length > MAX_PROMPT_CHARS) throw LocalConversationException("Ограничение компактной модели — " + MAX_PROMPT_CHARS + " символов на запрос.")
-        val file = modelStore.installedFile() ?: return fallback.respond(clean, recentHistory)
-        val understanding = LocalUnderstandingPipeline().analyze(clean)
+        val understanding = understandingContext ?: LocalUnderstandingPipeline().analyze(clean)
+        val file = modelStore.installedFile() ?: return fallback.respond(
+            clean, recentHistory, memoryContext, signalContext, understanding,
+        )
         val activeEngine = getEngine(file)
         val initial = recentHistory.takeLast(MAX_HISTORY).map { item ->
             val text = item.text.take(MAX_HISTORY_CHARS)
