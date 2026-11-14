@@ -2560,3 +2560,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** based on the exact Gradle diagnostic from run 43615561735. No new build has yet verified the property. The next push-triggered workflow is the verification gate.
 
 **Build / APK:** run 43615561735 failed before compilation; no APK artifact was produced.
+
+
+## 2026-11-14 — Fix missing APK workflow trigger path
+
+**Finding:** commit `6bc661f` added the root `gradle.properties`, but the workflow `push.paths` filter did not include that file. GitHub therefore did not start a new run; this was a trigger-filter omission, not another Gradle build failure.
+
+**Changed:** added `gradle.properties` to `.github/workflows/android-prototype.yml` push path filters so Gradle configuration changes trigger the Android prototype workflow.
+
+**Verification:** source correction committed on the experiment branch. A new Actions run must still complete and upload `jarvis-ans100-debug-apk` before an APK can be claimed. No build result is claimed in this entry.
