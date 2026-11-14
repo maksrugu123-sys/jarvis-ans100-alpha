@@ -35,6 +35,7 @@ import org.jarvis.ans100.alpha.data.RuntimeBridgeSnapshot
 import org.jarvis.ans100.alpha.data.RuntimeAccessTokenStore
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewRequest
 import org.jarvis.ans100.alpha.data.RuntimeReasoningPreviewResult
+import org.jarvis.ans100.alpha.data.RuntimeTaskExecutionResult
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceSnapshot
 import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
@@ -74,6 +75,7 @@ data class RuntimeBridgeUiState(
     val error: String? = null,
     val message: String? = null,
     val reasoningPreview: RuntimeReasoningPreviewResult? = null,
+    val taskExecutionResult: RuntimeTaskExecutionResult? = null,
     val hasAccessToken: Boolean = false,
     val extensionInstalled: Boolean = false,
     val signalEndpointAvailable: Boolean? = null,
@@ -1684,6 +1686,64 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun cancelRuntimeTask(taskId: String, revision: Int) {
         runtimeRequest("Ожидающая задача JARVIS отменена.") {
             runtimeClient.cancelQueuedTask(taskId, revision)
+        }
+    }
+
+    /** Explicitly executes the one Android-supported read-only task: approved-memory search. */
+    fun runRuntimeMemorySearch(taskId: String, revision: Int, query: String) {
+        val before = mutableState.value.runtime
+        if (before.isBusy) return
+        if (!before.extensionInstalled || !before.isConnected || !before.hasAccessToken) {
+            mutableState.value = mutableState.value.copy(
+                runtime = before.copy(
+                    error = null,
+                    message = "Для запуска задачи подключите локальное расширение Termux.",
+                ),
+            )
+            return
+        }
+        val queued = before.snapshot?.tasks?.firstOrNull { it.taskId == taskId }
+        if (queued == null || queued.revision != revision || queued.status != "queued") {
+            mutableState.value = mutableState.value.copy(
+                runtime = before.copy(error = "Задача изменилась. Обновите состояние перед запуском."),
+            )
+            return
+        }
+        mutableState.value = mutableState.value.copy(
+            runtime = before.copy(
+                isBusy = true,
+                error = null,
+                message = "Выполняется только поиск по подтверждённой памяти…",
+                taskExecutionResult = null,
+            ),
+        )
+        runtimeExecutor.execute {
+            try {
+                val result = runtimeClient.runApprovedMemorySearch(taskId, revision, query)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        runtime = current.runtime.copy(
+                            isBusy = false,
+                            isConnected = true,
+                            snapshot = result.snapshot,
+                            error = null,
+                            message = result.notice,
+                            taskExecutionResult = result,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        runtime = current.runtime.copy(
+                            isBusy = false,
+                            error = error.message ?: "Безопасная задача не выполнена.",
+                        ),
+                    )
+                }
+            }
         }
     }
 

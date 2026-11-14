@@ -531,6 +531,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onCreateTask = viewModel::createRuntimeTask,
                             onSetSessionStatus = viewModel::setRuntimeSessionStatus,
                             onCancelTask = viewModel::cancelRuntimeTask,
+                            onRunMemorySearch = viewModel::runRuntimeMemorySearch,
                             onPreviewReasoning = viewModel::previewRuntimeReasoning,
                             onSaveAccessToken = viewModel::saveRuntimeAccessToken,
                             onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
@@ -1344,6 +1345,7 @@ private fun RuntimeBridgePanel(
     onCreateTask: (String, String) -> Unit,
     onSetSessionStatus: (String, String, Int) -> Unit,
     onCancelTask: (String, Int) -> Unit,
+    onRunMemorySearch: (String, Int, String) -> Unit,
     onPreviewReasoning: (RuntimeReasoningPreviewRequest) -> Unit,
     onSaveAccessToken: (String) -> Unit,
     onForgetAccessToken: () -> Unit,
@@ -1366,6 +1368,7 @@ private fun RuntimeBridgePanel(
         )
     }
     var previewInputError by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingMemorySearchTask by remember { mutableStateOf<RuntimeTaskSnapshot?>(null) }
     val snapshot = state.snapshot
     val selectedSession = snapshot?.sessions?.firstOrNull {
         it.sessionId == selectedSessionId
@@ -1771,15 +1774,80 @@ private fun RuntimeBridgePanel(
                                         }
                                     }
                                     if (task.status == "queued") {
-                                        TextButton(
-                                            enabled = !state.isBusy,
-                                            onClick = { onCancelTask(task.taskId, task.revision) },
-                                        ) { Text("Отменить") }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            val owningSessionOpen = snapshot.sessions.any {
+                                                it.sessionId == task.sessionId && it.status == "open"
+                                            }
+                                            TextButton(
+                                                enabled = !state.isBusy && owningSessionOpen &&
+                                                    task.title.isNotBlank() && task.title.length <= 240,
+                                                onClick = { pendingMemorySearchTask = task },
+                                            ) { Text("Запустить поиск") }
+                                            TextButton(
+                                                enabled = !state.isBusy,
+                                                onClick = { onCancelTask(task.taskId, task.revision) },
+                                            ) { Text("Отменить") }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                }
+
+                state.taskExecutionResult?.let { result ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text("Результат безопасной задачи", fontWeight = FontWeight.SemiBold)
+                            Text("Статус: ${runtimeStatusLabel(result.status)}")
+                            Text("Поиск по запросу: «${result.query}»", style = MaterialTheme.typography.bodySmall)
+                            if (result.matches.isEmpty()) {
+                                Text("В подтверждённой памяти совпадений не найдено.")
+                            } else {
+                                result.matches.forEach { match ->
+                                    Text(match.category, fontWeight = FontWeight.Medium)
+                                    Text(match.excerpt, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            Text(
+                                "Использовались только воспоминания с явным подтверждением пользователя. Никаких внешних изменений не выполнялось.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                pendingMemorySearchTask?.let { task ->
+                    AlertDialog(
+                        onDismissRequest = { pendingMemorySearchTask = null },
+                        title = { Text("Подтвердить запуск задачи?") },
+                        text = {
+                            Text(
+                                "JARVIS выполнит только read-only memory.search по одобренным воспоминаниям. Запрос: «${task.title}». Браузер, команды оболочки и запись файлов не используются.",
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                enabled = !state.isBusy,
+                                onClick = {
+                                    onRunMemorySearch(task.taskId, task.revision, task.title)
+                                    pendingMemorySearchTask = null
+                                },
+                            ) { Text("Запустить безопасный поиск") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingMemorySearchTask = null }) {
+                                Text("Не запускать")
+                            }
+                        },
+                    )
                 }
 
                 SectionHeading("Предварительное планирование", "Reasoning Engine V0.1 · без исполнения")

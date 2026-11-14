@@ -67,6 +67,21 @@ data class RuntimeReasoningPreviewResult(
     val notice: String,
 )
 
+data class RuntimeMemorySearchMatch(
+    val memoryId: String,
+    val category: String,
+    val excerpt: String,
+)
+
+data class RuntimeTaskExecutionResult(
+    val snapshot: RuntimeBridgeSnapshot,
+    val taskId: String,
+    val status: String,
+    val query: String,
+    val matches: List<RuntimeMemorySearchMatch>,
+    val notice: String,
+)
+
 data class RuntimeWorkspaceSnapshot(
     val revision: Long,
     val document: JSONObject,
@@ -108,6 +123,27 @@ data class RuntimeBridgeSnapshot(
 )
 
 class RuntimeBridgeException(message: String) : IllegalStateException(message)
+
+/** Builds the exact one-step payload for the Android read-only approved-memory action. */
+internal fun buildApprovedMemorySearchPayload(
+    expectedRevision: Int,
+    query: String,
+): JSONObject {
+    if (expectedRevision < 0) {
+        throw RuntimeBridgeException("Ревизия задачи не может быть отрицательной.")
+    }
+    val clean = query.trim()
+    if (clean.isEmpty() || clean.length > 240 || clean.any { it == '\u0000' }) {
+        throw RuntimeBridgeException("Запрос поиска должен содержать от 1 до 240 символов.")
+    }
+    return JSONObject()
+        .put("expected_revision", expectedRevision)
+        .put("steps", JSONArray().put(
+            JSONObject()
+                .put("capability", "memory.search")
+                .put("input", clean),
+        ))
+}
 
 /**
  * Narrow client for the on-device Termux Python console.
@@ -791,6 +827,78 @@ class LocalRuntimeBridgeClient {
             "/api/tasks/${pathSegment(taskId)}/cancel",
             JSONObject().put("expected_revision", expectedRevision),
         )
+
+    /**
+     * Runs exactly one user-confirmed memory.search step for a queued task.
+     * The Android client intentionally exposes no browser, shell or write action.
+     */
+    fun runApprovedMemorySearch(
+        taskId: String,
+        expectedRevision: Int,
+        query: String,
+    ): RuntimeTaskExecutionResult {
+        val cleanId = pathSegment(taskId)
+        val cleanQuery = query.trim()
+        val payload = buildApprovedMemorySearchPayload(expectedRevision, cleanQuery)
+        val response = request("POST", "/api/tasks/$cleanId/run", payload)
+        val task = response.optJSONObject("task")
+            ?: throw RuntimeBridgeException("Результат Task Loop не содержит обновлённую задачу.")
+        if (requiredString(task, "task_id") != taskId) {
+            throw RuntimeBridgeException("Task Loop вернул другую задачу.")
+        }
+        val status = requiredString(task, "status")
+        if (status !in setOf("completed", "failed", "waiting")) {
+            throw RuntimeBridgeException("Task Loop вернул недопустимый статус задачи.")
+        }
+        val state = response.optJSONObject("state")
+            ?: throw RuntimeBridgeException("Task Loop не вернул актуальное состояние JPVR.")
+        val snapshot = decodeState(state)
+        val refreshed = snapshot.tasks.firstOrNull { it.taskId == taskId }
+            ?: throw RuntimeBridgeException("Задача отсутствует в обновлённом снимке JPVR.")
+        if (refreshed.status != status) {
+            throw RuntimeBridgeException("Статус результата не совпадает со снимком JPVR.")
+        }
+        val outputs = response.optJSONArray("outputs")
+            ?: throw RuntimeBridgeException("Task Loop не вернул результаты безопасного действия.")
+        if (outputs.length() != 1) {
+            throw RuntimeBridgeException("Ожидался ровно один результат memory.search.")
+        }
+        val output = outputs.optJSONObject(0)
+            ?: throw RuntimeBridgeException("Результат безопасного действия повреждён.")
+        if (requiredString(output, "capability") != "memory.search") {
+            throw RuntimeBridgeException("Android получил действие вне разрешённого списка.")
+        }
+        val result = output.optJSONObject("result")
+            ?: throw RuntimeBridgeException("Ответ memory.search не содержит результата.")
+        if (requiredString(result, "kind") != "memory.search" ||
+            requiredString(result, "query") != cleanQuery
+        ) {
+            throw RuntimeBridgeException("Результат memory.search не соответствует исходному запросу.")
+        }
+        val rawMatches = result.optJSONArray("matches")
+            ?: throw RuntimeBridgeException("Результат поиска не содержит список совпадений.")
+        if (rawMatches.length() > 5) {
+            throw RuntimeBridgeException("Результат поиска превышает лимит пяти совпадений.")
+        }
+        val matches = ArrayList<RuntimeMemorySearchMatch>(rawMatches.length())
+        for (index in 0 until rawMatches.length()) {
+            val item = rawMatches.optJSONObject(index)
+                ?: throw RuntimeBridgeException("Совпадение памяти имеет неверный формат.")
+            matches += RuntimeMemorySearchMatch(
+                memoryId = requiredString(item, "id"),
+                category = requiredString(item, "category"),
+                excerpt = requiredString(item, "excerpt"),
+            )
+        }
+        return RuntimeTaskExecutionResult(
+            snapshot = snapshot,
+            taskId = taskId,
+            status = status,
+            query = cleanQuery,
+            matches = matches,
+            notice = requiredString(response, "notice"),
+        )
+    }
 
     private fun postState(path: String, body: JSONObject): RuntimeBridgeSnapshot {
         val response = request("POST", path, body)
