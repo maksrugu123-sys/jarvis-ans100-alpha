@@ -2538,3 +2538,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Changed:** discover the actual `sdkmanager` executable under `$ANDROID_HOME/cmdline-tools`, fail with diagnostic path listing if absent, and invoke the discovered absolute path for license acceptance and SDK package installation. Add its directory to PATH for later Gradle tasks.
 
 **Verification:** based on run `43615178611` job log. Workflow source changed; no build has passed yet. Next push should trigger another run.
+
+
+## 2026-11-14 — Migrate Android Kotlin JVM target to compilerOptions
+
+**Trigger:** Android prototype workflow run 3 (43615308594) passed JDK, Gradle and Android SDK setup, then failed while compiling app/build.gradle.kts: Kotlin Gradle Plugin 2.3.10 treats kotlinOptions.jvmTarget as an error and requires the compilerOptions DSL.
+
+**Changed:** removed the deprecated android.kotlinOptions JVM target assignment and configured the Kotlin JVM target through kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }. Java source/target compatibility remains 17.
+
+**Verification:** the change is authored from the exact compiler error in run 43615308594; no Gradle build or Kotlin compilation has yet verified the correction. The next GitHub Actions run must confirm whether project configuration proceeds to source compilation.
+
+**Build / APK:** previous run failed; no APK artifact exists. The next build is expected to be triggered by the commit.
