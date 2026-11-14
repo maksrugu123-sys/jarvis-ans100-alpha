@@ -315,6 +315,7 @@ class LocalConversationSignalRuntime(
             effectiveThreshold = threshold,
             statePersisted = checkpointVersion > 0L,
             checkpointVersion = checkpointVersion,
+            modelTimeNs = currentTimeNs,
         )
     }
 

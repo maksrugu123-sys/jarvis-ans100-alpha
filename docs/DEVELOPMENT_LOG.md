@@ -1896,3 +1896,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Builds / device / CI:** Gradle sync/build, APK/AAB, emulator/device, airplane-mode, CI and GitHub Actions **NOT RUN**. This is source-level implementation only; no compile or runtime success is claimed.
 
 **Remaining:** native Android durable user-memory CRUD and retrieval; explicit Termux package/service discovery and capability UI; a permission-scoped extension API for additional tools; full source-level review of the existing workspace and transfer flows.
+
+
+## 2026-11-14 — Correct signal-context time metadata
+
+**Correction:** the first in-process ANS-100 commit added tests that asserted model-time metadata, but the shared context type did not yet declare that field. Before any test/build was run, source review caught the mismatch.
+
+**Changed:** added a non-negative `modelTimeNs` field to `ConversationSignalContext`; the in-process runtime now supplies its current model clock, and the optional Termux bridge parses both `model_time_ns` and `checkpoint_version` from the Python response using strict non-negative integer validation.
+
+**Verification:** source-level cross-file correction only. Tests/builds remain **NOT RUN**.

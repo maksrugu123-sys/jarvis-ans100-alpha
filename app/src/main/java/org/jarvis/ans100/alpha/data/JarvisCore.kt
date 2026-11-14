@@ -63,6 +63,7 @@ data class ConversationSignalContext(
     val effectiveThreshold: Double = 1.0,
     val statePersisted: Boolean = false,
     val checkpointVersion: Long = 0L,
+    val modelTimeNs: Long = 0L,
 ) {
     init {
         if (runtimeVersion != "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
@@ -72,7 +73,7 @@ data class ConversationSignalContext(
             !questionMarker.isFinite() || questionMarker !in 0.0..1.0 ||
             !integratorAdaptation.isFinite() || integratorAdaptation !in 0.0..1.0 ||
             !effectiveThreshold.isFinite() || effectiveThreshold !in 1.0..1.5 ||
-            checkpointVersion < 0L
+            checkpointVersion < 0L || modelTimeNs < 0L
         ) {
             throw RuntimeBridgeException("Сводка сигнала ANS-100 содержит недопустимые значения.")
         }

@@ -194,6 +194,8 @@ class LocalRuntimeBridgeClient {
             integratorAdaptation = feature("integrator_adaptation"),
             effectiveThreshold = feature("effective_threshold", 1.0, 1.5),
             statePersisted = statePersisted,
+            checkpointVersion = requiredLong(response, "checkpoint_version"),
+            modelTimeNs = requiredLong(response, "model_time_ns"),
         )
     }
 
