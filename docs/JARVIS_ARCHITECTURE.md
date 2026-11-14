@@ -4874,3 +4874,14 @@ The Android conversation path now includes `LocalReasoningEngine`, a bounded det
 The result is attached to the `LocalUnderstanding` record before `LocalResponseEngine` is invoked; LiteRT-LM receives it as a structured, untrusted plan description. `executionAuthorized` remains permanently false. The engine has no world-state access, evidence retrieval, network, tools or action executor. A SOLVED result proves only that the supplied finite planning graph satisfies its goal; it does not prove that extracted facts are true, that a factual answer is correct, or that JARVIS has general/deep intelligence.
 
 Focused JVM tests are authored for shortest-path selection, missing preconditions, search-budget reporting, question planning and clarification handling. They are **AUTHORED, NOT RUN**. Kotlin compilation and Android runtime are not verified. Contract: `app/src/main/java/org/jarvis/ans100/alpha/data/LocalReasoningEngine.kt` and `app/src/test/java/org/jarvis/ans100/alpha/data/LocalReasoningEngineTest.kt`.
+
+
+### 3.74 Native Android sparse neuron network and SQLite JNVM V1 (14 November 2026)
+
+`AndroidSparseNeuronNetwork` adds a native Kotlin event-driven sparse LIF-DT network, with a source-level topology ceiling of 10,000 neurons, 100,000 directed connections and 100,000 pending events. `AndroidNeuronSqliteStore` persists neuron state, sparse connections, pending events and model time in an app-private SQLite database. A bounded LRU cache (default 128 resident neuron states) loads inactive state on demand. Clean entries are evicted only after a durable timestamp transaction succeeds.
+
+One timestamp is committed as a single SQLite transaction containing consumed events, changed neuron states, generated delayed events and the shared model clock. The scheduler never splits same-time input batches. It enforces event, timestamp, fan-out and queue limits with explicit backpressure. This is the first native Android JNVM working-set path; SQLite flash storage remains persistence rather than active RAM.
+
+The default initializer creates a sparse chain for deterministic capacity validation. This runtime is not yet wired into the ordinary chat pipeline; the existing ten-neuron Kotlin ANS-100 signal pre-pass remains the chat default. No automatic STDP/R-STDP learning is implied. 10,000-node performance, SQL transaction latency, flash write amplification, RAM, battery, thermal behavior and crash recovery remain unmeasured.
+
+Three Android instrumentation tests are AUTHORED, NOT RUN: 10,000-node sparse initialization with a bounded resident set, timestamp-level propagation, and state/queue reopen. See `docs/JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md`.

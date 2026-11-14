@@ -2254,3 +2254,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** fetched and reviewed the current branch files and blob SHAs, assembled one atomic Git tree/commit, then fetched the updated source back from GitHub. No executable Kotlin/Python tests, Gradle sync/build, APK/AAB, CI, device inference or performance measurements were run. Five new JVM tests are **AUTHORED, NOT RUN**.
 
 **Limitations / next:** extend the same fact/action contract with independently sourced evidence and contradiction handling; do not equate a solved symbolic graph with general reasoning. Next engineering batches cover event/reward learning, the native sparse neuron network and durable working set, portable cross-device synchronization, and one-shot local action approvals.
+
+
+## 2026-11-14 — Add native Android sparse LIF-DT network and SQLite JNVM working set
+
+**Objective:** provide a native Android 10,000-node-capable sparse event runtime and persist inactive neuron state without requiring Termux.
+
+**Added:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidSparseNeuronNetwork.kt` — sparse directed LIF-DT network with up to 10,000 neuron records, 100,000 connections and 100,000 pending events; per-timestamp detached candidates; whole-timestamp event/state/clock publication in one SQLite transaction; deterministic sparse-chain initialization; 128-entry default LRU.
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidSparseNeuronNetworkTest.kt` — three instrumentation tests for 10,000-node initialization, bounded LRU, propagation and durable reopen.
+- `docs/JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md` and architecture §3.74 — record storage, scheduler and safety boundaries.
+
+**Behavior / boundaries:** this is a native Android runtime and persistence implementation at source level, independent of Termux. It is not yet the ordinary chat signal path; the ten-neuron diagnostic remains the default for conversation. The runtime uses deterministic starter LIF-DT parameters and a sparse chain initializer; task-specific topology and calibrated learning are separate work.
+
+**Verification:** source written through a single Git tree/commit and read back from GitHub. No Kotlin compilation, instrumentation tests, Gradle build, APK, device runtime or resource benchmark was run. Three Android instrumentation tests are **AUTHORED, NOT RUN**.
+
+**Limitations / next:** test SQLite transaction rollback and uncertain process death on a real device; measure 1/10/100/1,000/10,000-node profiles, RAM, I/O, CPU and thermal behavior; integrate a bounded learning path and explicit feedback before routing chat through this network.
