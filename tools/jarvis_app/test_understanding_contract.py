@@ -54,6 +54,25 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertTrue(result["refers_to_previous_context"])
         self.assertFalse(result["asks_for_explanation"])
 
+    def test_context_reference_requests_clarification_without_history(self) -> None:
+        result = analyze_text("Продолжай с предыдущей задачей")
+        self.assertTrue(result["refers_to_previous_context"])
+        self.assertFalse(result["has_recent_user_context"])
+        plan = result["reasoning_plan"]
+        self.assertTrue(plan["requires_clarification"])
+        self.assertFalse(plan["context_available"])
+        self.assertTrue(plan["clarification_question"])
+
+    def test_context_reference_can_use_recent_user_history(self) -> None:
+        history = [
+            {"role": "user", "content": "Мы обсуждаем ошибку в проекте JARVIS"},
+            {"role": "assistant", "content": "Я нашёл описание проблемы."},
+        ]
+        result = analyze_text("Продолжай с этим", history)
+        self.assertTrue(result["has_recent_user_context"])
+        self.assertTrue(result["reasoning_plan"]["context_available"])
+        self.assertFalse(result["reasoning_plan"]["requires_clarification"])
+
     def test_matches_the_shared_desktop_and_android_understanding_fixtures(self) -> None:
         fixture = (
             Path(__file__).resolve().parents[2]
