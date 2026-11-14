@@ -29,6 +29,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.NavigationBar
@@ -51,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -165,7 +167,21 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     }
     val selectedTask = ui.data.tasks.firstOrNull { it.id == selectedTaskId }
 
-    MaterialTheme {
+    val jarvisBlue = Color(0xFF268BFF)
+    val jarvisColors = darkColorScheme(
+        primary = Color(0xFF4DA3FF),
+        onPrimary = Color(0xFF001B35),
+        secondary = Color(0xFF69C8FF),
+        tertiary = Color(0xFF8AB4FF),
+        background = Color(0xFF07111F),
+        surface = Color(0xFF0C1B2D),
+        surfaceVariant = Color(0xFF122943),
+        onSurface = Color(0xFFE7F2FF),
+        onSurfaceVariant = Color(0xFFA9C4E2),
+        outline = Color(0xFF315579),
+    )
+
+    MaterialTheme(colorScheme = jarvisColors) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
@@ -1071,6 +1087,7 @@ private fun Header() {
                 "JARVIS",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
             )
             Text(
                 "ANS-100 ALPHA · ЛОКАЛЬНОЕ ПРИЛОЖЕНИЕ",
@@ -1265,6 +1282,7 @@ private fun RuntimeBridgePanel(
     onOpenTermux: () -> Unit,
 ) {
     var accessTokenInput by remember { mutableStateOf("") }
+    var showTermuxGuide by rememberSaveable { mutableStateOf(true) }
     var sessionTitle by rememberSaveable { mutableStateOf("") }
     var taskTitle by rememberSaveable { mutableStateOf("") }
     var selectedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1314,6 +1332,44 @@ private fun RuntimeBridgePanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Как подключить Termux", fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary)
+                        TextButton(onClick = { showTermuxGuide = !showTermuxGuide }) {
+                            Text(if (showTermuxGuide) "Свернуть" else "Показать")
+                        }
+                    }
+                    if (showTermuxGuide) {
+                        Text("1. Установите Termux из F-Droid или официального GitHub проекта. Не используйте устаревшую версию из Google Play.")
+                        Text("2. Откройте Termux и установите инструменты:")
+                        Text("pkg update && pkg upgrade\npkg install python git")
+                        Text("3. Скачайте репозиторий JARVIS и перейдите в его папку:")
+                        Text("git clone https://github.com/maksrugu123-sys/jarvis-ans100-alpha.git\ncd jarvis-ans100-alpha")
+                        Text("4. Запустите локальный мост:")
+                        Text("python -m tools.jarvis_app --port 8765 --platform android")
+                        Text("5. Скопируйте выданный токен из Termux, вернитесь сюда, вставьте его в поле ниже и нажмите «Сохранить токен», затем «Подключить расширение».")
+                        Text("Не отправляйте токен другим людям: он даёт доступ к локальному мосту JARVIS.",
+                            color = MaterialTheme.colorScheme.tertiary,
+                            style = MaterialTheme.typography.bodySmall)
+                        Text("Termux должен оставаться запущенным, пока используется расширение. Основной чат JARVIS продолжит работать и без него.")
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     enabled = !state.isBusy,
