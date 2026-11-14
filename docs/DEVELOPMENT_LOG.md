@@ -2439,3 +2439,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** fetched current branch files, applied exact-content replacements, and verified GitHub update responses. No executable test, Kotlin compile, Gradle build, APK, CI, device runtime or performance measurement was run, in accordance with repository instructions.
 
 **Limitations / next:** the Android dialogue graph is a bounded numeric feature-to-four-output learner, not a semantic reasoner. The next high-value engineering task is a static review of the existing Python JNVM working-set integration and its recovery/dirty-eviction invariants, followed by tests only when separately authorized. Automatic sync, PC browser/model runtime and Android build remain unverified.
+
+
+## 2026-11-14 — Reconcile Android dialogue R-STDP documentation
+
+**Objective:** remove contradictory status statements after the native Android 10k dialogue reward path and its instrumentation coverage were added.
+
+**Changed:**
+- `docs/JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md` now documents the bounded SQLite eligibility/reward path and distinguishes it from the separate hashed classifier and Qwen language model.
+- `docs/JARVIS_ARCHITECTURE.md` §3.74 now points to §3.79 as the superseding explicit R-STDP implementation instead of claiming that the 10k graph has no reward learning.
+- `README.md` removes the stale claim that Android feedback cannot update native LIF synapses and records the current nine-case instrumentation suite.
+
+**Tests:** no new tests in this documentation-only correction. The nine Android instrumentation cases in `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidSparseNeuronNetworkTest.kt` remain **AUTHORED, NOT RUN**.
+
+**Verification:** fetched the current experiment-branch source and compared the status text against the Kotlin implementation and test file. No executable test, Kotlin compile, Gradle build, APK, CI, device runtime or resource measurement was run.
+
+**Limitations / next:** the Android R-STDP rule remains an experimental numeric four-output readout. Eligibility attribution, update quality, held-out generalization and device costs are not verified. The Python per-neuron LRU uses 128 independent JPVR shard containers, whereas NetworkJNVMCoordinator commits a whole multi-neuron timestamp in one container; direct wiring would break atomic timestamp publication. Next, design a single-container lazy neuron-record/scheduler transaction before attempting to integrate that working set.
