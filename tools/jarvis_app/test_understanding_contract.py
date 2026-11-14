@@ -151,6 +151,35 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertEqual("JARVIS_UNDERSTANDING_V1", context["schema"])
         self.assertEqual("question", context["intent"])
 
+    def test_core_promotes_action_plan_into_structured_reasoning_dag(self) -> None:
+        engine = _CaptureLanguageEngine()
+        core = JarvisCore(engine, signal_runtime=_SignalRuntime())
+        try:
+            _answer, trace = core.respond("Найди ошибки и исправь их в проекте", [])
+        finally:
+            core.close()
+        self.assertTrue(trace["reasoning_engine_invoked"])
+        self.assertEqual("core_understanding_template", trace["reasoning_origin"])
+        self.assertFalse(trace["reasoning_execution_authorized"])
+        context = engine.arguments["reasoning_context"]
+        self.assertEqual("bounded_symbolic_plan_summary", context["scope"])
+        self.assertEqual("core_understanding_template", context["origin"])
+        self.assertEqual(5, len(context["steps"]))
+        self.assertEqual([], context["steps"][0]["depends_on"])
+        self.assertEqual(["step-01"], context["steps"][1]["depends_on"])
+
+    def test_ambiguous_natural_language_request_is_clarified_before_dag_planning(self) -> None:
+        engine = _CaptureLanguageEngine()
+        core = JarvisCore(engine, signal_runtime=_SignalRuntime())
+        try:
+            _answer, trace = core.respond("Почему это не работает?", [])
+        finally:
+            core.close()
+        self.assertTrue(trace["natural_language_plan_requires_clarification"])
+        self.assertFalse(trace["reasoning_engine_invoked"])
+        self.assertEqual("none", trace["reasoning_origin"])
+        self.assertIsNone(engine.arguments["reasoning_context"])
+
     def test_both_real_engines_accept_the_core_understanding_argument(self) -> None:
         fallback_parameters = inspect.signature(LocalFallbackResponseEngine.respond).parameters
         model_parameters = inspect.signature(LiteRtLmLocalEngine.respond).parameters
