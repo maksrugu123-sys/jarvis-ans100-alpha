@@ -26,7 +26,7 @@ The local conversation path does not construct an HTTP client, open a socket, us
 
 LocalFallbackResponseEngine implements the LocalResponseEngine interface. It recognizes basic social messages, /help and /status, and accepts the Core's bounded intent/plan record. For other requests it can show the heuristic intent and a clarification or preliminary-plan notice, while explicitly reporting that free-form answers require an installed language model.
 
-This is a deterministic fallback, not an LLM. The Core-side `JARVIS_UNDERSTANDING_V1` parser and `JARVIS_REASONING_PLAN_V1` planner are bounded rules/templates, not general semantic understanding, not the ANS-100 neural runtime, and not the separate symbolic Reasoning Engine. They do not perform content-aware task decomposition, voice, or action execution. It does not call tools or cause external side effects. A future local model must be introduced through LocalResponseEngine and must report its true backend identity and availability.
+This is a deterministic fallback, not an LLM. The Core-side `JARVIS_UNDERSTANDING_V1` parser and `JARVIS_REASONING_PLAN_V1` planner are bounded rules/templates, not general semantic understanding, not the ANS-100 neural runtime, and not the separate symbolic Reasoning Engine. They do not perform content-aware task decomposition, voice, or action execution. It does not call tools or cause external side effects. The optional LiteRT-LM Qwen adapter is now source-integrated behind LocalResponseEngine, but its runtime and device performance remain unverified.
 
 ## 4. Local history format and bounds
 
@@ -44,11 +44,11 @@ The store is app-private but is not separately encrypted by this feature. It is 
 
 ## 5. User-visible behavior
 
-The screen identifies the backend as a local basic responder without an LLM. The last eight messages are shown; the repository retains up to 120. The user can explicitly clear the Android-local conversation history. Unsupported prompts receive an honest capability response rather than fabricated answers or claims of successful reasoning.
+The screen identifies the active backend as a local basic responder or the installed language model. The last eight messages are shown; the repository retains up to 120. The user can explicitly clear the Android-local conversation history. Without a model, the Core can report a bounded intent estimate and ask for missing context, but it cannot formulate arbitrary factual answers.
 
 ## 6. Verification
 
-Twelve focused Kotlin/JUnit tests cover round-trip/reopen, bounded retention, invalid input, failed persistence, corrupt state, clear, fallback honesty, Core status, approved-memory routing and injected-engine coordination. Status: **AUTHORED, NOT RUN**.
+Fourteen focused Kotlin/JUnit conversation-runtime tests cover round-trip/reopen, bounded retention, invalid input, failed persistence, corrupt state, clear, fallback honesty, Core status, approved-memory routing, Core analysis handoff, model-free planning and injected-engine coordination. Eleven separate Kotlin understanding-pipeline tests cover intent/plan behavior and shared fixtures. Status: **AUTHORED, NOT RUN**.
 
 No Gradle sync/build, APK/AAB, Kotlin test, emulator run, Android device run, offline airplane-mode test, performance measurement, CI or GitHub Actions workflow was executed. Source readback and static cross-file inspection only.
 
