@@ -41,7 +41,7 @@ class SafeActionExecutor:
         return [dict(item) for item in self._outputs.get(task_id, [])]
 
     def execute(self, action, request) -> ActionExecutionResult:
-        observed = set(action.preconditions)
+        observed = {"request_received"} | set(action.preconditions)
         observed.difference_update(action.delete_facts)
         if request.effect is not EffectClass.READ_ONLY:
             return ActionExecutionResult(
@@ -87,7 +87,7 @@ class SafeActionExecutor:
             # no application-side mutation and is recorded as a known no-effect.
             return ActionExecutionResult(
                 ExecutionOutcome.FAILED_NO_EFFECT,
-                tuple(sorted(set(action.preconditions) - set(action.delete_facts))),
+                tuple(sorted(({"request_received"} | set(action.preconditions)) - set(action.delete_facts))),
                 "read_only_action_failed",
             )
 

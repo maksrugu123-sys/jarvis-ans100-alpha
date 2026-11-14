@@ -726,7 +726,7 @@ class LocalConsoleService:
             actions = []
             bindings = {}
             rules_by_capability = {}
-            prior_fact = "request_received"
+            available_facts = ["request_received"]
             for index, (capability, value) in enumerate(normalized, start=1):
                 action_id = f"safe_step_{index}"
                 next_fact = f"safe_step_{index}_completed"
@@ -740,7 +740,7 @@ class LocalConsoleService:
                     action_id=action_id,
                     summary=summary,
                     rationale=value,
-                    preconditions=(prior_fact,),
+                    preconditions=tuple(available_facts),
                     add_facts=(next_fact,),
                     delete_facts=(),
                 ))
@@ -767,13 +767,13 @@ class LocalConsoleService:
                     max_output_bytes=16_384,
                     max_retries=0,
                 )
-                prior_fact = next_fact
+                available_facts.append(next_fact)
 
             problem = ReasoningProblem(
                 task_id=clean_task_id,
                 goal_description=f"User-requested bounded read-only task: {task.title}"[:1024],
                 initial_facts=("request_received",),
-                goal_facts=(prior_fact,),
+                goal_facts=(available_facts[-1],),
                 actions=tuple(actions),
             )
             executor = SafeActionExecutor(

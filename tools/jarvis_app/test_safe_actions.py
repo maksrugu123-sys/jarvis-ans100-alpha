@@ -80,6 +80,26 @@ class ReadOnlyTaskLoopServiceTests(unittest.TestCase):
         self.assertEqual(len(result["outputs"]), 1)
         self.assertEqual(result["outputs"][0]["capability"], "memory.search")
 
+
+    def test_multiple_read_only_steps_keep_the_complete_fact_chain(self):
+        session = self.service.create_session("Multi-step read-only work")
+        task = self.service.create_task(session["session_id"], "Search memory twice")
+        result = self.service.run_read_only_task(
+            task["task_id"],
+            task["revision"],
+            [
+                {"capability": "memory.search", "input": "JARVIS"},
+                {"capability": "memory.search", "input": "neuron"},
+                {"capability": "memory.search", "input": "memory"},
+            ],
+        )
+        self.assertEqual(result["loop"]["status"], "completed")
+        self.assertEqual(len(result["loop"]["executed_step_ids"]), 3)
+        self.assertIn("request_received", result["loop"]["observed_facts"])
+        self.assertIn("safe_step_1_completed", result["loop"]["observed_facts"])
+        self.assertIn("safe_step_2_completed", result["loop"]["observed_facts"])
+        self.assertIn("safe_step_3_completed", result["loop"]["observed_facts"])
+
     def test_shell_or_write_capabilities_are_rejected_before_execution(self):
         session = self.service.create_session("Blocked work")
         task = self.service.create_task(session["session_id"], "Try unsupported action")
