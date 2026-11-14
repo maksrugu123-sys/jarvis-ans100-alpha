@@ -4882,9 +4882,11 @@ Focused JVM tests are authored for shortest-path selection, missing precondition
 
 One timestamp is committed as a single SQLite transaction containing consumed events, changed neuron states, generated delayed events and the shared model clock. The scheduler never splits same-time input batches. It enforces event, timestamp, fan-out and queue limits with explicit backpressure. This is the first native Android JNVM working-set path; SQLite flash storage remains persistence rather than active RAM.
 
-The default initializer creates a sparse chain for deterministic capacity validation. This runtime is not yet wired into the ordinary chat pipeline; the existing ten-neuron Kotlin ANS-100 signal pre-pass remains the chat default. No automatic STDP/R-STDP learning is implied. 10,000-node performance, SQL transaction latency, flash write amplification, RAM, battery, thermal behavior and crash recovery remain unmeasured.
+The generic initializer creates a sparse chain for deterministic scheduler tests. The ordinary Android chat side-channel uses a separate feed-forward `initializeSparseDialogueNetwork()` topology: 9,996 feature neurons each connect to four terminal output neurons (39,984 directed edges total). A feature spike fans out to the four outputs and stops; it cannot traverse a 10,000-node chain and accumulate a cross-turn propagation backlog. The classifier's 10,000 hash slots map modulo the 9,996 input-neuron slots. The new topology uses a separate V2 database filename so a pre-existing V1 chain database is preserved rather than silently overwritten. The ten-neuron Kotlin ANS-100 signal pass remains the chat response-context path; the 10k sparse graph is an optional numeric side-channel and its output does not control Qwen.
 
-Three Android instrumentation tests are AUTHORED, NOT RUN: 10,000-node sparse initialization with a bounded resident set, timestamp-level propagation, and state/queue reopen. See `docs/JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md`.
+No automatic STDP/R-STDP learning is implied for this spiking graph. Existing Android 👍/👎 feedback still updates the separate sparse dialogue-feature classifier, not the 10k LIF synapses. 10,000-node performance, SQL transaction latency, flash write amplification, RAM, battery, thermal behavior and crash recovery remain unmeasured.
+
+Seven Android instrumentation tests are AUTHORED, NOT RUN: 10,000-node generic chain initialization, 10,000-node dialogue topology initialization, bounded feature-to-output propagation without a chain backlog, timestamp propagation, atomic same-time batches, duplicate rejection and state/queue reopen. See `docs/JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md`.
 
 
 ### 3.75 Explicit reward-modulated dialogue plasticity V1 (14 November 2026)
