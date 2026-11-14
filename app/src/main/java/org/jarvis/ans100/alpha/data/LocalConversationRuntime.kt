@@ -227,6 +227,8 @@ internal object LocalConversationCodec {
 
 interface LocalResponseEngine {
     val backendLabel: String
+    /** True only when a local model artifact is installed; inference is not implied. */
+    val languageModelConfigured: Boolean get() = false
     fun respond(
         prompt: String,
         recentHistory: List<LocalConversationMessage>,
@@ -268,38 +270,5 @@ class LocalFallbackResponseEngine : LocalResponseEngine {
                     "ответ: встроенная языковая модель ещё не подключена. Попробуй /help или /status."
             }
         }
-    }
-}
-
-class LocalConversationCoordinator(
-    private val repository: LocalConversationRepository,
-    private val responseEngine: LocalResponseEngine,
-) {
-    val backendLabel: String get() = responseEngine.backendLabel
-
-    fun history(): List<LocalConversationMessage> = repository.load()
-
-    fun send(prompt: String): List<LocalConversationMessage> {
-        val clean = prompt.trim()
-        if (clean.isEmpty() || clean.length > LocalConversationRepository.MAX_MESSAGE_CHARS ||
-            clean.any { it == '\u0000' }
-        ) {
-            throw LocalConversationException("Сообщение должно содержать от 1 до 4 000 символов.")
-        }
-        val context = repository.load().takeLast(MAX_CONTEXT_MESSAGES)
-        val response = responseEngine.respond(clean, context)
-        if (response.isBlank() ||
-            response.length > LocalConversationRepository.MAX_MESSAGE_CHARS ||
-            response.any { it == '\u0000' }
-        ) {
-            throw LocalConversationException("Локальный ответчик вернул некорректный ответ.")
-        }
-        return repository.appendExchange(clean, response)
-    }
-
-    fun clear() = repository.clear()
-
-    private companion object {
-        const val MAX_CONTEXT_MESSAGES = 24
     }
 }

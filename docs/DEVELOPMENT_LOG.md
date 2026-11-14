@@ -1851,3 +1851,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Ветки:** изменения планируются только в mobile-first-offline-v1. На момент аудита branch head был 2b2adf83a5d3817fbdc0c46b86c3345ec7cb7c99; main был f8d21607af468e92abfcf1902a915511b2c940c6. Main не изменялся.
 
 **Следующий meaningful step:** интегрировать Android conversation records с portable shared workspace/JWS/JWB contract, сохранив локальный путь; затем добавить model-integrity/cancellation/test coverage и запросить отдельное разрешение на измерение фактической работы модели на телефоне и PC.
+
+## 2026-11-14 — JARVIS Core orchestration V1 (source implementation)
+
+- Added an explicit conversation orchestrator on Android and desktop/PWA. The core owns the turn boundary, validates user input and model output, routes deterministic `/help` and `/status` commands, and persists complete exchanges; the language model remains a text-generation component.
+- Android now labels the backend as `JARVIS Core → …` and reports the actual integration boundaries. Recent local conversation history is used as context. Android JPVR long-term memory, automatic Reasoning Engine invocation, and ANS-100 network invocation are still not integrated into the chat loop.
+- Desktop/PWA now retrieves up to three relevant saved workspace memories using bounded lexical overlap and supplies them to the language model as explicitly untrusted reference data. This is keyword retrieval, not semantic/vector search.
+- Desktop capability status exposes model/runtime availability without claiming inference verification. Reasoning remains a separate symbolic preview; ANS-100 NetworkRuntime remains separate; external actions stay disabled.
+- Updated model instructions to describe the LLM as JARVIS's language component, not the entire system.
+- Added Android and Python regression tests. Tests/builds/device inference were **not run**; changes are source-level only and require verification on Android and desktop.

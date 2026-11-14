@@ -108,6 +108,55 @@ class LocalConversationRuntimeTest {
             .contains("языковая модель ещё не подключена"))
     }
 
+
+    @Test
+    fun coreStatusCommandReportsRealIntegrationBoundariesWithoutCallingLanguageEngine() {
+        var engineCalled = false
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake-language-engine"
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+            ): String {
+                engineCalled = true
+                return "model-reply"
+            }
+        }
+        val coordinator = LocalConversationCoordinator(repository(MemoryStorage()), engine)
+
+        val messages = coordinator.send("/status")
+
+        assertTrue(!engineCalled)
+        assertTrue(messages.last().text.contains("ANS-100"))
+        assertTrue(messages.last().text.contains("не интегрирован"))
+        assertTrue(messages.last().text.contains("долговременная JPVR-память"))
+        assertTrue(coordinator.backendLabel.startsWith("JARVIS Core"))
+    }
+
+    @Test
+    fun normalConversationIsStillGeneratedByInjectedLanguageComponent() {
+        var observedPrompt: String? = null
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake-language-engine"
+            override val languageModelConfigured = true
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+            ): String {
+                observedPrompt = prompt
+                return "language-generated reply"
+            }
+        }
+        val coordinator = LocalConversationCoordinator(repository(MemoryStorage()), engine)
+
+        val messages = coordinator.send("Объясни, как работает JARVIS Core")
+
+        assertEquals("Объясни, как работает JARVIS Core", observedPrompt)
+        assertEquals("language-generated reply", messages.last().text)
+        assertTrue(coordinator.status().languageModelConfigured)
+        assertTrue(!coordinator.status().ans100IntegratedIntoConversation)
+    }
+
     @Test
     fun coordinatorUsesInjectedEngineAndStoresItsReply() {
         var observedPrompt: String? = null

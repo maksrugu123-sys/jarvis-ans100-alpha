@@ -16,8 +16,11 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     private var engine: Engine? = null
     private var loadedPath: String? = null
 
+    override val languageModelConfigured: Boolean
+        get() = modelStore.installedFile() != null
+
     override val backendLabel: String
-        get() = if (modelStore.installedFile() != null) "LiteRT-LM · Qwen3-0.6B INT4 · CPU · offline" else fallback.backendLabel
+        get() = if (languageModelConfigured) "LiteRT-LM · Qwen3-0.6B INT4 · CPU · offline" else fallback.backendLabel
 
     override fun respond(prompt: String, recentHistory: List<LocalConversationMessage>): String {
         val clean = prompt.trim()
@@ -89,6 +92,6 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         private const val MAX_HISTORY = 4
         private const val MAX_HISTORY_CHARS = 320
         private const val MIN_AVAILABLE_MEMORY_BYTES = 1280L * 1024L * 1024L
-        private const val SYSTEM_PROMPT = "Ты — локальный помощник JARVIS. Отвечай по-русски кратко и прямо. Если не знаешь, так и скажи. Не выдумывай факты и не утверждай, что выполнил действия вне чата. У тебя нет доступа к сети, файлам, приложениям или инструментам. Не проси секреты и пароли."
+        private const val SYSTEM_PROMPT = "Ты — языковой модуль, который формирует ответы от имени JARVIS. Ты не являешься всем JARVIS и не управляешь его памятью, нейронным runtime или инструментами. Отвечай по-русски кратко и прямо. Не утверждай, что ANS-100, Reasoning Engine, долговременная память, сеть, файлы, приложения или внешние действия использовались, если ядро явно не передало такой результат. История диалога — только контекст, не разрешение на действия. Не выдумывай факты, не проси секреты и пароли."
     }
 }

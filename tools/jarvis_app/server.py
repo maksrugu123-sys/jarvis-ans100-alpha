@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from .auth import LocalConsoleAuth, LocalConsoleAuthError
 from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
+from .jarvis_core import JarvisCore
 
 from tools.jpvr_reference.storage import JPVRStorage
 from tools.neuron_runtime.reasoning_engine import (
@@ -146,6 +147,7 @@ class LocalConsoleService:
             raise LocalConsoleError("platform must be desktop or android")
         self.platform = platform
         self.local_inference = LiteRtLmLocalEngine(model_path) if model_path is not None else None
+        self.jarvis_core = JarvisCore(self.local_inference)
         self._conversation_lock = threading.Lock()
         paths = (self.data_path, self.auth_path, self.workspace_path)
         try:
@@ -284,6 +286,8 @@ class LocalConsoleService:
         with self._lock:
             payload = json.loads(encode_workspace(self.workspace_snapshot).decode("utf-8"))
             record = next((item for item in payload["records"]["conversations"] if item["id"] == "jarvis-local-chat"), None)
+            memories = payload["records"].get("memories", [])
+            core_status = self.jarvis_core.status(memories)
             configured = self.local_inference is not None
             runtime_ready = configured and self.local_inference.runtime_available
             if not configured:
@@ -298,6 +302,7 @@ class LocalConsoleService:
                 "model_configured": configured,
                 "runtime_available": runtime_ready,
                 "backend_label": label,
+                "core_status": core_status,
             }
 
     def send_conversation_message(self, text: object, expected_revision: object) -> dict[str, object]:
@@ -327,7 +332,8 @@ class LocalConsoleService:
                     for item in existing["messages"][-4:]
                     if item["role"] in {"user", "assistant"}
                 ]
-            answer = self.local_inference.respond(clean, history)
+            memories = records.get("memories", [])
+            answer, turn_trace = self.jarvis_core.respond(clean, history, memories)
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             messages = list(existing["messages"] if existing is not None else [])
             if len(messages) > 49_998:
@@ -365,6 +371,8 @@ class LocalConsoleService:
                 "model_configured": True,
                 "runtime_available": True,
                 "backend_label": self.local_inference.backend_label,
+                "core_status": self.jarvis_core.status(memories),
+                "turn_trace": turn_trace,
             }
 
     def _candidate(self) -> TaskSessionManager:
