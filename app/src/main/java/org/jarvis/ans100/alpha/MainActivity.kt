@@ -185,6 +185,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onDownloadModel = viewModel::downloadConversationModel,
                     onCancelDownload = viewModel::cancelConversationModelDownload,
                     onRemoveModel = viewModel::removeConversationModel,
+                    onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
                 )
                 LocalMemoryPanel(
                     state = ui.localMemory,
@@ -1794,6 +1795,7 @@ private fun ConversationPanel(
     onDownloadModel: () -> Unit,
     onCancelDownload: () -> Unit,
     onRemoveModel: () -> Unit,
+    onTrainDialogFeature: (String) -> Unit,
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
     var showModelDownloadConfirmation by remember { mutableStateOf(false) }
@@ -1921,6 +1923,86 @@ private fun ConversationPanel(
                     if (state.messages.size > 8) {
                         Text(
                             "Показаны последние 8 сообщений из ${state.messages.size}.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            if (state.messages.any { it.role == ConversationRole.USER }) {
+                val featurePrediction = state.dialogFeaturePrediction
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            "Диалоговые признаки · 10 000 адресуемых слотов",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "Активно: ${featurePrediction?.activeFeatureCount ?: 0} · " +
+                                "обучено примеров: ${featurePrediction?.trainedExamples ?: 0}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            when {
+                                featurePrediction == null -> "Для этого сообщения нет сохранённого прогноза."
+                                featurePrediction.trainedExamples == 0 ->
+                                    "Классификатор ещё не обучен и намеренно не угадывает категорию."
+                                featurePrediction.predictedLabel == null ->
+                                    "Уверенного совпадения пока нет."
+                                else -> "Гипотеза: " + when (featurePrediction.predictedLabel) {
+                                    "greeting" -> "приветствие"
+                                    "question" -> "вопрос"
+                                    "thanks" -> "благодарность"
+                                    "farewell" -> "прощание"
+                                    else -> "неизвестно"
+                                } + " · это эвристика, не вероятность."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        state.dialogFeatureError?.let { featureError ->
+                            Text(
+                                featureError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Text(
+                            "Проверь категорию последнего сообщения и выбери правильную метку:",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            TextButton(
+                                onClick = { onTrainDialogFeature("greeting") },
+                                enabled = !state.isBusy,
+                            ) { Text("Приветствие") }
+                            TextButton(
+                                onClick = { onTrainDialogFeature("question") },
+                                enabled = !state.isBusy,
+                            ) { Text("Вопрос") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            TextButton(
+                                onClick = { onTrainDialogFeature("thanks") },
+                                enabled = !state.isBusy,
+                            ) { Text("Спасибо") }
+                            TextButton(
+                                onClick = { onTrainDialogFeature("farewell") },
+                                enabled = !state.isBusy,
+                            ) { Text("Прощание") }
+                        }
+                        Text(
+                            "Сохраняются только числовые веса; исходные сообщения не записываются в checkpoint. " +
+                                "Это отдельный классификатор, не языковая модель и не 10 000 работающих спайковых нейронов.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
