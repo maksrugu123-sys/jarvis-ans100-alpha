@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.jarvis.ans100.alpha.data.LocalConversationCoordinator
+import org.jarvis.ans100.alpha.data.LocalConversationSignalRuntime
+import org.jarvis.ans100.alpha.data.SharedPreferencesConversationSignalStorage
 import org.jarvis.ans100.alpha.data.LocalConversationMessage
 import org.jarvis.ans100.alpha.data.LocalConversationRepository
 import org.jarvis.ans100.alpha.data.LocalWorkspaceMemory
@@ -104,6 +106,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         application.applicationContext, modelStore,
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
+    // The app-local ANS-100 pass is always available; Termux may override it when connected.
+    private val localSignalRuntime = LocalConversationSignalRuntime(
+        SharedPreferencesConversationSignalStorage(application.applicationContext),
+    )
     private val workspaceMemoryCache = LocalWorkspaceMemoryCache()
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
@@ -322,12 +328,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         )
         conversationExecutor.execute {
             try {
-                val signalContext = if (
-                    !clean.startsWith("/") &&
-                        mutableState.value.conversation.modelInstalled &&
+                val signalContext = if (!clean.startsWith("/")) {
+                    val extensionConnected = mutableState.value.runtime.isConnected &&
                         mutableState.value.runtime.hasAccessToken
-                ) {
-                    runCatching { runtimeClient.analyzeConversationSignal(clean) }.getOrNull()
+                    if (extensionConnected) {
+                        // Prefer the optional Termux runtime, but never make chat depend on it.
+                        runCatching { runtimeClient.analyzeConversationSignal(clean) }
+                            .getOrElse { localSignalRuntime.analyze(clean) }
+                    } else {
+                        localSignalRuntime.analyze(clean)
+                    }
                 } else {
                     null
                 }

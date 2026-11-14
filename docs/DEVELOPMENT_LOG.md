@@ -1878,3 +1878,21 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - The checkpoint stores model parameters, adaptive neuron state, topology and clock, but no raw prompt. Synaptic STDP/R-STDP learning remains disabled.
 - Android now validates and receives adaptive-state/threshold fields and reports whether the last signal result was durably checkpointed. Desktop capability status reports whether durable state is configured.
 - Added persistence/restart tests and updated bridge/Kotlin regression tests. Tests/builds/device inference were **not run**; source-level implementation only.
+
+
+## 2026-11-14 — Make Android ANS-100 in-process with optional Termux extension
+
+**Objective:** remove Termux as a prerequisite for Android conversation processing while retaining the authenticated Termux runtime as an optional capability extension.
+
+**Changed:**
+- Added `app/src/main/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntime.kt`: bounded Kotlin signal pass with app-private checkpoint persistence.
+- Updated `JarvisViewModel.kt`: local signal processing is the default; an already-connected Termux signal endpoint is preferred when available, and errors fall back to the in-process runtime.
+- Updated `JarvisCore.kt`: signal context now carries a validated checkpoint version and status text no longer implies the Termux bridge is required.
+- Added `app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntimeTest.kt`.
+- Updated `docs/JARVIS_MOBILE_FIRST_OFFLINE_RUNTIME_V1.md` with the hybrid boundary and remaining native-memory gap.
+
+**Tests:** six focused Kotlin tests authored; **NOT RUN**. They cover feature extraction, event budget, persistence/reopen, failed checkpoint writes, malformed checkpoints, and punctuation-only input.
+
+**Builds / device / CI:** Gradle sync/build, APK/AAB, emulator/device, airplane-mode, CI and GitHub Actions **NOT RUN**. This is source-level implementation only; no compile or runtime success is claimed.
+
+**Remaining:** native Android durable user-memory CRUD and retrieval; explicit Termux package/service discovery and capability UI; a permission-scoped extension API for additional tools; full source-level review of the existing workspace and transfer flows.

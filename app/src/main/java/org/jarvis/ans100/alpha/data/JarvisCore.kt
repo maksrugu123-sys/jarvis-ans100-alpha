@@ -62,6 +62,7 @@ data class ConversationSignalContext(
     val integratorAdaptation: Double = 0.0,
     val effectiveThreshold: Double = 1.0,
     val statePersisted: Boolean = false,
+    val checkpointVersion: Long = 0L,
 ) {
     init {
         if (runtimeVersion != "JARVIS_ANS100_CONVERSATION_SIGNAL_V1" ||
@@ -70,7 +71,8 @@ data class ConversationSignalContext(
             !lexicalDiversity.isFinite() || lexicalDiversity !in 0.0..1.0 ||
             !questionMarker.isFinite() || questionMarker !in 0.0..1.0 ||
             !integratorAdaptation.isFinite() || integratorAdaptation !in 0.0..1.0 ||
-            !effectiveThreshold.isFinite() || effectiveThreshold !in 1.0..1.5
+            !effectiveThreshold.isFinite() || effectiveThreshold !in 1.0..1.5 ||
+            checkpointVersion < 0L
         ) {
             throw RuntimeBridgeException("Сводка сигнала ANS-100 содержит недопустимые значения.")
         }
@@ -122,7 +124,7 @@ data class JarvisCoreStatus(
             else -> "кэшировано $longTermMemoryRecordCount подтверждённых записей; найдено для прошлого запроса: $memoriesRetrievedLastTurn"
         }
         val neural = when {
-            !ans100SignalProcessorActive -> "для последнего запроса нет результата сигнального прохода (мост не запускался или был недоступен)"
+            !ans100SignalProcessorActive -> "для последнего запроса нет результата локального сигнального прохода"
             ans100AttentionGateActive -> "ограниченный ALIF-DT сигнальный проход выполнен; attention gate активирован"
             else -> "ограниченный ALIF-DT сигнальный проход выполнен; attention gate не активирован"
         }

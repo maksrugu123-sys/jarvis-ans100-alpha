@@ -211,3 +211,22 @@ The first usable release is reached when the installed Android app can, with the
 - keep the core experience independent of Termux and remote servers.
 
 This is a staged engineering target, not a claim that the current repository already satisfies it.
+
+
+## 2026-11-14 — Built-in ANS-100 signal path with optional Termux acceleration
+
+**Implemented at source level on `mobile-first-offline-v1`:**
+
+- Added `LocalConversationSignalRuntime.kt`, an in-process Kotlin implementation of the bounded two-neuron conversation signal pass. It stores its compact checkpoint in app-private SharedPreferences and does not open a socket or invoke Python.
+- The Android ViewModel now runs the in-process signal pass for every ordinary conversation message, whether or not Termux is installed.
+- When the authenticated Termux bridge is already connected, the ViewModel prefers its Python ANS-100 signal endpoint. If that endpoint fails, the Android-local signal pass is used for the same turn. A missing Termux installation, missing token, or unavailable bridge does not block the conversation path.
+- Added focused Kotlin tests for feature extraction, event bounds, checkpoint persistence across runtime recreation, failed writes, corrupt checkpoints, and punctuation-only input.
+- Added a checkpoint version field to the shared signal context. The JPVR memory/workspace administration and encrypted workspace transfer features remain optional Termux-backed extensions in this stage; they are not yet replaced by a native Android JPVR store.
+
+**Important boundaries:**
+
+- The built-in ANS-100 pass is a low-level numeric text-shape preprocessor, not semantic language understanding or a full reasoning engine. Dialogue learning remains disabled.
+- The local conversation history and signal checkpoint are app-private. The current approved long-term JPVR workspace cache is still supplied by the optional Termux bridge; native persistent Android user memory is a separate unfinished task.
+- The local language model remains separately installed by the user. This change does not bundle model weights or prove successful inference.
+
+**Verification:** source-level edits and cross-file API inspection only. Kotlin tests, Gradle sync/build, APK/AAB, emulator/device execution, airplane-mode run, CI and GitHub Actions: **NOT RUN** by instruction. No runtime behavior is claimed as verified.
