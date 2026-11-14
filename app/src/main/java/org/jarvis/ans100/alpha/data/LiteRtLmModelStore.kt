@@ -274,5 +274,5 @@ class LiteRtLmModelStore(context: Context) {
     }
 }
 
-class LiteRtLmModelException(message: String) : IllegalStateException(message)
+open class LiteRtLmModelException(message: String) : IllegalStateException(message)
 class LiteRtLmDownloadCancelledException : LiteRtLmModelException("Загрузка отменена. Можно продолжить позже.")
