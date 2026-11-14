@@ -37,6 +37,8 @@ class LocalInferenceError(RuntimeError):
 class LiteRtLmLocalEngine:
     """Lazy, serialized Python API wrapper for one user-supplied model file."""
 
+    language_model_configured = True
+
     def __init__(
         self,
         model_path: str | Path,
