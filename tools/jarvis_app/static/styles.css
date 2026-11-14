@@ -238,3 +238,9 @@ textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(109,214,1
 }
 .neuron-panel textarea { width:100%; }
 .neuron-panel select { width:100%; min-height:42px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--panel-soft); color:var(--text); }
+
+.chat-neuron-trace {
+  margin:10px 0 14px; padding:10px 12px; border:1px solid var(--line);
+  border-radius:10px; background:#0d1824; color:#c2d6e8;
+  font-size:12px; line-height:1.55; overflow-wrap:anywhere;
+}
