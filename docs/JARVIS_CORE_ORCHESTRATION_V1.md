@@ -60,4 +60,4 @@ Lexical overlap is not semantic or vector search and does not establish truth, f
 - Shared Python/Kotlin ANS-100 fixture tests: AUTHORED, NOT RUN.
 - Existing Core, local-console and signal tests remain NOT RUN unless explicitly recorded as user-run historical evidence elsewhere.
 - No Gradle build, APK/AAB, model load/inference, Android device run, PC PWA session, browser session or performance measurement is claimed.
-- Next implementation work: visible browser research on PC; native Android JPVR or a reliable export bridge for device-local memories; actual model/runtime verification only after explicit test/build authorization.
+- Next implementation work: port the safe template-to-DAG adapter to native Android Kotlin; improve evidence-backed resolution of references against recent dialogue and approved memories; keep candidate plans separate from execution; measure Qwen and platform behavior only after explicit test/build authorization.
