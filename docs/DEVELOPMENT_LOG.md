@@ -2455,3 +2455,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** fetched the current experiment-branch source and compared the status text against the Kotlin implementation and test file. No executable test, Kotlin compile, Gradle build, APK, CI, device runtime or resource measurement was run.
 
 **Limitations / next:** the Android R-STDP rule remains an experimental numeric four-output readout. Eligibility attribution, update quality, held-out generalization and device costs are not verified. The Python per-neuron LRU uses 128 independent JPVR shard containers, whereas NetworkJNVMCoordinator commits a whole multi-neuron timestamp in one container; direct wiring would break atomic timestamp publication. Next, design a single-container lazy neuron-record/scheduler transaction before attempting to integrate that working set.
+
+
+## 2026-11-14 — Refresh peer-sync and autonomous milestone status
+
+**Objective:** align project handoff documents with the already-implemented Android peer-sync client/UI and the ordinary-chat 10k dialogue reward path.
+
+**Changed:**
+- `docs/JARVIS_PEER_MEMORY_SYNC_V1.md` now describes the source-level Android HTTPS client, manual pairing, the optional server tombstone field, and the still-missing Android tombstone/automatic-sync path.
+- `docs/JARVIS_AUTONOMOUS_CORE_MILESTONE_V1.md` now records that Android chat routes bounded features through the 10k sparse LIF-DT graph and can apply explicit rewards; it also corrects the peer-sync status.
+- `README.md` removes the obsolete claim that the Android pinned client/UI do not exist.
+
+**Tests:** documentation-only status reconciliation; no new tests. Existing Android peer-sync tests and Android sparse-network tests remain **AUTHORED, NOT RUN**. No TLS or device verification was performed.
+
+**Verification:** source/readback comparison only. No Python/Kotlin tests, syntax execution, Gradle build, APK, CI or device runtime was run.
+
+**Limitations / next:** peer sync is manual, additive/upsert-only and not end-to-end verified. Automatic sync must be opt-in and should not begin until pairing, failure handling and deletion semantics are defined. Python per-neuron LRU remains separate from atomic NetworkJNVMCoordinator timestamp commits.
