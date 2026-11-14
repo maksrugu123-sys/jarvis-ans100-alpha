@@ -18,6 +18,8 @@ from urllib.parse import urlsplit
 
 from .auth import LocalConsoleAuth, LocalConsoleAuthError
 from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
+from .local_fallback import LocalFallbackResponseEngine
+from .dialog_neurons import DialogNeuronService
 from .jarvis_core import JarvisCore
 from .visible_browser import (
     VisibleBrowserResearchError,
@@ -158,7 +160,13 @@ class LocalConsoleService:
         if platform not in ("desktop", "android"):
             raise LocalConsoleError("platform must be desktop or android")
         self.platform = platform
-        self.local_inference = LiteRtLmLocalEngine(model_path) if model_path is not None else None
+        self.local_inference = (
+            LiteRtLmLocalEngine(model_path)
+            if model_path is not None else LocalFallbackResponseEngine()
+        )
+        self.dialog_neurons = DialogNeuronService(
+            self.data_path.parent / "dialog-neurons-v1.json"
+        )
         self._conversation_lock = threading.Lock()
         paths = (
             self.data_path, self.auth_path, self.workspace_path, self.ans100_state_path,
@@ -181,6 +189,7 @@ class LocalConsoleService:
         self.jarvis_core = JarvisCore(
             self.local_inference,
             ConversationSignalRuntime(self.ans100_state_path),
+            dialog_neuron_service=self.dialog_neurons,
         )
         self.visible_browser = VisibleBrowserResearchService(
             self.data_path.parent / "research-browser-profile"
@@ -311,20 +320,26 @@ class LocalConsoleService:
             record = next((item for item in payload["records"]["conversations"] if item["id"] == "jarvis-local-chat"), None)
             memories = payload["records"].get("memories", [])
             core_status = self.jarvis_core.status(memories)
-            configured = self.local_inference is not None
-            runtime_ready = configured and self.local_inference.runtime_available
-            if not configured:
-                label = "Модель не настроена · локальный чат отключён"
-            elif not runtime_ready:
-                label = "Файл модели указан, но пакет litert-lm-api==0.17.1 не установлен"
+            model_configured = bool(getattr(self.local_inference, "language_model_configured", True))
+            runtime_ready = bool(self.local_inference.runtime_available)
+            if model_configured and not runtime_ready:
+                label = "Модель указана, но пакет litert-lm-api==0.17.1 не установлен"
+                chat_mode = "unavailable"
+            elif model_configured:
+                label = self.local_inference.backend_label
+                chat_mode = "local_model"
             else:
                 label = self.local_inference.backend_label
+                chat_mode = "fallback"
             return {
                 "revision": self.workspace_revision,
                 "conversation": record,
-                "model_configured": configured,
+                "model_configured": model_configured,
                 "runtime_available": runtime_ready,
+                "chat_available": runtime_ready,
+                "chat_mode": chat_mode,
                 "backend_label": label,
+                "dialogue_neurons": self.dialog_neurons.status(),
                 "core_status": core_status,
             }
 
@@ -798,6 +813,11 @@ def create_http_server(
                     return
                 self._send(200, service.conversation_state())
                 return
+            if path == "/api/dialog-neurons":
+                if not self._require_auth():
+                    return
+                self._send(200, service.dialog_neurons.status())
+                return
             if path == "/api/browser":
                 if not self._require_auth():
                     return
@@ -871,6 +891,13 @@ def create_http_server(
                         raise WorkspaceError("ожидались поля expected_revision и workspace")
                     self._send(200, service.restore_workspace(
                         payload["workspace"], payload["expected_revision"]
+                    ))
+                    return
+                if path == "/api/dialog-neurons/learn":
+                    if set(payload) != {"text", "expected_label"}:
+                        raise LocalConsoleError("ожидались поля text и expected_label")
+                    self._send(200, service.dialog_neurons.learn(
+                        payload["text"], payload["expected_label"]
                     ))
                     return
                 if path == "/api/conversation":
