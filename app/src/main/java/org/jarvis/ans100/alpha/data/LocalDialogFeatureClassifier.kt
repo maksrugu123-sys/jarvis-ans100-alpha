@@ -43,15 +43,8 @@ class LocalDialogFeatureClassifier(
 ) {
     private var weights: MutableMap<String, MutableMap<Int, Double>> = emptyWeights()
     private var trainedExamples: Int = 0
+    private var loaded: Boolean = false
     private var loadError: String? = null
-
-    init {
-        try {
-            storage.read()?.let(::restore)
-        } catch (error: Exception) {
-            loadError = error.message ?: "Не удалось восстановить диалоговый классификатор."
-        }
-    }
 
     @Synchronized
     fun analyze(text: String): DialogFeaturePrediction {
@@ -161,6 +154,14 @@ class LocalDialogFeatureClassifier(
     }
 
     private fun ensureAvailable() {
+        if (!loaded) {
+            loaded = true
+            try {
+                storage.read()?.let(::restore)
+            } catch (error: Exception) {
+                loadError = error.message ?: "Не удалось восстановить диалоговый классификатор."
+            }
+        }
         loadError?.let {
             throw DialogFeatureClassifierException("Checkpoint диалоговых признаков повреждён; обучение заблокировано. $it")
         }
