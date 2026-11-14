@@ -75,11 +75,15 @@ class LocalUnderstandingPipelineTest {
         }
         assertTrue(rows.isNotEmpty())
         rows.forEach { row ->
-            assertEquals(row[1], pipeline.analyze(row[0]).intent)
             val result = pipeline.analyze(row[0])
+            assertEquals(row[1], result.intent)
             assertEquals(row[2].toBoolean(), result.containsNegation)
             assertEquals(row[3].toBoolean(), result.refersToPreviousContext)
             assertEquals(row[4].toBoolean(), result.asksForExplanation)
+            assertEquals("JARVIS_REASONING_PLAN_V1", result.reasoningPlan.schema)
+            assertEquals(row[5].toInt(), result.reasoningPlan.steps.size)
+            assertEquals(row[6].toBoolean(), result.reasoningPlan.requiresClarification)
+            assertFalse(result.reasoningPlan.executionAuthorized)
         }
     }
 
