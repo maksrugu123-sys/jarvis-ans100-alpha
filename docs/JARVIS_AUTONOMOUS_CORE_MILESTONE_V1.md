@@ -37,7 +37,7 @@
 
 ### C. Native Android 10k network
 - Preserve the existing SQLite atomic timestamp and LRU design.
-- Add task-specific sparse topology, typed input encoding, persistent synapse state and bounded learning updates.
+- **Implemented at source level:** the chat-specific feed-forward topology has 9,996 feature neurons and four terminal output neurons (39,984 edges), and ordinary chat routes bounded hashed features to it on a dedicated executor. A V2 DB filename preserves old V1 chain data. Persistent synapse plasticity and reward integration into this 10k graph remain unfinished.
 - Connect the network to ordinary conversation as an optional, observable side channel; it must never block or corrupt the chat if the neural path fails.
 - Do not call it 10k-neuron reasoning until the network contributes to measured task decisions and passes held-out evaluation.
 
@@ -72,6 +72,12 @@
 4. Run Gradle debug build and inspect APK manifest, package ID, permissions and model/runtime packaging.
 5. Install on the target Android device; measure cold start, chat latency, memory, thermal behavior, offline operation and 10k sparse-network load.
 6. Record every result in the development log. Failed or unrun checks remain visibly marked.
+
+## Implementation update — bounded Android dialogue topology
+
+The Android chat graph no longer uses the generic 10,000-node sparse chain. `initializeSparseDialogueNetwork()` creates 9,996 feature neurons with four terminal readout neurons and 39,984 directed edges. Each active feature neuron can fan out to the four readouts; readout spikes do not propagate further, so a single chat turn cannot leave a long chain cascade queued for later turns. The 10,000 hashed feature IDs map modulo the 9,996 input slots.
+
+The new graph uses a V2 SQLite filename so an existing V1 chain database is preserved. Two instrumentation cases were added for graph counts and bounded feature-to-output propagation. The network remains an observable numeric side channel; it does not learn synaptic weights or control the response. All Android tests remain AUTHORED, NOT RUN.
 
 ## Current verification status
 
