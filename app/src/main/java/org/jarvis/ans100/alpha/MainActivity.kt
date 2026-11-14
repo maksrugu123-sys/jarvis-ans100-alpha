@@ -186,30 +186,30 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             )
                         }
                         NavigationBar {
-                        NavigationBarItem(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            icon = { Text("◉") },
-                            label = { Text("Чат") },
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            icon = { Text("▤") },
-                            label = { Text("Память") },
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == 2,
-                            onClick = { selectedTab = 2 },
-                            icon = { Text("☷") },
-                            label = { Text("Задачи") },
-                        )
-                        NavigationBarItem(
-                            selected = selectedTab == 3,
-                            onClick = { selectedTab = 3 },
-                            icon = { Text("⚙") },
-                            label = { Text("Система") },
-                        )
+                            NavigationBarItem(
+                                selected = selectedTab == 0,
+                                onClick = { selectedTab = 0 },
+                                icon = { Text("◉") },
+                                label = { Text("Чат") },
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 1,
+                                onClick = { selectedTab = 1 },
+                                icon = { Text("▤") },
+                                label = { Text("Память") },
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 2,
+                                onClick = { selectedTab = 2 },
+                                icon = { Text("☷") },
+                                label = { Text("Задачи") },
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 3,
+                                onClick = { selectedTab = 3 },
+                                icon = { Text("⚙") },
+                                label = { Text("Система") },
+                            )
                         }
                     }
                 },
@@ -224,284 +224,284 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     Header()
                     when (selectedTab) {
                         0 -> {
-                SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
-                ConversationPanel(
-                    state = ui.conversation,
-                    onClear = viewModel::clearConversation,
-                    onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
-                    onDownloadModel = viewModel::downloadConversationModel,
-                    onCancelDownload = viewModel::cancelConversationModelDownload,
-                    onRemoveModel = viewModel::removeConversationModel,
-                    onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
-                )
+                        SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
+                        ConversationPanel(
+                            state = ui.conversation,
+                            onClear = viewModel::clearConversation,
+                            onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
+                            onDownloadModel = viewModel::downloadConversationModel,
+                            onCancelDownload = viewModel::cancelConversationModelDownload,
+                            onRemoveModel = viewModel::removeConversationModel,
+                            onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
+                        )
                         }
                         1 -> {
-                LocalMemoryPanel(
-                    state = ui.localMemory,
-                    onAdd = viewModel::addLocalMemory,
-                    onDelete = viewModel::deleteLocalMemory,
-                )
-                WorkspaceMemoryPanel(
-                    state = ui.workspace,
-                    onRefresh = viewModel::refreshWorkspace,
-                    onAdd = viewModel::addWorkspaceMemory,
-                    onDelete = viewModel::deleteWorkspaceMemory,
-                    transferPassphrase = transferPassphrase,
-                    onPassphraseChange = { transferPassphrase = it.take(256) },
-                    onExport = { phrase ->
-                        transferPassphrase = ""
-                        viewModel.exportWorkspace(phrase.toCharArray()) { bytes ->
-                            pendingExportBytes = bytes
-                            exportLauncher.launch("jarvis-workspace-" +
-                                java.time.LocalDate.now().toString() + ".jws")
-                        }
-                    },
-                    onChooseImport = {
-                        if (transferPassphrase.length >= 12) {
-                            pendingImportPassphrase = transferPassphrase.toCharArray()
-                            transferPassphrase = ""
-                            importLauncher.launch(arrayOf(
-                                "application/vnd.jarvis.workspace+json",
-                                "application/json",
-                                "application/octet-stream",
-                                "*/*",
-                            ))
-                        }
-                    },
-                    onConfirmImport = viewModel::confirmWorkspaceImport,
-                    onCancelImport = viewModel::cancelWorkspaceImport,
-                    onExportBackup = { phrase ->
-                        transferPassphrase = ""
-                        viewModel.exportWorkspaceBackup(phrase.toCharArray()) { bytes, revision ->
-                            pendingBackupExportBytes = bytes
-                            pendingBackupExportRevision = revision
-                            backupExportLauncher.launch(
-                                "jarvis-workspace-backup-" +
-                                    java.time.LocalDate.now().toString() + ".jwb",
-                            )
-                        }
-                    },
-                    onChooseRestore = { phrase ->
-                        if (phrase.length >= 12 &&
-                            ui.workspace.backupRevision == ui.workspace.revision &&
-                            ui.workspace.restoreBackupAcknowledged
-                        ) {
-                            pendingRestorePassphrase = phrase.toCharArray()
-                            transferPassphrase = ""
-                            restoreLauncher.launch(arrayOf(
-                                "application/vnd.jarvis.workspace-backup+json",
-                                "application/json",
-                                "application/octet-stream",
-                                "*/*",
-                            ))
-                        }
-                    },
-                    onBackupAcknowledgement = viewModel::setRestoreBackupAcknowledged,
-                    onConfirmRestore = viewModel::confirmWorkspaceRestore,
-                    onCancelRestore = viewModel::cancelWorkspaceRestore,
-                )
+                        LocalMemoryPanel(
+                            state = ui.localMemory,
+                            onAdd = viewModel::addLocalMemory,
+                            onDelete = viewModel::deleteLocalMemory,
+                        )
+                        WorkspaceMemoryPanel(
+                            state = ui.workspace,
+                            onRefresh = viewModel::refreshWorkspace,
+                            onAdd = viewModel::addWorkspaceMemory,
+                            onDelete = viewModel::deleteWorkspaceMemory,
+                            transferPassphrase = transferPassphrase,
+                            onPassphraseChange = { transferPassphrase = it.take(256) },
+                            onExport = { phrase ->
+                                transferPassphrase = ""
+                                viewModel.exportWorkspace(phrase.toCharArray()) { bytes ->
+                                    pendingExportBytes = bytes
+                                    exportLauncher.launch("jarvis-workspace-" +
+                                        java.time.LocalDate.now().toString() + ".jws")
+                                }
+                            },
+                            onChooseImport = {
+                                if (transferPassphrase.length >= 12) {
+                                    pendingImportPassphrase = transferPassphrase.toCharArray()
+                                    transferPassphrase = ""
+                                    importLauncher.launch(arrayOf(
+                                        "application/vnd.jarvis.workspace+json",
+                                        "application/json",
+                                        "application/octet-stream",
+                                        "*/*",
+                                    ))
+                                }
+                            },
+                            onConfirmImport = viewModel::confirmWorkspaceImport,
+                            onCancelImport = viewModel::cancelWorkspaceImport,
+                            onExportBackup = { phrase ->
+                                transferPassphrase = ""
+                                viewModel.exportWorkspaceBackup(phrase.toCharArray()) { bytes, revision ->
+                                    pendingBackupExportBytes = bytes
+                                    pendingBackupExportRevision = revision
+                                    backupExportLauncher.launch(
+                                        "jarvis-workspace-backup-" +
+                                            java.time.LocalDate.now().toString() + ".jwb",
+                                    )
+                                }
+                            },
+                            onChooseRestore = { phrase ->
+                                if (phrase.length >= 12 &&
+                                    ui.workspace.backupRevision == ui.workspace.revision &&
+                                    ui.workspace.restoreBackupAcknowledged
+                                ) {
+                                    pendingRestorePassphrase = phrase.toCharArray()
+                                    transferPassphrase = ""
+                                    restoreLauncher.launch(arrayOf(
+                                        "application/vnd.jarvis.workspace-backup+json",
+                                        "application/json",
+                                        "application/octet-stream",
+                                        "*/*",
+                                    ))
+                                }
+                            },
+                            onBackupAcknowledgement = viewModel::setRestoreBackupAcknowledged,
+                            onConfirmRestore = viewModel::confirmWorkspaceRestore,
+                            onCancelRestore = viewModel::cancelWorkspaceRestore,
+                        )
                         }
                         2 -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    MetricCard(
-                        title = "СЕССИИ",
-                        value = ui.data.sessions.size.toString(),
-                        modifier = Modifier.weight(1f),
-                    )
-                    MetricCard(
-                        title = "ЧЕРНОВИКИ",
-                        value = ui.data.tasks.size.toString(),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            MetricCard(
+                                title = "СЕССИИ",
+                                value = ui.data.sessions.size.toString(),
+                                modifier = Modifier.weight(1f),
+                            )
+                            MetricCard(
+                                title = "ЧЕРНОВИКИ",
+                                value = ui.data.tasks.size.toString(),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(9.dp),
-                    ) {
-                        SectionHeading("Сессии", "локальный контекст")
-                        if (ui.data.sessions.isNotEmpty()) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(ui.data.sessions, key = { it.id }) { session ->
-                                    FilterChip(
-                                        selected = session.id == ui.selectedSessionId,
-                                        onClick = { viewModel.selectSession(session.id) },
-                                        label = {
-                                            Text(
-                                                session.title + when (session.status) {
-                                                    LocalSessionStatus.OPEN -> ""
-                                                    LocalSessionStatus.PAUSED -> " · пауза"
-                                                    LocalSessionStatus.CLOSED -> " · закрыта"
-                                                }
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(9.dp),
+                            ) {
+                                SectionHeading("Сессии", "локальный контекст")
+                                if (ui.data.sessions.isNotEmpty()) {
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(ui.data.sessions, key = { it.id }) { session ->
+                                            FilterChip(
+                                                selected = session.id == ui.selectedSessionId,
+                                                onClick = { viewModel.selectSession(session.id) },
+                                                label = {
+                                                    Text(
+                                                        session.title + when (session.status) {
+                                                            LocalSessionStatus.OPEN -> ""
+                                                            LocalSessionStatus.PAUSED -> " · пауза"
+                                                            LocalSessionStatus.CLOSED -> " · закрыта"
+                                                        }
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        "Создайте первую сессию. В ней будут храниться ваши локальные черновики.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+
+                                OutlinedTextField(
+                                    value = sessionTitle,
+                                    onValueChange = { sessionTitle = it.take(240) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Название новой сессии") },
+                                    singleLine = true,
+                                    enabled = ui.storageReady,
+                                )
+                                Button(
+                                    onClick = {
+                                        viewModel.createSession(sessionTitle)
+                                        sessionTitle = ""
+                                    },
+                                    enabled = ui.storageReady && sessionTitle.isNotBlank() &&
+                                        ui.data.sessions.size < 32,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Создать сессию")
+                                }
+
+                                if (selectedSession != null) {
+                                    SessionControls(
+                                        session = selectedSession,
+                                        onStatus = { status ->
+                                            viewModel.setSessionStatus(
+                                                selectedSession.id, status, selectedSession.revision,
                                             )
                                         },
+                                        enabled = ui.storageReady,
                                     )
                                 }
                             }
-                        } else {
-                            Text(
-                                "Создайте первую сессию. В ней будут храниться ваши локальные черновики.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
 
-                        OutlinedTextField(
-                            value = sessionTitle,
-                            onValueChange = { sessionTitle = it.take(240) },
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Название новой сессии") },
-                            singleLine = true,
-                            enabled = ui.storageReady,
-                        )
-                        Button(
-                            onClick = {
-                                viewModel.createSession(sessionTitle)
-                                sessionTitle = ""
-                            },
-                            enabled = ui.storageReady && sessionTitle.isNotBlank() &&
-                                ui.data.sessions.size < 32,
-                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
                         ) {
-                            Text("Создать сессию")
-                        }
-
-                        if (selectedSession != null) {
-                            SessionControls(
-                                session = selectedSession,
-                                onStatus = { status ->
-                                    viewModel.setSessionStatus(
-                                        selectedSession.id, status, selectedSession.revision,
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                SectionHeading("Новая задача", "пока только черновик")
+                                OutlinedTextField(
+                                    value = taskTitle,
+                                    onValueChange = { taskTitle = it.take(240) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Что нужно сделать?") },
+                                    placeholder = { Text("Например: составить план проекта") },
+                                    minLines = 2,
+                                    maxLines = 3,
+                                    enabled = ui.storageReady &&
+                                        selectedSession?.status == LocalSessionStatus.OPEN,
+                                )
+                                Button(
+                                    onClick = {
+                                        viewModel.createTask(taskTitle)
+                                        taskTitle = ""
+                                    },
+                                    enabled = ui.storageReady && taskTitle.isNotBlank() &&
+                                        selectedSession?.status == LocalSessionStatus.OPEN &&
+                                        ui.data.tasks.size < 500,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Сохранить черновик")
+                                }
+                                if (selectedSession == null) {
+                                    Text(
+                                        "Сначала создайте сессию.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                },
-                                enabled = ui.storageReady,
-                            )
+                                } else if (selectedSession.status != LocalSessionStatus.OPEN) {
+                                    Text(
+                                        "Сессия не открыта. Возобновите её, чтобы добавлять задачи.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
-                    }
-                }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        SectionHeading("Новая задача", "пока только черновик")
-                        OutlinedTextField(
-                            value = taskTitle,
-                            onValueChange = { taskTitle = it.take(240) },
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Что нужно сделать?") },
-                            placeholder = { Text("Например: составить план проекта") },
-                            minLines = 2,
-                            maxLines = 3,
-                            enabled = ui.storageReady &&
-                                selectedSession?.status == LocalSessionStatus.OPEN,
-                        )
-                        Button(
-                            onClick = {
-                                viewModel.createTask(taskTitle)
-                                taskTitle = ""
-                            },
-                            enabled = ui.storageReady && taskTitle.isNotBlank() &&
-                                selectedSession?.status == LocalSessionStatus.OPEN &&
-                                ui.data.tasks.size < 500,
-                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Text("Сохранить черновик")
-                        }
-                        if (selectedSession == null) {
+                            Text("Мои задачи", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Сначала создайте сессию.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else if (selectedSession.status != LocalSessionStatus.OPEN) {
-                            Text(
-                                "Сессия не открыта. Возобновите её, чтобы добавлять задачи.",
-                                style = MaterialTheme.typography.bodySmall,
+                                "${visibleTasks.size}/${sessionTasks.size}",
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                    }
-                }
+                        OutlinedTextField(
+                            value = search,
+                            onValueChange = { search = it.take(120) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Поиск в выбранной сессии") },
+                            singleLine = true,
+                        )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Мои задачи", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${visibleTasks.size}/${sessionTasks.size}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                OutlinedTextField(
-                    value = search,
-                    onValueChange = { search = it.take(120) },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Поиск в выбранной сессии") },
-                    singleLine = true,
-                )
-
-                if (visibleTasks.isEmpty()) {
-                    Text(
-                        if (sessionTasks.isEmpty()) {
-                            "В этой сессии пока нет черновиков."
+                        if (visibleTasks.isEmpty()) {
+                            Text(
+                                if (sessionTasks.isEmpty()) {
+                                    "В этой сессии пока нет черновиков."
+                                } else {
+                                    "Поиск ничего не нашёл."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         } else {
-                            "Поиск ничего не нашёл."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(visibleTasks.reversed(), key = { it.id }) { task ->
-                            DraftTaskCard(task = task, onDetails = { selectedTaskId = task.id })
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(visibleTasks.reversed(), key = { it.id }) { task ->
+                                    DraftTaskCard(task = task, onDetails = { selectedTaskId = task.id })
+                                }
+                            }
                         }
-                    }
-                }
 
-                Text(
-                    "Локальный режим · ничего не отправляется в Python-движок и не исполняется.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                        Text(
+                            "Локальный режим · ничего не отправляется в Python-движок и не исполняется.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         }
                         else -> {
-                            SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
-                RuntimeBridgePanel(
-                    state = ui.runtime,
-                    onConnect = viewModel::connectRuntime,
-                    onRefresh = viewModel::refreshRuntime,
-                    onCreateSession = viewModel::createRuntimeSession,
-                    onCreateTask = viewModel::createRuntimeTask,
-                    onSetSessionStatus = viewModel::setRuntimeSessionStatus,
-                    onCancelTask = viewModel::cancelRuntimeTask,
-                    onPreviewReasoning = viewModel::previewRuntimeReasoning,
-                    onSaveAccessToken = viewModel::saveRuntimeAccessToken,
-                    onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
-                    onCheckExtension = viewModel::checkTermuxExtension,
-                    onOpenTermux = viewModel::openTermux,
-                )
+                                    SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
+                        RuntimeBridgePanel(
+                            state = ui.runtime,
+                            onConnect = viewModel::connectRuntime,
+                            onRefresh = viewModel::refreshRuntime,
+                            onCreateSession = viewModel::createRuntimeSession,
+                            onCreateTask = viewModel::createRuntimeTask,
+                            onSetSessionStatus = viewModel::setRuntimeSessionStatus,
+                            onCancelTask = viewModel::cancelRuntimeTask,
+                            onPreviewReasoning = viewModel::previewRuntimeReasoning,
+                            onSaveAccessToken = viewModel::saveRuntimeAccessToken,
+                            onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
+                            onCheckExtension = viewModel::checkTermuxExtension,
+                            onOpenTermux = viewModel::openTermux,
+                        )
                         }
                     }
                 }

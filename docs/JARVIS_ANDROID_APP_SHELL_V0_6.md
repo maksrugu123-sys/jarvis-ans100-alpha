@@ -11,7 +11,7 @@ The Android client opens directly into the local JARVIS conversation. Previously
 - **Задачи** — Android-local sessions and task drafts. These drafts remain separate from Python runtime tasks.
 - **Система** — optional Termux pairing/bridge, runtime task/session operations and non-executing reasoning preview.
 
-The bottom navigation is stateful and keeps the selected destination through ordinary Compose recreation via saveable state. Each destination has its own scrollable content. The existing feature panels and ViewModel callbacks are reused; no data migration or storage schema change is part of this UI batch.
+The bottom navigation is stateful and keeps the selected destination through ordinary Compose recreation via saveable state. Each destination has its own scrollable content. The conversation composer remains pinned above navigation while the chat is selected; the full message history is shown in its own bounded, auto-following list. The existing feature panels and ViewModel callbacks are reused; no data migration or storage schema change is part of this UI batch.
 
 ## Local-first messaging
 
