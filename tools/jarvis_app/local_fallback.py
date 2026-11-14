@@ -122,14 +122,28 @@ class LocalFallbackResponseEngine:
             understanding_context.get("intent_confidence", 0.0)
             if isinstance(understanding_context, Mapping) else 0.0
         )
+        raw_plan = (
+            understanding_context.get("reasoning_plan")
+            if isinstance(understanding_context, Mapping) else None
+        )
+        plan_notice = ""
+        if isinstance(raw_plan, Mapping) and raw_plan.get("schema") == "JARVIS_REASONING_PLAN_V1":
+            raw_steps = raw_plan.get("steps")
+            step_count = len(raw_steps) if isinstance(raw_steps, list) else 0
+            question = raw_plan.get("clarification_question")
+            if raw_plan.get("requires_clarification") is True and isinstance(question, str) and question:
+                plan_notice = f" Нужно уточнение: {question}"
+            else:
+                plan_notice = f" Ядро составило предварительный план из {min(step_count, 5)} шагов."
         if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
             confidence = 0.0
         confidence = min(1.0, max(0.0, float(confidence)))
         return (
             "Ядро JARVIS выполнило предварительный анализ сообщения. "
             f"Эвристически определённый тип запроса: {intent} "
-            f"(оценка уверенности {confidence:.2f}). "
-            "Это ограниченная классификация признаков текста, а не глубокое понимание. "
+            f"(оценка уверенности {confidence:.2f})."
+            f"{plan_notice} "
+            "Это ограниченная классификация признаков текста и шаблонное планирование, а не глубокое понимание. "
             "Сейчас базовый режим не умеет формировать свободный содержательный ответ; "
             "для него нужна подключённая языковая модель. Никакие внешние действия "
             "по этому сообщению не выполнялись."
