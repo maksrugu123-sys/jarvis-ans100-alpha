@@ -48,7 +48,7 @@ The screen identifies the active backend as a local basic responder or the insta
 
 ## 6. Verification
 
-Fourteen focused Kotlin/JUnit conversation-runtime tests cover round-trip/reopen, bounded retention, invalid input, failed persistence, corrupt state, clear, fallback honesty, Core status, approved-memory routing, Core analysis handoff, model-free planning and injected-engine coordination. Eleven separate Kotlin understanding-pipeline tests cover intent/plan behavior and shared fixtures. Status: **AUTHORED, NOT RUN**.
+Fifteen focused Kotlin/JUnit conversation-runtime tests cover round-trip/reopen, bounded retention, invalid input, failed persistence, corrupt state, clear, fallback honesty, Core status, approved-memory routing, Core analysis handoff, model-free planning and injected-engine coordination. Eleven separate Kotlin understanding-pipeline tests cover intent/plan behavior and shared fixtures. Status: **AUTHORED, NOT RUN**.
 
 No Gradle sync/build, APK/AAB, Kotlin test, emulator run, Android device run, offline airplane-mode test, performance measurement, CI or GitHub Actions workflow was executed. Source readback and static cross-file inspection only.
 
