@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -181,6 +182,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     },
                     onClear = viewModel::clearConversation,
                     onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
+                    onDownloadModel = viewModel::downloadConversationModel,
+                    onCancelDownload = viewModel::cancelConversationModelDownload,
                     onRemoveModel = viewModel::removeConversationModel,
                 )
                 LocalMemoryPanel(
@@ -1788,6 +1791,8 @@ private fun ConversationPanel(
     onSend: (String) -> Unit,
     onClear: () -> Unit,
     onSelectModel: () -> Unit,
+    onDownloadModel: () -> Unit,
+    onCancelDownload: () -> Unit,
     onRemoveModel: () -> Unit,
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
@@ -1829,9 +1834,44 @@ private fun ConversationPanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (!state.modelInstalled) {
+                Button(
+                    onClick = onDownloadModel,
+                    enabled = !state.isBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        if (state.modelDownloadStatus != null) "Продолжить загрузку модели"
+                        else "Скачать языковую модель · около 331 МиБ",
+                    )
+                }
+            }
+            if (state.modelDownloadProgress != null) {
+                LinearProgressIndicator(
+                    progress = { state.modelDownloadProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    state.modelDownloadStatus ?: "Загрузка модели…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = onCancelDownload,
+                    enabled = state.isBusy,
+                ) {
+                    Text("Остановить загрузку")
+                }
+            } else if (state.modelDownloadStatus != null) {
+                Text(
+                    state.modelDownloadStatus,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onSelectModel, enabled = !state.isBusy) {
-                    Text("Выбрать модель")
+                    Text("Выбрать файл")
                 }
                 if (state.modelInstalled) {
                     TextButton(onClick = onRemoveModel, enabled = !state.isBusy) {
@@ -1923,7 +1963,7 @@ private fun ConversationPanel(
                 if (state.modelInstalled) {
                     "Ответы создаются локальной моделью. Инструменты и выполнение действий отключены."
                 } else {
-                    "Без установленной модели доступен только базовый ответчик. Выберите файл Qwen3 .litertlm; загрузка из сети не выполняется."
+                    "Без установленной модели доступен базовый режим. Скачайте Qwen3 один раз через Wi-Fi или импортируйте совместимый файл; после установки модель работает офлайн."
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
