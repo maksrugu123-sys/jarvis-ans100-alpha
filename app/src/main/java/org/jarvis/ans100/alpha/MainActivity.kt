@@ -1796,6 +1796,7 @@ private fun ConversationPanel(
     onRemoveModel: () -> Unit,
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
+    var showModelDownloadConfirmation by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -1836,7 +1837,7 @@ private fun ConversationPanel(
             )
             if (!state.modelInstalled) {
                 Button(
-                    onClick = onDownloadModel,
+                    onClick = { showModelDownloadConfirmation = true },
                     enabled = !state.isBusy,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -1969,6 +1970,33 @@ private fun ConversationPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+    if (showModelDownloadConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showModelDownloadConfirmation = false },
+            title = { Text("Скачать языковую модель?") },
+            text = {
+                Text(
+                    "Загрузка займёт около 331 МиБ интернет-трафика и потребует свободного места во внутренней памяти. " +
+                        "Лучше использовать Wi-Fi. После установки ответы будут формироваться локально, без интернета.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showModelDownloadConfirmation = false
+                        onDownloadModel()
+                    },
+                ) {
+                    Text("Скачать")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showModelDownloadConfirmation = false }) {
+                    Text("Не сейчас")
+                }
+            },
+        )
     }
     if (showClearConfirmation) {
         AlertDialog(
