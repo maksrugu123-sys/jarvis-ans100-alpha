@@ -2,45 +2,74 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
 MAX_INPUT_CHARS = 900
 MAX_TOKENS = 128
 _TOKEN = re.compile(r"[A-Za-zА-Яа-яЁё0-9]+", re.UNICODE)
-_ENTITY = re.compile(r"\\b[A-ZА-ЯЁ][\\w-]{1,47}\\b", re.UNICODE)
-_STOP = frozenset({"это", "для", "или", "что", "чтобы", "мне", "могу", "можно", "когда", "где", "почему", "который", "которая", "которые", "есть", "the", "and", "for", "with", "that", "this"})
-_QUESTIONS = frozenset({"кто", "что", "где", "когда", "почему", "зачем", "как", "сколько", "можно", "ли", "what", "who", "where", "when", "why", "how"})
+_ENTITY = re.compile(r"(?<![\\w])[A-ZА-ЯЁ][\\w-]{1,47}(?![\\w])", re.UNICODE)
+_STOP = frozenset({
+    "это", "для", "или", "что", "чтобы", "мне", "могу", "можно",
+    "когда", "где", "почему", "который", "которая", "которые", "есть",
+    "the", "and", "for", "with", "that", "this",
+})
+_QUESTIONS = frozenset({
+    "кто", "что", "где", "когда", "почему", "зачем", "как", "сколько",
+    "можно", "ли", "what", "who", "where", "when", "why", "how",
+})
 _NEGATIONS = frozenset({"не", "нет", "ни", "без", "нельзя", "never", "not", "no", "without"})
-_GREETINGS = frozenset({"привет", "здравствуй", "здравствуйте", "hello", "hi", "hey"})
+_GREETINGS = frozenset({"привет", "здравствуй", "здравствуйте", "добрый", "hello", "hi", "hey"})
 _THANKS = ("спасибо", "благодарю", "thanks", "thank you")
 _FAREWELLS = ("пока", "до свидания", "увидимся", "bye", "goodbye")
-_COMPARISONS = ("сравни", "сравнение", "что лучше", "лучше чем", "разница", "отличие", "compare", "versus", " vs ")
-_EXPLANATIONS = ("объясни", "расскажи", "почему", "зачем", "что означает", "что такое", "explain", "describe")
-_ACTIONS = ("сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь", "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь", "сделать", "implement", "build", "fix", "find", "create")
+_COMPARISONS = ("сравни", "сравнение", "что лучше", "лучше чем", "разница", "отличие", "compare", "versus", "vs")
+# "почему" and "зачем" are questions, not commands to explain.
+_EXPLANATIONS = ("объясни", "расскажи", "что означает", "что такое", "explain", "describe")
+_ACTIONS = (
+    "сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь",
+    "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь",
+    "сделать", "implement", "build", "fix", "find", "create",
+)
 _CORRECTIONS = ("я имел в виду", "не так", "исправление", "точнее", "я ошибся", "i meant", "correction")
-_CONTEXT = ("это", "этот", "эта", "эти", "там", "тогда", "продолжай", "дальше", "как раньше", "предыдущ", "в прошлый раз", "it", "that", "those", "continue", "previous")
+_CONTEXT = (
+    "это", "этот", "эта", "эти", "там", "тогда", "продолжай", "дальше",
+    "предыдущ", "it", "that", "those", "continue", "previous",
+)
+
+
+def _contains_phrase(tokens: Sequence[str], phrase: str) -> bool:
+    parts = tuple(phrase.casefold().split())
+    if not parts:
+        return False
+    width = len(parts)
+    return any(tuple(tokens[index:index + width]) == parts for index in range(len(tokens) - width + 1))
+
+
+def _contains_any(tokens: Sequence[str], phrases: Sequence[str]) -> bool:
+    return any(_contains_phrase(tokens, phrase) for phrase in phrases)
 
 
 def analyze_text(value: str) -> dict[str, object]:
-    """Return bounded heuristic evidence; this is not a semantic model."""
+    """Return the JARVIS_UNDERSTANDING_V1 record; this is not a semantic model."""
     if not isinstance(value, str):
         value = ""
-    text = value.strip().replace("\\x00", "")[:MAX_INPUT_CHARS]
-    normalized = text.casefold()
-    tokens = [token.casefold() for token in _TOKEN.findall(normalized)[:MAX_TOKENS]]
+    text = value.strip().replace("\x00", "")[:MAX_INPUT_CHARS]
+    tokens = [token.casefold() for token in _TOKEN.findall(text)[:MAX_TOKENS]]
     key_terms = list(dict.fromkeys(
         token for token in tokens if len(token) >= 3 and token not in _STOP
     ))[:10]
     has_question = "?" in text or any(token in _QUESTIONS for token in tokens)
-    refers_back = any(marker in normalized for marker in _CONTEXT)
+    refers_back = any(
+        marker in tokens or (len(marker) >= 4 and any(token.startswith(marker) for token in tokens))
+        for marker in _CONTEXT
+    )
     negation = any(token in _NEGATIONS for token in tokens)
-    first = tokens[0] if tokens else ""
-    greeting = first in _GREETINGS
-    thanks = any(marker in normalized for marker in _THANKS)
-    farewell = any(marker in normalized for marker in _FAREWELLS)
-    comparison = any(marker in normalized for marker in _COMPARISONS)
-    explanation = any(marker in normalized for marker in _EXPLANATIONS)
-    action = any(marker in normalized for marker in _ACTIONS)
-    correction = any(marker in normalized for marker in _CORRECTIONS)
+    greeting = bool(tokens and tokens[0] in _GREETINGS)
+    thanks = _contains_any(tokens, _THANKS)
+    farewell = _contains_any(tokens, _FAREWELLS)
+    comparison = _contains_any(tokens, _COMPARISONS)
+    explanation = _contains_any(tokens, _EXPLANATIONS)
+    action = _contains_any(tokens, _ACTIONS)
+    correction = _contains_any(tokens, _CORRECTIONS)
 
     if correction:
         intent, confidence, task = "correction", 0.82, "revise_previous_result"
@@ -60,12 +89,12 @@ def analyze_text(value: str) -> dict[str, object]:
     elif action:
         intent, confidence, task = "action_request", 0.68, "plan_or_explain_requested_action"
         evidence = ["action/request marker"]
+    elif explanation:
+        intent, confidence, task = "explanation", 0.72, "explain_concept"
+        evidence = ["explicit explanation marker"]
     elif has_question:
         intent, confidence, task = "question", 0.70, "answer_question"
         evidence = ["question marker"]
-    elif explanation:
-        intent, confidence, task = "explanation", 0.72, "explain_concept"
-        evidence = ["explanation marker"]
     elif refers_back:
         intent, confidence, task = "continuation", 0.64, "continue_context"
         evidence = ["context reference"]
@@ -84,7 +113,7 @@ def analyze_text(value: str) -> dict[str, object]:
         match.group(0) for match in _ENTITY.finditer(text)
         if match.group(0).casefold() not in _GREETINGS
     ))[:5]
-    language = "ru_or_cyrillic" if re.search(r"[\\u0400-\\u04ff]", text) else (
+    language = "ru_or_cyrillic" if re.search(r"[\u0400-\u04ff]", text) else (
         "en_or_latin" if re.search(r"[A-Za-z]", text) else "unknown"
     )
     return {
