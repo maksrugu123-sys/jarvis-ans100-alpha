@@ -72,6 +72,7 @@ const STATUS_LABELS = {
 let currentState = null;
 let currentConversation = null;
 let conversationReady = false;
+let conversationMode = "unavailable";
 
 function statusLabel(status) {
   return STATUS_LABELS[status] || status;
@@ -1113,18 +1114,26 @@ $("#backup-restore-confirm").addEventListener("click", async event => {
 
 function renderConversation(state) {
   currentConversation = state.conversation || null;
+  conversationMode = state.chat_mode || "unavailable";
   $("#chat-backend").textContent = state.backend_label || "Локальная модель не настроена.";
   const button = $("#chat-send");
-  conversationReady = Boolean(state.model_configured && state.runtime_available);
+  conversationReady = Boolean(state.chat_available ?? (state.model_configured && state.runtime_available));
   button.disabled = !conversationReady;
+  button.textContent = conversationMode === "fallback"
+    ? "Отправить JARVIS"
+    : "Отправить локальной модели";
   const root = $("#chat-messages");
   root.replaceChildren();
   const messages = currentConversation?.messages || [];
   root.classList.toggle("empty", messages.length === 0);
   if (!messages.length) {
-    root.textContent = button.disabled
-      ? "Модель не подключена. Установите litert-lm-api==0.17.1 и запустите консоль с --model <путь-к-файлу>."
-      : "История локального диалога пока пуста.";
+    if (conversationMode === "fallback") {
+      root.textContent = "Базовый офлайн-режим активен. Попробуйте /help или /status. Для свободного диалога можно подключить локальную модель.";
+    } else if (button.disabled) {
+      root.textContent = "Модель указана, но runtime LiteRT-LM недоступен. Установите litert-lm-api==0.17.1 и проверьте файл модели.";
+    } else {
+      root.textContent = "История локального диалога пока пуста.";
+    }
     return;
   }
   for (const message of messages.slice(-30)) {
@@ -1142,6 +1151,46 @@ async function refreshConversation() {
   return state;
 }
 
+async function refreshDialogNeurons() {
+  const root = $("#dialog-neuron-status");
+  try {
+    const state = await api("/api/dialog-neurons");
+    const count = Number(state.neuron_count || 0).toLocaleString("ru-RU");
+    root.textContent = count + " адресуемых признаковых нейронов · обучающих примеров: " +
+      Number(state.trained_examples || 0).toLocaleString("ru-RU") +
+      " · метки: " + (state.labels || []).join(", ") +
+      " · исходные фразы не сохраняются.";
+    return state;
+  } catch (error) {
+    root.textContent = "Состояние диалогового слоя недоступно: " + error.message;
+    return null;
+  }
+}
+
+$("#dialog-neuron-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const textValue = $("#dialog-neuron-sample").value.trim();
+  const expectedLabel = $("#dialog-neuron-label").value;
+  const button = $("#dialog-neuron-train");
+  if (!textValue) return;
+  button.disabled = true;
+  try {
+    const result = await api("/api/dialog-neurons/learn", {
+      text: textValue,
+      expected_label: expectedLabel,
+    });
+    $("#dialog-neuron-sample").value = "";
+    await refreshDialogNeurons();
+    const before = result.before?.predicted_label || "нет уверенной метки";
+    const after = result.after?.predicted_label || "пока нет уверенной метки";
+    setNotice("Пример принят явно. До обучения: " + before + "; после: " + after + ". " + result.notice, "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $("#chat-form").addEventListener("submit", async event => {
   event.preventDefault();
   const input = $("#chat-input");
@@ -1155,7 +1204,7 @@ $("#chat-form").addEventListener("submit", async event => {
     const result = await api("/api/conversation", {text, expected_revision: before.revision});
     input.value = "";
     renderConversation(result);
-    setNotice("Ответ создан локальной моделью и сохранён в workspace.", "success");
+    setNotice("Ответ JARVIS сохранён в локальном workspace.", "success");
   } catch (error) {
     setNotice(error.message, "error");
     if (error.status === 409) {
@@ -1163,7 +1212,9 @@ $("#chat-form").addEventListener("submit", async event => {
     }
   } finally {
     button.disabled = !conversationReady;
-    button.textContent = "Отправить локальной модели";
+    button.textContent = conversationMode === "fallback"
+      ? "Отправить JARVIS"
+      : "Отправить локальной модели";
   }
 });
 let browserState = null;
@@ -1366,6 +1417,7 @@ async function refresh() {
   renderState(state);
   await refreshWorkspace();
   await refreshConversation();
+  await refreshDialogNeurons();
   await refreshBrowserState();
   return state;
 }
