@@ -54,6 +54,37 @@ def _bounded_understanding_context(
             if isinstance(item, str) and item.strip()
         ]
 
+    raw_plan = value.get("reasoning_plan")
+    safe_plan = None
+    if isinstance(raw_plan, Mapping) and raw_plan.get("schema") == "JARVIS_REASONING_PLAN_V1":
+        raw_steps = raw_plan.get("steps")
+        steps = []
+        if isinstance(raw_steps, (list, tuple)):
+            steps = [
+                "".join(ch for ch in item if ord(ch) >= 0x20 and ord(ch) != 0x7F)[:120]
+                for item in raw_steps[:5]
+                if isinstance(item, str) and item.strip()
+            ]
+        raw_question = raw_plan.get("clarification_question")
+        question = (
+            "".join(ch for ch in raw_question if ord(ch) >= 0x20 and ord(ch) != 0x7F)[:160]
+            if isinstance(raw_question, str) else ""
+        )
+        raw_goal = raw_plan.get("goal")
+        goal = (
+            "".join(ch for ch in raw_goal if ord(ch) >= 0x20 and ord(ch) != 0x7F)[:48]
+            if isinstance(raw_goal, str) else ""
+        )
+        safe_plan = {
+            "schema": "JARVIS_REASONING_PLAN_V1",
+            "goal": goal,
+            "steps": steps,
+            "requires_clarification": raw_plan.get("requires_clarification") is True,
+            "clarification_question": question,
+            "execution_authorized": False,
+            "scope": "bounded_template_plan_only",
+        }
+
     confidence = value.get("intent_confidence")
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
         confidence = 0.0
@@ -72,6 +103,7 @@ def _bounded_understanding_context(
         "refers_to_previous_context": value.get("refers_to_previous_context") is True,
         "asks_for_explanation": value.get("asks_for_explanation") is True,
         "evidence": list_field("evidence", 5),
+        "reasoning_plan": safe_plan,
         "scope": "bounded_heuristic_pre_generation_analysis",
     }
 
