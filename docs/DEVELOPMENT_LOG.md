@@ -2598,3 +2598,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** compared the handoff against `AndroidSparseNeuronNetwork.kt`, `JarvisViewModel.kt`, architecture §§3.74/3.79, and the actual Actions run metadata at 2026-11-14 16:46 UTC. Documentation-only change; no executable tests were applicable and no tests were run.
 
 **Limitations:** run 6 may still fail or succeed after this snapshot. The APK, model inference, Android install and device behavior remain unverified.
+
+
+## 2026-11-14 — Raise Gradle heap after DEX merge exhaustion
+
+**Trigger:** Android Actions run `43617428362` (#6), commit `d14c58f45093e19cb7386cfda3dceaed9d99b59e`. JDK, Gradle, SDK setup and Kotlin compilation completed. The build failed at `:app:mergeExtDexDebug` with `java.lang.OutOfMemoryError: Java heap space` in R8/D8 while merging external DEX archives. APK upload was skipped; no APK exists.
+
+**Change:** set Gradle JVM heap to 4 GiB, cap metaspace at 1 GiB, and limit Gradle workers to 2 in root `gradle.properties`. This targets the confirmed D8 heap exhaustion and reduces concurrent build pressure without removing dependencies or application features.
+
+**Verification:** read the completed run's job log and confirmed the failing task and root exception. No local build or tests were run. The next push-triggered Actions run is the verification gate; 4 GiB is a resource setting, not a guarantee that D8 will succeed.
+
+**Boundary:** only `experiment/jarvis-integrated-prototype-v1` is modified. Do not change `main`.
