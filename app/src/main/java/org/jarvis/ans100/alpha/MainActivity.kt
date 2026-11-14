@@ -1848,7 +1848,7 @@ private fun ConversationPanel(
             }
             if (state.modelDownloadProgress != null) {
                 LinearProgressIndicator(
-                    progress = { state.modelDownloadProgress.coerceIn(0f, 1f) },
+                    progress = { (state.modelDownloadProgress ?: 0f).coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
