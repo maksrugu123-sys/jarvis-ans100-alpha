@@ -85,6 +85,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
     fun enqueue(event: AndroidNeuronEvent)
+    fun enqueueAll(events: List<AndroidNeuronEvent>)
     fun nextTimestampEvents(maxEvents: Int): List<AndroidNeuronEvent>?
     fun outgoing(neuronId: Int): List<AndroidNeuronConnection>
     fun loadNeuron(neuronId: Int): AndroidNeuronState
@@ -151,11 +152,25 @@ class AndroidSparseNeuronNetwork(
         timeNs: Long,
         neuronId: Int,
         strength: Double,
-    ) {
-        if (timeNs <= store.stats(hot.size, hotSetCapacity).currentTimeNs) {
+    ) = scheduleInputs(listOf(AndroidNeuronEvent(eventId, timeNs, neuronId, strength)))
+
+    /** Enqueue one same-timestamp feature batch with all-or-nothing SQLite publication. */
+    @Synchronized
+    fun scheduleInputs(events: List<AndroidNeuronEvent>) {
+        if (events.isEmpty() || events.size > MAX_EVENTS_PER_TIMESTAMP) {
+            throw AndroidNeuronNetworkException("input batch must contain 1..$MAX_EVENTS_PER_TIMESTAMP events")
+        }
+        val timestamp = events.first().timeNs
+        if (events.any { it.timeNs != timestamp }) {
+            throw AndroidNeuronNetworkException("one input batch must use a single model timestamp")
+        }
+        if (events.map { it.eventId }.toSet().size != events.size) {
+            throw AndroidNeuronNetworkException("input event IDs must be unique within a batch")
+        }
+        if (timestamp <= store.stats(hot.size, hotSetCapacity).currentTimeNs) {
             throw AndroidNeuronNetworkException("input must be later than the committed network clock")
         }
-        store.enqueue(AndroidNeuronEvent(eventId, timeNs, neuronId, strength))
+        store.enqueueAll(events)
     }
 
     @Synchronized
@@ -399,19 +414,34 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
-    override fun enqueue(event: AndroidNeuronEvent) {
+    override fun enqueue(event: AndroidNeuronEvent) = enqueueAll(listOf(event))
+
+    override fun enqueueAll(events: List<AndroidNeuronEvent>) {
+        if (events.isEmpty() || events.size > AndroidSparseNeuronNetwork.MAX_EVENTS_PER_TIMESTAMP) {
+            throw AndroidNeuronNetworkException("input batch exceeds the timestamp event bound")
+        }
+        val ids = HashSet<String>(events.size)
+        if (events.any { !ids.add(it.eventId) }) {
+            throw AndroidNeuronNetworkException("input batch contains duplicate event IDs")
+        }
+        if (events.map { it.timeNs }.toSet().size != 1) {
+            throw AndroidNeuronNetworkException("input batch contains mixed timestamps")
+        }
         val db = writableDatabase
         db.beginTransaction()
         try {
-            requireNeuron(db, event.targetNeuronId)
             val currentTime = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'")
-            if (event.timeNs <= currentTime) {
+            if (events.any { it.timeNs <= currentTime }) {
                 throw AndroidNeuronNetworkException("event time must be later than the committed clock")
             }
-            if (scalar(db, "SELECT COUNT(*) FROM events") >= AndroidSparseNeuronNetwork.MAX_PENDING_EVENTS) {
-                throw AndroidNeuronBackpressureException("100,000-event queue is full")
+            val pending = scalar(db, "SELECT COUNT(*) FROM events")
+            if (pending + events.size > AndroidSparseNeuronNetwork.MAX_PENDING_EVENTS) {
+                throw AndroidNeuronBackpressureException("100,000-event queue would be exceeded")
             }
-            insertEvent(db, event)
+            events.forEach { event ->
+                requireNeuron(db, event.targetNeuronId)
+                insertEvent(db, event)
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

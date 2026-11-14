@@ -13,6 +13,8 @@ data class DialogFeaturePrediction(
     val trainedExamples: Int,
     val neuronCount: Int,
     val rewardUpdates: Int = 0,
+    /** Stable hashed feature slots for the optional sparse LIF-DT side channel. */
+    val activeFeatureIds: List<Int> = emptyList(),
 )
 
 interface DialogFeatureStorage {
@@ -163,6 +165,7 @@ class LocalDialogFeatureClassifier(
             trainedExamples = trainedExamples,
             neuronCount = FEATURE_NEURON_COUNT,
             rewardUpdates = rewardUpdates,
+            activeFeatureIds = active.keys.sorted().take(MAX_EXPORTED_FEATURES),
         )
     }
 
@@ -306,6 +309,7 @@ class LocalDialogFeatureClassifier(
         private const val CHECKPOINT_HEADER_V1 = "JARVIS_ANDROID_DIALOG_FEATURES\t1"
         private const val CHECKPOINT_HEADER_V2 = "JARVIS_ANDROID_DIALOG_FEATURES\t2"
         private const val MAX_TOKENS = 256
+        private const val MAX_EXPORTED_FEATURES = 128
         private const val HASH_BYTES = 8
         private const val LEARNING_RATE = 0.15
         private const val REWARD_LEARNING_RATE = 0.15

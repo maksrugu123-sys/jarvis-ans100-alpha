@@ -166,6 +166,10 @@ class LocalDialogFeatureClassifierTest {
         val a = first.analyze(phrase)
         val b = second.analyze(phrase)
         assertTrue(a.activeFeatureCount in 1..511)
+        assertTrue(a.activeFeatureIds.isNotEmpty())
+        assertTrue(a.activeFeatureIds.size <= 128)
+        assertTrue(a.activeFeatureIds.all { it in 0 until 10_000 })
+        assertEquals(a.activeFeatureIds, b.activeFeatureIds)
         assertEquals(a.activeFeatureCount, b.activeFeatureCount)
         assertEquals(a.confidenceMargin, b.confidenceMargin, 0.0)
     }

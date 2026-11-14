@@ -2322,7 +2322,7 @@ private fun ConversationPanel(
                     val networkStats = state.nativeNetworkStats
                     Text(
                         if (networkStats == null) "Состояние локального JNVM загружается…"
-                        else "Нейронов: \${networkStats.neuronCount} · связей: \${networkStats.connectionCount} · событий: \${networkStats.pendingEvents} · в RAM-кэше: \${networkStats.residentNeuronCount}/\${networkStats.hotSetCapacity}",
+                        else "Нейронов: ${networkStats.neuronCount} · связей: ${networkStats.connectionCount} · событий: ${networkStats.pendingEvents} · в RAM-кэше: ${networkStats.residentNeuronCount}/${networkStats.hotSetCapacity}",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     if ((networkStats?.neuronCount ?: 0) == 0) {

@@ -52,6 +52,44 @@ class AndroidSparseNeuronNetworkTest {
     }
 
     @Test
+    fun sameTimestampFeatureBatchIsInsertedAndProcessedAtomically() {
+        AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 4).use { network ->
+            network.initializeSparseChain(8, delayNs = 1_000_000L, weight = 0.75)
+            network.scheduleInputs(
+                listOf(
+                    AndroidNeuronEvent("turn-a", 10_000_000L, 1, 1.0),
+                    AndroidNeuronEvent("turn-b", 10_000_000L, 3, 1.0),
+                    AndroidNeuronEvent("turn-c", 10_000_000L, 5, 1.0),
+                ),
+            )
+            val result = network.run(maxEvents = 3, maxTimestamps = 1)
+            assertEquals(3, result.processedEvents)
+            assertEquals(listOf(1 to 1L, 3 to 1L, 5 to 1L), result.emittedSpikes)
+            assertEquals(3, result.pendingEvents)
+        }
+    }
+
+    @Test
+    fun duplicateIdsRejectTheWholeBatchWithoutQueueMutation() {
+        AndroidSparseNeuronNetwork(context, databaseName).use { network ->
+            network.initializeSparseChain(3)
+            var rejected = false
+            try {
+                network.scheduleInputs(
+                    listOf(
+                        AndroidNeuronEvent("duplicate", 10_000_000L, 0, 1.0),
+                        AndroidNeuronEvent("duplicate", 10_000_000L, 1, 1.0),
+                    ),
+                )
+            } catch (_: AndroidNeuronNetworkException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+            assertEquals(0, network.stats().pendingEvents)
+        }
+    }
+
+    @Test
     fun durableStateCanBeReopenedAfterTheHotSetIsDiscarded() {
         AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 1).use { network ->
             network.initializeSparseChain(2, delayNs = 1_000_000L, weight = 1.0)

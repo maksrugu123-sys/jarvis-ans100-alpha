@@ -42,6 +42,7 @@ import org.jarvis.ans100.alpha.data.shouldUseTermuxSignal
 import org.jarvis.ans100.alpha.data.AndroidWebSearchService
 import org.jarvis.ans100.alpha.data.AndroidSparseNeuronNetwork
 import org.jarvis.ans100.alpha.data.AndroidNeuronNetworkStats
+import org.jarvis.ans100.alpha.data.AndroidNeuronEvent
 import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
 import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
@@ -564,6 +565,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 } catch (error: Exception) {
                     null to (error.message ?: "Диалоговые признаки временно недоступны.")
                 }
+                val activeFeatureIds = dialogPredictionResult.first?.activeFeatureIds.orEmpty()
+                if (!clean.startsWith("/") && activeFeatureIds.isNotEmpty()) {
+                    enqueueNativeDialogueFeatures(activeFeatureIds)
+                }
                 val runtimeState = mutableState.value.runtime
                 val signalContext = if (!clean.startsWith("/")) {
                     val useTermuxSignal = shouldUseTermuxSignal(
@@ -722,6 +727,88 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Best-effort bridge from ordinary chat turns into the native sparse LIF-DT
+     * network. The dedicated executor keeps neural work off the chat path.
+     * Results are diagnostic only; they do not control Qwen or authorize actions.
+     */
+    private fun enqueueNativeDialogueFeatures(featureIds: List<Int>) {
+        val boundedIds = featureIds.asSequence()
+            .filter { it in 0 until AndroidSparseNeuronNetwork.MAX_NEURONS }
+            .distinct()
+            .take(MAX_DIALOGUE_FEATURE_EVENTS)
+            .toList()
+        if (boundedIds.isEmpty()) return
+
+        nativeNetworkExecutor.execute {
+            try {
+                val prior = nativeNeuronNetwork.stats()
+                if (prior.neuronCount == 0) {
+                    mainHandler.post {
+                        val current = mutableState.value
+                        mutableState.value = current.copy(
+                            conversation = current.conversation.copy(
+                                nativeNetworkMessage = "Нейронный проход пропущен: сначала создай сеть JNVM. Основной чат работает независимо.",
+                            ),
+                        )
+                    }
+                    return@execute
+                }
+                val usableIds = boundedIds.filter { it < prior.neuronCount }
+                if (usableIds.isEmpty()) {
+                    mainHandler.post {
+                        val current = mutableState.value
+                        mutableState.value = current.copy(
+                            conversation = current.conversation.copy(
+                                nativeNetworkMessage = "В текущей сети нет слотов для признаков этого сообщения; ответ сформирован независимо.",
+                            ),
+                        )
+                    }
+                    return@execute
+                }
+                if (prior.currentTimeNs > Long.MAX_VALUE - DIALOGUE_INPUT_STEP_NS) {
+                    throw IllegalStateException("Модельные часы JNVM достигли предела.")
+                }
+                val nextTime = prior.currentTimeNs + DIALOGUE_INPUT_STEP_NS
+                val turnId = UUID.randomUUID().toString()
+                val events = usableIds.mapIndexed { index, neuronId ->
+                    AndroidNeuronEvent(
+                        eventId = "chat-$turnId-$index",
+                        timeNs = nextTime,
+                        targetNeuronId = neuronId,
+                        strength = 1.0,
+                    )
+                }
+                nativeNeuronNetwork.scheduleInputs(events)
+                val result = nativeNeuronNetwork.run(
+                    maxEvents = MAX_DIALOGUE_FEATURE_EVENTS * 2,
+                    maxTimestamps = MAX_DIALOGUE_TIMESTAMPS_PER_TURN,
+                )
+                val stats = nativeNeuronNetwork.stats()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkStats = stats,
+                            nativeNetworkError = null,
+                            nativeNetworkMessage = "Диалоговый ANS-100: признаков ${events.size}; событий ${result.processedEvents}; импульсов ${result.emittedSpikes.size}; очередь ${result.pendingEvents}. Сигнал не управляет ответом Qwen.",
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            nativeNetworkError = error.message ?: "Диалоговый нейронный проход недоступен.",
+                            nativeNetworkMessage = "Чат продолжен без нейронного сигнала.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     fun refreshNativeNeuronNetwork() {
         nativeNetworkExecutor.execute {
             try {
@@ -809,7 +896,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 val nextTime = prior.currentTimeNs + 10_000_000L
                 nativeNeuronNetwork.scheduleInput(
-                    eventId = "phone-probe-\${UUID.randomUUID()}",
+                    eventId = "phone-probe-${UUID.randomUUID()}",
                     timeNs = nextTime,
                     neuronId = 0,
                     strength = 1.0,
@@ -823,7 +910,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             nativeNetworkBusy = false,
                             nativeNetworkStats = stats,
                             nativeNetworkError = null,
-                            nativeNetworkMessage = "Обработано событий: \${result.processedEvents}; импульсов: \${result.emittedSpikes.size}; осталось в очереди: \${result.pendingEvents}.",
+                            nativeNetworkMessage = "Обработано событий: ${result.processedEvents}; импульсов: ${result.emittedSpikes.size}; осталось в очереди: ${result.pendingEvents}.",
                         ),
                     )
                 }
@@ -1904,6 +1991,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val TERMUX_PACKAGE_NAME = "com.termux"
+        private const val MAX_DIALOGUE_FEATURE_EVENTS = 128
+        private const val MAX_DIALOGUE_TIMESTAMPS_PER_TURN = 4
+        private const val DIALOGUE_INPUT_STEP_NS = 10_000_000L
     }
 
     override fun onCleared() {
