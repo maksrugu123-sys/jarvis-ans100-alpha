@@ -1,5 +1,7 @@
 # JARVIS ANS-100 Alpha
 
+> **Integrated experimental prototype:** see [JARVIS Experimental Integrated Prototype V1](docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md). This branch combines the existing Android client and PC local console; it adds a no-model desktop fallback and connects the 10,000-feature sparse dialogue classifier to the PC conversation path. It remains experimental and source-level: no APK, build, runtime or test result is claimed.
+
 **JARVIS ANS-100 Alpha** is a research project for a compact adaptive neural system. Development is staged: begin with one artificial neuron and a small number of synapses, validate behavior and resource cost, and scale only when each previous step is supported by evidence.
 
 The repository has entered the first executable Python reference-orchestration stage. It is still not a production neural runtime, an integrated JPVR-001 prototype, or a finished assistant.
