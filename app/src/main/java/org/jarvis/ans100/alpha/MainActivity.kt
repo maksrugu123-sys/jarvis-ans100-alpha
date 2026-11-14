@@ -495,7 +495,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         }
                     }
                 }
-            }            }
+            }
         }
     }
 
