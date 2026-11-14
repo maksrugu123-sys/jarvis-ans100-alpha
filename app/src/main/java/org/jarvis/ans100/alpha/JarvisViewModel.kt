@@ -922,26 +922,50 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 val stats = nativeNeuronNetwork.stats()
                 mainHandler.post {
                     val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkStats = stats,
-                            nativeNetworkError = null,
-                            nativeNetworkMessage =
-                                "R-STDP reward сохранён: обновлено синапсов ${result.updatedSynapses}; " +
-                                    "просрочено eligibility: ${result.expiredSynapses}.",
-                            nativeDialogueContextId = null,
-                            nativeDialogueFeatureIds = emptyList(),
-                        ),
+                    val ownsFeedbackContext =
+                        current.conversation.nativeDialogueContextId == contextId
+                    val nextConversation = current.conversation.copy(
+                        nativeNetworkStats = stats,
+                        nativeNetworkError = if (ownsFeedbackContext && result.updatedSynapses == 0) {
+                            null
+                        } else if (ownsFeedbackContext) {
+                            null
+                        } else {
+                            current.conversation.nativeNetworkError
+                        },
+                        nativeNetworkMessage = if (ownsFeedbackContext) {
+                            if (result.updatedSynapses > 0) {
+                                "R-STDP reward применён: обновлено синапсов ${result.updatedSynapses}; " +
+                                    "просрочено eligibility: ${result.expiredSynapses}."
+                            } else {
+                                "R-STDP reward не изменил веса: для этого хода не найден действующий eligibility-след."
+                            }
+                        } else {
+                            current.conversation.nativeNetworkMessage
+                        },
+                        nativeDialogueContextId = if (ownsFeedbackContext) null
+                            else current.conversation.nativeDialogueContextId,
+                        nativeDialogueFeatureIds = if (ownsFeedbackContext) emptyList()
+                            else current.conversation.nativeDialogueFeatureIds,
                     )
+                    mutableState.value = current.copy(conversation = nextConversation)
                 }
             } catch (error: Exception) {
                 mainHandler.post {
                     val current = mutableState.value
+                    val ownsFeedbackContext =
+                        current.conversation.nativeDialogueContextId == contextId
                     mutableState.value = current.copy(
                         conversation = current.conversation.copy(
-                            nativeNetworkError = error.message ?: "Не удалось применить R-STDP reward.",
-                            nativeDialogueContextId = null,
-                            nativeDialogueFeatureIds = emptyList(),
+                            nativeNetworkError = if (ownsFeedbackContext) {
+                                error.message ?: "Не удалось применить R-STDP reward."
+                            } else {
+                                current.conversation.nativeNetworkError
+                            },
+                            nativeDialogueContextId = if (ownsFeedbackContext) null
+                                else current.conversation.nativeDialogueContextId,
+                            nativeDialogueFeatureIds = if (ownsFeedbackContext) emptyList()
+                                else current.conversation.nativeDialogueFeatureIds,
                         ),
                     )
                 }
