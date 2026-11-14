@@ -159,6 +159,59 @@ class LocalConversationRuntimeTest {
     }
 
     @Test
+    fun androidCoreOwnsUnderstandingAndPassesItBeforeLanguageGeneration() {
+        var observedUnderstanding: LocalUnderstanding? = null
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake-language-engine"
+            override val languageModelConfigured = true
+
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+            ): String = "legacy reply"
+
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+                memoryContext: List<LocalWorkspaceMemory>,
+                signalContext: ConversationSignalContext?,
+                understandingContext: LocalUnderstanding?,
+            ): String {
+                observedUnderstanding = understandingContext
+                return "model reply"
+            }
+        }
+        val coordinator = LocalConversationCoordinator(repository(MemoryStorage()), engine)
+
+        val messages = coordinator.send("Почему это не работает?")
+
+        assertEquals("model reply", messages.last().text)
+        assertEquals("question", observedUnderstanding?.intent)
+        assertTrue(observedUnderstanding?.containsNegation == true)
+        assertTrue(observedUnderstanding?.reasoningPlan?.steps?.isNotEmpty() == true)
+        assertTrue(!coordinator.status().externalActionsEnabled)
+        assertTrue(coordinator.status().understandingIntegratedIntoConversation)
+        assertEquals("question", coordinator.status().lastUnderstandingIntent)
+        assertTrue(messages.last().text == "model reply")
+    }
+
+    @Test
+    fun androidFallbackReceivesCoreAnalysisEvenWhenLanguageModelIsAbsent() {
+        val coordinator = LocalConversationCoordinator(
+            repository(MemoryStorage()),
+            LocalFallbackResponseEngine(),
+        )
+
+        val messages = coordinator.send("Найди ошибку в коде")
+
+        assertTrue(messages.last().text.contains("action_request"))
+        assertTrue(messages.last().text.contains("предварительный план"))
+        assertTrue(!coordinator.status().languageModelConfigured)
+        assertTrue(coordinator.status().understandingIntegratedIntoConversation)
+        assertEquals("action_request", coordinator.status().lastUnderstandingIntent)
+    }
+
+    @Test
     fun coreUsesOnlyApprovedWorkspaceMemoriesAndPassesNeuralSignalToLanguageEngine() {
         val cache = LocalWorkspaceMemoryCache()
         cache.replace(listOf(
