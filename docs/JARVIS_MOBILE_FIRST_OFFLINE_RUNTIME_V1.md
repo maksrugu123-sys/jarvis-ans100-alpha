@@ -88,9 +88,9 @@ Optional remote features must be separately permissioned, visibly indicated, and
 
 ### Phase B — Durable local memory
 
-**Implemented at source level:** Android retains recent conversation history in app-private SharedPreferences. JARVIS Core can also cache user-approved JPVR workspace memories after an authenticated Termux bridge refresh, confirmed import, or restore, and retrieves at most three lexical matches as untrusted model context. The cache is in-memory, bounded to 2,000 compact records, and cleared when the bridge token is removed. Desktop/PWA retrieves from the portable JPVR workspace directly.
+**Implemented at source level:** Android retains recent conversation history in app-private SharedPreferences and now has a separate versioned app-private approved-memory store. The store retains up to 2,000 approved records (700 characters per content, 64 per category), validates a canonical Base64URL record format, commits candidate state before publishing it to JARVIS Core, and is available without Termux. Records imported from a connected shared JPVR workspace are merged into the same bounded local cache only when user_approved=true. JARVIS Core retrieves at most three lexical matches as untrusted model context. Removing the optional Termux token no longer removes local approved memories. Desktop/PWA retrieves from the portable JPVR workspace directly.
 
-**Not yet complete:** Android does not yet own a native in-process JPVR store for durable user memories; the optional cache requires a workspace snapshot supplied by the loopback service and is not a substitute for a local persistent memory implementation. There is no live cross-device synchronization. Memory retrieval uses keyword overlap, not semantic search.
+**Not yet complete:** this Android store is app-private SharedPreferences, not a native JPVR storage engine. Android-created device-local notes are not automatically uploaded to the shared workspace or included in JWS/JWB transfer, and automatic PC/Android synchronization remains unimplemented. Memory retrieval uses keyword overlap, not semantic search. The new local-memory tests are AUTHORED, NOT RUN; corruption and persistence failure are handled fail-closed in source but have not been runtime-verified.
 
 **Acceptance:** Android must load, inspect, correct, delete, persist and retrieve user-approved memories without Termux; deletion and process/device restart must be covered by authorized tests.
 
@@ -118,9 +118,9 @@ Optional remote features must be separately permissioned, visibly indicated, and
 
 ### Phase E — ANS-100 integration
 
-**Implemented at source level:** Android now has an in-process Kotlin two-neuron ALIF-DT signal pass with app-private checkpoint storage. It processes bounded transparent request-shape features and remains available when Termux is absent. Desktop/PWA uses the Python reference pass. Android may prefer the equivalent authenticated Termux signal endpoint while the optional extension is connected; if that endpoint fails, it is marked unavailable for the current connection and the in-process pass is used.
+**Implemented at source level:** Android now has an in-process Kotlin ten-neuron ALIF-DT request-shape signal pass with app-private checkpoint storage. It processes bounded transparent request-shape features and remains available when Termux is absent. Desktop/PWA uses the Python reference pass. Android may prefer the equivalent authenticated Termux signal endpoint while the optional extension is connected; if that endpoint fails, it is marked unavailable for the current connection and the in-process pass is used.
 
-**Not yet implemented:** full cognitive integration, semantic processing, STDP/R-STDP learning from dialogue, autonomous neural planning, and proof of useful adaptation. The signal pass is a low-level numeric diagnostic, not language understanding or a complete neural assistant. Kotlin/Python differential equivalence, checkpoint recovery under process interruption, and target-device resource behavior remain unverified.
+**Not yet implemented:** full cognitive integration, semantic processing, STDP/R-STDP learning from dialogue, autonomous neural planning, and proof of useful adaptation. The signal pass is a low-level numeric diagnostic, not language understanding or a complete neural assistant. A shared golden-vector fixture is now consumed by Python and Kotlin regression tests; those tests are AUTHORED, NOT RUN, so numerical parity is not yet verified. Checkpoint recovery under process interruption and target-device resource behavior remain unverified.
 
 **Acceptance:** compare Kotlin and Python outputs on shared deterministic vectors; verify checkpoint corruption/interruption handling on Android; measure memory, latency, CPU and thermal behavior on the target phone. Keep the Termux endpoint optional throughout.
 
@@ -217,7 +217,7 @@ This is a staged engineering target, not a claim that the current repository alr
 
 **Implemented at source level on `mobile-first-offline-v1`:**
 
-- Added `LocalConversationSignalRuntime.kt`, an in-process Kotlin implementation of the bounded two-neuron conversation signal pass. It stores its compact checkpoint in app-private SharedPreferences and does not open a socket or invoke Python.
+- Added `LocalConversationSignalRuntime.kt`, an in-process Kotlin implementation of the bounded ten-neuron conversation signal pass. It stores its compact checkpoint in app-private SharedPreferences and does not open a socket or invoke Python.
 - The Android ViewModel now runs the in-process signal pass for every ordinary conversation message, whether or not Termux is installed.
 - When the authenticated Termux bridge is already connected, the ViewModel prefers its Python ANS-100 signal endpoint. If that endpoint fails, the Android-local signal pass is used for the same turn. A missing Termux installation, missing token, or unavailable bridge does not block the conversation path.
 - Added focused Kotlin tests for feature extraction, event bounds, checkpoint persistence across runtime recreation, failed writes, corrupt checkpoints, and punctuation-only input.
@@ -226,7 +226,16 @@ This is a staged engineering target, not a claim that the current repository alr
 **Important boundaries:**
 
 - The built-in ANS-100 pass is a low-level numeric text-shape preprocessor, not semantic language understanding or a full reasoning engine. Dialogue learning remains disabled.
-- The local conversation history and signal checkpoint are app-private. The current approved long-term JPVR workspace cache is still supplied by the optional Termux bridge; native persistent Android user memory is a separate unfinished task.
+- The local conversation history and signal checkpoint are app-private. Android also now persists approved device-local memories in a versioned SharedPreferences store without Termux. Add/delete commits run on the conversation background executor; the panel clears input only after a successful save and reflects approved workspace import/restore. This is not native JPVR and device-local notes are not automatically exported or synchronized to PC.
 - The local language model remains separately installed by the user. This change does not bundle model weights or prove successful inference.
 
 **Verification:** source-level edits and cross-file API inspection only. Kotlin tests, Gradle sync/build, APK/AAB, emulator/device execution, airplane-mode run, CI and GitHub Actions: **NOT RUN** by instruction. No runtime behavior is claimed as verified.
+
+
+## 2026-11-14 update — app-private approved memories and shared ANS-100 vectors
+
+Android now persists explicitly approved user memories in a bounded, versioned SharedPreferences store. It can add, search/filter in the UI, delete, restore after process recreation, and continue to expose approved memory context to JARVIS Core without Termux. Workspace refresh/import/restore merges approved workspace records into the local memory cache. The store is not a native JPVR engine; device-local notes are not automatically synchronized or exported through JWS/JWB.
+
+A common fixture at app/src/test/resources/ans100/conversation-v2.tsv is consumed by the Python conversation-signal test and the Android Kotlin test. It covers a full six-feature route, a structure-only question mark and a neutral short input. This creates a shared numerical contract, but the tests remain AUTHORED, NOT RUN, so cross-language parity is not yet verified.
+
+**Verification:** source-level changes and GitHub readback only. No Python/Kotlin tests, builds, APK/AAB, CI, device run or resource measurement were performed.

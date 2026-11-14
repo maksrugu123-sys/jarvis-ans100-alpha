@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -181,6 +182,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     onClear = viewModel::clearConversation,
                     onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
                     onRemoveModel = viewModel::removeConversationModel,
+                )
+                LocalMemoryPanel(
+                    state = ui.localMemory,
+                    onAdd = viewModel::addLocalMemory,
+                    onDelete = viewModel::deleteLocalMemory,
                 )
                 RuntimeBridgePanel(
                     state = ui.runtime,
@@ -451,6 +457,145 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                 selectedTaskId = null
             },
         )
+    }
+}
+
+@Composable
+private fun LocalMemoryPanel(
+    state: LocalMemoryUiState,
+    onAdd: (String, String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    var content by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("general") }
+    var search by rememberSaveable { mutableStateOf("") }
+    var lastHandledAddedId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.lastAddedId) {
+        val savedId = state.lastAddedId
+        if (savedId != null && savedId != lastHandledAddedId) {
+            content = ""
+            lastHandledAddedId = savedId
+        }
+    }
+    val query = search.trim()
+    val visible = state.records.asReversed().filter { memory ->
+        query.isBlank() ||
+            memory.content.contains(query, ignoreCase = true) ||
+            memory.category.contains(query, ignoreCase = true)
+    }.take(30)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                SectionHeading(
+                    "Память устройства",
+                    "сохраняется в Android · работает без Termux",
+                )
+                Text(
+                    "${state.records.size} / 2 000",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                "Эти заметки хранятся только на этом устройстве и доступны JARVIS после перезапуска. Они пока не включены в перенос рабочего пространства на ПК.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = content,
+                onValueChange = { content = it.take(700) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Новое воспоминание") },
+                placeholder = { Text("Что JARVIS должен помнить?") },
+                minLines = 2,
+                maxLines = 4,
+                enabled = state.isLoaded && !state.isBusy,
+            )
+            OutlinedTextField(
+                value = category,
+                onValueChange = { category = it.take(64) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Категория") },
+                singleLine = true,
+                enabled = state.isLoaded && !state.isBusy,
+            )
+            Button(
+                onClick = { onAdd(content, category) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = state.isLoaded && !state.isBusy && content.isNotBlank() && category.isNotBlank(),
+            ) {
+                Text(if (state.isBusy) "Сохраняем…" else "Сохранить на устройстве")
+            }
+            state.error?.let { message ->
+                Text(message, color = MaterialTheme.colorScheme.error)
+            }
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it.take(128) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Поиск по локальным воспоминаниям") },
+                singleLine = true,
+            )
+            Text(
+                "Показано ${visible.size} из ${state.records.size}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (visible.isEmpty()) {
+                Text(
+                    if (state.isLoaded) "Локальных воспоминаний пока нет." else "Локальная память недоступна.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                visible.forEach { memory ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    memory.category,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                                TextButton(onClick = { onDelete(memory.id) }, enabled = !state.isBusy) {
+                                    Text("Удалить")
+                                }
+                            }
+                            Text(memory.content, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                memory.updatedAt,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

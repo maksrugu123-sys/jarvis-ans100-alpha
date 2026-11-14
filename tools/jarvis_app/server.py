@@ -19,6 +19,11 @@ from urllib.parse import urlsplit
 from .auth import LocalConsoleAuth, LocalConsoleAuthError
 from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
 from .jarvis_core import JarvisCore
+from .visible_browser import (
+    VisibleBrowserResearchError,
+    VisibleBrowserUnavailable,
+    VisibleBrowserResearchService,
+)
 from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
 
 from tools.jpvr_reference.storage import JPVRStorage
@@ -177,6 +182,9 @@ class LocalConsoleService:
             self.local_inference,
             ConversationSignalRuntime(self.ans100_state_path),
         )
+        self.visible_browser = VisibleBrowserResearchService(
+            self.data_path.parent / "research-browser-profile"
+        )
 
         try:
             self.storage = JPVRStorage.open(self.data_path, recover_tail=True)
@@ -246,6 +254,7 @@ class LocalConsoleService:
         return self.auth.verify(token)
 
     def close(self) -> None:
+        self.visible_browser.close()
         self.jarvis_core.close()
         if self.local_inference is not None:
             self.local_inference.close()
@@ -324,6 +333,7 @@ class LocalConsoleService:
         text: object,
         expected_revision: object,
         reasoning_request: object | None = None,
+        external_context: object | None = None,
     ) -> dict[str, object]:
         if self.local_inference is None:
             raise LocalInferenceError("Укажите --model и установите litert-lm-api==0.17.1.")
@@ -356,16 +366,30 @@ class LocalConsoleService:
                 answer, turn_trace = self.jarvis_core.respond(
                     clean, history, memories,
                     reasoning_request=reasoning_request,
+                    external_context=external_context,
                 )
             except StructuredReasoningError as exc:
                 raise LocalConsoleError(str(exc)) from exc
+            source_record = None
+            stored_answer = answer
+            if external_context is not None:
+                source_record = {
+                    "title": str(external_context.get("title", ""))[:300],
+                    "url": str(external_context.get("url", ""))[:2_048],
+                    "retrieved_at": str(external_context.get("retrieved_at", ""))[:80],
+                }
+                citation = (
+                    "\n\nИсточник страницы: " + source_record["title"]
+                    + "\n" + source_record["url"]
+                )
+                stored_answer = answer[:max(0, 4_000 - len(citation))] + citation
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             messages = list(existing["messages"] if existing is not None else [])
             if len(messages) > 49_998:
                 messages = messages[-49_998:]
             messages.extend([
                 {"id": "message-" + uuid.uuid4().hex, "role": "user", "created_at": now, "content": clean},
-                {"id": "message-" + uuid.uuid4().hex, "role": "assistant", "created_at": now, "content": answer},
+                {"id": "message-" + uuid.uuid4().hex, "role": "assistant", "created_at": now, "content": stored_answer},
             ])
             old_revision = existing["revision"] if existing is not None else 0
             if old_revision >= 2_147_483_647:
@@ -398,6 +422,7 @@ class LocalConsoleService:
                 "backend_label": self.local_inference.backend_label,
                 "core_status": self.jarvis_core.status(memories),
                 "turn_trace": turn_trace,
+                "browser_source": source_record,
             }
 
 
@@ -424,6 +449,60 @@ class LocalConsoleService:
             return self.jarvis_core.analyze_signal(clean)
         except (TypeError, ValueError, RuntimeError) as exc:
             raise LocalConsoleError("ANS-100 signal preprocessing is unavailable") from exc
+
+    def _require_desktop_browser(self) -> None:
+        if self.platform != "desktop":
+            raise VisibleBrowserUnavailable("Видимый браузер доступен только в режиме desktop на ПК.")
+
+    def browser_status(self) -> dict[str, object]:
+        if self.platform != "desktop":
+            return {
+                "supported": False,
+                "browser_open": False,
+                "paused": False,
+                "page": None,
+                "scope": "desktop_only_visible_browser",
+            }
+        return {"supported": True, **self.visible_browser.status()}
+
+    def browser_search(self, query: object) -> dict[str, object]:
+        self._require_desktop_browser()
+        return {"supported": True, **self.visible_browser.search(query)}
+
+    def browser_open(self, url: object) -> dict[str, object]:
+        self._require_desktop_browser()
+        return {"supported": True, **self.visible_browser.open(url)}
+
+    def browser_read(self) -> dict[str, object]:
+        self._require_desktop_browser()
+        return {"supported": True, **self.visible_browser.read()}
+
+    def browser_control(self, paused: object) -> dict[str, object]:
+        self._require_desktop_browser()
+        return {"supported": True, **self.visible_browser.set_paused(paused)}
+
+    def browser_stop(self) -> dict[str, object]:
+        self._require_desktop_browser()
+        return {"supported": True, **self.visible_browser.stop()}
+
+    def ask_about_browser_page(
+        self,
+        question: object,
+        expected_revision: object,
+    ) -> dict[str, object]:
+        self._require_desktop_browser()
+        page = self.visible_browser.read()
+        external_context = {
+            "title": page["title"],
+            "url": page["url"],
+            "retrieved_at": page["retrieved_at"],
+            "text": page["text"],
+        }
+        return self.send_conversation_message(
+            question,
+            expected_revision,
+            external_context=external_context,
+        )
 
     def _candidate(self) -> TaskSessionManager:
         try:
@@ -719,6 +798,11 @@ def create_http_server(
                     return
                 self._send(200, service.conversation_state())
                 return
+            if path == "/api/browser":
+                if not self._require_auth():
+                    return
+                self._send(200, service.browser_status())
+                return
             filename = _STATIC_FILES.get(path)
             if filename is None:
                 self._error(404, "Страница не найдена")
@@ -750,6 +834,38 @@ def create_http_server(
             if payload is None:
                 return
             try:
+                if path == "/api/browser/search":
+                    if set(payload) != {"query"}:
+                        raise LocalConsoleError("ожидалось поле query")
+                    self._send(200, service.browser_search(payload["query"]))
+                    return
+                if path == "/api/browser/open":
+                    if set(payload) != {"url"}:
+                        raise LocalConsoleError("ожидалось поле url")
+                    self._send(200, service.browser_open(payload["url"]))
+                    return
+                if path == "/api/browser/read":
+                    if payload:
+                        raise LocalConsoleError("чтение страницы не принимает параметры")
+                    self._send(200, service.browser_read())
+                    return
+                if path == "/api/browser/control":
+                    if set(payload) != {"paused"}:
+                        raise LocalConsoleError("ожидалось поле paused")
+                    self._send(200, service.browser_control(payload["paused"]))
+                    return
+                if path == "/api/browser/stop":
+                    if payload:
+                        raise LocalConsoleError("остановка браузера не принимает параметры")
+                    self._send(200, service.browser_stop())
+                    return
+                if path == "/api/browser/ask":
+                    if set(payload) != {"question", "expected_revision"}:
+                        raise LocalConsoleError("ожидались поля question и expected_revision")
+                    self._send(200, service.ask_about_browser_page(
+                        payload["question"], payload["expected_revision"]
+                    ))
+                    return
                 if path == "/api/workspace/restore":
                     if set(payload) != {"expected_revision", "workspace"}:
                         raise WorkspaceError("ожидались поля expected_revision и workspace")
@@ -829,6 +945,10 @@ def create_http_server(
                     ))
                     return
                 self._error(404, "Маршрут API не найден")
+            except VisibleBrowserUnavailable as exc:
+                self._error(503, str(exc))
+            except VisibleBrowserResearchError as exc:
+                self._error(400, str(exc))
             except WorkspaceConflict as exc:
                 self._error(409, str(exc))
             except LocalInferenceError as exc:

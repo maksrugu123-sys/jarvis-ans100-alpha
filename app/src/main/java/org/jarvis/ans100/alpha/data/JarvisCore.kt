@@ -1,6 +1,8 @@
 package org.jarvis.ans100.alpha.data
 
+import java.time.Instant
 import java.util.Locale
+import java.util.UUID
 
 data class LocalWorkspaceMemory(
     val id: String,
@@ -13,39 +15,113 @@ data class LocalWorkspaceMemory(
 data class LocalWorkspaceMemorySnapshot(
     val loaded: Boolean,
     val records: List<LocalWorkspaceMemory>,
+    val error: String? = null,
 )
 
-class LocalWorkspaceMemoryCache {
+/**
+ * Bounded memory used by JARVIS Core. The optional app-private storage makes
+ * explicitly approved memories survive process restarts and work without Termux.
+ * Imported workspace memories are merged into this local cache, never treated as
+ * instructions and never allowed to replace records by an unapproved source.
+ */
+class LocalWorkspaceMemoryCache(
+    private val storage: ConversationStorage? = null,
+) {
     @Volatile private var loaded: Boolean = false
     @Volatile private var records: List<LocalWorkspaceMemory> = emptyList()
+    @Volatile private var storageError: String? = null
+
+    init {
+        if (storage != null) {
+            try {
+                val raw = storage.read()
+                records = raw?.let(LocalWorkspaceMemoryCodec::decode) ?: emptyList()
+                loaded = true
+            } catch (error: Exception) {
+                storageError = error.message ?: "Не удалось восстановить локальную память."
+            }
+        }
+    }
 
     @Synchronized
     fun replace(values: List<LocalWorkspaceMemory>) {
-        records = values
-            .filter { it.userApproved && it.content.isNotBlank() }
-            .takeLast(MAX_CACHED_RECORDS)
-            .map { memory ->
-                memory.copy(
-                    content = memory.content.trim().take(MAX_MEMORY_CHARS),
-                    category = memory.category.trim().take(MAX_CATEGORY_CHARS),
-                )
-            }
-        loaded = true
+        requireWritable()
+        val merged = LinkedHashMap<String, LocalWorkspaceMemory>()
+        records.forEach { merged[it.id] = it }
+        values.filter { it.userApproved && it.content.isNotBlank() }.forEach { memory ->
+            val clean = memory.copy(
+                content = memory.content.trim().take(MAX_MEMORY_CHARS),
+                category = memory.category.trim().take(MAX_CATEGORY_CHARS),
+                updatedAt = memory.updatedAt.trim().take(MAX_UPDATED_AT_CHARS),
+                userApproved = true,
+            )
+            merged[clean.id] = clean
+        }
+        publish(merged.values.toList().takeLast(MAX_CACHED_RECORDS))
+    }
+
+    @Synchronized
+    fun add(content: String, category: String): List<LocalWorkspaceMemory> {
+        requireWritable()
+        val cleanContent = content.trim()
+        val cleanCategory = category.trim()
+        if (cleanContent.isEmpty() || cleanContent.length > MAX_MEMORY_CHARS ||
+            cleanContent.any { it == '\u0000' } ||
+            cleanCategory.isEmpty() || cleanCategory.length > MAX_CATEGORY_CHARS ||
+            cleanCategory.any { it == '\u0000' }
+        ) {
+            throw LocalConversationException("Воспоминание должно содержать текст до $MAX_MEMORY_CHARS символов и категорию до $MAX_CATEGORY_CHARS символов.")
+        }
+        val item = LocalWorkspaceMemory(
+            id = "local-" + UUID.randomUUID().toString(),
+            content = cleanContent,
+            category = cleanCategory,
+            updatedAt = Instant.now().toString(),
+            userApproved = true,
+        )
+        publish((records + item).takeLast(MAX_CACHED_RECORDS))
+        return records.toList()
+    }
+
+    @Synchronized
+    fun delete(id: String): List<LocalWorkspaceMemory> {
+        requireWritable()
+        if (records.none { it.id == id }) return records.toList()
+        publish(records.filterNot { it.id == id })
+        return records.toList()
     }
 
     @Synchronized
     fun clear() {
-        records = emptyList()
-        loaded = false
+        requireWritable()
+        publish(emptyList())
+    }
+
+    @Synchronized
+    private fun publish(candidate: List<LocalWorkspaceMemory>) {
+        val encoded = LocalWorkspaceMemoryCodec.encode(candidate)
+        if (storage != null && !storage.write(encoded)) {
+            throw LocalConversationException("Не удалось надёжно сохранить локальную память; прежнее состояние оставлено без изменений.")
+        }
+        records = candidate.toList()
+        loaded = true
+        storageError = null
+    }
+
+    private fun requireWritable() {
+        storageError?.let {
+            throw LocalConversationException("Локальная память повреждена; сохранённые данные не перезаписаны. $it")
+        }
     }
 
     fun snapshot(): LocalWorkspaceMemorySnapshot =
-        LocalWorkspaceMemorySnapshot(loaded, records.toList())
+        LocalWorkspaceMemorySnapshot(loaded, records.toList(), storageError)
 
     companion object {
         const val MAX_CACHED_RECORDS = 2_000
         const val MAX_MEMORY_CHARS = 700
         const val MAX_CATEGORY_CHARS = 64
+        private const val MAX_UPDATED_AT_CHARS = 80
     }
 }
 

@@ -68,6 +68,46 @@
       </form>
       <p class="muted">Модель и история остаются в локальном workspace этого ПК. Автозагрузка модели, облачный ИИ и выполнение команд отключены.</p>
     </section>
+
+    <section class="panel browser-panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">VISIBLE RESEARCH · PC</div><h2>Браузер JARVIS</h2></div>
+        <span class="tag">ОКНО ВИДНО</span>
+      </div>
+      <p class="panel-copy">JARVIS открывает отдельное видимое окно Chromium, ищет страницы и читает текст. Вы можете посмотреть страницу и забрать управление. Содержимое сайтов — недоверенные данные, а не команды.</p>
+      <form id="browser-search-form" class="stack-form">
+        <label for="browser-query">Поисковый запрос</label>
+        <div class="input-row">
+          <input id="browser-query" maxlength="500" placeholder="Что найти в интернете?" required>
+          <button id="browser-search" type="submit">Искать</button>
+        </div>
+      </form>
+      <div id="browser-status" class="browser-status" role="status" aria-live="polite">Видимый браузер ещё не запущен.</div>
+      <div class="browser-controls">
+        <button id="browser-read" class="secondary-button" type="button" disabled>Прочитать открытую страницу</button>
+        <button id="browser-takeover" class="secondary-button" type="button" disabled>Забрать управление</button>
+        <button id="browser-stop" class="secondary-button" type="button" disabled>Закрыть браузер</button>
+        <button id="browser-refresh" class="secondary-button" type="button">Обновить состояние</button>
+      </div>
+      <div class="browser-results">
+        <h3>Источники поиска</h3>
+        <div id="browser-sources" class="browser-sources empty">Результаты поиска появятся здесь.</div>
+      </div>
+      <div class="browser-page">
+        <div id="browser-page-meta" class="muted">Открытая страница не выбрана.</div>
+        <pre id="browser-page-text" class="browser-page-text empty">Прочитанный текст страницы появится здесь.</pre>
+      </div>
+      <div class="browser-ask">
+        <label for="browser-question">Задать вопрос по текущей странице</label>
+        <div class="input-row">
+          <input id="browser-question" maxlength="900" placeholder="Например: какие основные выводы автора?" autocomplete="off">
+          <button id="browser-ask" type="button" disabled>Спросить JARVIS</button>
+        </div>
+        <p class="muted">JARVIS получит ограниченный фрагмент страницы как недоверенный контекст. Источник будет добавлен к сохранённому ответу.</p>
+      </div>
+      <p class="muted">Первая версия выполняет только GET/HEAD навигацию. Отправка форм, покупки, сообщения, загрузка файлов и выполнение команд отключены. Для работы требуется установленный Playwright и Chromium; на ПК должна быть доступна графическая среда.</p>
+    </section>
+
     <div class="columns">
       <section class="panel">
         <div class="panel-heading">

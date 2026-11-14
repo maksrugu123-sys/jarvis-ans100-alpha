@@ -15,6 +15,7 @@ from tools.jarvis_app.server import (
     LocalConsoleService,
     create_http_server,
 )
+from tools.jarvis_app.visible_browser import VisibleBrowserUnavailable
 from tools.neuron_runtime.task_session import TaskConflict, TaskStatus
 from tools.neuron_runtime.workspace_store import WorkspaceSnapshot, encode_workspace
 
@@ -71,6 +72,20 @@ class LocalConsoleServiceTests(unittest.TestCase):
         )
         self.assertEqual(unchanged["revision"], session["revision"])
         self.assertEqual(self.service.checkpoint_version, version)
+
+    def test_visible_browser_is_disabled_on_android_platform(self):
+        service = LocalConsoleService(
+            os.path.join(self.temp.name, "android-console.jpvr"),
+            platform="android",
+        )
+        try:
+            status = service.browser_status()
+            self.assertFalse(status["supported"])
+            self.assertFalse(status["browser_open"])
+            with self.assertRaises(VisibleBrowserUnavailable):
+                service.browser_search("test query")
+        finally:
+            service.close()
 
     def test_access_token_persists_and_rotation_revokes_previous_token(self):
         auth_path = os.path.join(self.temp.name, "console.auth")
@@ -209,6 +224,20 @@ class LocalConsoleHttpTests(unittest.TestCase):
         )
         with urlopen(request, timeout=3) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
+
+    def test_visible_browser_status_is_authenticated_and_desktop_only(self):
+        with self.assertRaises(HTTPError) as missing_auth:
+            urlopen(self.base_url + "/api/browser", timeout=3)
+        self.assertEqual(missing_auth.exception.code, 401)
+        request = Request(
+            self.base_url + "/api/browser",
+            headers={"Authorization": "Bearer " + self.token},
+        )
+        with urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(response.status, 200)
+        self.assertTrue(payload["supported"])
+        self.assertFalse(payload["browser_open"])
 
     def test_session_status_endpoint_persists_and_returns_updated_state(self):
         created = self.service.create_session("HTTP session")
@@ -536,6 +565,12 @@ class LocalConsoleHttpTests(unittest.TestCase):
                     "observations": [],
                 },
             ),
+            ("/api/browser/search", {"query": "unauthorized browser search"}),
+            ("/api/browser/open", {"url": "https://example.com/"}),
+            ("/api/browser/read", {}),
+            ("/api/browser/control", {"paused": True}),
+            ("/api/browser/stop", {}),
+            ("/api/browser/ask", {"question": "unauthorized", "expected_revision": 0}),
         ]
 
         for path, payload in routes:

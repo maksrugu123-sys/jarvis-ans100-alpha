@@ -1166,13 +1166,210 @@ $("#chat-form").addEventListener("submit", async event => {
     button.textContent = "Отправить локальной модели";
   }
 });
+let browserState = null;
+
+function renderBrowserState(state) {
+  browserState = state;
+  const status = $("#browser-status");
+  const supported = !state || state.supported !== false;
+  const open = Boolean(state && state.browser_open);
+  const paused = Boolean(state && state.paused);
+  const page = state && state.page;
+  if (!supported) {
+    status.textContent = "Видимый Chromium доступен только в режиме desktop на ПК. Android продолжает работать без этого расширения.";
+  } else if (!state || !open) {
+    status.textContent = "Видимый браузер закрыт. Поиск откроет отдельное окно Chromium.";
+  } else if (paused) {
+    status.textContent = "Управление передано вам. JARVIS не читает и не меняет открытую страницу.";
+  } else if (page) {
+    status.textContent = "Браузер открыт: " + (page.title || "страница без заголовка") + " · " + page.url;
+  } else {
+    status.textContent = "Видимый браузер открыт.";
+  }
+  $("#browser-query").disabled = !supported || paused;
+  $("#browser-search").disabled = !supported || paused;
+  $("#browser-read").disabled = !supported || !open || paused;
+  $("#browser-ask").disabled = !supported || !open || paused;
+  $("#browser-takeover").disabled = !supported || !open;
+  $("#browser-takeover").textContent = paused ? "Вернуть управление JARVIS" : "Забрать управление";
+  $("#browser-stop").disabled = !supported || !open;
+  if (page) {
+    $("#browser-page-meta").textContent = page.title + " · " + page.url;
+  } else if (!open) {
+    $("#browser-page-meta").textContent = "Открытая страница не выбрана.";
+  }
+}
+
+async function refreshBrowserState() {
+  try {
+    const state = await api("/api/browser");
+    renderBrowserState(state);
+    return state;
+  } catch (error) {
+    if (error.status === 401) throw error;
+    $("#browser-status").textContent = error.message;
+    return null;
+  }
+}
+
+function renderBrowserSources(sources) {
+  const root = $("#browser-sources");
+  root.replaceChildren();
+  root.classList.toggle("empty", !sources || sources.length === 0);
+  if (!sources || sources.length === 0) {
+    root.textContent = "Источники не найдены. Попробуйте уточнить запрос.";
+    return;
+  }
+  for (const source of sources) {
+    const card = node("article", "browser-source");
+    const title = node("strong", "", source.title);
+    const link = node("small", "muted", source.url);
+    const open = node("button", "secondary-button", "Открыть в видимом браузере");
+    open.type = "button";
+    open.addEventListener("click", async () => {
+      open.disabled = true;
+      try {
+        const state = await api("/api/browser/open", {url: source.url});
+        renderBrowserState(state);
+        $("#browser-page-text").textContent = "Страница открыта. Нажмите «Прочитать открытую страницу», чтобы передать её текст JARVIS.";
+        $("#browser-page-text").classList.add("empty");
+        setNotice("Страница открыта в видимом браузере. Вы можете прочитать её сами или запросить чтение JARVIS.", "success");
+      } catch (error) {
+        setNotice(error.message, "error");
+      } finally {
+        open.disabled = false;
+      }
+    });
+    card.append(title, link, open);
+    root.append(card);
+  }
+}
+
+$("#browser-search-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const query = $("#browser-query").value.trim();
+  if (!query || browserState?.paused) return;
+  const button = $("#browser-search");
+  button.disabled = true;
+  button.textContent = "Ищу…";
+  $("#browser-sources").textContent = "Поиск выполняется в видимом окне Chromium…";
+  try {
+    const result = await api("/api/browser/search", {query});
+    renderBrowserState(result);
+    renderBrowserSources(result.sources);
+    $("#browser-page-text").textContent = "Поисковая выдача открыта в окне браузера. Выберите источник, чтобы открыть страницу.";
+    $("#browser-page-text").classList.add("empty");
+    setNotice("Поиск завершён. Найденные ссылки показаны в панели JARVIS.", "success");
+  } catch (error) {
+    $("#browser-sources").textContent = error.message;
+    setNotice(error.message, "error");
+  } finally {
+    button.textContent = "Искать";
+    button.disabled = Boolean(browserState?.paused);
+  }
+});
+
+$("#browser-read").addEventListener("click", async () => {
+  const button = $("#browser-read");
+  button.disabled = true;
+  $("#browser-page-text").textContent = "Чтение открытой страницы…";
+  $("#browser-page-text").classList.remove("empty");
+  try {
+    const result = await api("/api/browser/read", {});
+    $("#browser-page-meta").textContent =
+      result.title + " · " + result.url + " · " + result.retrieved_at +
+      (result.truncated ? " · текст ограничен лимитом" : "");
+    $("#browser-page-text").textContent = result.text;
+    setNotice("Текст страницы прочитан. Содержимое сайта считается недоверенными данными.", "success");
+  } catch (error) {
+    $("#browser-page-text").textContent = error.message;
+    setNotice(error.message, "error");
+  } finally {
+    await refreshBrowserState();
+  }
+});
+
+$("#browser-takeover").addEventListener("click", async () => {
+  if (!browserState?.browser_open) return;
+  const paused = !browserState.paused;
+  try {
+    const state = await api("/api/browser/control", {paused});
+    renderBrowserState(state);
+    setNotice(
+      paused
+        ? "Управление передано вам. JARVIS приостановил навигацию и чтение."
+        : "Управление возвращено JARVIS.",
+      "success",
+    );
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+});
+
+$("#browser-stop").addEventListener("click", async () => {
+  const button = $("#browser-stop");
+  button.disabled = true;
+  try {
+    const state = await api("/api/browser/stop", {});
+    renderBrowserState(state);
+    $("#browser-sources").replaceChildren();
+    $("#browser-sources").textContent = "Браузер закрыт. Поиск можно начать заново.";
+    $("#browser-page-text").textContent = "Прочитанный текст страницы появится здесь.";
+    $("#browser-page-text").classList.add("empty");
+    $("#browser-page-meta").textContent = "Открытая страница не выбрана.";
+    setNotice("Видимый браузер закрыт.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+    await refreshBrowserState();
+  }
+});
+
+$("#browser-refresh").addEventListener("click", async () => {
+  const state = await refreshBrowserState();
+  if (state) setNotice("Состояние видимого браузера обновлено.", "success");
+});
+
+$("#browser-ask").addEventListener("click", async () => {
+  const question = $("#browser-question").value.trim();
+  const button = $("#browser-ask");
+  if (!question || button.disabled || !browserState?.browser_open || browserState.paused) return;
+  button.disabled = true;
+  button.textContent = "JARVIS анализирует страницу…";
+  try {
+    const before = await api("/api/conversation");
+    const result = await api("/api/browser/ask", {
+      question,
+      expected_revision: before.revision,
+    });
+    renderConversation(result);
+    $("#browser-question").value = "";
+    const source = result.browser_source;
+    if (source) {
+      $("#browser-page-meta").textContent =
+        "Источник ответа: " + source.title + " · " + source.url +
+        (source.retrieved_at ? " · " + source.retrieved_at : "");
+    }
+    setNotice("Ответ JARVIS сохранён в диалоге вместе со ссылкой на страницу.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+    if (error.status === 409) {
+      try { await refreshConversation(); } catch { /* Preserve the revision conflict. */ }
+    }
+  } finally {
+    button.textContent = "Спросить JARVIS";
+    await refreshBrowserState();
+  }
+});
+
 async function refresh() {
   const state = await api("/api/state");
   renderState(state);
   await refreshWorkspace();
   await refreshConversation();
+  await refreshBrowserState();
   return state;
 }
+
 
 $("#session-form").addEventListener("submit", async event => {
   event.preventDefault();

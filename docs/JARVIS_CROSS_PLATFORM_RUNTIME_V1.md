@@ -21,11 +21,11 @@ This is a shared product and data contract, not a claim that the current impleme
 | Area | Existing source | Current limitation |
 |---|---|---|
 | Desktop runtime | Python modules under tools/ | Reference/research components; no packaged desktop product yet |
-| Desktop UI | PWA served by tools.jarvis_app | Local task/session console and optional local-model conversation through JARVIS Core; source-level only, not runtime verified |
+| Desktop UI | PWA served by tools.jarvis_app | Local task/session console and optional local-model conversation through JARVIS Core; includes a source-level visible headed Chromium search/read panel and bounded page-question context; browser/model runtime NOT VERIFIED |
 | Android UI | Kotlin + Jetpack Compose under app/ | Native V0.5 source exists |
 | Android runtime connection | LocalRuntimeBridgeClient → 127.0.0.1:8765 | Optional Termux extension for shared JPVR workspace, task/session administration, symbolic preview and encrypted transfer; core chat/history and the Kotlin ANS-100 signal pass remain in-process |
 | Neural runtime | Python NeuronRuntime / NetworkRuntime reference; Kotlin in-process Android signal pass | Bounded ten-neuron request-shape signal preprocessing is used by desktop Core and Android; Android may prefer the authenticated Termux Python endpoint when connected, but falls back to Kotlin. This is not full cognition or dialogue learning |
-| Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | No native Kotlin JPVR implementation or automatic cross-device sync yet |
+| Persistent storage | Python JPVR reference stores, including the shared workspace checkpoint | Android has bounded app-private conversation history, neural checkpoint and a separate approved-memory SharedPreferences store; no native Kotlin JPVR implementation or automatic cross-device sync yet |
 | Offline language model | Optional LiteRT-LM Qwen3 adapters called by JARVIS Core on Android and desktop/PWA | Source-level only; no inference or target-device performance has been verified |
 
 The existing desktop PWA can be hosted by the Python local console on a PC. This gives a practical desktop development surface without pretending that a packaged desktop executable already exists. The shared workspace JSON contract, JPVR workspace store, authenticated local API V1, Android Compose memory manager and desktop PWA memory manager are present on `mobile-first-offline-v1`; both UIs support explicit-consent memory creation, search, listing and confirmed deletion. Manual encrypted `.jws` transfer is implemented on both platforms; the phone and PC still keep separate loopback-local files until the user explicitly moves a file between them.
@@ -257,3 +257,13 @@ The topology contains nine directed connections and uses a 64-event per-turn cei
 Both platforms emit JARVIS_ANS100_CONVERSATION_SIGNAL_V2. Android validates returned event, batch and neuron counts and accepts V1 responses only as a compatibility path. The Python local-console endpoint returns V2. A V1 two-neuron Android checkpoint migrates to V2 while retaining prior integrator and output-gate state; unrelated or invalid checkpoints remain fail-closed. A Python V1 JPVR network checkpoint is rebuilt into V2 at load and durably rewritten on the next successful turn. Legacy checkpoints with pending routed events are rejected rather than migrated ambiguously.
 
 Source status: IMPLEMENTED at source level; tests AUTHORED, NOT RUN; Android/desktop execution and resource use NOT MEASURED.
+
+
+## 2026-11-14 update — Android local approved memory
+
+The Android app now persists user-approved device-local notes without Termux through an app-private versioned SharedPreferences store. This improves offline memory availability but is not a native Kotlin JPVR engine and does not automatically synchronize or export newly created device-local notes to PC. The 10-neuron signal path now has a common Kotlin/Python golden-vector fixture; tests are authored but not run.
+
+
+## 2026-11-14 update — Visible desktop research browser
+
+PC PWA now exposes source-level authenticated endpoints for visible browser search/open/read/ask/pause/stop through an optional headed Playwright Chromium profile. This is a PC-local feature and does not change Android runtime dependencies. Page excerpts are untrusted model context. The feature remains NOT VERIFIED at runtime and its URL/DNS filter is not a complete network sandbox.

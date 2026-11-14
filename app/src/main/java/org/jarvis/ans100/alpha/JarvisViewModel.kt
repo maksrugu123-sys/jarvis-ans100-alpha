@@ -21,6 +21,7 @@ import org.jarvis.ans100.alpha.data.LiteRtLmModelStore
 import org.jarvis.ans100.alpha.data.LiteRtLmResponseEngine
 import org.jarvis.ans100.alpha.data.LocalFallbackResponseEngine
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
+import org.jarvis.ans100.alpha.data.SharedPreferencesLocalWorkspaceMemoryStorage
 import org.jarvis.ans100.alpha.data.LocalDraftException
 import org.jarvis.ans100.alpha.data.LocalDraftRepository
 import org.jarvis.ans100.alpha.data.LocalDraftState
@@ -65,6 +66,14 @@ data class RuntimeMemory(
     val updatedAt: String,
 )
 
+data class LocalMemoryUiState(
+    val records: List<LocalWorkspaceMemory> = emptyList(),
+    val isLoaded: Boolean = false,
+    val isBusy: Boolean = false,
+    val error: String? = null,
+    val lastAddedId: String? = null,
+)
+
 data class RuntimeWorkspaceImportPreview(
     val addedCount: Int,
     val identicalCount: Int,
@@ -99,6 +108,7 @@ data class JarvisUiState(
     val storageReady: Boolean = true,
     val runtime: RuntimeBridgeUiState = RuntimeBridgeUiState(),
     val workspace: RuntimeWorkspaceUiState = RuntimeWorkspaceUiState(),
+    val localMemory: LocalMemoryUiState = LocalMemoryUiState(),
     val conversation: LocalConversationUiState = LocalConversationUiState(),
 )
 
@@ -116,7 +126,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val localSignalRuntime = LocalConversationSignalRuntime(
         SharedPreferencesConversationSignalStorage(application.applicationContext),
     )
-    private val workspaceMemoryCache = LocalWorkspaceMemoryCache()
+    private val workspaceMemoryCache = LocalWorkspaceMemoryCache(
+        SharedPreferencesLocalWorkspaceMemoryStorage(application.applicationContext),
+    )
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
@@ -135,6 +147,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     val state: StateFlow<JarvisUiState> = mutableState.asStateFlow()
 
     init {
+        val localMemorySnapshot = workspaceMemoryCache.snapshot()
+        mutableState.value = mutableState.value.copy(
+            localMemory = LocalMemoryUiState(
+                records = localMemorySnapshot.records,
+                isLoaded = localMemorySnapshot.loaded,
+                error = localMemorySnapshot.error,
+            ),
+        )
         val extensionInstalled = isTermuxInstalled()
         try {
             val token = runtimeTokenStore.load()
@@ -268,7 +288,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         try {
             runtimeTokenStore.clear()
             runtimeClient.setAccessToken(null)
-            workspaceMemoryCache.clear()
             val extensionInstalled = mutableState.value.runtime.extensionInstalled
             mutableState.value = mutableState.value.copy(
                 runtime = RuntimeBridgeUiState(
@@ -578,6 +597,74 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 refreshWorkspace()
             },
         )
+    }
+
+    fun addLocalMemory(content: String, category: String) {
+        val before = mutableState.value
+        if (before.localMemory.isBusy || !before.localMemory.isLoaded) return
+        mutableState.value = before.copy(
+            localMemory = before.localMemory.copy(isBusy = true, error = null),
+        )
+        conversationExecutor.execute {
+            try {
+                val records = workspaceMemoryCache.add(content, category)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        localMemory = LocalMemoryUiState(
+                            records = records,
+                            isLoaded = true,
+                            isBusy = false,
+                            lastAddedId = records.lastOrNull()?.id,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        localMemory = current.localMemory.copy(
+                            isBusy = false,
+                            error = error.message ?: "Не удалось сохранить локальное воспоминание.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteLocalMemory(id: String) {
+        val before = mutableState.value
+        if (before.localMemory.isBusy || !before.localMemory.isLoaded) return
+        mutableState.value = before.copy(
+            localMemory = before.localMemory.copy(isBusy = true, error = null),
+        )
+        conversationExecutor.execute {
+            try {
+                val records = workspaceMemoryCache.delete(id)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        localMemory = LocalMemoryUiState(
+                            records = records,
+                            isLoaded = true,
+                            isBusy = false,
+                            lastAddedId = current.localMemory.lastAddedId,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        localMemory = current.localMemory.copy(
+                            isBusy = false,
+                            error = error.message ?: "Не удалось удалить локальное воспоминание.",
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     fun refreshWorkspace() {
@@ -927,11 +1014,17 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 workspaceMemoryCache.replace(approvedMemories)
+                val localMemorySnapshot = workspaceMemoryCache.snapshot()
                 pendingWorkspaceRestore = null
                 pendingWorkspaceBackupRevision = null
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
+                        localMemory = current.localMemory.copy(
+                            records = localMemorySnapshot.records,
+                            isLoaded = localMemorySnapshot.loaded,
+                            error = localMemorySnapshot.error,
+                        ),
                         workspace = RuntimeWorkspaceUiState(
                             revision = snapshot.revision,
                             memories = memories,
@@ -1087,10 +1180,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 workspaceMemoryCache.replace(approvedMemories)
+                val localMemorySnapshot = workspaceMemoryCache.snapshot()
                 pendingWorkspaceMerge = null
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
+                        localMemory = current.localMemory.copy(
+                            records = localMemorySnapshot.records,
+                            isLoaded = localMemorySnapshot.loaded,
+                            error = localMemorySnapshot.error,
+                        ),
                         workspace = RuntimeWorkspaceUiState(
                             revision = snapshot.revision,
                             memories = memories,
@@ -1336,9 +1435,15 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 workspaceMemoryCache.replace(approvedMemories)
+                val localMemorySnapshot = workspaceMemoryCache.snapshot()
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
+                        localMemory = current.localMemory.copy(
+                            records = localMemorySnapshot.records,
+                            isLoaded = localMemorySnapshot.loaded,
+                            error = localMemorySnapshot.error,
+                        ),
                         workspace = RuntimeWorkspaceUiState(
                             revision = snapshot.revision,
                             memories = memories,

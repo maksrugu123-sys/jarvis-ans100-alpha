@@ -1,98 +1,81 @@
 # JARVIS Visible Browser Research V1
 
-**Status:** Proposed desktop capability; no browser controller implementation is included in this change  
+**Status:** source implementation V0.1 on `mobile-first-offline-v1`; browser/UI/Core tests AUTHORED, NOT RUN; headed PC runtime NOT VERIFIED.  
 **Date:** 2026-11-14  
 **Target:** PC / desktop JARVIS  
-**Primary product rule:** the browser window must be visible to the user throughout an agent-driven research session
+**Primary product rule:** the browser must open as a visible foreground Chromium window. No silent headless fallback.
 
-## 1. Goal
+## 1. Current source implementation
 
-When the user asks JARVIS to research a topic, JARVIS should open a real browser window on the PC, show the searches and pages it visits, read relevant page content, and return a grounded summary. The user can watch, read the same pages, switch tabs, pause the agent, take over, or stop the session.
+The optional controller lives in `tools/jarvis_app/visible_browser.py` and is owned by `LocalConsoleService`. It uses Playwright >=1.48's synchronous Python API inside one dedicated worker thread, with a persistent JARVIS-only profile at:
 
-This is not a hidden scraper and not an invisible headless browser. The browser is part of the user-facing interaction.
+`~/.jarvis-ans100-alpha/research-browser-profile`
 
-## 2. User flow
+The controller starts only when the user searches or opens a page. It launches Chromium with `headless=False`, disables downloads and service workers, and keeps a single dedicated page in a separate profile. Playwright is not imported at application startup; the normal local console still starts if the optional package is missing.
 
-1. The user gives JARVIS a research request.
-2. JARVIS restates or displays the intended search query and starts a visible browser session.
-3. The browser opens a search engine and visibly performs the search.
-4. JARVIS opens relevant result pages in visible tabs and extracts accessible page text.
-5. JARVIS compares the sources, separates facts from disagreement and uncertainty, and prepares a summary.
-6. The answer includes source titles, direct links, retrieval times and evidence excerpts where useful.
-7. The visible browser session remains available for the user to inspect after the summary; the user may close it.
+Install the optional dependency from the repository root:
 
-The UI should expose session state (starting, searching, reading, paused, completed, cancelled or failed) and controls for **Pause**, **Resume**, **Take control** and **Stop**.
+```bash
+python3 -m pip install -r requirements-browser.txt
+python3 -m playwright install chromium
+```
 
-## 3. Visible browser contract
+Then run the existing desktop console and authenticate in the PWA as usual. The Browser JARVIS panel performs visible search, opens selected sources, reads current page text, lets the user take over, and closes the research window.
 
-- Browser automation must run in a foreground, visible window. The browser automation library's headless mode is forbidden for this user-facing feature.
-- Initial implementation should use a dedicated JARVIS research browser profile rather than silently attaching to the user's everyday browser profile. This reduces accidental access to unrelated tabs, passwords and personal cookies.
-- The browser engine is behind a narrow `VisibleBrowserAdapter`; Playwright in headed mode is a candidate implementation, not yet a committed dependency.
-- Search, navigation and reading are the default allowed operations. The exact query and current URL remain visible in the address bar.
-- The user can interact with the window at any time. When manual control is detected or explicitly requested, automation pauses and waits for the user to resume it.
-- Closing the research window cancels the active session and records that it was cancelled.
-- If no supported browser is installed or the browser cannot be shown, the research action fails visibly. JARVIS must not silently switch to a hidden browser.
-- The browser must not be used to bypass CAPTCHA, paywalls, access controls or site restrictions.
+The first search provider is Bing's public HTML search results. Search-result extraction relies on its current DOM selector and may need maintenance if the provider changes its markup.
 
-## 4. Read-only capability boundary
+## 2. Authenticated local API
 
-The initial capability is intentionally read-only:
+The browser controller is available only through the existing authenticated loopback console. The server remains bound to `127.0.0.1`; all browser API operations require the console's Bearer token and the existing local-origin check.
 
-- submit a search query to the configured search engine;
-- open a result URL;
-- navigate within the currently requested research flow;
-- read page title, URL, accessible DOM text and relevant visible text;
-- capture a screenshot for user-facing inspection when useful;
-- return page metadata and extracted text to JARVIS Core.
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/api/browser` | Browser state, current page and pause state |
+| POST | `/api/browser/search` | Open visible search results and return up to 10 source records |
+| POST | `/api/browser/open` | Open a selected external HTTP(S) result |
+| POST | `/api/browser/read` | Read the current visible page title, URL and bounded body text |
+| POST | `/api/browser/control` | Pause/resume JARVIS control for manual user takeover |
+| POST | `/api/browser/stop` | Close the dedicated browser context |
+| POST | `/api/browser/ask` | Ask the local model about the currently opened page and save the answer with its source URL |
 
-The initial version must not submit arbitrary forms, send messages, publish content, purchase items, delete data, upload files, download or run executables, execute page scripts, modify accounts or change settings. If a site requires sign-in, the user may interact with the visible browser manually; JARVIS must not ask for or capture the user's password. Reading private/authenticated content requires a clear per-site user confirmation.
+Page text displayed in the UI is limited to 15,000 characters. When the user asks JARVIS a question about the current page, Core passes at most 1,800 characters of extracted page text to the local inference adapter. The source title, URL and retrieval timestamp accompany the context; the source URL is appended to the stored assistant answer. This is a bounded first slice, not a general web research agent or multi-source evidence engine.
 
-## 5. Untrusted page content and prompt-injection resistance
+The "Ask JARVIS" action requires the optional local model to be installed and available. Page search and reading can be used independently of model availability.
 
-Every page, search result, ad, snippet, document and downloaded text is untrusted external data. Instructions found inside a page must never be treated as JARVIS system instructions, developer instructions, user approval or permission to perform actions.
+## 3. User control and page lifecycle
 
-Page content may be passed to the language model only as quoted/untrusted research material. It cannot grant browser capabilities, change the task, reveal secrets, approve an action or override the user's request. Browser tools should expose narrow typed operations rather than unrestricted shell or arbitrary JavaScript execution.
+- Search and open operations show the active query/page in the visible browser window.
+- **Take control** pauses JARVIS navigation and reading while leaving the window visible for the user. The user can manually inspect and navigate the page. **Return control** re-enables JARVIS operations.
+- **Stop** closes the persistent browser context. The JARVIS profile remains on disk to preserve browser state for this dedicated profile.
+- Browser close, crash, unsupported page or navigation timeout is surfaced as an error; there is no hidden/headless retry.
+- The current implementation does not detect every possible manual gesture in Chromium; takeover is explicit through the PWA control.
+- The current UI reads one page at a time. It does not manage a multi-tab source graph or compare conflicting evidence automatically.
 
-## 6. Evidence and research result contract
+## 4. Read-only boundary
 
-A research session should produce structured records:
+The HTTP route guard permits only GET/HEAD requests, restricts target URLs to HTTP(S) on standard ports, rejects embedded URL credentials and local/private/reserved literal IPs, and checks DNS-resolved addresses for public IPs on each routed request. A separate Playwright WebSocket route rejects WebSocket connections. Downloads are disabled and service workers are blocked.
 
-- **ResearchSession:** stable ID, original user request, displayed search query, status, start/end time, cancellation state and configured limits.
-- **ResearchSource:** stable source ID, title, canonical URL, host, retrieval timestamp, page-read status and bounded extracted text.
-- **ResearchClaim:** concise claim, source IDs that support it, source IDs that disagree, and an explicit state such as supported, conflicting or unverified. Do not report heuristic scores as calibrated probabilities.
-- **ResearchSummary:** answer, limitations, unresolved questions and source list.
+This is a first safety filter, **not a complete network sandbox**. DNS can change between validation and the browser's connection (DNS rebinding/TOCTOU); browser engines and page JavaScript still execute web content; and HTTP GET endpoints can be misused by some sites despite being conventionally read-only. Use a dedicated clean JARVIS profile, do not sign it into personal accounts, and do not treat this implementation as suitable for sensitive authenticated browsing. A future release should add OS-level egress isolation or an explicit outbound proxy with address pinning before expanding permissions.
 
-Do not fabricate citations. A claim without a source should be marked as the assistant's inference or left unverified. Distinguish the page's publication date from the time JARVIS accessed it. Prefer primary and authoritative sources where appropriate, and compare sources rather than treating the first result as fact.
+JARVIS does not submit forms, click page controls, send messages, publish, purchase, upload files, download artifacts or execute page-provided commands. The browser search/read capability does not grant write permission. If the user manually takes control, JARVIS stays paused until the user explicitly returns control.
 
-Initial resource limits should be explicit and configurable: maximum open tabs, pages read, characters extracted per page, total context, navigation duration and overall session duration. The first release should begin with conservative bounded defaults and measure actual PC resource use before increasing them.
+## 5. Untrusted page content and prompt-injection boundary
 
-## 7. Permissions, privacy and lifecycle
+Page title, URL and extracted body are treated as untrusted external reference data. The local language adapter receives an explicit instruction to ignore page directives, role changes, requests for secrets, alternate URLs or actions, and to use the content only as evidence for the user's question. Automatic tool calling remains disabled.
 
-- A user's explicit request to research authorizes the bounded read-only search/open/read flow for that request.
-- Any action that changes remote state requires a separate capability and confirmation for the exact action. Read permission never implies write permission.
-- Keep the dedicated browser profile separate from Android app storage and unrelated browser profiles.
-- Show the search query, active URL, and session state to the user.
-- Do not record raw passwords, authentication forms or full private page contents in routine diagnostics.
-- Provide a control to clear the dedicated research profile's cookies and browsing data.
-- On timeout, browser crash, user stop, or unsupported content, fail safely and return the sources that were successfully read.
-- Desktop browser research is a PC feature. The Android phone must continue to work independently; remote PC browser control from Android is a separate future feature requiring authenticated pairing and explicit user consent.
+This prompt defense is a mitigation, not a proof against prompt injection. The model may still misinterpret or misstate page content. The UI and saved answer include the actual source URL; users should open and verify important claims themselves. The controller does not independently validate a page's claims, publication dates, authorship or factual accuracy.
 
-## 8. Proposed integration boundary
+## 6. Current limitations
 
-Desktop JARVIS should own a `VisibleBrowserResearchService` behind a `VisibleBrowserAdapter` interface. The service creates a bounded `ResearchSession`, calls only the read-only browser capabilities, and returns structured source records to JARVIS Core. The Core treats all extracted page text as untrusted context and produces the final answer with source provenance.
+- Requires a desktop session capable of showing a Chromium window. Headed mode has not been verified on Windows, Linux or macOS in this change.
+- Requires optional Playwright >=1.48 package and installed Chromium browser binary; neither is auto-downloaded by JARVIS.
+- Bing page selectors may change; anti-bot, CAPTCHA, rate limits or search markup changes can cause search to return no sources. The controller does not bypass site restrictions.
+- One active page, a maximum of 10 extracted search-result links, page text bounded to 15,000 characters, model context bounded to 1,800 characters, 25-second navigation timeout and 45-second worker request timeout.
+- No screenshots, PDF extraction, image understanding, multi-source claim/evidence graph, page caching, automatic retries or source deduplication across separate search sessions.
+- No automatic Task Loop/CQE dispatch, external action execution, desktop package, or Android-to-PC remote browser control.
 
-The browser controller must be hosted on the same PC as the visible browser. It must not expose an unauthenticated LAN or Internet control port. If a local IPC or loopback endpoint is required, it must be authenticated, bound to loopback only, and limited to the declared browser operations.
+## 7. Tests and verification
 
-This proposal does not yet connect the capability to Task Loop, CQE or Permission & Safety Gate. Those integrations must preserve explicit capability checks, bounded execution, cancellation and exact-action authorization. No browser task should be reported as complete unless its page reads and evidence records have been confirmed.
+`tools/jarvis_app/test_visible_browser.py` covers URL scheme/credential/host/port and search-query validation. `tools/jarvis_app/test_jarvis_core.py` covers bounded untrusted external-page context handling. `tools/jarvis_app/test_local_inference.py` covers the instruction boundary when page text is added to the system context. Browser HTTP/UI integration tests are authored in source where applicable; all such tests are **AUTHORED, NOT RUN**.
 
-## 9. Implementation and verification stages
-
-1. **Visible shell:** launch a visible dedicated browser profile; test launch failure, window visibility, close and cancellation.
-2. **Read-only research:** search, open, extract text, track tabs and produce source records.
-3. **Evidence-aware answer:** link every factual claim to read sources, display disagreements and mark unsupported claims.
-4. **User control:** reliable pause/resume/takeover/stop behavior; preserve the user's manual navigation without silently overriding it.
-5. **Permission integration:** only after the read-only feature is verified, consider additional browser actions behind separate capability grants.
-
-Required tests include: visible mode is mandatory; no headless fallback; navigation and page/text bounds; URL/title provenance; page prompt-injection text never changes permissions; manual takeover pauses automation; user stop and window close cancel; browser crash/timeout fails safely; form submission and other side effects are rejected; authenticated page access requires site-specific confirmation.
-
-**Verification status:** proposed only. No browser automation source, dependency, browser profile, desktop build, integration test or PC runtime validation was added or run.
+No Playwright browser was launched, no model inference was run, no PWA session was exercised, and no Windows/macOS/Linux runtime test, Python unit test, Gradle build, APK/AAB, CI or Actions workflow was executed. This feature is **IMPLEMENTED at source level, NOT VERIFIED at runtime**.

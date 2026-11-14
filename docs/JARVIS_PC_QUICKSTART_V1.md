@@ -3,7 +3,7 @@
 **Status:** source-level desktop development entry point  
 **Date:** 2026-11-13
 
-This guide describes the existing Python local console for Linux/macOS and the current Windows 10/11 compatibility work. A cross-platform JPVR I/O adapter is now present in the source, but Windows execution has not yet been verified. This is not a claim of a finished Windows release, conversational assistant, or native desktop executable.
+This guide describes the existing Python local console for Linux/macOS and the current Windows 10/11 compatibility work. An optional visible Chromium research controller is now present at source level; it requires a separately installed Playwright package and Chromium browser. A cross-platform JPVR I/O adapter is present in the source, but Windows execution has not yet been verified. This is not a claim of a finished Windows release, conversational assistant, or native desktop executable.
 
 ## What currently works at source level
 
@@ -15,9 +15,10 @@ This guide describes the existing Python local console for Linux/macOS and the c
 - Encrypted `.jws` workspace export/import in the PWA, with merge preview, explicit confirmation and no silent overwrites.
 - Separate encrypted `.jwb` workspace backup and full replacement restore, with integrity validation, current-revision backup acknowledgement, preview, explicit confirmation and server-side CAS.
 - Bounded symbolic reasoning preview using structured facts and actions.
+- Optional visible Chromium research panel: search, open and read page text; pause automation for manual user takeover; ask the local model about the current page with the source URL saved alongside the answer.
 - Bearer-token protected state and mutation routes.
 
-An optional LiteRT-LM source adapter for Qwen3-0.6B INT4 no-think inference exists, and the local conversation route is wired through JARVIS Core. The adapter requires an explicitly supplied model file; successful inference and natural-language response quality have not been runtime-verified. Not yet delivered: verified production conversation quality, production task execution, offline voice, native Windows/macOS/Linux package, or automatic synchronization with Android.
+An optional LiteRT-LM source adapter for Qwen3-0.6B INT4 no-think inference exists, and the local conversation route is wired through JARVIS Core. The adapter requires an explicitly supplied model file; successful inference and natural-language response quality have not been runtime-verified. Not yet delivered: verified production conversation quality, production task execution, offline voice, native Windows/macOS/Linux package, multi-source evidence validation, secure network isolation for untrusted pages, or automatic synchronization with Android.
 
 ## Requirements
 
@@ -55,6 +56,28 @@ Open a terminal in the repository directory:
 
     python3 --version
     python3 -m tools.jarvis_app --port 8765 --platform desktop
+
+## Optional visible research browser
+
+The PC PWA includes a source-level visible browser panel. The browser opens a separate foreground Chromium window with a dedicated JARVIS profile; it is not a headless scraper and does not reuse your everyday browser profile.
+
+From the repository root, install the optional package and browser binary:
+
+    python3 -m pip install -r requirements-browser.txt
+    python3 -m playwright install chromium
+
+On Windows, use `py -3 -m pip install -r requirements-browser.txt` and `py -3 -m playwright install chromium`. A graphical desktop session must be available. JARVIS does not automatically install a browser or run in headless mode.
+
+After starting the local console and signing in to the PWA, use the **Браузер JARVIS** panel:
+1. Enter a search query. Chromium opens visibly and the PWA lists the extracted source links.
+2. Open a result, then use **Прочитать открытую страницу** to display the extracted text.
+3. Enter a question and choose **Спросить JARVIS**. This requires an installed and available local language model. The model receives up to 1,800 characters of page text as explicitly untrusted context, and the saved answer includes the page URL.
+4. Choose **Забрать управление** to pause JARVIS while you interact with the visible window; choose **Вернуть управление JARVIS** when finished.
+5. Choose **Закрыть браузер** to close the dedicated browser context.
+
+The browser uses the separate profile under `~/.jarvis-ans100-alpha/research-browser-profile` (or the corresponding data directory on Windows). It is designed for clean read-only research. Do not sign into personal accounts or use it for sensitive authenticated browsing. It allows only GET/HEAD network requests, blocks WebSocket connections, downloads and service workers, and applies hostname/IP/port checks; these are best-effort filters, not a complete network sandbox against DNS rebinding or browser-engine vulnerabilities. Page scripts still run. JARVIS does not submit forms, send messages, make purchases, upload files or perform external actions.
+
+If Playwright or Chromium is missing, the browser feature reports an error and the rest of the local console remains available. Search markup may change; unsupported pages, anti-bot checks or timeouts can cause search/reading to fail. The visible browser is source-implemented but its headed runtime, manual takeover and model-assisted page answers have not been executed or verified on Windows/Linux/macOS.
 
 ## First launch
 

@@ -4523,9 +4523,9 @@ The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,
 
 **Next:** unify Android conversation storage with the existing portable workspace contract; add model-store/backend regression tests, cancellation and streaming; obtain a trusted model digest and validate model contents where the distribution provides one; then, only after separate user authorization, measure the model on the target Android phone and a desktop. Keep LLM capability, symbolic reasoning and ANS-100 research status separate.
 
-### 3.56. JARVIS Core JPVR recall and ANS-100 conversation signal pass V1
+### 3.56. JARVIS Core JPVR recall and ANS-100 conversation signal pass V1 (historical)
 
-**Status:** IMPLEMENTED at source level on `mobile-first-offline-v1`; tests are AUTHORED, NOT RUN; no runtime/device verification is claimed.
+**Статус:** исторический срез V1. Текущая десятинейронная реализация и локальная Android-память описаны в §§3.67 и 3.69. Детали ниже сохранены для истории миграции.
 
 **JARVIS Core ownership**
 - Android `JarvisCore` owns the conversation turn, keeps the bounded SharedPreferences history boundary, selects reference memories and passes optional signal diagnostics to the language component.
@@ -4534,17 +4534,14 @@ The Android-local codec permits at most 120 messages / 60 complete exchanges, 4,
 
 **Android JPVR memory path**
 - After authenticated workspace fetch, confirmed merge/import or confirmed restore, the ViewModel loads only records with `user_approved=true` into `LocalWorkspaceMemoryCache`.
-- Cache bounds: at most 2,000 records, 700 characters per memory, and 64 characters per category. Explicit bridge-token removal clears the cache. A process restart with a stored token attempts a fresh bridge/workspace load.
-- Core selects at most three lexical-overlap records, with a total selected-context limit of 1,800 characters, and passes them to LiteRT-LM as explicitly untrusted reference notes. The LLM is instructed not to treat notes as instructions.
-- This cache is in-memory and depends on the optional Termux loopback bridge for refresh/import/restore. Android does not yet own a native durable JPVR store; when no workspace snapshot is loaded, local conversation continues using SharedPreferences history only. There is no live PC/Android memory sync. Retrieval is keyword overlap, not semantic search.
+- Cache bounds: at most 2,000 records, 700 characters per memory, and 64 characters per category. The current V1-era cache description is superseded by §3.69: Android now persists device-local approved memories in an app-private versioned SharedPreferences store without Termux; approved workspace imports are merged into it, and bridge-token removal does not erase local records.
+- Core selects at most three lexical-overlap records, with a total selected-context limit of 1,800 characters, and passes them to LiteRT-LM as explicitly untrusted reference notes. Retrieval is keyword overlap, not semantic search.
+- The new Android store is not native JPVR and device-local notes are not automatically transferred to PC/JWS/JWB. There is no automatic cross-device synchronization.
 
 **ANS-100 signal pass**
-- `tools/neuron_runtime/conversation_signal.py` runs a bounded two-neuron ALIF-DT network using existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle code.
-- It converts three explicit text-shape features (normalized token volume, lexical diversity and question punctuation) to input events, then propagates a spike to an attention-gate neuron through a bounded connection.
-- The ALIF adaptation variable and network clock persist across turns. Each processed turn advances model time by 10 ms; the network checkpoint is stored in a dedicated `ans100-conversation.jpvr` container through `JPVRNetworkCheckpointStore` with record-version CAS. Raw prompts are not saved in that checkpoint.
-- Queue/run budget is eight events. Synaptic learning remains disabled (`learning_rule="none"`). The result is a numeric signal diagnostic only, not natural-language understanding, intent recognition, answer validation, planning, or dialogue learning.
-- Desktop Core calls this pass directly. Android optionally calls authenticated `POST /api/ans100/conversation-signal` through the loopback Termux service using short timeouts; failure is fail-open and does not block chat.
-- Full ANS-100 cognitive integration, native Kotlin neural runtime, STDP/R-STDP learning from dialogue, and semantic reasoning remain NOT IMPLEMENTED.
+- The Python pass has since migrated to the ten-neuron V2 topology in §3.67: six request-shape features feed two aggregators, an adaptive ALIF-DT integrator and an attention gate. Android has an equivalent ten-neuron Kotlin in-process pass; Termux remains an optional Python endpoint only.
+- Python adaptive state is stored in a separate `ans100-conversation.jpvr` checkpoint; Android stores its signal checkpoint in app-private SharedPreferences. Both are stateful numeric pre-processors, not natural-language understanding, intent recognition, answer validation, planning or dialogue learning.
+- The shared Python/Kotlin golden-vector fixture is AUTHORED, NOT RUN; numerical parity is therefore not yet verified. STDP/R-STDP learning from dialogue and full ANS-100 cognitive integration remain NOT IMPLEMENTED.
 
 **Safety and verification boundary**
 - Retrieved memory is reference data, not authority or instructions.
@@ -4591,19 +4588,29 @@ The extension may provide authenticated shared JPVR workspace/memory operations,
 
 ### 3.59. PC Visible Browser Research V1
 
-**Status:** PROPOSED; no controller implementation or browser dependency has been added.
+**Status:** source implementation V0.1 on `mobile-first-offline-v1`; Python/Core/UI tests AUTHORED, NOT RUN; headed browser and model-assisted browsing NOT VERIFIED on a PC.
 
-JARVIS PC should be able to open a real, foreground browser window for user-requested research. The user sees the search query, visited tabs and pages, may read alongside JARVIS, and can pause, take control or stop. The first capability is limited to bounded search, navigation and page reading. It must not silently switch to headless operation.
+The optional controller is `tools/jarvis_app/visible_browser.py`, owned by the loopback-only `LocalConsoleService`. It starts a visible Chromium window only after an explicit search/open action. Playwright and Chromium are an optional dependency; the normal PWA/local console can still start without them. The browser uses a dedicated JARVIS profile under the local data directory and keeps Playwright objects on one worker thread.
 
-The proposed desktop boundary is `VisibleBrowserResearchService` → `VisibleBrowserAdapter` → visible dedicated research-browser profile. A dedicated profile is preferred over silently attaching to the user's everyday browser session. The initial browser controller may use a headed Playwright-backed adapter, but no engine or dependency is committed yet. Browser actions remain read-only by default; page content is untrusted external data and cannot provide instructions, permissions or approval. Site authentication, form submission, messages, purchases, uploads, downloads, account changes and other side effects require separate explicit authorization and are excluded from the initial scope.
+The PWA exposes authenticated, loopback-only endpoints:
+- `GET /api/browser`: state and current page.
+- `POST /api/browser/search`: visible Bing search and up to ten extracted result links.
+- `POST /api/browser/open`: open one external HTTP(S) page.
+- `POST /api/browser/read`: return page title, canonical URL, retrieval timestamp and at most 15,000 characters of extracted text.
+- `POST /api/browser/control`: pause/resume automation for manual user takeover.
+- `POST /api/browser/stop`: close the dedicated browser context.
+- `POST /api/browser/ask`: read the current page and send a bounded 1,800-character excerpt to the optional local language model as untrusted context; the answer is stored with the source title and URL.
 
-Research results should be structured as source records with title, canonical URL, retrieval timestamp and bounded extracted text, followed by claims that identify supporting/conflicting sources and unknowns. The assistant must not fabricate citations or treat a first search result as verified fact. Page counts, open tabs, extracted characters and session duration require explicit bounds. Browser close, crash, timeout, manual takeover and user stop must pause or safely cancel the session.
+The browser starts headed (`headless=False`), disables downloads and service workers, permits only GET/HEAD HTTP requests, and separately blocks WebSocket connections through Playwright `route_web_socket` (available from Playwright 1.48). URL/host/DNS filters reject non-public addresses, but this is only a best-effort filter, not a complete network sandbox: DNS can change between validation and connection (TOCTOU/rebinding), browser/page JavaScript executes, and some sites misuse GET endpoints. It must not be used for sensitive authenticated browsing or personal account profiles. Do not silently elevate it to a trusted browser or remote action executor.
 
-This is a PC capability only. Android continues independently; remote control of a PC browser from the phone is a separate future feature with authenticated pairing and consent. See [JARVIS Visible Browser Research V1](JARVIS_VISIBLE_BROWSER_RESEARCH_V1.md).
+The user can take over the visible window explicitly. While paused, JARVIS search/open/read/ask requests are rejected; the user can manually inspect the page and then explicitly return control. The first version operates on a single current page and does not automatically build a multi-source evidence graph, independently verify claims or compare conflicting sources. Search extraction depends on Bing's current result markup.
 
-**Next acceptance work:** add a visible browser adapter and bounded read-only research service; test that the window is actually visible, manual takeover works, untrusted page instructions cannot expand permissions, and every result has source provenance. No browser source, desktop package, tests or runtime validation currently exists.
+Page content is always untrusted reference data. The language adapter receives explicit prompt-injection warnings, automatic tool calling remains disabled, and the saved reply contains a source URL. This mitigation is not proof of prompt-injection resistance or factual correctness. The user should open and verify important claims themselves.
 
+**Dependency/setup:** `requirements-browser.txt` pins optional Playwright >=1.48 for WebSocket routing. Install it and Chromium separately with `python3 -m pip install -r requirements-browser.txt` and `python3 -m playwright install chromium`. A graphical desktop session is required. No automatic browser download, headless fallback, form submission, messaging, purchase, upload or external action is implemented.
 
+**Tests:** `tools/jarvis_app/test_visible_browser.py` covers URL/query validation; `test_jarvis_core.py` covers bounded untrusted page-context handling; `test_local_inference.py` covers the page-context prompt boundary. Status: AUTHORED, NOT RUN. No Playwright session, PWA interaction, local model inference, Windows/Linux/macOS headed runtime, screenshots, builds, CI or device measurements were executed. See [JARVIS Visible Browser Research V1](JARVIS_VISIBLE_BROWSER_RESEARCH_V1.md).
+ 
 ### 3.60. Bounded 10,000-Neuron Network Scaling V1
 
 **Status:** IMPLEMENTED at source level in the Python reference `NetworkRuntime`; scaling benchmark and limit tests are AUTHORED, NOT RUN. This does not promote 10,000 neurons as a verified device configuration.
@@ -4623,7 +4630,7 @@ This is a PC capability only. Android continues independently; remote control of
 
 **Storage and platform boundary**
 - `JPVRNetworkCheckpointStore` stores the complete network snapshot in a BLOB plus CHECKPOINT commit; that whole-network checkpoint path does not page inactive neurons out of RAM or fault them in on demand. A separate per-neuron LRU/JNVM working-set prototype is specified in §3.61, but is not integrated with `NetworkRuntime`. Flash persistence is not equivalent to active RAM.
-- The current Python coordinator is a desktop/Termux reference component. Android's in-process Kotlin signal runtime remains a two-neuron feature; the native Android 10,000-neuron runtime, packed state representation, Android/PC numerical parity, and device RAM/CPU/thermal measurements are NOT IMPLEMENTED / NOT MEASURED.
+- The current Python coordinator is a desktop/Termux reference component. Android's in-process Kotlin conversation signal runtime now has ten logical request-shape neurons; the native Android 10,000-neuron runtime, packed state representation, and device RAM/CPU/thermal measurements are NOT IMPLEMENTED / NOT MEASURED. A common Kotlin/Python golden-vector fixture is AUTHORED, NOT RUN, so numerical parity is not yet VERIFIED.
 - The optional Termux extension must remain optional. The Android app must continue to function without it; this increment does not route ordinary Android chat through a 10,000-node Python network.
 - The 10,000-node capacity ceiling is not evidence of intelligence, semantic understanding, useful learning, or biological equivalence. Dialogue STDP/R-STDP remains disabled.
 
@@ -4654,7 +4661,7 @@ This is a PC capability only. Android continues independently; remote control of
 - This manager commits one neuron at a time. It is not yet integrated into NetworkRuntime, and it does not provide atomic publication of all neuron candidates touched by a common timestamp. Do not route the multi-neuron network scheduler through these separate commits until a network-level commit coordinator exists.
 - JPVR checkpoint reads pin the active Superblock and fetch referenced pages lazily through a 64-page read-through cache, avoiding materialization of unrelated DATA/BLOB checkpoints. The COMMIT-ancestry proof still reads historical COMMIT pages. Save/planning continues to materialize a bounded page catalog (default 4,096 pages). The writer is append-only and no compaction/free-page reuse is provided here. Long-lived shards can reach the page bound; callers receive a persistence error and dirty state remains resident.
 - The complete NetworkRuntime plus JPVRNetworkCheckpointStore path remains a separate whole-network snapshot implementation.
-- Android's standalone Kotlin signal pass remains two neurons. Native Kotlin packed state, Android JPVR/JNVM paging, Python/Kotlin parity and device resource measurements remain NOT IMPLEMENTED / NOT MEASURED. Termux stays optional.
+- Android's standalone Kotlin conversation signal pass now contains ten logical nodes. The app-private approved-memory store is persistent but is not a native JPVR/JNVM engine. Native Kotlin packed neuron state, Android JPVR/JNVM paging, Python/Kotlin measured parity and device resource measurements remain NOT IMPLEMENTED / NOT MEASURED. Termux stays optional.
 - One-neuron durable commits do not make cross-neuron event delivery exactly once and do not replace NCC/CQE ownership.
 
 **Tests:** tools/neuron_runtime/test_compact_state.py and tools/neuron_runtime/test_working_set.py are AUTHORED, NOT RUN. They cover all-rule packed round trips, codec corruption/bounds, LRU reload, write-before-evict, storage backpressure, candidate isolation, uncertain-commit reconciliation, epoch mismatch and an actual JPVR temporary-directory round trip.
@@ -4682,11 +4689,11 @@ The focused test extends the uncertain-commit path to assert that another batch 
 
 ### 3.63. Network-Level JNVM Timestamp Transaction V1
 
-**Status:** the group checkpoint storage facade is implemented at source level; scheduler V2 version manifest and exact-snapshot restore are in §3.66. NetworkRuntime.run() remains not integrated. Full contract: docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md.
+**Status:** the group checkpoint store (§3.66) and the fail-closed timestamp coordinator that integrates it with `NetworkRuntime.run()` (§3.68) are implemented at source level. Tests are AUTHORED, NOT RUN; crash-recovery correctness and scale are not verified. Full contract: docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md.
 
 The existing NetworkRuntime timestamp batch is a logical atomic unit: all affected neuron candidates, generated outgoing events, pending queue and network clock must become visible together. The per-neuron NeuronWorkingSet uses 128 separate JPVR shard containers; separate container commits cannot provide this invariant. Do not connect it directly to NetworkRuntime.
 
-The specified next storage topology is one JPVR container per network with:
+The implemented source-level topology is one JPVR container per network with:
 - a neuron COW INDEX mapping stable neuron IDs to immutable neuron checkpoint records;
 - a network-state COW INDEX mapping the network ID to the bounded scheduler checkpoint;
 - one typed JPVR transaction containing all changed neuron records, all changed INDEX locators and the scheduler checkpoint;
@@ -4694,11 +4701,11 @@ The specified next storage topology is one JPVR container per network with:
 
 The scheduler checkpoint owns the clock, pending queue, event-ID deduplication state, topology version and transaction sequence. Candidate neuron state and generated outgoing events are prepared and validated before commit. In-memory state is published only after durable commit. An uncertain commit freezes the writer until reopen/reconciliation proves whether the exact transaction became active.
 
-The existing JPVR typed transaction builder supports multiple DATA/BLOB records and index mutations in one transaction request, but the current neuron checkpoint facade exposes only single-neuron saves. A dedicated group checkpoint store is required. The 128-shard manager remains an isolated per-neuron experiment, not the network execution backend.
+The existing JPVR typed transaction builder supports multiple DATA/BLOB records and index mutations in one transaction request. `JPVRNetworkJNVMStore` publishes changed neuron records and scheduler state through one group checkpoint transaction, and `NetworkJNVMCoordinator` invokes that store before publishing candidate scheduler/neuron state; see §§3.66 and 3.68. The separate 128-shard per-neuron manager remains an isolated experiment, not the network execution backend.
 
-Acceptance includes all-or-none multi-neuron visibility, crash/failpoint recovery, differential scheduler tests, queue/clock invariants, bounded cache/compaction and measured scale profiles through 10,000 nodes. Python implementation and measurements precede any Kotlin port. Android's two-neuron native path and optional-Termux boundary remain unchanged.
+Acceptance includes all-or-none multi-neuron visibility, crash/failpoint recovery, differential scheduler tests, queue/clock invariants, bounded cache/compaction and measured scale profiles through 10,000 nodes. The Python group store and timestamp coordinator are implemented at source level in §3.68; it remains a single-process reference and holds the full network object graph. Android's native ten-neuron path remains separate, Termux stays optional, and no Android 10,000-neuron runtime is implemented.
 
-**Verification:** design/static API review only. No group transaction implementation, tests, benchmark, build or device measurement.
+**Verification:** source readback/static API review only. The group-store/coordinator tests are AUTHORED, NOT RUN. No group transaction runtime, crash failpoints, benchmark, build, CI or device measurement was executed.
 
 
 
@@ -4795,3 +4802,24 @@ STDP/R-STDP диалоговое обучение выключено. Ни 10 н
 **Тесты:** `tools/neuron_runtime/test_network_jnvm_coordinator.py` AUTHORED, NOT RUN. Сценарии: один COMMIT на timestamp, scheduler-only persistence внешнего input, отказ до публикации, неопределённая публикация и reopen/reconciliation, stale writer reload и idle no-op.
 
 **Проверка:** статическое чтение исходников и API; никакие тесты, failpoint experiments, benchmarks, builds, CI или device measurements не запускались.
+
+
+### 3.69. Android app-private approved memory V1
+
+**Статус:** IMPLEMENTED на уровне Kotlin source; store/UI/Core regression tests AUTHORED, NOT RUN; Android runtime and durability under process/device interruption NOT VERIFIED.
+
+Android now has a versioned app-private approved-memory store backed by SharedPreferences. SharedPreferencesLocalWorkspaceMemoryStorage uses synchronous commit acknowledgement. LocalWorkspaceMemoryCodec enforces a strict canonical Base64URL record format, unique bounded IDs, UTF-8 validity, and limits of 2,000 records / 700 content characters / 64 category characters. LocalWorkspaceMemoryCache validates a candidate and commits it before publishing it to JARVIS Core. Corrupt persisted state or a failed commit blocks further mutation instead of silently resetting data.
+
+The native Compose panel allows the user to explicitly add and delete device-local notes and filter them locally. Add/delete commits run on the existing conversation background executor; the UI input clears only after a successful commit and the list refreshes after approved workspace import/restore. Core can retrieve approved notes through the same bounded lexical-overlap contract (up to three notes / 1,800 context characters) and passes them as untrusted reference material. Approved records imported from the optional authenticated Termux workspace bridge are merged into the app-private store. Removing the bridge token does not erase device-local notes.
+
+**Boundaries:** this is not a native JPVR engine, encrypted database, or automatic sync. Device-local notes are not currently uploaded to the PC workspace or automatically included in JWS/JWB. The local SharedPreferences store is separate from the shared Python JPVR workspace. Storage is app-private; this feature does not add application-level encryption at rest.
+
+**Tests:** app/src/test/java/org/jarvis/ans100/alpha/data/LocalWorkspaceMemoryStoreTest.kt covers reopen, explicit approval filtering, merge preservation, failed commit, corrupt-state fencing, size limits, unloaded-cache state and case-sensitive imported IDs. AUTHORED, NOT RUN.
+
+### 3.70. Shared Python/Kotlin ANS-100 conversation vectors
+
+**Статус:** shared fixture and consumer tests IMPLEMENTED at source level; tests AUTHORED, NOT RUN; numerical parity NOT VERIFIED.
+
+Both tools/neuron_runtime/test_conversation_signal.py and app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntimeTest.kt consume app/src/test/resources/ans100/conversation-v2.tsv. Cases cover a full six-feature route, structure-only input and a neutral short input. The contract compares normalized features, event/batch/spike counts, adaptive integration state and threshold, gate state and model time.
+
+The fixture reduces divergence between independent implementations but is not a replacement for running the suites or a formal proof. Android/PC device measurements, Python/Kotlin binary/state-format interoperability, dialogue-driven plasticity and full semantic integration remain outside this test.

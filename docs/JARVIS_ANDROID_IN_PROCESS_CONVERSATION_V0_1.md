@@ -48,7 +48,7 @@ The screen identifies the backend as a local basic responder without an LLM. The
 
 ## 6. Verification
 
-Eight focused Kotlin/JUnit tests are authored for round-trip/reopen, bounded retention, invalid input, failed persistence, corrupt state, clear, fallback honesty and injected-engine coordination. Status: **AUTHORED, NOT RUN**.
+Twelve focused Kotlin/JUnit tests cover round-trip/reopen, bounded retention, invalid input, failed persistence, corrupt state, clear, fallback honesty, Core status, approved-memory routing and injected-engine coordination. Status: **AUTHORED, NOT RUN**.
 
 No Gradle sync/build, APK/AAB, Kotlin test, emulator run, Android device run, offline airplane-mode test, performance measurement, CI or GitHub Actions workflow was executed. Source readback and static cross-file inspection only.
 
@@ -85,3 +85,8 @@ The V2 response contract is JARVIS_ANS100_CONVERSATION_SIGNAL_V2. It includes ac
 Each platform uses a bounded 64-event budget. The signal runtime still receives only deterministic text-shape values. STDP/R-STDP learning from dialogue remains disabled, and the signal does not provide semantic understanding or reasoning. Ordinary Android chat must continue when both optional Termux signalling and the local signal pass fail; the ViewModel now treats this pre-pass as optional and calls the conversation coordinator with a null signal context in that case.
 
 The focused Kotlin and Python regression tests cover ten-neuron flow, event bounds, persistence/reopen, legacy checkpoint migration, neutral inputs and malformed/persistence-failure behavior. Status: AUTHORED, NOT RUN. Android builds, desktop runtime tests, device inference, resource use and cross-language differential execution have not been run.
+
+
+## 2026-11-14 update — app-private approved memory
+
+Android now provides an app-local approved-memory store and Compose panel which work without Termux. This storage is distinct from the recent conversation history and from the shared Python JPVR workspace. It persists through process recreation but is not a native JPVR engine and is not automatically exported or synchronized to PC. See JARVIS_ANDROID_LOCAL_MEMORY_V1.md.

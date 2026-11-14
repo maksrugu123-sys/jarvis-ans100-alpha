@@ -171,5 +171,38 @@ class ConversationSignalRuntimeTests(unittest.TestCase):
             runtime.close()
 
 
+    def test_shared_android_python_golden_vectors_match(self):
+        fixture = (
+            Path(__file__).resolve().parents[2]
+            / "app" / "src" / "test" / "resources" / "ans100" / "conversation-v2.tsv"
+        )
+        rows = [
+            line.split("\t")
+            for line in fixture.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertGreaterEqual(len(rows), 3)
+        for fields in rows:
+            with self.subTest(case=fields[0]):
+                result = ConversationSignalRuntime().analyze(fields[1])
+                self.assertEqual(result.network_neuron_count, 10)
+                for actual, expected in (
+                    (result.token_volume, fields[2]),
+                    (result.lexical_diversity, fields[3]),
+                    (result.question_marker, fields[4]),
+                    (result.punctuation_density, fields[5]),
+                    (result.sentence_density, fields[6]),
+                    (result.uppercase_ratio, fields[7]),
+                    (result.integrator_adaptation, fields[12]),
+                    (result.effective_threshold, fields[13]),
+                ):
+                    self.assertAlmostEqual(actual, float(expected), places=9)
+                self.assertEqual(result.processed_events, int(fields[8]))
+                self.assertEqual(result.processed_batches, int(fields[9]))
+                self.assertEqual(result.spike_count, int(fields[10]))
+                self.assertEqual(result.attention_gate_active, fields[11] == "true")
+                self.assertEqual(result.model_time_ns, int(fields[14]))
+
+
 if __name__ == "__main__":
     unittest.main()

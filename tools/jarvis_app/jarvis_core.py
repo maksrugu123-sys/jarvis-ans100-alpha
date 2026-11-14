@@ -24,6 +24,7 @@ MAX_REASONING_HYPOTHESES = 8
 MAX_REASONING_EVIDENCE = 32
 MAX_REASONING_CRITERIA = 16
 MAX_REASONING_TEXT_CHARS = 6_000
+MAX_EXTERNAL_PAGE_CHARS = 1_800
 _TOKEN = re.compile(r"[A-Za-zА-Яа-яЁё0-9]{3,}", re.UNICODE)
 _STOP_WORDS = frozenset({
     "the", "and", "for", "with", "that", "this", "from", "have", "what",
@@ -391,6 +392,7 @@ class JarvisCore:
         history: list[dict[str, str]],
         memories: Sequence[Mapping[str, object]] | object = (),
         reasoning_request: Mapping[str, object] | None = None,
+        external_context: Mapping[str, object] | None = None,
     ) -> tuple[str, dict[str, object]]:
         engine = self._language_engine
         if engine is None:
@@ -407,10 +409,43 @@ class JarvisCore:
         except Exception:
             # The neural pre-pass is optional; a failure must not break local chat.
             signal_error = True
-        answer = engine.respond(
-            prompt, history, memory_context=recalled, signal_context=signal_context,
-            reasoning_context=reasoning_context,
-        )
+        safe_external_context = None
+        if external_context is not None:
+            if not isinstance(external_context, Mapping):
+                raise ValueError("external_context must be a mapping")
+            title = external_context.get("title")
+            url = external_context.get("url")
+            text = external_context.get("text")
+            retrieved_at = external_context.get("retrieved_at", "")
+            if (
+                not isinstance(title, str) or not title.strip() or len(title) > 300
+                or not isinstance(url, str) or not url.startswith(("http://", "https://")) or len(url) > 2_048
+                or not isinstance(text, str) or not text.strip()
+                or not isinstance(retrieved_at, str) or len(retrieved_at) > 80
+            ):
+                raise ValueError("external_context does not match the bounded browser-page contract")
+            clean_text = text.replace(chr(0), "").strip()[:MAX_EXTERNAL_PAGE_CHARS]
+            clean_title = "".join(
+                char for char in title if ord(char) >= 0x20 and ord(char) != 0x7F
+            ).strip()
+            if not clean_text or not clean_title:
+                raise ValueError("external_context title or page text is empty")
+            safe_external_context = {
+                "title": clean_title,
+                "url": url,
+                "retrieved_at": retrieved_at,
+                "text": clean_text,
+                "scope": "untrusted_external_web_page",
+            }
+        engine_arguments = {
+            "memory_context": recalled,
+            "signal_context": signal_context,
+            "reasoning_context": reasoning_context,
+        }
+        # Preserve compatibility with older test/adaptor engines on ordinary chat.
+        if safe_external_context is not None:
+            engine_arguments["external_context"] = safe_external_context
+        answer = engine.respond(prompt, history, **engine_arguments)
         if not isinstance(answer, str) or not answer.strip() or len(answer) > 4_000 or chr(0) in answer:
             raise RuntimeError("The language component returned an invalid response")
         return answer, {
@@ -427,6 +462,11 @@ class JarvisCore:
             "reasoning_plan_id": reasoning_context["plan_id"] if reasoning_context is not None else None,
             "reasoning_step_count": len(reasoning_context["steps"]) if reasoning_context is not None else 0,
             "reasoning_execution_authorized": False,
+            "external_context_used": safe_external_context is not None,
+            "external_context_source": (
+                {"title": safe_external_context["title"], "url": safe_external_context["url"]}
+                if safe_external_context is not None else None
+            ),
             "ans100_full_cognition_invoked": False,
             "external_actions_invoked": False,
         }

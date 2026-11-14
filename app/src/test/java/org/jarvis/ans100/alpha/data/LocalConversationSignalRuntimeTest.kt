@@ -134,6 +134,32 @@ class LocalConversationSignalRuntimeTest {
     }
 
     @Test
+    fun sharedPythonAndAndroidGoldenVectorsMatch() {
+        val stream = javaClass.classLoader?.getResourceAsStream("ans100/conversation-v2.tsv")
+            ?: throw AssertionError("shared ANS-100 parity fixture is missing")
+        val rows = stream.bufferedReader(Charsets.UTF_8).use { it.readLines() }
+        rows.filter { it.isNotBlank() && !it.startsWith("#") }.forEach { line ->
+            val fields = line.split('\t')
+            assertEquals(15, fields.size)
+            val result = LocalConversationSignalRuntime(MemoryStorage()).analyze(fields[1])
+            assertEquals(10, result.networkNeuronCount)
+            assertEquals(fields[2].toDouble(), result.tokenVolume, 1e-9)
+            assertEquals(fields[3].toDouble(), result.lexicalDiversity, 1e-9)
+            assertEquals(fields[4].toDouble(), result.questionMarker, 1e-9)
+            assertEquals(fields[5].toDouble(), result.punctuationDensity, 1e-9)
+            assertEquals(fields[6].toDouble(), result.sentenceDensity, 1e-9)
+            assertEquals(fields[7].toDouble(), result.uppercaseRatio, 1e-9)
+            assertEquals(fields[8].toInt(), result.processedEvents)
+            assertEquals(fields[9].toInt(), result.processedBatches)
+            assertEquals(fields[10].toInt(), result.spikeCount)
+            assertEquals(fields[11].toBoolean(), result.attentionGateActive)
+            assertEquals(fields[12].toDouble(), result.integratorAdaptation, 1e-9)
+            assertEquals(fields[13].toDouble(), result.effectiveThreshold, 1e-9)
+            assertEquals(fields[14].toLong(), result.modelTimeNs)
+        }
+    }
+
+    @Test
     fun v2SignalContextAcceptsTenNeuronMetricsAndRejectsOutOfBudgetCounts() {
         val context = ConversationSignalContext(
             runtimeVersion = "JARVIS_ANS100_CONVERSATION_SIGNAL_V2",

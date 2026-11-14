@@ -858,7 +858,7 @@ A local isolated Python sanity snippet checked `struct.calcsize` for the intende
 - `tools/jpvr_reference/test_outbox.py` — 36 deterministic tests для round-trip, unknown optional/mandatory TLV, prefix/length/identity/type/payload limits, PageRef, page type/CRC, transaction identity, sequence continuity и same-generation COMMIT consistency.
 - `docs/JPVR_OUTBOX_V1.md` — бинарный контракт, API и ограничения.
 
-**Архитектурные решения:** одна OUTBOX page хранит одно неизменяемое событие; обязательные идентификаторы — event_id, idempotency_key, operation_id и commit_id; event_type ограничен 128 UTF-8 bytes; opaque event payload — 3,500 bytes; sequence начинается с 1. Event ссылается на COMMIT того же поколения, который физически следует за OUTBOX page. Соседние события одного поколения должны принадлежать одному transaction_id и одному source COMMIT. Доставка остаётся at-least-once.
+**Архитектурные решения:** одна OUTBOX page хранит одно неизменяемое событие; обязательные идентификаторы — event_id, idempotency_key, operation_id и commit_id; event_type ограничен 128 UTF-8 bytes; opaque event payload — 1,800 bytes; sequence начинается с 1. Event ссылается на COMMIT того же поколения, который физически следует за OUTBOX page. Соседние события одного поколения должны принадлежать одному transaction_id и одному source COMMIT. Доставка остаётся at-least-once.
 
 **Изменено:** `docs/JARVIS_ARCHITECTURE.md` (раздел 3.21.24 и границы реализации), `docs/JPVR_JOURNAL_V1.md` (актуализированы ограничения), `README.md` (11 modules / 232 methods и evidence).
 
@@ -2153,3 +2153,61 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Limitations:** the coordinator still holds a complete in-memory NetworkRuntime; it is not production NCC or multi-process writer leadership. The per-neuron 128-shard working set is not integrated. JPVR page-catalog bounds, append-only growth, absent compaction/reclamation and missing historical processed-event deduplication remain. Correctness and resource use are not runtime-verified or measured.
 
 **Next step:** after separate authorization, run the focused Python store/coordinator/network tests and deterministic failpoint recovery checks; then compare coordinator outcomes against the in-memory NetworkRuntime and measure profiles at 1/10/100/1,000/10,000 neurons on a named PC.
+
+
+## 2026-11-14 — Add app-private approved memories and shared ANS-100 parity vectors
+
+**Objective:** give Android durable device-local approved memories independent of Termux, provide local UI management, and make the ten-neuron Kotlin/Python conversation-signal contract compare against one shared fixture.
+
+**Changed / added:**
+- app/src/main/java/org/jarvis/ans100/alpha/data/LocalWorkspaceMemoryStorage.kt — versioned Base64URL memory codec and SharedPreferences adapter with bounded records and strict decoding.
+- app/src/main/java/org/jarvis/ans100/alpha/data/JarvisCore.kt — persistent approved-memory cache, merge of approved workspace records, add/delete APIs, write-before-publish and fail-closed corrupt/commit handling.
+- app/src/main/java/org/jarvis/ans100/alpha/JarvisViewModel.kt and app/src/main/java/org/jarvis/ans100/alpha/MainActivity.kt — local-memory state, add/delete flow and device-local Compose panel; removing the optional Termux token no longer deletes local notes.
+- app/src/test/java/org/jarvis/ans100/alpha/data/LocalWorkspaceMemoryStoreTest.kt — memory reopen, approval, merge, failed-write, corrupt-snapshot and bounds tests.
+- app/src/test/resources/ans100/conversation-v2.tsv — common feature/event/adaptation/time golden vectors.
+- app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationSignalRuntimeTest.kt and tools/neuron_runtime/test_conversation_signal.py — both runtimes consume the same parity fixture.
+- Documentation: README, AGENTS, architecture, mobile-first, cross-platform, Core orchestration, Android conversation guide and 10k scaling guide; added Android local-memory and ANS-100 parity contracts.
+
+**Behavior / boundaries:** new Android device-local notes persist app-privately without Termux and are available to Core through bounded lexical retrieval. The store is not native JPVR, not application-level encrypted at rest, and device-local records are not automatically included in JWS/JWB or synchronized with PC. The common signal fixture is authored contract coverage, not proof of parity before execution.
+
+**Tests:** new memory tests and shared-vector consumer tests are AUTHORED, NOT RUN. No test suite was executed.
+
+**Verification:** GitHub source fetch, static patch/readback review and commit object inspection only. No Kotlin/Python test, syntax/import check, Gradle build, APK/AAB, CI, device runtime, model inference or resource measurement was performed.
+
+**Next:** implement the visible headed PC research browser with authenticated bounded read-only controls; then plan a portable and conflict-safe path for transferring Android-created local memories into the PC workspace. Preserve the existing user build/test restrictions.
+
+
+## 2026-11-14 — Implement visible PC browser research V0.1 and harden offline memory boundaries
+
+**Objective:** provide the first user-visible PC browser workflow for search/open/read/ask while preserving the Android-first local path and keeping external actions disabled.
+
+**Added / changed:**
+- `tools/jarvis_app/visible_browser.py` — optional Playwright >=1.48 headed Chromium controller with a dedicated persistent profile, one worker thread, bounded search results/page text, GET/HEAD-only HTTP request guard, a separate WebSocket-blocking route, disabled downloads/service workers, URL validation, public-address DNS checks, explicit pause/manual takeover, resume and stop.
+- `requirements-browser.txt` — separate optional Playwright dependency; normal app startup does not require or auto-install it.
+- `tools/jarvis_app/server.py` — authenticated loopback-only browser status/search/open/read/ask/control/stop routes. The browser is explicitly desktop-only; Android/Termux reports it unsupported. Asking about the current page re-reads the visible page, passes a maximum 1,800-character excerpt to Core and persists the answer with the source title/URL.
+- `tools/jarvis_app/jarvis_core.py` and `tools/jarvis_app/local_inference.py` — bounded external-page context contract; page text is explicitly untrusted, prompt-injection warnings are added to the system instruction and automatic tool calling remains disabled.
+- `tools/jarvis_app/static/index.html`, `app.js`, `styles.css`, `sw.js` — visible-browser PWA panel, source selection, read display, question/answer flow, manual takeover, stop/status controls and service-worker cache bump to v10.
+- `tools/jarvis_app/test_visible_browser.py` — URL/search validation coverage.
+- `tools/jarvis_app/test_jarvis_core.py` and `test_local_inference.py` — external-page context bounds, source provenance and untrusted-data instruction coverage.
+- `tools/jarvis_app/test_server.py` — browser status auth, PC-only capability boundary and missing-token rejection for every browser POST route.
+- Documentation: `docs/JARVIS_VISIBLE_BROWSER_RESEARCH_V1.md`, `docs/JARVIS_PC_QUICKSTART_V1.md`, `docs/JARVIS_ARCHITECTURE.md` §3.59, `docs/JARVIS_CORE_ORCHESTRATION_V1.md`, `docs/JARVIS_CROSS_PLATFORM_RUNTIME_V1.md`, README and AGENTS.
+- Android memory follow-up: `LocalWorkspaceMemoryCache` no longer marks an in-memory-only default cache as durable memory loaded; app-local codec preserves case-sensitive imported IDs and rejects untrimmed stored fields; memory test coverage includes unloaded cache state and imported ID preservation; the Compose description now states device-local notes are not yet transferred to PC.
+
+**Behavior / safety boundaries:** the browser opens visibly and only after explicit search/open requests. JARVIS can read one current page and answer a user question using a bounded untrusted excerpt. The separate browser profile is not the user's everyday profile. The HTTP request guard permits only GET/HEAD; a separate Playwright WebSocket route blocks WebSocket connections; downloads/service workers are disabled; literal URLs and DNS-resolved IPs are checked; this is a best-effort filter, **not a full network sandbox**, and DNS rebinding/TOCTOU and browser/page-script risks remain. Do not use it for sensitive authenticated browsing. The browser does not submit forms, send messages, buy items, upload files or execute external actions. Manual takeover is explicit, not automatic gesture detection. Search extraction depends on Bing page markup. Android/Termux remains independent and does not expose this PC-only feature.
+
+**Tests:** new/updated browser validation, HTTP, Core and local-inference tests are AUTHORED, NOT RUN. The ANS-100 shared-vector and Android approved-memory tests from the preceding entry also remain AUTHORED, NOT RUN.
+
+**Verification:** GitHub source/blob review and static content/readback checks only. No Python test, Kotlin test, Playwright browser launch, PWA interaction, local-model inference, Python import/syntax command, Gradle build, APK/AAB, desktop/phone runtime, CI, GitHub Actions, screenshot, RAM/latency/thermal measurement or Windows/macOS/Linux headed-browser check was executed.
+
+**Limitations / next:** validate the headed browser on a real PC only after separately authorized runtime checks; improve browser network isolation before sensitive use; build a portable conflict-safe export/import path for Android-created local memories; then verify the Python/Kotlin shared ANS-100 vectors with explicit permission. Do not call the browser or local memory production-ready.
+
+
+## 2026-11-14 — Keep Android local-memory I/O off the UI thread
+
+**Objective:** avoid blocking the Compose main thread during synchronous SharedPreferences commit and ensure the local memory panel reflects imported approved workspace records.
+
+**Changed:** `JarvisViewModel.kt` now serializes add/delete operations on the existing conversation background executor. The panel exposes a busy state, disables conflicting mutations, and clears the input only after the commit is acknowledged. Approved memory refresh/import/restore results are copied into the panel state after the persistent cache commit.
+
+**Tests:** existing `LocalWorkspaceMemoryStoreTest.kt` remains AUTHORED, NOT RUN. No dedicated ViewModel/UI test was added in this source-only change.
+
+**Verification:** GitHub source readback and static inspection only. No Kotlin tests, Gradle build, APK/AAB, device interaction, CI or performance measurement was run.

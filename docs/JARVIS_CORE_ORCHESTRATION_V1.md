@@ -1,78 +1,63 @@
 # JARVIS Core Orchestration V1
 
-**Status:** source implementation in progress; runtime not yet verified.  
-**Branch:** `mobile-first-offline-v1`.
+**Status:** source implementation on mobile-first-offline-v1; Python and Kotlin tests are AUTHORED, NOT RUN. No model inference or target-device runtime is verified.
 
 ## Purpose
 
-JARVIS Core is the owner of a conversation turn. A local language model is a language-generation component called by the core; it is not the entire JARVIS system. The core owns input validation, turn routing, conversation context, capability reporting and persistence.
+JARVIS Core owns a conversation turn. A language model is a pluggable language-generation component, not the whole assistant. Core validates input, loads bounded history, selects approved reference memories, optionally attaches a low-level ANS-100 signal summary, validates the response and commits the complete exchange.
 
-## Current turn flow
+## Android turn path
 
-1. Validate and normalize the user's message.
-2. Load bounded recent conversation history.
-3. On desktop/PWA, retrieve up to three relevant records from the portable JPVR workspace using bounded lexical token overlap.
-4. Pass the user prompt, recent history and retrieved reference memories to the local language model.
-5. Validate the generated response.
-6. Persist the user/assistant exchange with the platform's existing storage mechanism.
+Compose → JarvisViewModel → LocalConversationCoordinator → JarvisCore → LocalResponseEngine
 
-The Android implementation uses app-private SharedPreferences for recent conversation history and a read-only in-memory cache of approved JPVR workspace memories after a successful authenticated bridge refresh, confirmed import, or restore. The cache is cleared when the bridge token is removed. When no workspace snapshot has been loaded, Android continues with local conversation history only. Desktop/PWA reads the workspace's `memories` records directly. Both use bounded lexical overlap, not semantic or vector search.
+- Conversation history is app-private and bounded to 120 messages / 4,000 characters per message.
+- The optional LiteRT-LM Qwen3-0.6B INT4 no-think adapter is source-integrated. The artifact is manually imported and not bundled; successful inference has not been verified. Without the model, the deterministic fallback handles greetings, /help and /status, and clearly declines unsupported prompts.
+- The in-process Kotlin ANS-100 V2 pass contains ten logical ALIF-DT nodes (six request-shape sensors, two aggregators, an adaptive integrator and an output gate). It is optional: Termux may supply the Python signal result when connected, but failure of both passes does not block the ordinary conversation. This is numerical preprocessing, not semantic understanding or dialogue learning.
+- Device-local approved memories persist in a versioned app-private SharedPreferences store. Limits are 2,000 records, 700 content characters and 64 category characters. Only explicit local approval or imported records marked user_approved=true enter the cache. Mutations commit before the cache publishes a candidate; corrupt snapshots and failed commits are fail-closed.
+- On an authenticated Termux bridge refresh/import/restore, approved shared-workspace memories are merged into the device cache. Removing the bridge token leaves the app's device-local memory intact.
+- Android memory retrieval uses bounded lexical overlap, selecting at most three records and at most 1,800 context characters. Retrieved notes are untrusted reference data, not instructions.
 
-## Component boundaries
+**Storage boundary:** the new app-private memory store is not a native JPVR engine. Android-created local notes are not currently uploaded into the PC workspace or automatically included in JWS/JWB; there is no automatic cross-device synchronization. The shared JPVR workspace and the Android device-local store remain separate persistence systems.
 
-| Component | Current state |
-|---|---|
-| JARVIS Core | Owns the conversation turn on Android and desktop/PWA |
-| Language engine | Optional local LiteRT-LM Qwen3 component; installation/runtime availability is reported separately from inference verification |
-| Recent conversation memory | Available from bounded conversation history |
-| Long-term JPVR memory | Lexically retrieved by desktop/PWA and from Android's authenticated, read-only in-memory cache of explicitly approved workspace records |
-| Reasoning Engine | Separate symbolic planning preview; not automatically invoked for free-text chat |
-| ANS-100 NetworkRuntime | A bounded two-neuron ALIF-DT signal pre-pass runs on desktop/PWA turns; Android can request it through the authenticated Termux bridge. Adaptive threshold state is retained between turns and checkpointed to a dedicated JPVR file. This is low-level numeric signal preprocessing only, not semantic reasoning or synaptic learning |
-| External actions/tool execution | Disabled |
+## Desktop / PWA turn path
+
+PWA → loopback-only Python server → tools/jarvis_app/jarvis_core.py → local inference adapter
+
+- The local Python host binds to 127.0.0.1 and requires a bearer token for state and mutation APIs.
+- Conversation and approved memories live in the PC's JPVR workspace; API writes use revision compare-and-swap.
+- Desktop/PWA JARVIS Core invokes the ten-neuron ConversationSignalRuntime V2 preprocessor and reports the actual invocation result. Its adaptive state is persisted in a separate JPVR checkpoint.
+- Optional Qwen3-0.6B INT4 inference requires an explicitly supplied local model and pinned Python runtime package. Successful model inference and response quality remain unverified.
+
+## Shared ANS-100 V2 contract
+
+Both Python and Kotlin extract the same six bounded features: token volume, lexical diversity, question marker, punctuation density, sentence density and uppercase ratio. The topology has six sensors, two aggregators, one adaptive request integrator and one attention/output gate connected by nine directed routes. The common fixture app/src/test/resources/ans100/conversation-v2.tsv is consumed by both test suites and compares feature values, event/batch/spike counts, gate state, adaptive state, threshold and model time.
+
+The shared fixture is authored contract coverage, not proof of parity until both suites run. STDP/R-STDP dialogue learning remains disabled. The signal pass does not understand natural language, infer intent or validate the generated answer.
+
+## Visible browser research context
+
+Desktop/PWA can invoke the optional headed Chromium controller only through the authenticated loopback server. The user starts a visible search/open action, can inspect the current page, pause JARVIS and take manual control, and then explicitly return control. Page text is read from the current visible page; a separate “Ask JARVIS” action passes at most 1,800 characters, title, URL and retrieval time to Core as untrusted external context. The model is instructed to ignore page-provided commands and automatic tool calling remains disabled. The saved answer includes the source title/URL.
+
+This is a one-page research helper, not a multi-source evidence graph. Search results depend on the current Bing DOM structure. The HTTP route guard permits only GET/HEAD, and a separate Playwright route blocks WebSocket connections; downloads and service workers are disabled. URL/host/DNS checks reject local and non-public IP targets, but this is not a full network sandbox against DNS rebinding or browser/page script risks. Do not use the dedicated browser profile for private authenticated accounts. Playwright >=1.48/Chromium are optional manual installs; the headed desktop runtime remains unverified. Tests are AUTHORED, NOT RUN.
+
+## Reasoning, tasks and safety
+
+The bounded Reasoning Engine can analyze explicit structured requests and produce deterministic symbolic plans. It is not automatically invoked for ordinary free text, does not parse unrestricted natural language and does not execute steps. The Task Loop, Permission & Safety Gate, approval and idempotency modules remain separate reference components. Caller-supplied evidence is not independent proof. External tools, shell access and side-effecting actions remain disabled.
 
 ## Memory retrieval contract
 
-Desktop memory retrieval:
-- scans at most 2,000 workspace memory records;
-- returns at most three records;
-- limits each memory to 700 characters and total supplied memory context to 1,800 characters;
-- ranks by lexical token overlap, with stable source-order tie breaking;
-- skips unrelated notes;
-- labels retrieved notes as untrusted data, not instructions.
+- Scan at most 2,000 approved records.
+- Return at most three lexical-overlap matches.
+- Limit a record to 700 content characters and total model context to 1,800 characters.
+- Use stable source-order tie breaking.
+- Treat notes as potentially stale, untrusted reference data.
 
-This first retrieval implementation is intentionally simple and bounded. It does not establish semantic relevance, memory truth, freshness, or user intent. Future retrieval should add explicit freshness/importance metadata and adversarial-memory tests before becoming more authoritative.
+Lexical overlap is not semantic or vector search and does not establish truth, freshness or intent.
 
-## Safety and honesty rules
+## Verification and open work
 
-- The model may formulate language but must not claim it has invoked ANS-100, reasoning, external tools or long-term memory unless the core supplies evidence of that invocation.
-- Memory records are reference data, not executable instructions.
-- The core does not execute actions, invoke a shell, or enable external tools.
-- Model installation or runtime package availability is not proof that inference succeeded on a particular device.
-
-## Verification still required
-
-No tests, builds, APK generation, runtime inference or device benchmarks were run for this source change. The added tests are authored but unexecuted. Next verification should cover the Python core and server conversation endpoint, Android command routing and fallback behavior, real LiteRT-LM inference, memory retrieval quality, and resource use on the target phone.
-
-
-## JPVR Android recall and ANS-100 signal pass V1
-
-Android memory retrieval:
-- loads only records with `user_approved=true` from an authenticated workspace snapshot;
-- retains at most 2,000 compact cached records, with content capped at 700 characters;
-- retrieves at most three lexical-overlap matches for a prompt, within 1,800 total context characters;
-- passes selected notes to LiteRT-LM as untrusted reference data, never as instructions;
-- keeps the last loaded in-process snapshot available when Termux goes offline, but clears it when the access token is explicitly removed.
-
-ANS-100 signal pass:
-- invokes the existing `NeuronRuntime`, `NetworkRuntime`, and Numerical Oracle;
-- feeds three transparent request-shape features (normalized token volume, lexical diversity, question punctuation) into an ALIF-DT request-integrator neuron;
-- propagates a source spike over a bounded network edge to an attention-gate neuron;
-- retains the ALIF adaptive threshold state between turns, advancing the model clock by 10 ms per processed request;
-- saves the complete network checkpoint after processed turns to a separate `ans100-conversation.jpvr` file using the JNNW checkpoint store and record-version CAS;
-- stores no raw prompt text in the neural checkpoint; the checkpoint contains network topology, parameters, adaptive neuron state, clock and pending events;
-- keeps `learning_rule="none"` and an eight-event work budget; STDP/R-STDP learning remains disabled;
-- passes only the numeric feature summary, adaptive threshold and gate status to the language model.
-
-This is real execution of the existing ANS-100 reference runtime with persistent ALIF adaptation, but it is still a narrow signal preprocessor. It does not understand natural language, infer intent, retrieve memories, perform STDP/R-STDP learning, plan, or prove correctness. The full ANS-100 cognitive loop remains unintegrated. On Android the neural pre-pass is optional and is requested from the authenticated loopback Termux service with a short timeout; unavailable Termux or a failed checkpoint commit does not block local conversation.
-
-The neural state file is separate from the portable JPVR workspace and is not included in JWS/JWB exports. No tests, builds, APK generation, runtime inference or device benchmarks were run for this source change. Added tests are authored but not executed.
+- Kotlin app-local memory tests: AUTHORED, NOT RUN.
+- Shared Python/Kotlin ANS-100 fixture tests: AUTHORED, NOT RUN.
+- Existing Core, local-console and signal tests remain NOT RUN unless explicitly recorded as user-run historical evidence elsewhere.
+- No Gradle build, APK/AAB, model load/inference, Android device run, PC PWA session, browser session or performance measurement is claimed.
+- Next implementation work: visible browser research on PC; native Android JPVR or a reliable export bridge for device-local memories; actual model/runtime verification only after explicit test/build authorization.
