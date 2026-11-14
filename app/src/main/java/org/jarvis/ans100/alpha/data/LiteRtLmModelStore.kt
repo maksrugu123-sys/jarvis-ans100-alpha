@@ -45,6 +45,9 @@ class LiteRtLmModelStore(context: Context) {
     @Synchronized
     @Throws(LiteRtLmModelException::class)
     fun downloadModel(onProgress: (Long, Long) -> Unit): File {
+        if (cancelRequested || Thread.currentThread().isInterrupted) {
+            throw LiteRtLmDownloadCancelledException()
+        }
         if (!directory.exists() && !directory.mkdirs()) {
             throw LiteRtLmModelException("Не удалось создать приватную папку модели.")
         }
@@ -91,13 +94,27 @@ class LiteRtLmModelStore(context: Context) {
                 return verifyAndPublish(digest)
             }
 
+            if (cancelRequested || Thread.currentThread().isInterrupted) {
+                throw LiteRtLmDownloadCancelledException()
+            }
+            val contentEncoding = connection.getHeaderField("Content-Encoding")
+            if (!contentEncoding.isNullOrBlank() &&
+                !contentEncoding.equals("identity", ignoreCase = true)
+            ) {
+                throw LiteRtLmModelException("Сервер вернул сжатый ответ; безопасное продолжение загрузки невозможно.")
+            }
+
             if (code == HttpURLConnection.HTTP_PARTIAL) {
                 val range = connection.getHeaderField("Content-Range")
                     ?: throw LiteRtLmModelException("Сервер не подтвердил продолжение загрузки.")
                 val match = CONTENT_RANGE_REGEX.matchEntire(range)
                     ?: throw LiteRtLmModelException("Сервер вернул некорректный диапазон загрузки.")
-                if (match.groupValues[1].toLong() != offset ||
-                    match.groupValues[3].toLong() != EXPECTED_BYTES
+                val rangeStart = match.groupValues[1].toLongOrNull()
+                val rangeEnd = match.groupValues[2].toLongOrNull()
+                val rangeTotal = match.groupValues[3].toLongOrNull()
+                if (rangeStart != offset || rangeEnd == null ||
+                    rangeEnd < offset || rangeEnd >= EXPECTED_BYTES ||
+                    rangeTotal != EXPECTED_BYTES
                 ) {
                     throw LiteRtLmModelException("Диапазон загрузки не совпадает с ожидаемой моделью.")
                 }
