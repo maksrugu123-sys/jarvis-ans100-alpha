@@ -252,6 +252,68 @@ class LocalConsoleHttpTests(unittest.TestCase):
             created["revision"] + 1,
         )
 
+    def test_dialog_rstdp_status_is_authenticated_and_reports_separate_spiking_network(self):
+        with self.assertRaises(HTTPError) as missing_auth:
+            urlopen(self.base_url + "/api/dialog-rstdp", timeout=3)
+        self.assertEqual(missing_auth.exception.code, 401)
+
+        request = Request(
+            self.base_url + "/api/dialog-rstdp",
+            headers={"Authorization": "Bearer " + self.token},
+        )
+        with urlopen(request, timeout=3) as response:
+            state = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(response.status, 200)
+        self.assertEqual(state["state"], "experimental_sparse_dialogue_rstdp")
+        self.assertEqual(state["input_feature_neurons"], 256)
+        self.assertEqual(state["output_spiking_neurons"], 4)
+        self.assertEqual(
+            state["trained_examples_per_label"],
+            {label: 0 for label in ("greeting", "question", "thanks", "farewell")},
+        )
+        self.assertFalse(state["raw_utterances_persisted"])
+
+    def test_dialog_rstdp_learn_endpoint_requires_auth_and_changes_explicitly_labelled_state(self):
+        payload = {
+            "text": "hello jarvis this is a dialogue learning sample",
+            "expected_label": "greeting",
+            "feedback_id": "00000000-0000-4000-8000-000000000001",
+        }
+        with self.assertRaises(HTTPError) as missing_auth:
+            self._post("/api/dialog-rstdp/learn", payload, authenticated=False)
+        self.assertEqual(missing_auth.exception.code, 401)
+
+        status, result = self._post("/api/dialog-rstdp/learn", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["status"], "APPLIED")
+        self.assertEqual(result["expected_label"], "greeting")
+        self.assertEqual(result["feedback_id"], payload["feedback_id"])
+        self.assertGreater(
+            result["scores_after"]["greeting"],
+            result["scores_before"]["greeting"],
+        )
+        self.assertFalse(result["raw_utterances_persisted"])
+
+        status, repeated = self._post("/api/dialog-rstdp/learn", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(repeated["status"], "DUPLICATE")
+
+    def test_dialog_rstdp_endpoint_rejects_unknown_payload_fields(self):
+        status = None
+        try:
+            self._post(
+                "/api/dialog-rstdp/learn",
+                {"text": "hello", "expected_label": "greeting", "command": "run shell"},
+            )
+        except HTTPError as error:
+            status = error.code
+        self.assertEqual(status, 400)
+        state = self.service.dialog_rstdp.status()
+        self.assertEqual(
+            state["trained_examples_per_label"],
+            {label: 0 for label in ("greeting", "question", "thanks", "farewell")},
+        )
+
     def test_ans100_signal_endpoint_requires_auth_and_returns_runtime_summary(self):
         payload = {"prompt": "Как подключить ANS-100 к JARVIS?"}
         with self.assertRaises(HTTPError) as missing_auth:
