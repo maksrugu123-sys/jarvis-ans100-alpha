@@ -43,9 +43,11 @@ class JarvisCore:
         language_engine: Any | None,
         signal_runtime: ConversationSignalRuntime | None = None,
         reasoning_engine: ReasoningEngineV01 | None = None,
+        dialog_neuron_service: Any | None = None,
     ) -> None:
         self._language_engine = language_engine
         self._signal_runtime = signal_runtime or ConversationSignalRuntime()
+        self._dialog_neuron_service = dialog_neuron_service
         self._reasoning_engine = reasoning_engine or ReasoningEngineV01(
             max_subtasks=MAX_REASONING_SUBTASKS,
             max_hypotheses=MAX_REASONING_HYPOTHESES,
@@ -383,6 +385,11 @@ class JarvisCore:
                 "adaptive_threshold_enabled": True,
                 "persistent_state": self._signal_runtime.persistent_state_enabled,
             },
+            "dialogue_neurons": (
+                self._dialog_neuron_service.status()
+                if self._dialog_neuron_service is not None
+                else {"state": "unavailable", "neuron_count": 0}
+            ),
             "external_actions": {"state": "disabled", "enabled": False},
         }
 
@@ -409,6 +416,14 @@ class JarvisCore:
         except Exception:
             # The neural pre-pass is optional; a failure must not break local chat.
             signal_error = True
+        dialog_neuron_context = None
+        dialog_neuron_error = False
+        if self._dialog_neuron_service is not None:
+            try:
+                dialog_neuron_context = self._dialog_neuron_service.analyze(prompt)
+            except Exception:
+                # Experimental intent classification must never block ordinary chat.
+                dialog_neuron_error = True
         safe_external_context = None
         if external_context is not None:
             if not isinstance(external_context, Mapping):
@@ -441,6 +456,7 @@ class JarvisCore:
             "memory_context": recalled,
             "signal_context": signal_context,
             "reasoning_context": reasoning_context,
+            "dialog_neuron_context": dialog_neuron_context,
         }
         # Preserve compatibility with older test/adaptor engines on ordinary chat.
         if safe_external_context is not None:
@@ -462,6 +478,24 @@ class JarvisCore:
             "reasoning_plan_id": reasoning_context["plan_id"] if reasoning_context is not None else None,
             "reasoning_step_count": len(reasoning_context["steps"]) if reasoning_context is not None else 0,
             "reasoning_execution_authorized": False,
+            "dialog_neuron_context_invoked": dialog_neuron_context is not None,
+            "dialog_neuron_error": dialog_neuron_error,
+            "dialog_neuron_count": (
+                dialog_neuron_context.get("neuron_count", 0)
+                if dialog_neuron_context is not None else 0
+            ),
+            "dialog_neuron_active_features": (
+                dialog_neuron_context.get("active_feature_neurons", 0)
+                if dialog_neuron_context is not None else 0
+            ),
+            "dialog_neuron_predicted_label": (
+                dialog_neuron_context.get("predicted_label")
+                if dialog_neuron_context is not None else None
+            ),
+            "dialog_neuron_trained_examples": (
+                dialog_neuron_context.get("trained_examples", 0)
+                if dialog_neuron_context is not None else 0
+            ),
             "external_context_used": safe_external_context is not None,
             "external_context_source": (
                 {"title": safe_external_context["title"], "url": safe_external_context["url"]}
