@@ -44,11 +44,11 @@ class LocalUnderstandingPipeline {
         val text = input.trim().take(MAX_INPUT_CHARS)
         val normalized = text.lowercase(Locale.ROOT)
         val tokens = TOKEN.findAll(normalized).map { it.value }.take(MAX_TOKENS).toList()
-        val uniqueTerms = tokens.filter { it.length >= MIN_TERM_LENGTH }
+        val uniqueTerms = tokens.filter { it.length >= MIN_TERM_LENGTH && it !in STOP_WORDS }
             .distinct().take(MAX_KEY_TERMS)
         val evidence = mutableListOf<String>()
         val hasQuestion = '?' in text || QUESTION_WORDS.any { it in tokens }
-        val refersBack = CONTEXT_REFERENCES.any { marker -> marker in tokens || tokens.any { it.startsWith(marker) && marker.length >= 4 } }
+        val refersBack = CONTEXT_REFERENCES.any { marker -> marker in tokens || tokens.any { it.startsWith(marker) && marker.length >= 4 } } || containsAnyPhrase(tokens, CONTEXT_PHRASES)
         val negation = NEGATIONS.any { it in tokens }
         val greeting = tokens.firstOrNull()?.let { it in GREETINGS } == true
         val thanks = containsAnyPhrase(tokens, THANKS)
@@ -62,20 +62,20 @@ class LocalUnderstandingPipeline {
         val confidence: Double
         val taskKind: String
         when {
-            correction -> { intent = "correction"; confidence = 0.82; taskKind = "revise_previous_result"; evidence += "корректирующая формулировка" }
-            farewell -> { intent = "farewell"; confidence = 0.90; taskKind = "social_response"; evidence += "маркер прощания" }
-            thanks -> { intent = "thanks"; confidence = 0.88; taskKind = "social_response"; evidence += "маркер благодарности" }
-            greeting -> { intent = "greeting"; confidence = 0.88; taskKind = "social_response"; evidence += "маркер приветствия" }
-            comparison -> { intent = "comparison"; confidence = 0.76; taskKind = "compare_options"; evidence += "сравнительные маркеры" }
-            actionRequest -> { intent = "action_request"; confidence = 0.68; taskKind = "plan_or_explain_requested_action"; evidence += "глагол или конструкция просьбы" }
-            hasQuestion -> { intent = "question"; confidence = 0.70; taskKind = "answer_question"; evidence += "вопросительный маркер" }
-            explanation -> { intent = "explanation"; confidence = 0.72; taskKind = "explain_concept"; evidence += "маркер объяснения" }
-            refersBack -> { intent = "continuation"; confidence = 0.64; taskKind = "continue_context"; evidence += "ссылка на предыдущий контекст" }
+            correction -> { intent = "correction"; confidence = 0.82; taskKind = "revise_previous_result"; evidence += "correction_marker" }
+            farewell -> { intent = "farewell"; confidence = 0.90; taskKind = "social_response"; evidence += "farewell_marker" }
+            thanks -> { intent = "thanks"; confidence = 0.88; taskKind = "social_response"; evidence += "gratitude_marker" }
+            greeting -> { intent = "greeting"; confidence = 0.88; taskKind = "social_response"; evidence += "greeting_marker" }
+            comparison -> { intent = "comparison"; confidence = 0.76; taskKind = "compare_options"; evidence += "comparison_marker" }
+            actionRequest -> { intent = "action_request"; confidence = 0.68; taskKind = "plan_or_explain_requested_action"; evidence += "action_marker" }
+            hasQuestion -> { intent = "question"; confidence = 0.70; taskKind = "answer_question"; evidence += "question_marker" }
+            explanation -> { intent = "explanation"; confidence = 0.72; taskKind = "explain_concept"; evidence += "explanation_marker" }
+            refersBack -> { intent = "continuation"; confidence = 0.64; taskKind = "continue_context"; evidence += "context_reference" }
             else -> { intent = "statement_or_unknown"; confidence = 0.30; taskKind = "interpret_and_respond"; evidence += "нет сильного маркера намерения" }
         }
-        if (hasQuestion) evidence += "вопросительная форма"
-        if (negation) evidence += "обнаружено отрицание"
-        if (refersBack) evidence += "обнаружена ссылка на контекст"
+        if (hasQuestion) evidence += "question_form"
+        if (negation) evidence += "negation_marker"
+        if (refersBack) evidence += "previous_context_reference"
 
         val entities = ENTITY.findAll(text).map { it.value.trim() }
             .filter { it.length in 2..48 && it.lowercase(Locale.ROOT) !in COMMON_ENTITY_STOPWORDS }
@@ -127,6 +127,16 @@ class LocalUnderstandingPipeline {
         private val ACTION_MARKERS = listOf("сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь", "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь", "можешь ли", "сделать", "implement", "build", "fix", "find", "create")
         private val CORRECTION_MARKERS = listOf("я имел в виду", "не так", "исправление", "точнее", "я ошибся", "i meant", "correction")
         private val CONTEXT_REFERENCES = listOf("это", "этот", "эта", "эти", "там", "тогда", "продолжай", "дальше", "предыдущ", "it", "that", "those", "continue", "previous")
-        private val COMMON_ENTITY_STOPWORDS = setOf("привет", "здравствуйте", "добрый", "спасибо", "пока", "можешь", "сделай", "объясни", "расскажи")
+        private val COMMON_ENTITY_STOPWORDS = setOf(
+            "привет", "здравствуй", "здравствуйте", "добрый", "спасибо", "благодарю",
+            "пока", "можешь", "сделай", "создай", "найди", "исправь", "проверь",
+            "напиши", "добавь", "удали", "открой", "помоги", "объясни", "расскажи",
+        )
+        private val STOP_WORDS = setOf(
+            "это", "для", "или", "что", "чтобы", "мне", "могу", "можно",
+            "когда", "где", "почему", "который", "которая", "которые", "есть",
+            "the", "and", "for", "with", "that", "this",
+        )
+        private val CONTEXT_PHRASES = listOf("как раньше", "в прошлый раз")
     }
 }
