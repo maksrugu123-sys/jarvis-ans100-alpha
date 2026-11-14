@@ -2493,7 +2493,7 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Objective:** define a safe way to fault neuron state into a bounded Python LRU without violating the existing single-container atomic timestamp transaction.
 
 **Changed:**
-- Added `docs/JARVIS_NETWORK_JNVM_LRU_INTEGRATION_V1.md` with current-state audit, rejected alternatives, chosen architecture, atomicity/memory bounds and acceptance gates.
+- Added `docs/superpowers/specs/2026-11-14-network-jnvm-lru-integration-design.md` with current-state audit, rejected alternatives, chosen architecture, atomicity/memory bounds and acceptance gates.
 - Added `docs/superpowers/plans/2026-11-14-network-jnvm-lru-integration.md` with file-level tasks, interfaces, tests-first steps and the execution gate.
 - Added architecture §3.80 to mark the design PROPOSED and distinguish it from existing source implementations.
 

@@ -4941,7 +4941,7 @@ Android instrumentation coverage for the delayed reward path has been added, inc
 
 ### 3.80. Proposed lazy LRU integration for the single-container network JNVM (14 November 2026)
 
-**Статус:** PROPOSED; implementation has not started. See `docs/JARVIS_NETWORK_JNVM_LRU_INTEGRATION_V1.md` and implementation plan `docs/superpowers/plans/2026-11-14-network-jnvm-lru-integration.md`.
+**Статус:** PROPOSED; implementation has not started. See `docs/superpowers/specs/2026-11-14-network-jnvm-lru-integration-design.md` and implementation plan `docs/superpowers/plans/2026-11-14-network-jnvm-lru-integration.md`.
 
 The current Python `NetworkRuntime` and `NetworkJNVMCoordinator` still hold and copy the full neuron object graph. The separate `NeuronWorkingSet` remains a 128-shard per-neuron persistence experiment; it must not be directly wired into the network scheduler because those independent containers cannot atomically publish all neuron changes, pending events and the network clock for one timestamp.
 
