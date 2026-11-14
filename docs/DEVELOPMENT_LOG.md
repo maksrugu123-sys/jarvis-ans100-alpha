@@ -2529,3 +2529,12 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Changed:** removed the failing setup-android action; use the runner's preinstalled SDK at `/usr/local/lib/android/sdk`, add cmdline-tools/platform-tools to PATH, accept licenses and install only `platform-tools`, `platforms;android-35` and `build-tools;35.0.0`. Updated checkout/setup-java to v5 and documented the correction.
 
 **Verification:** based on the actual failed run and decoded job log. Workflow source updated; the next push should trigger a fresh run. No successful build or APK is claimed yet.
+
+
+## 2026-11-14 — Fix Android SDK manager path discovery
+
+**Trigger:** second automatic build run `43615178611` reached SDK configuration but failed with `sdkmanager: command not found`. JDK 17 and Gradle 8.9 setup both passed; assembly was skipped. The runner image has command-line tools under a versioned directory (for example `cmdline-tools/16.0/bin`), not necessarily `cmdline-tools/latest/bin`.
+
+**Changed:** discover the actual `sdkmanager` executable under `$ANDROID_HOME/cmdline-tools`, fail with diagnostic path listing if absent, and invoke the discovered absolute path for license acceptance and SDK package installation. Add its directory to PATH for later Gradle tasks.
+
+**Verification:** based on run `43615178611` job log. Workflow source changed; no build has passed yet. Next push should trigger another run.
