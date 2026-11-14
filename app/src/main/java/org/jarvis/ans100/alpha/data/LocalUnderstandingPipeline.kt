@@ -53,7 +53,7 @@ data class LocalUnderstanding(
         append("План JARVIS (").append(reasoningPlan.schema).append("; ")
             .append(reasoningPlan.scope).append("):\n")
         if (reasoningPlan.focusTerms.isNotEmpty()) {
-            append("Фокусные термины: ").append(reasoningPlan.focusTerms.joinToString(", ")).append('\\n')
+            append("Фокусные термины: ").append(reasoningPlan.focusTerms.joinToString(", ")).append('\n')
         }
         reasoningPlan.steps.forEachIndexed { index, step ->
             append(index + 1).append(". ").append(step).append('\n')
