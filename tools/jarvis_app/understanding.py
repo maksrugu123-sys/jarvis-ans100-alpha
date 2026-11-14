@@ -92,12 +92,12 @@ def analyze_text(value: str) -> dict[str, object]:
     elif comparison:
         intent, confidence, task = "comparison", 0.76, "compare_options"
         evidence = ["comparison_marker"]
-    elif action:
-        intent, confidence, task = "action_request", 0.68, "plan_or_explain_requested_action"
-        evidence = ["action_marker"]
     elif explanation:
         intent, confidence, task = "explanation", 0.72, "explain_concept"
         evidence = ["explanation_marker"]
+    elif action:
+        intent, confidence, task = "action_request", 0.68, "plan_or_explain_requested_action"
+        evidence = ["action_marker"]
     elif has_question:
         intent, confidence, task = "question", 0.70, "answer_question"
         evidence = ["question_marker"]
