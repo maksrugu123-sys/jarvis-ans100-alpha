@@ -65,8 +65,8 @@ class LocalUnderstandingPipeline {
             greeting -> { intent = "greeting"; confidence = 0.88; taskKind = "social_response"; evidence += "маркер приветствия" }
             comparison -> { intent = "comparison"; confidence = 0.76; taskKind = "compare_options"; evidence += "сравнительные маркеры" }
             actionRequest -> { intent = "action_request"; confidence = 0.68; taskKind = "plan_or_explain_requested_action"; evidence += "глагол или конструкция просьбы" }
-            explanation -> { intent = "explanation"; confidence = 0.72; taskKind = "explain_concept"; evidence += "маркер объяснения" }
             hasQuestion -> { intent = "question"; confidence = 0.70; taskKind = "answer_question"; evidence += "вопросительный маркер" }
+            explanation -> { intent = "explanation"; confidence = 0.72; taskKind = "explain_concept"; evidence += "маркер объяснения" }
             refersBack -> { intent = "continuation"; confidence = 0.64; taskKind = "continue_context"; evidence += "ссылка на предыдущий контекст" }
             else -> { intent = "statement_or_unknown"; confidence = 0.30; taskKind = "interpret_and_respond"; evidence += "нет сильного маркера намерения" }
         }
