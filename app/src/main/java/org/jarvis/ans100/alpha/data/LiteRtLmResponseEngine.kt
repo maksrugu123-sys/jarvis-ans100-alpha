@@ -35,6 +35,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val clean = prompt.trim()
         if (clean.length > MAX_PROMPT_CHARS) throw LocalConversationException("Ограничение компактной модели — " + MAX_PROMPT_CHARS + " символов на запрос.")
         val file = modelStore.installedFile() ?: return fallback.respond(clean, recentHistory)
+        val understanding = LocalUnderstandingPipeline().analyze(clean)
         val activeEngine = getEngine(file)
         val initial = recentHistory.takeLast(MAX_HISTORY).map { item ->
             val text = item.text.take(MAX_HISTORY_CHARS)
@@ -42,6 +43,8 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         }
         val systemInstruction = buildString {
             append(SYSTEM_PROMPT)
+            append("\\n\\n")
+            append(understanding.toModelContext())
             val selectedMemories = memoryContext.asSequence()
                 .filter { it.userApproved }
                 .take(MAX_MEMORY_CONTEXT_ITEMS)
