@@ -27,6 +27,7 @@ MAX_REASONING_EVIDENCE = 32
 MAX_REASONING_CRITERIA = 16
 MAX_REASONING_TEXT_CHARS = 6_000
 MAX_EXTERNAL_PAGE_CHARS = 1_800
+MAX_REASONING_HISTORY_MESSAGE_CHARS = 160
 _TOKEN = re.compile(r"[A-Za-zА-Яа-яЁё0-9]{3,}", re.UNICODE)
 _STOP_WORDS = frozenset({
     "the", "and", "for", "with", "that", "this", "from", "have", "what",
@@ -292,7 +293,7 @@ class JarvisCore:
         if not objective:
             return None
         recent_context = [
-            str(item.get("content", ""))[:MAX_HISTORY_MESSAGE_CHARS]
+            str(item.get("content", ""))[:MAX_REASONING_HISTORY_MESSAGE_CHARS]
             for item in history[-4:]
             if isinstance(item, Mapping)
             and item.get("role") in {"user", "assistant"}
