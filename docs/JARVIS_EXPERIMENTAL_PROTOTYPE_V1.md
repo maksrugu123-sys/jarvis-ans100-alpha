@@ -33,11 +33,11 @@ The model is not downloaded automatically or included in the repository. Model c
 
 Every ordinary conversation turn is first processed by JARVIS Core on both platforms, before the response engine is called. Android uses `LocalUnderstandingPipeline`; PC/PWA uses `tools.jarvis_app.understanding.analyze_text`. Both produce the bounded `JARVIS_UNDERSTANDING_V1` record: a heuristic intent, task type, key terms, possible entities, negation and context indicators, plus a short evidence list.
 
-Core also creates a `JARVIS_REASONING_PLAN_V1` template plan of up to five steps for question, explanation, comparison, action request, continuation, correction or basic social intents. Some ambiguous requests carry one clarification question. The plan is advisory and explicitly has `execution_authorized=false`.
+Core also creates a `JARVIS_REASONING_PLAN_V1` template plan of up to five steps for question, explanation, comparison, action request, continuation, correction or basic social intents. Context-dependent messages request clarification when there is no recent user turn; when history exists, Core marks it as available for Qwen to examine rather than claiming it has resolved the reference. The plan is advisory and explicitly has `execution_authorized=false`.
 
 When Qwen is installed, the original user message and this Core-produced analysis are both passed to the language adapter; Qwen formulates the natural-language answer. The adapters bound and validate the V1 context. When no model is installed, the local fallback still receives the Core analysis and can display a basic intent/plan notice, but it cannot provide open-ended factual conversation.
 
-This is the beginning of independent JARVIS processing, not proof of deep semantic intelligence. The parser uses explicit rules and the plan uses templates; neither is a trained general-purpose reasoning model. A shared TSV fixture is read by both Android and Python test sources. Nine understanding tests per platform plus two Android Core integration tests are AUTHORED, NOT RUN. No cross-platform runtime parity or quality measurement is claimed.
+This is the beginning of independent JARVIS processing, not proof of deep semantic intelligence. The parser uses explicit rules and the plan uses templates; neither is a trained general-purpose reasoning model. A shared TSV fixture is read by both Android and Python test sources. Eleven understanding tests per platform plus two Android Core integration tests are AUTHORED, NOT RUN. No cross-platform runtime parity or quality measurement is claimed.
 
 The PC interface includes:
 - local conversation history stored in the JPVR workspace;
