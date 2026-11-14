@@ -63,6 +63,22 @@ class UnderstandingContractTests(unittest.TestCase):
         self.assertFalse(plan["context_available"])
         self.assertTrue(plan["clarification_question"])
 
+    def test_core_passes_recent_history_to_its_understanding_pipeline(self) -> None:
+        engine = _CaptureLanguageEngine()
+        core = JarvisCore(engine, signal_runtime=_SignalRuntime())
+        history = [
+            {"role": "user", "content": "Мы обсуждаем ошибку в проекте JARVIS"},
+            {"role": "assistant", "content": "Я нашёл описание проблемы."},
+        ]
+        try:
+            core.respond("Продолжай с этим", history)
+        finally:
+            core.close()
+        context = engine.arguments["understanding_context"]
+        self.assertTrue(context["has_recent_user_context"])
+        self.assertTrue(context["reasoning_plan"]["context_available"])
+        self.assertFalse(context["reasoning_plan"]["requires_clarification"])
+
     def test_context_reference_can_use_recent_user_history(self) -> None:
         history = [
             {"role": "user", "content": "Мы обсуждаем ошибку в проекте JARVIS"},
