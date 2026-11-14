@@ -1,6 +1,6 @@
 # JARVIS Network JNVM Transaction V1
 
-**Status:** architecture proposal grounded in the current JPVR transaction and NetworkRuntime APIs. Not implemented; no scheduler integration or performance claim.
+**Status:** architecture proposal grounded in the current JPVR transaction and NetworkRuntime APIs. The typed builder now exposes logical DATA/BLOB placement maps needed by a future group checkpoint store; group commit and scheduler integration remain NOT IMPLEMENTED. No performance claim.
 
 ## 1. Why a network-level transaction is required
 

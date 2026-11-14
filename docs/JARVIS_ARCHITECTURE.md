@@ -4699,3 +4699,19 @@ The existing JPVR typed transaction builder supports multiple DATA/BLOB records 
 Acceptance includes all-or-none multi-neuron visibility, crash/failpoint recovery, differential scheduler tests, queue/clock invariants, bounded cache/compaction and measured scale profiles through 10,000 nodes. Python implementation and measurements precede any Kotlin port. Android's two-neuron native path and optional-Termux boundary remain unchanged.
 
 **Verification:** design/static API review only. No group transaction implementation, tests, benchmark, build or device measurement.
+
+
+
+### 3.64. JPVR Logical Record Placement Map
+
+**Status:** implemented at source level in tools/jpvr_reference/typed_transaction.py; focused builder tests AUTHORED, NOT RUN.
+
+TypedTransactionBuildPlan now exposes two additive maps in the same order as TypedTransactionRequest inputs:
+- data_record_page_numbers: one physical DATA page number per DataRecordInput. Multiple records may share one DATA page and therefore repeat the same page number.
+- blob_record_page_ranges: one (first_page_no, page_count) range per BlobRecordInput.
+
+These mappings are derived by the canonical builder while it stages records; application code does not need to duplicate DATA packing or BLOB fragmentation calculations. They are the placement basis for constructing multiple immutable neuron locators and applying all index mutations in one group transaction. Locator COMMIT page resolution still uses the established placeholder/final planning pass.
+
+**Tests:** two builder tests are AUTHORED, NOT RUN. They cover DATA page splitting/sharing and multi-BLOB contiguous-range mapping.
+
+**Verification:** source-level static review only. No tests, benchmark, build or device measurement.

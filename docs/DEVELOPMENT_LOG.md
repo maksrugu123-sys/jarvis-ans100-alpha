@@ -2032,3 +2032,21 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Added:** docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md, architecture section 3.63 and a corresponding gate in the 10k scaling roadmap.
 
 **Verification:** architecture and existing JPVR API review only. This is a design specification, not an implementation. No tests, benchmarks, builds or device measurements.
+
+
+## 2026-11-14 — Expose logical DATA/BLOB placement in JPVR build plans
+
+**Objective:** provide stable physical placement information for every logical record in a multi-record transaction, without reimplementing JPVR page packing in application code.
+
+**Changed:**
+- tools/jpvr_reference/typed_transaction.py: TypedTransactionBuildPlan now returns data_record_page_numbers in DataRecordInput order and blob_record_page_ranges in BlobRecordInput order. DATA mappings may repeat a page number when multiple JRECs share one DATA page; BLOB mappings provide each logical record's contiguous first-page/count pair.
+- tools/jpvr_reference/test_typed_transaction.py: authored tests cover DATA records split across pages, DATA records sharing a page, and multiple BLOB logical records with distinct contiguous ranges.
+- docs/JARVIS_ARCHITECTURE.md section 3.64 and docs/JARVIS_NETWORK_JNVM_TRANSACTION_V1.md now record the placement-map contract and its role in a future atomic multi-neuron transaction.
+
+**Tests:** the two builder tests are AUTHORED, NOT RUN. Existing JPVR typed-transaction and neuron/network checkpoint tests were not run.
+
+**Verification:** GitHub source readback and static layout review only. No tests, benchmarks, builds, CI or device measurements.
+
+**Limitations:** this does not yet build a group checkpoint facade or integrate NetworkRuntime. Locator COMMIT page resolution still requires placeholder and final builder passes. The JPVR page-catalog and append-only growth bounds remain unchanged.
+
+**Next:** implement a single-container multi-neuron + scheduler group checkpoint store using these maps and one neuron COW INDEX plus the primary_object INDEX; add all-or-none, stale-version and uncertain-commit recovery tests.

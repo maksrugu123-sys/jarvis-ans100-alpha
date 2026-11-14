@@ -145,6 +145,45 @@ class TypedTransactionBuilderTests(unittest.TestCase):
         self.assertEqual(len(plan.index_page_numbers), 7)
         self.assertEqual(plan.manifest_page_no, 11)
 
+
+    def test_plan_maps_logical_records_to_data_pages_and_blob_ranges(self):
+        data_records = (
+            DataRecordInput(1, 1, 1, OBJECT1, 1, b"A" * 3900),
+            DataRecordInput(1, 1, 1, OBJECT2, 1, b"B" * 100),
+        )
+        blob_records = (
+            BlobRecordInput(2, 1, 1, bytes.fromhex("03030303030303030303030303030303"), 1, b"C" * 5000),
+            BlobRecordInput(2, 1, 1, bytes.fromhex("04040404040404040404040404040404"), 1, b"D" * 9000),
+        )
+        request = full_genesis_request(
+            data_records=data_records,
+            blob_records=blob_records,
+            journal_entries=(),
+            outbox_events=(),
+        )
+        plan = build_typed_transaction(request)
+        self.assertEqual(plan.data_page_numbers, (2, 3))
+        self.assertEqual(plan.data_record_page_numbers, (2, 3))
+        self.assertEqual(plan.blob_record_page_ranges, ((4, 2), (6, 3)))
+        self.assertEqual(plan.blob_page_numbers, (4, 5, 6, 7, 8))
+        validate_typed_transaction_plan(plan, request)
+
+    def test_plan_maps_multiple_data_records_sharing_one_page(self):
+        data_records = (
+            DataRecordInput(1, 1, 1, OBJECT1, 1, b"A" * 100),
+            DataRecordInput(1, 1, 1, OBJECT2, 1, b"B" * 100),
+        )
+        request = full_genesis_request(
+            data_records=data_records,
+            blob_records=(),
+            journal_entries=(),
+            outbox_events=(),
+        )
+        plan = build_typed_transaction(request)
+        self.assertEqual(plan.data_page_numbers, (2,))
+        self.assertEqual(plan.data_record_page_numbers, (2, 2))
+        validate_typed_transaction_plan(plan, request)
+
     def test_second_generation_inherits_roots_and_high_water_marks(self):
         first = build_typed_transaction(full_genesis_request())
         second = build_typed_transaction(TypedTransactionRequest(

@@ -166,6 +166,11 @@ class TypedTransactionBuildPlan:
     index_mutation_plans: tuple[IndexMutationBuildPlan, ...]
     # Appended so existing field order remains stable.
     checkpoint_page_numbers: tuple[int, ...]
+    # Logical input order -> physical DATA page number; multiple records may
+    # share one DATA page.
+    data_record_page_numbers: tuple[int, ...]
+    # Logical BLOB input order -> (first page number, page count).
+    blob_record_page_ranges: tuple[tuple[int, int], ...]
 
     @property
     def manifest_page_no(self) -> int:
@@ -325,8 +330,10 @@ def build_typed_transaction(
     staged: list[bytes] = []
     next_page_no = first_page_no
     data_numbers: list[int] = []
+    data_record_page_numbers: list[int] = []
     for records in data_groups:
         data_numbers.append(next_page_no)
+        data_record_page_numbers.extend([next_page_no] * len(records))
         staged.append(
             encode_data_page(records, next_page_no, next_generation, transaction_id)
         )
@@ -335,7 +342,9 @@ def build_typed_transaction(
     # BLOB: each logical record owns one consecutive fragment run.
     blob_numbers: list[int] = []
     blob_groups: list[tuple[bytes, ...]] = []
+    blob_record_page_ranges: list[tuple[int, int]] = []
     for item in blob_records:
+        first_blob_page_no = next_page_no
         encoded_pages = encode_blob_pages(
             item.record_type,
             item.schema_id,
@@ -348,6 +357,7 @@ def build_typed_transaction(
             item.payload,
         )
         blob_groups.append(encoded_pages)
+        blob_record_page_ranges.append((first_blob_page_no, len(encoded_pages)))
         blob_numbers.extend(range(next_page_no, next_page_no + len(encoded_pages)))
         staged.extend(encoded_pages)
         next_page_no += len(encoded_pages)
@@ -680,6 +690,8 @@ def build_typed_transaction(
         journal_page_numbers=tuple(journal_numbers),
         outbox_page_numbers=tuple(outbox_numbers),
         checkpoint_page_numbers=tuple(checkpoint_numbers),
+        data_record_page_numbers=tuple(data_record_page_numbers),
+        blob_record_page_ranges=tuple(blob_record_page_ranges),
     )
 
 
