@@ -17,13 +17,14 @@ class FakeLanguageEngine:
 
     def respond(
         self, prompt, history, *, memory_context=(), signal_context=None,
-        reasoning_context=None,
+        reasoning_context=None, dialog_neuron_context=None, external_context=None,
     ):
         self.prompt = prompt
         self.history = history
         self.memory_context = list(memory_context)
         self.signal_context = signal_context
         self.reasoning_context = reasoning_context
+        self.dialog_neuron_context = dialog_neuron_context
         self.external_context = external_context
         return "Сформированный языковым модулем ответ."
 
