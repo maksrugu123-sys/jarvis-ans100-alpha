@@ -1638,6 +1638,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        // A ViewModel can be cleared while the HTTP download is active.
+        // Disconnect it first so the worker can finish and close the model engine.
+        modelStore.cancelDownload()
         conversationExecutor.execute { conversationResponseEngine.close() }
         conversationExecutor.shutdown()
         runtimeExecutor.shutdownNow()
