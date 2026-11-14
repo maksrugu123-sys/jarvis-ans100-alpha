@@ -298,11 +298,11 @@ class JarvisCore:
             and item.get("role") in {"user", "assistant"}
             and isinstance(item.get("content"), str)
         ]
-        identity_payload = "\\0".join((
+        identity_payload = "\0".join((
             objective,
             str(intent),
-            "\\n".join(recent_context),
-            "\\n".join(steps),
+            "\n".join(recent_context),
+            "\n".join(steps),
         ))
         digest = hashlib.sha256(identity_payload.encode("utf-8")).hexdigest()
         subtasks = []
@@ -520,7 +520,9 @@ class JarvisCore:
                 reasoning_context = self._language_plan_context(reasoning_plan)
                 reasoning_context["origin"] = reasoning_origin
             except ReasoningEngineError:
-                # A rejected candidate plan must not block the user's ordinary conversation.
+                if reasoning_origin == "explicit_structured_request":
+                    raise
+                # A rejected Core-derived candidate must not block ordinary conversation.
                 reasoning_context = None
                 reasoning_origin = "rejected_candidate"
         signal_context = None
