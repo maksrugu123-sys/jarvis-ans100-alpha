@@ -2609,3 +2609,15 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** read the completed run's job log and confirmed the failing task and root exception. No local build or tests were run. The next push-triggered Actions run is the verification gate; 4 GiB is a resource setting, not a guarantee that D8 will succeed.
 
 **Boundary:** only `experiment/jarvis-integrated-prototype-v1` is modified. Do not change `main`.
+
+
+## Android prototype UX + dialogue milestone — 2026-11-14
+
+- Reworked the Android chat surface into a dedicated conversation view with a full-height message list, separated user/assistant bubbles, a pinned composer, and a compact model/status header.
+- Moved model import/download/removal, neural diagnostics, dialogue-classifier training, Termux/runtime controls, and storage status into a separate Settings destination with Appearance, Language Model, ANS-100, System, and About categories.
+- Added persistent appearance preferences for blue/violet/mint accent colors and an animated flowing-gradient outline toggle.
+- Improved the Qwen instruction to answer rather than echo the user's text and expanded bounded recent history from 2 to 6 prior messages (220 characters each).
+- Added a deterministic Core response for the assistant-identity exchange, including a polite greeting when the user provides a name. This is a narrow deterministic rule, not general semantic understanding.
+- Added runtime measurements for first model initialization, last generation, whole-turn time, a rough output word-count estimate, and visible Core/10-neuron ANS-100 indicators.
+- The 10,000-slot sparse classifier and SQLite/JNVM graph remain experimental and are described accordingly.
+- No build or tests have been run for this change batch yet; Android Actions will perform the compile/package check after commit.

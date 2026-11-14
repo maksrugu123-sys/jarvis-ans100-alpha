@@ -69,6 +69,17 @@ data class LocalConversationUiState(
     val nativeNetworkMessage: String? = null,
     val nativeDialogueContextId: String? = null,
     val nativeDialogueFeatureIds: List<Int> = emptyList(),
+    val modelInitializationMs: Long = 0L,
+    val responseGenerationMs: Long = 0L,
+    val lastTurnDurationMs: Long = 0L,
+    val responseTokenEstimate: Int = 0,
+    val ans100ProcessedEvents: Int = 0,
+    val ans100SpikeCount: Int = 0,
+    val ans100ActiveNeuronCount: Int = 0,
+    val ans100AttentionGateActive: Boolean = false,
+    val understandingIntent: String? = null,
+    val reasoningPlanSteps: Int = 0,
+    val reasoningNeedsClarification: Boolean = false,
 )
 
 private data class NativeDialogueFeedbackContext(
@@ -591,6 +602,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         conversationExecutor.execute {
+            val turnStartedAtNs = System.nanoTime()
             try {
                 // The sparse intent classifier is an optional side channel; it never blocks chat.
                 val dialogPredictionResult = try {
@@ -652,6 +664,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 // Neural preprocessing is optional: the normal turn is committed even
                 // when both the Termux endpoint and the in-process checkpoint are unavailable.
                 val messages = conversationCoordinator.send(clean, signalContext)
+                val elapsedMs = ((System.nanoTime() - turnStartedAtNs) / 1_000_000L).coerceAtLeast(0L)
+                val modelMetrics = conversationResponseEngine.performanceSnapshot()
+                val coreStatus = conversationCoordinator.status()
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
@@ -664,6 +679,17 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             lastRewardedAssistantMessageId = null,
                             nativeDialogueContextId = nativeFeedbackContext?.contextId,
                             nativeDialogueFeatureIds = nativeFeedbackContext?.featureNeuronIds.orEmpty(),
+                            modelInitializationMs = modelMetrics.initializationMs,
+                            responseGenerationMs = modelMetrics.generationMs,
+                            lastTurnDurationMs = elapsedMs,
+                            responseTokenEstimate = modelMetrics.outputTokenEstimate,
+                            ans100ProcessedEvents = signalContext?.processedEvents ?: 0,
+                            ans100SpikeCount = signalContext?.spikeCount ?: 0,
+                            ans100ActiveNeuronCount = signalContext?.activeNeuronCount ?: 0,
+                            ans100AttentionGateActive = signalContext?.attentionGateActive == true,
+                            understandingIntent = coreStatus.lastUnderstandingIntent,
+                            reasoningPlanSteps = coreStatus.lastReasoningPlanStepCount,
+                            reasoningNeedsClarification = coreStatus.lastReasoningPlanRequiresClarification,
                         ),
                     )
                 }

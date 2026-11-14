@@ -7,11 +7,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +66,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -70,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jarvis.ans100.alpha.data.ConversationRole
@@ -104,7 +110,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var pendingBackupExportRevision by remember { mutableStateOf<Long?>(null) }
     var pendingRestorePassphrase by remember { mutableStateOf<CharArray?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var settingsCategory by rememberSaveable { mutableStateOf("appearance") }
     val context = LocalContext.current
+    val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
+    var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
+    var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.jarvis.workspace+json"),
     ) { uri: Uri? ->
@@ -183,12 +193,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     }
     val selectedTask = ui.data.tasks.firstOrNull { it.id == selectedTaskId }
 
-    val jarvisBlue = Color(0xFF268BFF)
+    val selectedAccentColor = when (accentChoice) { "violet" -> Color(0xFFB18CFF); "mint" -> Color(0xFF52D6B4); else -> Color(0xFF4DA3FF) }
     val jarvisColors = darkColorScheme(
-        primary = Color(0xFF4DA3FF),
+        primary = selectedAccentColor,
         onPrimary = Color(0xFF001B35),
-        secondary = Color(0xFF69C8FF),
-        tertiary = Color(0xFF8AB4FF),
+        secondary = selectedAccentColor.copy(alpha = 0.86f),
+        tertiary = selectedAccentColor.copy(alpha = 0.72f),
         background = Color(0xFF07111F),
         surface = Color(0xFF0C1B2D),
         surfaceVariant = Color(0xFF122943),
@@ -215,6 +225,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                     conversationInput = ""
                                 },
                                 isBusy = ui.conversation.isBusy,
+                                glowEnabled = glowEnabled,
                             )
                         }
                         NavigationBar {
@@ -240,7 +251,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 selected = selectedTab == 3,
                                 onClick = { selectedTab = 3 },
                                 icon = { Text("⚙") },
-                                label = { Text("Система") },
+                                label = { Text("Настройки") },
                             )
                         }
                     }
@@ -249,26 +260,26 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                 Column(
                     modifier = Modifier.fillMaxSize()
                         .padding(contentPadding)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                        .then(if (selectedTab == 0) Modifier else Modifier.verticalScroll(rememberScrollState()))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Header(isBusy = ui.conversation.isBusy)
+                    if (selectedTab != 0) Header(isBusy = ui.conversation.isBusy)
                     when (selectedTab) {
                         0 -> {
-                        SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
-                        ConversationPanel(
-                            state = ui.conversation,
-                            onClear = viewModel::clearConversation,
-                            onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
-                            onDownloadModel = viewModel::downloadConversationModel,
-                            onCancelDownload = viewModel::cancelConversationModelDownload,
-                            onRemoveModel = viewModel::removeConversationModel,
-                            onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
-                            onRewardDialogFeature = viewModel::applyDialogRewardFeedback,
-                            onInitializeNativeNetwork = viewModel::initializeNativeNeuronNetwork,
-                            onRunNativeNetworkProbe = viewModel::runNativeNeuronProbe,
-                        )
+                            ChatTitleBar(
+                                backendLabel = ui.conversation.backendLabel,
+                                isBusy = ui.conversation.isBusy,
+                                glowEnabled = glowEnabled,
+                                onOpenSettings = { selectedTab = 3; settingsCategory = "model" },
+                            )
+                            ConversationPanel(
+                                state = ui.conversation,
+                                onClear = viewModel::clearConversation,
+                                onRewardDialogFeature = viewModel::applyDialogRewardFeedback,
+                                glowEnabled = glowEnabled,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
                         }
                         1 -> {
                         LocalMemoryPanel(
@@ -524,22 +535,29 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         )
                         }
                         else -> {
-                                    SystemStatusCard(storageReady = ui.storageReady, notice = ui.notice)
-                        RuntimeBridgePanel(
-                            state = ui.runtime,
-                            onConnect = viewModel::connectRuntime,
-                            onRefresh = viewModel::refreshRuntime,
-                            onCreateSession = viewModel::createRuntimeSession,
-                            onCreateTask = viewModel::createRuntimeTask,
-                            onSetSessionStatus = viewModel::setRuntimeSessionStatus,
-                            onCancelTask = viewModel::cancelRuntimeTask,
-                            onRunMemorySearch = viewModel::runRuntimeMemorySearch,
-                            onPreviewReasoning = viewModel::previewRuntimeReasoning,
-                            onSaveAccessToken = viewModel::saveRuntimeAccessToken,
-                            onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
-                            onCheckExtension = viewModel::checkTermuxExtension,
-                            onOpenTermux = viewModel::openTermux,
-                        )
+                            SettingsPanel(
+                                selectedCategory = settingsCategory,
+                                onCategoryChange = { settingsCategory = it },
+                                accentChoice = accentChoice,
+                                onAccentChange = { accentChoice = it; uiPreferences.edit().putString("accent", it).apply() },
+                                glowEnabled = glowEnabled,
+                                onGlowChange = { glowEnabled = it; uiPreferences.edit().putBoolean("flowing_glow", it).apply() },
+                                conversation = ui.conversation,
+                                onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
+                                onDownloadModel = viewModel::downloadConversationModel,
+                                onCancelDownload = viewModel::cancelConversationModelDownload,
+                                onRemoveModel = viewModel::removeConversationModel,
+                                onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
+                                onInitializeNativeNetwork = viewModel::initializeNativeNeuronNetwork,
+                                onRunNativeNetworkProbe = viewModel::runNativeNeuronProbe,
+                                storageReady = ui.storageReady, notice = ui.notice, runtime = ui.runtime,
+                                onConnect = viewModel::connectRuntime, onRefresh = viewModel::refreshRuntime,
+                                onCreateSession = viewModel::createRuntimeSession, onCreateTask = viewModel::createRuntimeTask,
+                                onSetSessionStatus = viewModel::setRuntimeSessionStatus, onCancelTask = viewModel::cancelRuntimeTask,
+                                onRunMemorySearch = viewModel::runRuntimeMemorySearch, onPreviewReasoning = viewModel::previewRuntimeReasoning,
+                                onSaveAccessToken = viewModel::saveRuntimeAccessToken, onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
+                                onCheckExtension = viewModel::checkTermuxExtension, onOpenTermux = viewModel::openTermux,
+                            )
                         }
                     }
                 }
@@ -2238,8 +2256,10 @@ private fun ConversationComposer(
     onInputChange: (String) -> Unit,
     onSend: (String) -> Unit,
     isBusy: Boolean,
+    glowEnabled: Boolean = true,
 ) {
     Surface(
+        modifier = Modifier.fillMaxWidth().then(rememberGlowBorder(glowEnabled, 22.dp)),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
     ) {
@@ -2268,172 +2288,114 @@ private fun ConversationComposer(
 }
 
 @Composable
+private fun ChatTitleBar(
+    backendLabel: String,
+    isBusy: Boolean,
+    glowEnabled: Boolean,
+    onOpenSettings: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().then(rememberGlowBorder(glowEnabled, 18.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("JARVIS", style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text("$backendLabel · ${if (isBusy) "формирует ответ" else "локально"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        TextButton(onClick = onOpenSettings) { Text("⚙") }
+    }
+}
+
+@Composable
 private fun ConversationPanel(
     state: LocalConversationUiState,
     onClear: () -> Unit,
-    onSelectModel: () -> Unit,
-    onDownloadModel: () -> Unit,
-    onCancelDownload: () -> Unit,
-    onRemoveModel: () -> Unit,
-    onTrainDialogFeature: (String) -> Unit,
     onRewardDialogFeature: (Double) -> Unit,
-    onInitializeNativeNetwork: () -> Unit,
-    onRunNativeNetworkProbe: () -> Unit,
+    glowEnabled: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
-    var showModelDownloadConfirmation by remember { mutableStateOf(false) }
     val messageListState = rememberLazyListState()
-
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            messageListState.animateScrollToItem(state.messages.lastIndex)
-        }
+    LaunchedEffect(state.messages.size, state.isBusy) {
+        val target = state.messages.size - 1
+        if (target >= 0) messageListState.animateScrollToItem(target)
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(
-            if (state.isBusy) 1.5.dp else 1.dp,
-            if (state.isBusy) Color(0xFF73D7FF) else Color(0x8851AFFF),
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (state.isBusy) 8.dp else 4.dp,
-        ),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+    Column(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            if (state.messages.isNotEmpty()) {
+                TextButton(onClick = { showClearConfirmation = true }, enabled = !state.isBusy) {
+                    Text("Очистить диалог")
+                }
+            }
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = messageListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    SectionHeading("Диалог JARVIS", "без Termux · модель устанавливается отдельно")
-                    Text(
-                        state.backendLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (state.messages.isNotEmpty()) {
-                    TextButton(
-                        onClick = { showClearConfirmation = true },
-                        enabled = !state.isBusy,
-                    ) {
-                        Text("Очистить")
+                if (state.messages.isEmpty()) {
+                    item(key = "jarvis-welcome") {
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 36.dp, bottom = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Surface(modifier = Modifier.size(64.dp).then(rememberGlowBorder(glowEnabled, 32.dp)),
+                                shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("✦", style = MaterialTheme.typography.headlineLarge,
+                                        color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            Text("Чем могу помочь?", style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold)
+                            Text("Напиши сообщение. Переписка хранится локально на этом устройстве.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
-            }
-            Text(
-                state.modelStatus,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (!state.modelInstalled) {
-                Button(
-                    onClick = { showModelDownloadConfirmation = true },
-                    enabled = !state.isBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        if (state.modelDownloadStatus != null) "Продолжить загрузку модели"
-                        else "Скачать языковую модель · около 331 МиБ",
-                    )
-                }
-            }
-            if (state.modelDownloadProgress != null) {
-                LinearProgressIndicator(
-                    progress = (state.modelDownloadProgress ?: 0f).coerceIn(0f, 1f),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    state.modelDownloadStatus ?: "Загрузка модели…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TextButton(
-                    onClick = onCancelDownload,
-                    enabled = state.isBusy,
-                ) {
-                    Text("Остановить загрузку")
-                }
-            } else if (state.modelDownloadStatus != null) {
-                Text(
-                    state.modelDownloadStatus,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onSelectModel, enabled = !state.isBusy) {
-                    Text("Выбрать файл")
-                }
-                if (state.modelInstalled) {
-                    TextButton(onClick = onRemoveModel, enabled = !state.isBusy) {
-                        Text("Удалить модель")
-                    }
-                }
-            }
-            if (state.messages.isEmpty()) {
-                Text(
-                    "Напиши «Привет» или команду /help. История хранится в данных приложения на этом телефоне.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                LazyColumn(
-                    state = messageListState,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 440.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(state.messages, key = { it.id }) { message ->
-                        val userMessage = message.role == ConversationRole.USER
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (userMessage) {
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surface
-                                },
-                            ),
+                items(state.messages, key = { it.id }) { message ->
+                    val userMessage = message.role == ConversationRole.USER
+                    val latestAssistantId = state.messages.lastOrNull {
+                        it.role == ConversationRole.ASSISTANT
+                    }?.id
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (userMessage) Arrangement.End else Arrangement.Start) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(0.90f),
+                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp,
+                                bottomStart = if (userMessage) 20.dp else 6.dp,
+                                bottomEnd = if (userMessage) 6.dp else 20.dp),
+                            color = if (userMessage) MaterialTheme.colorScheme.secondaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                            border = if (!userMessage && glowEnabled) BorderStroke(1.dp, Color(0x6655BFFF)) else null,
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                Text(
-                                    if (userMessage) "Вы" else "JARVIS",
+                            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(if (userMessage) "Вы" else "JARVIS",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
-                                )
+                                    color = if (userMessage) MaterialTheme.colorScheme.onSecondaryContainer
+                                        else MaterialTheme.colorScheme.primary)
                                 MessageBodyText(message.text)
-                                val latestAssistantId = state.messages.lastOrNull {
-                                    it.role == ConversationRole.ASSISTANT
-                                }?.id
                                 if (!userMessage && message.id == latestAssistantId) {
                                     if (state.lastRewardedAssistantMessageId == message.id) {
-                                        Text(
-                                            "Обратная связь сохранена в reward-эксперименте.",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                                        Text("Оценка сохранена", style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     } else {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            TextButton(
-                                                onClick = { onRewardDialogFeature(-1.0) },
-                                                enabled = !state.isBusy,
-                                            ) { Text("👎 Неудачно") }
-                                            TextButton(
-                                                onClick = { onRewardDialogFeature(1.0) },
-                                                enabled = !state.isBusy,
-                                            ) { Text("👍 Полезно") }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            TextButton(onClick = { onRewardDialogFeature(-1.0) }, enabled = !state.isBusy) {
+                                                Text("👎 Неудачно")
+                                            }
+                                            TextButton(onClick = { onRewardDialogFeature(1.0) }, enabled = !state.isBusy) {
+                                                Text("👍 Полезно")
+                                            }
                                         }
                                     }
                                 }
@@ -2441,203 +2403,218 @@ private fun ConversationPanel(
                         }
                     }
                 }
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Text("Нативная сеть ANS-100 / JNVM", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    val networkStats = state.nativeNetworkStats
-                    Text(
-                        if (networkStats == null) "Состояние локального JNVM загружается…"
-                        else "Нейронов: ${networkStats.neuronCount} · связей: ${networkStats.connectionCount} · событий: ${networkStats.pendingEvents} · в RAM-кэше: ${networkStats.residentNeuronCount}/${networkStats.hotSetCapacity}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    if ((networkStats?.neuronCount ?: 0) == 0) {
-                        Button(
-                            onClick = onInitializeNativeNetwork,
-                            enabled = !state.nativeNetworkBusy,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Создать разреженную сеть · 10 000 нейронов") }
-                    } else {
-                        OutlinedButton(
-                            onClick = onRunNativeNetworkProbe,
-                            enabled = !state.nativeNetworkBusy,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Подать импульс и обработать до 32 отметок") }
-                    }
-                    if (state.nativeNetworkBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    state.nativeNetworkMessage?.let {
-                        Text(it, style = MaterialTheme.typography.labelSmall)
-                    }
-                    state.nativeNetworkError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                    }
-                    Text(
-                        "Это отдельный тестовый runtime. Он не заменяет пока десятинейронный проход обычного диалога. Состояния сохраняются в SQLite JNVM; активный LRU-кэш ограничен.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (state.messages.any { it.role == ConversationRole.USER }) {
-                val featurePrediction = state.dialogFeaturePrediction
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            "Диалоговые признаки · 10 000 адресуемых слотов",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "Активно: ${featurePrediction?.activeFeatureCount ?: 0} · " +
-                                "обучено примеров: ${featurePrediction?.trainedExamples ?: 0} · reward-событий: ${featurePrediction?.rewardUpdates ?: 0}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            when {
-                                featurePrediction == null -> "Для этого сообщения нет сохранённого прогноза."
-                                featurePrediction.trainedExamples == 0 ->
-                                    "Классификатор ещё не обучен и намеренно не угадывает категорию."
-                                featurePrediction.predictedLabel == null ->
-                                    "Уверенного совпадения пока нет."
-                                else -> "Гипотеза: " + when (featurePrediction.predictedLabel) {
-                                    "greeting" -> "приветствие"
-                                    "question" -> "вопрос"
-                                    "thanks" -> "благодарность"
-                                    "farewell" -> "прощание"
-                                    else -> "неизвестно"
-                                } + " · это эвристика, не вероятность."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        state.dialogFeatureError?.let { featureError ->
-                            Text(
-                                featureError,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                if (state.isBusy) {
+                    item(key = "jarvis-thinking") {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Text("JARVIS думает…", modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+                            }
                         }
-                        Text(
-                            "Проверь категорию последнего сообщения и выбери правильную метку. После ответа можно отдельно дать reward-сигнал:",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            TextButton(
-                                onClick = { onTrainDialogFeature("greeting") },
-                                enabled = !state.isBusy,
-                            ) { Text("Приветствие") }
-                            TextButton(
-                                onClick = { onTrainDialogFeature("question") },
-                                enabled = !state.isBusy,
-                            ) { Text("Вопрос") }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            TextButton(
-                                onClick = { onTrainDialogFeature("thanks") },
-                                enabled = !state.isBusy,
-                            ) { Text("Спасибо") }
-                            TextButton(
-                                onClick = { onTrainDialogFeature("farewell") },
-                                enabled = !state.isBusy,
-                            ) { Text("Прощание") }
-                        }
-                        Text(
-                            "Сохраняются только числовые веса; исходные сообщения не записываются в checkpoint. " +
-                                "Reward создаёт ограниченный след STDP для активных признаков, а 👍/👎 модулирует его вес. Это экспериментальный классификатор, не языковая модель и не 10 000 активных спайковых нейронов.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
-            if (state.isBusy) {
-                Text(
-                    "Локальная модель загружается или формирует ответ…",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            state.error?.let { error ->
-                Text(
-                    error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Text(
-                if (state.modelInstalled) {
-                    "Ответы создаются локальной моделью. Инструменты и выполнение действий отключены."
-                } else {
-                    "Без установленной модели доступен базовый режим. Скачайте Qwen3 один раз через Wi-Fi или импортируйте совместимый файл; после установки модель работает офлайн."
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
-    }
-    if (showModelDownloadConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showModelDownloadConfirmation = false },
-            title = { Text("Скачать языковую модель?") },
-            text = {
-                Text(
-                    "Загрузка займёт около 331 МиБ интернет-трафика и потребует свободного места во внутренней памяти. " +
-                        "Лучше использовать Wi-Fi. После установки ответы будут формироваться локально, без интернета.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showModelDownloadConfirmation = false
-                        onDownloadModel()
-                    },
-                ) {
-                    Text("Скачать")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showModelDownloadConfirmation = false }) {
-                    Text("Не сейчас")
-                }
-            },
-        )
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
     if (showClearConfirmation) {
         AlertDialog(
             onDismissRequest = { showClearConfirmation = false },
             title = { Text("Очистить локальный диалог?") },
-            text = { Text("История на этом телефоне будет удалена. Общая память PC/JPVR не изменится.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showClearConfirmation = false
-                        onClear()
-                    },
-                ) {
-                    Text("Удалить историю")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearConfirmation = false }) {
-                    Text("Отмена")
-                }
-            },
+            text = { Text("История переписки на этом телефоне будет удалена. Общая память JPVR не изменится.") },
+            confirmButton = { TextButton(onClick = { showClearConfirmation = false; onClear() }) { Text("Удалить историю") } },
+            dismissButton = { TextButton(onClick = { showClearConfirmation = false }) { Text("Отмена") } },
         )
     }
+}
+
+@Composable
+private fun SettingsPanel(
+    selectedCategory: String,
+    onCategoryChange: (String) -> Unit,
+    accentChoice: String,
+    onAccentChange: (String) -> Unit,
+    glowEnabled: Boolean,
+    onGlowChange: (Boolean) -> Unit,
+    conversation: LocalConversationUiState,
+    onSelectModel: () -> Unit,
+    onDownloadModel: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onRemoveModel: () -> Unit,
+    onTrainDialogFeature: (String) -> Unit,
+    onInitializeNativeNetwork: () -> Unit,
+    onRunNativeNetworkProbe: () -> Unit,
+    storageReady: Boolean,
+    notice: String?,
+    runtime: RuntimeBridgeUiState,
+    onConnect: () -> Unit,
+    onRefresh: () -> Unit,
+    onCreateSession: (String) -> Unit,
+    onCreateTask: (String, String) -> Unit,
+    onSetSessionStatus: (String, String, Int) -> Unit,
+    onCancelTask: (String, Int) -> Unit,
+    onRunMemorySearch: (String, Int, String) -> Unit,
+    onPreviewReasoning: (RuntimeReasoningPreviewRequest) -> Unit,
+    onSaveAccessToken: (String) -> Unit,
+    onForgetAccessToken: () -> Unit,
+    onCheckExtension: () -> Unit,
+    onOpenTermux: () -> Unit,
+) {
+    val categories = listOf("appearance" to "Внешний вид", "model" to "Языковая модель",
+        "neural" to "ANS-100", "system" to "Система", "about" to "О приложении")
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Настройки", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            items(categories, key = { it.first }) { (id, title) ->
+                FilterChip(selected = selectedCategory == id, onClick = { onCategoryChange(id) },
+                    label = { Text(title) })
+            }
+        }
+        when (selectedCategory) {
+            "appearance" -> {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SectionHeading("Цвет интерфейса", "выбери акцент приложения")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = accentChoice == "blue", onClick = { onAccentChange("blue") }, label = { Text("Голубой") })
+                            FilterChip(selected = accentChoice == "violet", onClick = { onAccentChange("violet") }, label = { Text("Фиолетовый") })
+                            FilterChip(selected = accentChoice == "mint", onClick = { onAccentChange("mint") }, label = { Text("Мятный") })
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Переливающаяся подсветка", fontWeight = FontWeight.SemiBold)
+                                Text("Плавное цветное свечение вокруг панели чата и поля ввода.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Checkbox(checked = glowEnabled, onCheckedChange = onGlowChange)
+                        }
+                        Surface(modifier = Modifier.fillMaxWidth().then(rememberGlowBorder(glowEnabled, 18.dp)),
+                            shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                            Text("Предпросмотр подсветки JARVIS", modifier = Modifier.padding(18.dp),
+                                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            "model" -> {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        SectionHeading("Локальная языковая модель", "Qwen3 · LiteRT-LM · CPU")
+                        Text(conversation.modelStatus, style = MaterialTheme.typography.bodyMedium)
+                        Text(conversation.backendLabel, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (!conversation.modelInstalled) {
+                            Button(onClick = onDownloadModel, enabled = !conversation.isBusy, modifier = Modifier.fillMaxWidth()) {
+                                Text(if (conversation.modelDownloadStatus != null) "Продолжить загрузку" else "Скачать модель · около 331 МиБ")
+                            }
+                        }
+                        if (conversation.modelDownloadProgress != null) {
+                            LinearProgressIndicator(progress = (conversation.modelDownloadProgress ?: 0f).coerceIn(0f, 1f),
+                                modifier = Modifier.fillMaxWidth())
+                            Text(conversation.modelDownloadStatus ?: "Загрузка…", style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = onCancelDownload, enabled = conversation.isBusy) { Text("Остановить загрузку") }
+                        } else conversation.modelDownloadStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = onSelectModel, enabled = !conversation.isBusy) { Text("Импортировать файл") }
+                            if (conversation.modelInstalled) TextButton(onClick = onRemoveModel, enabled = !conversation.isBusy) {
+                                Text("Удалить модель")
+                            }
+                        }
+                    }
+                }
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SectionHeading("Скорость ответа", "измерения на этом устройстве")
+                        Text("Инициализация модели: ${conversation.modelInitializationMs} мс")
+                        Text("Генерация последнего ответа: ${conversation.responseGenerationMs} мс")
+                        Text("Весь ход диалога: ${conversation.lastTurnDurationMs} мс")
+                        Text("Оценка количества слов: ${conversation.responseTokenEstimate}")
+                        Text("Счётчик слов приблизительный; это не токенизатор языковой модели.",
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            "neural" -> {
+                val stats = conversation.nativeNetworkStats
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionHeading("Нативная сеть ANS-100 / JNVM", "разреженный SQLite runtime")
+                        Text(if (stats == null) "Состояние загружается…"
+                            else "Нейронов: ${stats.neuronCount} · связей: ${stats.connectionCount}\nОжидающих событий: ${stats.pendingEvents}\nRAM-кэш: ${stats.residentNeuronCount}/${stats.hotSetCapacity}",
+                            style = MaterialTheme.typography.bodyMedium)
+                        if ((stats?.neuronCount ?: 0) == 0) {
+                            Button(onClick = onInitializeNativeNetwork, enabled = !conversation.nativeNetworkBusy,
+                                modifier = Modifier.fillMaxWidth()) { Text("Создать сеть · 10 000 нейронов") }
+                        } else {
+                            OutlinedButton(onClick = onRunNativeNetworkProbe, enabled = !conversation.nativeNetworkBusy,
+                                modifier = Modifier.fillMaxWidth()) { Text("Запустить тестовый импульс") }
+                        }
+                        if (conversation.nativeNetworkBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        conversation.nativeNetworkMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        conversation.nativeNetworkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        SectionHeading("Анализ диалога", "локальные признаки и обратная связь")
+                        Text("Активных признаков: ${conversation.dialogFeaturePrediction?.activeFeatureCount ?: 0}")
+                        Text("Обучено примеров: ${conversation.dialogFeaturePrediction?.trainedExamples ?: 0}")
+                        Text("Reward-событий: ${conversation.dialogFeaturePrediction?.rewardUpdates ?: 0}")
+                        Text("ANS-100 (10 нейронов): активно ${conversation.ans100ActiveNeuronCount}, событий ${conversation.ans100ProcessedEvents}, импульсов ${conversation.ans100SpikeCount}, attention gate: ${if (conversation.ans100AttentionGateActive) "да" else "нет"}",
+                            style = MaterialTheme.typography.bodySmall)
+                        conversation.understandingIntent?.let {
+                            Text("Предварительное намерение Core: $it · план: ${conversation.reasoningPlanSteps} шагов" +
+                                if (conversation.reasoningNeedsClarification) " · нужно уточнение" else "")
+                        }
+                        conversation.dialogFeatureError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        Text("Уточни правильную категорию последнего сообщения — это сохранит обучающий пример.")
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { onTrainDialogFeature("greeting") }, enabled = !conversation.isBusy) { Text("Приветствие") }
+                            TextButton(onClick = { onTrainDialogFeature("question") }, enabled = !conversation.isBusy) { Text("Вопрос") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { onTrainDialogFeature("thanks") }, enabled = !conversation.isBusy) { Text("Спасибо") }
+                            TextButton(onClick = { onTrainDialogFeature("farewell") }, enabled = !conversation.isBusy) { Text("Прощание") }
+                        }
+                    }
+                }
+            }
+            "system" -> {
+                SystemStatusCard(storageReady = storageReady, notice = notice)
+                RuntimeBridgePanel(
+                    state = runtime, onConnect = onConnect, onRefresh = onRefresh,
+                    onCreateSession = onCreateSession, onCreateTask = onCreateTask,
+                    onSetSessionStatus = onSetSessionStatus, onCancelTask = onCancelTask,
+                    onRunMemorySearch = onRunMemorySearch, onPreviewReasoning = onPreviewReasoning,
+                    onSaveAccessToken = onSaveAccessToken, onForgetAccessToken = onForgetAccessToken,
+                    onCheckExtension = onCheckExtension, onOpenTermux = onOpenTermux,
+                )
+            }
+            else -> {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("JARVIS ANS-100 Alpha", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Офлайн-чат с отдельной языковой моделью, локальным Core, ограниченным ANS-100 runtime и локальной памятью.")
+                        Text("ANS-100 и диалоговый классификатор остаются экспериментальными компонентами. Они не заменяют языковую модель и пока не являются полноценным самостоятельным общим интеллектом.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberGlowBorder(enabled: Boolean, cornerRadius: Dp): Modifier {
+    if (!enabled) return Modifier.border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
+        RoundedCornerShape(cornerRadius))
+    val transition = rememberInfiniteTransition(label = "jarvis-flowing-glow")
+    val phase by transition.animateFloat(initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(animation = tween(durationMillis = 2_800), repeatMode = RepeatMode.Reverse),
+        label = "jarvis-glow-phase")
+    val brush = Brush.linearGradient(
+        colors = listOf(Color(0xFF328CFF), Color(0xFF45D8E8), Color(0xFF9C75FF), Color(0xFF328CFF)),
+        start = Offset(-220f + 440f * phase, 0f), end = Offset(220f + 440f * phase, 150f))
+    return Modifier.border(BorderStroke(1.5.dp, brush), RoundedCornerShape(cornerRadius))
 }
 

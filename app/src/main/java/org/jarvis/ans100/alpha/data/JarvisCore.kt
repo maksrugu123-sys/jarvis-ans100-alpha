@@ -192,6 +192,34 @@ data class ConversationSignalContext(
 }
 
 /**
+ * Small deterministic social fast paths for stable facts about this local assistant.
+ * They do not replace open-ended language-model replies.
+ */
+internal object LocalDialogueFastPaths {
+    fun assistantIdentityReply(prompt: String): String? {
+        val normalized = prompt.lowercase(Locale.ROOT)
+            .replace('ё', 'е')
+            .replace(Regex("[^\\p{L}\\p{N} ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val asksIdentity = normalized.contains("а тебя") ||
+            normalized.contains("как тебя зовут") ||
+            normalized.contains("твое имя") ||
+            normalized.contains("назови свое имя") ||
+            normalized.contains("назвать свое имя")
+        if (!asksIdentity) return null
+        val name = Regex("меня зовут\\s+([\\p{L}][\\p{L}-]{1,29})")
+            .find(normalized)?.groupValues?.getOrNull(1)
+            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+        return if (name.isNullOrBlank()) {
+            "Меня зовут JARVIS. Я локальный помощник, который работает на этом устройстве."
+        } else {
+            "Меня зовут JARVIS. Приятно познакомиться, $name!"
+        }
+    }
+}
+
+/**
  * Owns every Android conversation turn. Language generation, read-only JPVR
  * recall and the optional ANS-100 signal pass are separate components.
  */
@@ -318,7 +346,8 @@ class JarvisCore(
                     emptyList()
                 }
                 lastRetrievedMemoryCount = memories.size
-                languageEngine.respond(clean, context, memories, signalContext, understanding)
+                LocalDialogueFastPaths.assistantIdentityReply(clean)
+                    ?: languageEngine.respond(clean, context, memories, signalContext, understanding)
             }
         }
         if (response.isBlank() ||
