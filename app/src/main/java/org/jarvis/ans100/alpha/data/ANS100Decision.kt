@@ -230,7 +230,7 @@ class ANS100QwenHandoffBuilder {
 
     companion object {
         private const val MAX_CORE_CHARS = 1_000
-        private const val MAX_DECISION_CHARS = 900
+        private const val MAX_DECISION_CHARS = 600
         private const val MAX_TOOL_CHARS = 300
         private const val MAX_MEMORY_REF_CHARS = 240
         private const val SCHEMA = ANS100QwenHandoff.SCHEMA_V1
