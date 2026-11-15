@@ -114,8 +114,12 @@ All source-level implementation statements above are based on static inspection.
 - Do not modify `main`; all work stays on the target experiment branch until explicitly approved.
 
 
-## 2026-11-15 dialogue graph cutover
+## 2026-11-15 hybrid dialogue decision handoff
 
-The ordinary Android chat route now invokes only the seven-population hybrid graph for its neural preprocessing. The legacy three-layer 9,000-input/996-hidden/4-output graph and its learned classifier/readout are no longer invoked from the normal send path; startup no longer refreshes the legacy graph. The old implementation and its SQLite namespace have deliberately NOT been deleted or migrated, preserving existing state while the replacement is validated. The hybrid graph's bounded population telemetry is the only neural-network context currently passed toward Qwen.
+The ordinary Android chat route invokes the seven-population hybrid graph and no longer runs the legacy three-layer dialogue graph/classifier during normal message processing. Legacy source and SQLite state remain preserved; they have not been deleted or migrated.
 
-**Important limitation:** this is a runtime-route cutover, not completion of hybrid reasoning. The hybrid adapter still encodes typed feature presence, and `ANS100DecisionPolicy` remains `CORE_POLICY_V1`; the hybrid network does not yet produce the selected candidate or structured decision. Legacy diagnostic/reward methods and source files remain in the repository pending a separate UI/API cleanup. No build, test, CI, APK/AAB or device run was performed.
+A new `ANS100HybridPopulationController` now checks whether all seven populations produced at least one spiking neuron and whether the bounded event queue drained. It may forward the Core-proposed response candidate only when that complete path is observed; otherwise it emits an explicit abstention. Core still supplies the candidate and clarification hint. The controller does not decode semantic content from neuron activity, compare multiple learned hypotheses, or claim calibrated confidence. This is a conservative network-participation gate, not yet independent neural reasoning.
+
+The resulting evidence-bound `ANS100QwenHandoff` is carried in `DialogueNeuralAnalysis` and preferred by `LiteRtLmResponseEngine` even when the older optional Core-policy handoff setting is off. Prompt packing now prioritizes this handoff over optional telemetry. Qwen is instructed to preserve abstention/clarification and not execute tools or actions.
+
+Legacy manual diagnostic/reward APIs remain for cleanup. The implementation is source-only: no Gradle build, tests, CI, APK/AAB, benchmark or device run was performed.
