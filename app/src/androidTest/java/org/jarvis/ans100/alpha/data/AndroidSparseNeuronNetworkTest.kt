@@ -59,6 +59,9 @@ class AndroidSparseNeuronNetworkTest {
         try {
             db.delete("connections", null, null)
             db.delete("metadata", "key='dialogue_topology_version'", null)
+            val preservedClock = 42_000_000L
+            val clockValues = ContentValues().apply { put("value", preservedClock) }
+            db.update("metadata", clockValues, "key='model_time_ns'", null)
             for (outputIndex in 0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS) {
                 val values = ContentValues().apply {
                     put("connection_id", "dialog-feature-0-output-$outputIndex")
@@ -87,6 +90,7 @@ class AndroidSparseNeuronNetworkTest {
                 AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 1,
             ), 0.000001)
             assertEquals(9_000 * 8 + 996 * 4, upgraded.stats().connectionCount)
+            assertEquals(preservedClock, upgraded.stats().currentTimeNs)
         }
     }
 
