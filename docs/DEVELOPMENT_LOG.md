@@ -2930,3 +2930,9 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - The UI explicitly reports `active_in_chat: false` / source-topology-only. It does not claim that the new 10k topology is running. The existing desktop conversation path's 10-neuron structural signal preprocessor and separate four-output dialogue R-STDP experiment remain distinct.
 - Added an authenticated endpoint regression test for 10,000 declared neurons, 25,500 expected edges, seven populations and inactive chat status. The test is authored and NOT RUN.
 - This UI endpoint depends on the source module `tools/neuron_runtime/hybrid_ans100.py`; the topology builder's own tests remain NOT RUN. No runtime graph was constructed, no memory/performance measurement was made, and no Android/Python parity claim is made.
+
+
+**Follow-up — browser commands without Qwen runtime:**
+- The chat send control now remains enabled when the local inference runtime is unavailable, but changes its label to **Команда браузера**.
+- Recognized local browser commands are routed before any model call. A non-browser chat message is rejected with a clear message explaining that LiteRT-LM is required.
+- Added static-asset regression assertions for this behavior. Tests remain NOT RUN.
