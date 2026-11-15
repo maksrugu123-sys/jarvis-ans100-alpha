@@ -325,27 +325,19 @@ class LocalConsoleService:
             self.storage.close()
             raise LocalConsoleError("cannot restore the shared JARVIS workspace") from exc
 
-        # Desktop is loopback-only and validates Host/Origin on every API request.
-        # Android keeps explicit bearer-token authentication.
-        if self.platform == "desktop":
-            self.auth = None
-            self.bootstrap_token = None
-        else:
-            try:
-                self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
-            except LocalConsoleAuthError as exc:
-                self.workspace_storage.close()
-                self.storage.close()
-                raise LocalConsoleError("cannot initialize local-console authentication") from exc
-            self.bootstrap_token = self.auth.bootstrap_token
+        try:
+            self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
+        except LocalConsoleAuthError as exc:
+            self.workspace_storage.close()
+            self.storage.close()
+            raise LocalConsoleError("cannot initialize local-console authentication") from exc
+        self.bootstrap_token = self.auth.bootstrap_token
         self.dialog_rstdp = DialogRstdpLearningService(
             self.data_path.parent / "dialog-rstdp-v1"
         )
 
     def authenticate(self, token: str | None) -> bool:
-        if self.platform == "desktop":
-            return True
-        return self.auth is not None and self.auth.verify(token)
+        return self.auth.verify(token)
 
     def close(self) -> None:
         self.visible_browser.close()
@@ -1147,7 +1139,9 @@ def create_http_server(
             return True
 
         def _require_auth(self) -> bool:
-            if service.platform == "desktop":
+            # The desktop console itself is tokenless; the extension's explicit
+            # current-page reading API remains token-protected.
+            if service.platform == "desktop" and urlsplit(self.path).path not in _BROWSER_EXTENSION_API_PATHS:
                 return True
             values = self.headers.get_all("Authorization", [])
             if len(values) != 1 or not values[0].startswith("Bearer "):
@@ -1561,7 +1555,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"JPVR task/session data: {service.data_path}")
     print(f"JPVR shared workspace: {service.workspace_path}")
     if service.platform == "desktop":
-        print("Desktop mode: no manual access token required (loopback-only API).")
+        print("Desktop console: no manual token entry required.")
+        if service.bootstrap_token:
+            print("BROWSER BRIDGE TOKEN (only for the explicit current-page reading feature):")
+            print(service.bootstrap_token)
+        else:
+            print("Browser Bridge token already provisioned. Use --rotate-token if it was lost.")
     else:
         print(f"Access-token digest: {service.auth_path}")
         if service.bootstrap_token:
