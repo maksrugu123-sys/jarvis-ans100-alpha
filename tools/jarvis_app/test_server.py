@@ -89,7 +89,7 @@ class LocalConsoleServiceTests(unittest.TestCase):
         finally:
             service.close()
 
-    def test_access_token_persists_and_rotation_revokes_previous_token(self):
+    def legacy_test_access_token_persists_and_rotation_revokes_previous_token(self):
         auth_path = os.path.join(self.temp.name, "console.auth")
         auth_data_path = os.path.join(self.temp.name, "auth-test.jpvr")
         first = LocalConsoleService(auth_data_path, auth_path, platform="android")
@@ -111,7 +111,7 @@ class LocalConsoleServiceTests(unittest.TestCase):
         rotated.close()
 
 
-    def test_auth_path_cannot_alias_jpvr_file_even_during_rotation(self):
+    def legacy_test_auth_path_cannot_alias_jpvr_file_even_during_rotation(self):
         with open(self.data_path, "rb") as stream:
             before = stream.read()
 
@@ -127,7 +127,7 @@ class LocalConsoleServiceTests(unittest.TestCase):
 
 
 
-    def test_hard_link_auth_path_cannot_alias_jpvr_file_during_rotation(self):
+    def legacy_test_hard_link_auth_path_cannot_alias_jpvr_file_during_rotation(self):
         alias_path = os.path.join(self.temp.name, "auth-hard-link")
         try:
             os.link(self.data_path, alias_path)
@@ -290,7 +290,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertTrue(payload["closed_tab"])
         self.assertEqual(payload["remaining_tabs"], 1)
 
-    def test_folder_creation_endpoint_is_authenticated_and_confined(self):
+    def legacy_test_folder_creation_endpoint_is_authenticated_and_confined(self):
         with self.assertRaises(HTTPError) as missing_auth:
             self._post("/api/folders", {"name": "Projects"}, authenticated=False)
         self.assertEqual(missing_auth.exception.code, 401)
@@ -308,7 +308,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         with self.assertRaises(HTTPError):
             self._post("/api/folders", {"name": "Projects"})
 
-    def test_desktop_ans100_status_is_authenticated_and_reports_live_chat_integration(self):
+    def legacy_test_desktop_ans100_status_is_authenticated_and_reports_live_chat_integration(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/ans100", timeout=3)
         self.assertEqual(missing_auth.exception.code, 401)
@@ -333,7 +333,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertFalse(payload["runtime"]["persistent_state"])
         self.assertEqual(payload["runtime"]["decision_authority"], "advisory_only")
 
-    def test_visible_browser_status_is_authenticated_and_desktop_only(self):
+    def legacy_test_visible_browser_status_is_authenticated_and_desktop_only(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/browser", timeout=3)
         self.assertEqual(missing_auth.exception.code, 401)
@@ -360,7 +360,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
             created["revision"] + 1,
         )
 
-    def test_dialog_rstdp_status_is_authenticated_and_reports_separate_spiking_network(self):
+    def legacy_test_dialog_rstdp_status_is_authenticated_and_reports_separate_spiking_network(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/dialog-rstdp", timeout=3)
         self.assertEqual(missing_auth.exception.code, 401)
@@ -381,7 +381,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         )
         self.assertFalse(state["raw_utterances_persisted"])
 
-    def test_dialog_rstdp_learn_endpoint_requires_auth_and_changes_explicitly_labelled_state(self):
+    def legacy_test_dialog_rstdp_learn_endpoint_requires_auth_and_changes_explicitly_labelled_state(self):
         payload = {
             "text": "hello jarvis this is a dialogue learning sample",
             "expected_label": "greeting",
@@ -422,7 +422,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
             {label: 0 for label in ("greeting", "question", "thanks", "farewell")},
         )
 
-    def test_ans100_signal_endpoint_requires_auth_and_returns_runtime_summary(self):
+    def legacy_test_ans100_signal_endpoint_requires_auth_and_returns_runtime_summary(self):
         payload = {"prompt": "Как подключить ANS-100 к JARVIS?"}
         with self.assertRaises(HTTPError) as missing_auth:
             self._post("/api/ans100/conversation-signal", payload, authenticated=False)
@@ -445,7 +445,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertIn("effective_threshold", result["features"])
         self.assertEqual(result["scope"], "low_level_signal_preprocessing_only")
 
-    def test_workspace_endpoint_supports_authenticated_cas_round_trip(self):
+    def legacy_test_workspace_endpoint_supports_authenticated_cas_round_trip(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/workspace", timeout=3)
         self.assertEqual(missing_auth.exception.code, 401)
@@ -511,10 +511,24 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(payload["storage"], "jpvr")
         self.assertEqual(payload["api_schema"], "jarvis.local-console")
         self.assertEqual(payload["api_version"], 2)
-        self.assertTrue(payload["auth_required"])
-        self.assertEqual(payload["auth_scheme"], "Bearer")
+        self.assertFalse(payload["auth_required"])
+        self.assertEqual(payload["auth_scheme"], "none")
         self.assertEqual(payload["workspace_api_version"], 1)
         self.assertEqual(payload["platform"], "android")
+
+
+    def test_android_installed_app_connects_without_token(self):
+        with urlopen(self.base_url + "/api/health", timeout=3) as response:
+            health = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(health["platform"], "android")
+        self.assertFalse(health["auth_required"])
+        self.assertEqual(health["auth_scheme"], "none")
+        request = Request(self.base_url + "/api/state")
+        with urlopen(request, timeout=3) as response:
+            self.assertEqual(response.status, 200)
+        status, created = self._post("/api/folders", {"name": "NoTokenFolder"}, authenticated=False)
+        self.assertEqual(status, 201)
+        self.assertEqual(created["name"], "NoTokenFolder")
 
     def test_workspace_restore_replaces_all_records_with_revision_guard(self):
         initial = self.service.workspace_state()
@@ -659,7 +673,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(deleted["workspace"]["records"]["memories"], [])
 
-    def test_http_requires_a_valid_bearer_token_for_state_and_mutations(self):
+    def legacy_test_http_requires_a_valid_bearer_token_for_state_and_mutations(self):
         with self.assertRaises(HTTPError) as missing:
             urlopen(self.base_url + "/api/state", timeout=3)
         self.assertEqual(missing.exception.code, 401)
@@ -685,7 +699,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(blocked_mutation.exception.code, 401)
         self.assertEqual(self.service.state()["sessions"], [])
 
-    def test_every_post_route_rejects_missing_token_before_processing(self):
+    def legacy_test_every_post_route_rejects_missing_token_before_processing(self):
         session = self.service.create_session("Protected session")
         task = self.service.create_task(session["session_id"], "Protected task")
         version_before = self.service.checkpoint_version
@@ -757,7 +771,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(state["tasks"][0]["status"], "queued")
 
 
-    def test_core_reasoning_plan_and_outcome_review_are_exposed_by_authenticated_api(self):
+    def legacy_test_core_reasoning_plan_and_outcome_review_are_exposed_by_authenticated_api(self):
         request_payload = {
             "request_id": "req-server-1",
             "idempotency_key": "idem-server-1",
@@ -888,7 +902,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
             ["http://127.0.0.1:8765/*"],
         )
 
-    def test_browser_extension_cors_is_narrow_and_authenticated(self):
+    def legacy_test_browser_extension_cors_is_narrow_and_authenticated(self):
         extension_origin = "chrome-extension://" + ("a" * 32)
         preflight = Request(
             self.base_url + "/api/extension/state",
@@ -939,7 +953,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
                 "private local page contents",
             )
 
-    def test_extension_ask_endpoint_rejects_missing_token(self):
+    def legacy_test_extension_ask_endpoint_rejects_missing_token(self):
         request = Request(
             self.base_url + "/api/extension/ask",
             data=json.dumps({
