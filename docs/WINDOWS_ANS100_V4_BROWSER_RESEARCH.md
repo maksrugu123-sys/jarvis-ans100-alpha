@@ -33,7 +33,7 @@ The 10,000-neuron graph is now wired into the Windows desktop conversation path:
 5. Core passes a bounded, allowlisted `ans100_context` object to the language engine. The LiteRT-LM/Qwen adapter labels it as advisory structural signal, not semantic truth or an execution instruction.
 6. If graph construction or execution fails, Core records the error and continues through the legacy 10-neuron signal path; a graph failure does not block the chat.
 
-The old persistent 10-neuron `ConversationSignalRuntime` remains in parallel as a fallback. The separate optional dialogue R-STDP classifier also remains separate and is not represented as the 10k graph.
+The old persistent 10-neuron `ConversationSignalRuntime` continues to run in parallel and remains available as a fallback. The separate optional dialogue R-STDP classifier also remains separate and is not represented as the 10k graph.
 
 This integration is a real invocation path, but it is **not yet independent semantic reasoning**. Core currently supplies heuristic, typed candidate hints; the graph propagates and scores them. It does not discover factual truth, train from conversation, or autonomously verify claims. A fresh in-memory graph is built per turn: synaptic learning and persistent graph checkpoints are disabled. The Android topology contract is ported, but numerical/behavioral parity with Android golden fixtures has not been demonstrated. Existing conversation memory and the legacy signal checkpoint are not deleted or reinterpreted.
 
