@@ -93,6 +93,13 @@ class AndroidHybridEvidenceInputAdapterTest {
         assertEquals(first.events.map { it.targetNeuronId }, first.trace.map { it.neuronId })
         assertEquals(EvidenceStatus.USER_PROVIDED, first.trace.first().status)
         assertEquals("turn:turn-input-1:user.message.text", first.trace.first().provenanceRef)
+
+        val secondTurn = TypedEvidenceBundle(
+            turnId = "turn-input-2",
+            records = bundle.records.map { it.copy(turnId = "turn-input-2") },
+        )
+        val secondTurnBatch = AndroidHybridEvidenceInputAdapter.createBatch(secondTurn, 10L)
+        assertNotEquals(first.events.first().eventId, secondTurnBatch.events.first().eventId)
     }
 
     @Test
