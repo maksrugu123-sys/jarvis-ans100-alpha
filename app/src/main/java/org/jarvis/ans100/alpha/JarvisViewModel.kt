@@ -915,17 +915,26 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         return try {
             nativeNetworkExecutor.submit<NativeDialogueFeedbackContext?> {
                 try {
-                    val prior = nativeNeuronNetwork.stats()
-                    if (prior.neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS) {
+                    var prior = nativeNeuronNetwork.stats()
+                    if (prior.neuronCount == 0) {
                         mainHandler.post {
                             val current = mutableState.value
                             mutableState.value = current.copy(
                                 conversation = current.conversation.copy(
-                                    nativeNetworkMessage = "Нативная диалоговая сеть ещё не создана. Чат продолжен без неё.",
+                                    nativeNetworkMessage = "Первичная настройка ANS-100: создаётся разреженная сеть из 10 000 нейронов…",
                                 ),
                             )
                         }
-                        return@submit null
+                        nativeNeuronNetwork.initializeSparseDialogueNetwork(
+                            neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
+                            weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
+                        )
+                        prior = nativeNeuronNetwork.stats()
+                    }
+                    if (prior.neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS) {
+                        throw IllegalStateException(
+                            "Сохранённая диалоговая сеть имеет неожиданное число нейронов: ${prior.neuronCount}.",
+                        )
                     }
                     if (prior.currentTimeNs > Long.MAX_VALUE - DIALOGUE_INPUT_STEP_NS - AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS) {
                         throw IllegalStateException("Модельные часы JNVM достигли предельного значения.")
