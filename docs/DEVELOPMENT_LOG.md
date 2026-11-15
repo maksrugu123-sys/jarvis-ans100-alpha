@@ -2922,3 +2922,11 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - The command does not switch between Chrome and Edge. The browser hosting JARVIS is used. Existing `Открой сайт` / `Найди в интернете` commands continue to use the separate visible Playwright/Chromium research window.
 - The Chrome/Edge extension still works independently from its toolbar popup. Chat-to-extension background command relay is not implemented; this limitation is documented in the PC quickstart.
 - Static asset regression coverage includes the normal-browser command route and service-worker v14. Tests remain NOT RUN.
+
+
+## Desktop ANS-100 V4 status visibility — 2026-11-15
+
+- Added an authenticated `GET /api/ans100` metadata endpoint and a separate ANS-100 status panel in the PC UI. It reports the source-defined seven populations, 10,000 neuron IDs and 25,500 *declared/expected* connections without constructing the graph or allocating neuron state.
+- The UI explicitly reports `active_in_chat: false` / source-topology-only. It does not claim that the new 10k topology is running. The existing desktop conversation path's 10-neuron structural signal preprocessor and separate four-output dialogue R-STDP experiment remain distinct.
+- Added an authenticated endpoint regression test for 10,000 declared neurons, 25,500 expected edges, seven populations and inactive chat status. The test is authored and NOT RUN.
+- This UI endpoint depends on the source module `tools/neuron_runtime/hybrid_ans100.py`; the topology builder's own tests remain NOT RUN. No runtime graph was constructed, no memory/performance measurement was made, and no Android/Python parity claim is made.
