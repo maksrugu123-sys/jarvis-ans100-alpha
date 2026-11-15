@@ -27,6 +27,7 @@ class LocalFallbackResponseEngine:
         reasoning_context: Mapping[str, object] | None = None,
         external_context: Mapping[str, object] | None = None,
         dialog_neuron_context: Mapping[str, object] | None = None,
+        ans100_context: Mapping[str, object] | None = None,
     ) -> str:
         clean = prompt.strip()
         normalized = clean.casefold().strip(" .!?;,:")
@@ -51,6 +52,14 @@ class LocalFallbackResponseEngine:
                 "JARVIS работает в базовом локальном режиме; полноценная языковая модель не подключена.",
                 f"Подтверждённых заметок, переданных в этот ход: {memory_count}.",
             ]
+            if ans100_context:
+                selected = ans100_context.get("selected_candidate", "abstain")
+                if selected not in {"answer", "clarification", "abstain"}:
+                    selected = "abstain"
+                parts.append(
+                    "ANS-100 V4: 10 000-нейронный граф обработал этот ход; "
+                    f"кандидат сигнала — {selected}. Это ограниченная структурная оценка, не понимание смысла."
+                )
             if signal:
                 parts.append(
                     "ANS-100: "
