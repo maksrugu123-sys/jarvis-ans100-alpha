@@ -31,7 +31,25 @@
       <p>Сессии, задачи, история изменений и проверка планов. Пока это исследовательский интерфейс: он не выполняет внешние действия.</p>
     </section>
 
-    <section class="stats" aria-label="Состояние">
+    <div class="desktop-workspace">
+      <nav class="side-nav" aria-label="Основная навигация">
+        <div class="side-nav-heading">РАЗДЕЛЫ</div>
+        <a class="side-nav-link active" href="#overview" data-nav-target="overview"><span>01</span> Обзор</a>
+        <a class="side-nav-link" href="#chat" data-nav-target="chat"><span>02</span> Диалог</a>
+        <a class="side-nav-link" href="#network" data-nav-target="network"><span>03</span> ANS-100</a>
+        <a class="side-nav-link" href="#browser" data-nav-target="browser"><span>04</span> Браузер</a>
+        <a class="side-nav-link" href="#tasks-section" data-nav-target="tasks-section"><span>05</span> Задачи</a>
+        <a class="side-nav-link" href="#memory" data-nav-target="memory"><span>06</span> Память</a>
+        <a class="side-nav-link" href="#transfer" data-nav-target="transfer"><span>07</span> Перенос данных</a>
+        <a class="side-nav-link" href="#reasoning" data-nav-target="reasoning"><span>08</span> Планирование</a>
+        <a class="side-nav-link" href="#settings" data-nav-target="settings"><span>09</span> Настройки</a>
+        <div class="nav-health" aria-live="polite">
+          <span class="nav-health-dot"></span>
+          <div><strong id="nav-core-state">Ядро: ожидание</strong><small id="nav-model-state">Модель: проверка</small><small id="nav-network-state">ANS-100: ожидание</small></div>
+        </div>
+      </nav>
+      <div class="workspace-content">
+    <section class="stats" id="overview" aria-label="Состояние">
       <article class="stat-card"><span>Сессии</span><strong id="session-count">—</strong></article>
       <article class="stat-card"><span>Задачи</span><strong id="task-count">—</strong></article>
       <article class="stat-card"><span>В работе</span><strong id="active-count">—</strong></article>
@@ -54,7 +72,7 @@
       <p class="muted">Если токен потерян, остановите консоль и запустите её с параметром <code>--rotate-token</code>. Старый токен после ротации перестанет работать.</p>
     </section>
 
-    <section class="panel local-chat-panel">
+    <section class="panel local-chat-panel" id="chat">
       <div class="panel-heading">
         <div><div class="eyebrow">LOCAL LLM · LITERT-LM</div><h2>Диалог JARVIS</h2></div>
         <span class="tag">OFFLINE</span>
@@ -71,7 +89,7 @@
       <p class="muted">Модель и история остаются в локальном workspace этого ПК. При отсутствии модели доступен базовый офлайн-ответчик; облачный ИИ и выполнение команд отключены, кроме перечисленных безопасных команд браузера.</p>
     </section>
 
-    <section class="panel neuron-panel">
+    <section class="panel neuron-panel" id="network">
       <div class="panel-heading">
         <div><div class="eyebrow">ANS-100 EXPERIMENT · DIALOGUE R-STDP</div><h2>Экспериментальная диалоговая спайковая сеть</h2></div>
         <span class="tag">4 LIF-DT · 256 ПРИЗНАКОВ</span>
@@ -93,7 +111,7 @@
       <p class="muted">Никакого скрытого обучения по переписке: нажатие кнопки создаёт отдельный feedback ID и применяет награду R-STDP. В хранилище записываются числовые состояния, метки и идентификаторы событий; исходная фраза не сохраняется. Эксперимент пока не управляет обычными ответами JARVIS.</p>
     </section>
 
-    <section class="panel browser-panel">
+    <section class="panel browser-panel" id="browser">
       <div class="panel-heading">
         <div><div class="eyebrow">VISIBLE RESEARCH · PC</div><h2>Браузер JARVIS</h2></div>
         <span class="tag">ОКНО ВИДНО</span>
@@ -134,7 +152,7 @@
       <p class="muted">Первая версия видимого Chromium выполняет только GET/HEAD навигацию. Отправка форм, покупки, сообщения, загрузка файлов и выполнение команд отключены. Для этого отдельного браузера требуется установленный Playwright и Chromium; расширение работает с обычными вкладками Chrome / Edge без отдельного Chromium.</p>
     </section>
 
-    <div class="columns">
+    <div class="columns" id="tasks-section">
       <section class="panel">
         <div class="panel-heading">
           <div><div class="eyebrow">КОНТЕКСТ</div><h2>Сессии</h2></div>
@@ -183,7 +201,7 @@
       </section>
     </div>
 
-    <section class="panel memory-panel">
+    <section class="panel memory-panel" id="memory">
       <div class="panel-heading">
         <div><div class="eyebrow">ДОЛГОВРЕМЕННЫЙ КОНТЕКСТ</div><h2>Память JARVIS</h2></div>
         <span class="tag" id="memory-revision">REV —</span>
@@ -207,7 +225,7 @@
       <div id="memories" class="record-list empty">Загрузка общей памяти…</div>
     </section>
 
-    <section class="panel transfer-panel">
+    <section class="panel transfer-panel" id="transfer">
       <div class="panel-heading">
         <div><div class="eyebrow">OFFLINE TRANSFER V1</div><h2>Зашифрованный перенос</h2></div>
         <span class="tag">AES-256-GCM</span>
@@ -246,7 +264,7 @@
       <p class="muted">.jwb содержит только общую переносимую память, но не JPVR-файл задач/сессий, черновики Android, токены, ключи или нейронные checkpoint. При повреждении самого JPVR-файла сначала сохраните оригинал и используйте отдельную проверку JPVR recovery.</p>
     </section>
 
-    <section class="panel reasoning-panel">
+    <section class="panel reasoning-panel" id="reasoning">
       <div class="panel-heading">
         <div><div class="eyebrow">REASONING ENGINE V0.1</div><h2>Проверка плана</h2></div>
         <span class="tag">ТОЛЬКО PREVIEW</span>
@@ -299,10 +317,40 @@
       <div id="events" class="event-list empty">Событий пока нет.</div>
     </section>
 
+    <section class="panel settings-panel" id="settings">
+      <div class="panel-heading">
+        <div><div class="eyebrow">РАБОЧЕЕ ОКРУЖЕНИЕ</div><h2>Настройки интерфейса</h2></div>
+        <span class="tag">ЛОКАЛЬНО</span>
+      </div>
+      <p class="panel-copy">Эти параметры меняют только отображение на этом устройстве. Они не меняют модель, обучение или поведение нейронной сети.</p>
+      <label class="setting-row" for="compact-ui-toggle">
+        <span><strong>Компактный режим</strong><small>Уменьшить отступы и плотнее расположить панели.</small></span>
+        <input id="compact-ui-toggle" type="checkbox">
+      </label>
+      <label class="setting-row" for="motion-ui-toggle">
+        <span><strong>Уменьшить анимацию</strong><small>Отключить плавные переходы и декоративное движение.</small></span>
+        <input id="motion-ui-toggle" type="checkbox">
+      </label>
+      <div class="settings-meta">
+        <span>Платформа</span><strong id="settings-platform">Определяется ядром</strong>
+        <span>Подключение</span><strong>Только локальный API · 127.0.0.1</strong>
+        <span>Внешние действия</span><strong>Отключены, кроме явно разрешённых браузерных команд</strong>
+      </div>
+    </section>
+
+    <section class="panel" id="events-panel">
+      <div class="panel-heading">
+        <div><div class="eyebrow">АУДИТ</div><h2>Журнал событий</h2></div>
+      </div>
+      <div id="events" class="event-list empty">Событий пока нет.</div>
+    </section>
+
     <footer>
       <p>JARVIS ANS-100 Alpha · локальный режим</p>
       <p>Внешние действия, сетевые инструменты и подтверждение опасных операций пока отключены.</p>
     </footer>
+      </div>
+    </div>
   </main>
 </body>
 </html>
