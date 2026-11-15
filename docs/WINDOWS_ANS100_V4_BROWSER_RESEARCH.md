@@ -22,17 +22,26 @@ The topology uses the Android V4 deterministic projection salts, fan-outs, candi
 
 The external evidence input contract accepts at most 128 unique neuron IDs from the first 1,200 input neurons. Candidate labels and support/conflict hints still have to come from explicitly typed Core evidence; the network does not independently infer their semantic truth.
 
-### Integration boundary
+### Live chat integration
 
-This is the desktop network foundation, **not yet a replacement of the current 10-neuron `ConversationSignalRuntime` in the live chat path**. The 10-neuron structural preprocessor is preserved. The next integration step must:
-1. map versioned typed Core evidence to the same 1,200 input range as Android;
-2. schedule a bounded input batch and run the 10k graph under event/time budgets;
-3. compute candidate support/conflict readouts and abstain on missing or incomplete lanes;
-4. pass a provenance-labelled decision object to Qwen;
-5. add durable topology/state/weight checkpoints and safe version migration;
-6. prove parity against Android golden fixtures before enabling it by default.
+The 10,000-neuron graph is now wired into the Windows desktop conversation path:
 
-The Python reference network is currently in-memory. Do not claim persistent cross-restart learning, identical Android numerical/runtime behavior, or independent semantic reasoning yet. Existing desktop conversation memory and the old signal checkpoint are not deleted or reinterpreted.
+1. `LocalConsoleService` injects `HybridANS100Runtime` into `JarvisCore` only on the desktop platform.
+2. For each chat turn, Core runs its existing bounded understanding pass and optional symbolic-plan generation, then the hybrid runtime builds a fresh V4 graph.
+3. Up to 128 unique inputs are mapped into the 1,200-neuron evidence population. Token hashes and a small fixed set of structural metadata flags are used only as input features; six reserved input neurons carry Core-produced answer/clarification/abstain support/conflict hints.
+4. The graph runs with a 10,000-event per-turn budget and at most eight timestamp batches. Its six decision-readout lanes are counted and compared. Ties or event-budget exhaustion resolve conservatively to `abstain`.
+5. Core passes a bounded, allowlisted `ans100_context` object to the language engine. The LiteRT-LM/Qwen adapter labels it as advisory structural signal, not semantic truth or an execution instruction.
+6. If graph construction or execution fails, Core records the error and continues through the legacy 10-neuron signal path; a graph failure does not block the chat.
+
+The old persistent 10-neuron `ConversationSignalRuntime` remains in parallel as a fallback. The separate optional dialogue R-STDP classifier also remains separate and is not represented as the 10k graph.
+
+This integration is a real invocation path, but it is **not yet independent semantic reasoning**. Core currently supplies heuristic, typed candidate hints; the graph propagates and scores them. It does not discover factual truth, train from conversation, or autonomously verify claims. A fresh in-memory graph is built per turn: synaptic learning and persistent graph checkpoints are disabled. The Android topology contract is ported, but numerical/behavioral parity with Android golden fixtures has not been demonstrated. Existing conversation memory and the legacy signal checkpoint are not deleted or reinterpreted.
+
+Remaining validation gates before treating this as a stable production path:
+- run the authored regression suite on a Windows/Python environment and profile startup, peak memory and per-turn latency;
+- compare all seven population and 25,500-edge topology details against Android golden fixtures;
+- measure candidate-readout coverage and false abstention/answer/clarification rates on held-out prompts;
+- design versioned durable graph checkpoints only after resource and parity results justify persistence.
 
 ## Browser automation research
 
@@ -62,8 +71,8 @@ Do not attach to a user's personal browser through remote-debugging flags or cop
 
 ## Verification record
 
-- `tools/neuron_runtime/test_hybrid_ans100.py` and `tools/jarvis_app/test_workspace_files.py`: authored, **NOT RUN**.
-- Folder endpoint, isolated-browser close-tab routing, and extension archive/ownership regression coverage updated in `tools/jarvis_app/test_server.py`; **NOT RUN**.
+- `tools/neuron_runtime/test_hybrid_ans100.py`, `tools/neuron_runtime/test_hybrid_ans100_runtime.py`, `tools/jarvis_app/test_jarvis_core.py`, `tools/jarvis_app/test_workspace_files.py` and `tools/jarvis_app/test_server.py`: authored/updated, **NOT RUN**.
+- The live desktop Core now invokes the 10,000-neuron graph adapter on each chat turn and passes its allowlisted readout to the language engine. This is source-level integration only; actual graph execution is **NOT VERIFIED**.
 - No Python tests, Windows launch, browser extension installation, Playwright launch, model inference, Gradle build, CI, or GitHub Actions workflow was run.
-- Browser Bridge 1.1.0 and the chat command route are source changes only; Chrome/Edge behavior is **NOT VERIFIED**.
-- The current 10-neuron signal preprocessor remains in the active desktop conversation path until the typed-evidence integration and persistence gates above are completed.
+- Browser Bridge 1.1.0 and its chat command route remain source changes only; Chrome/Edge behavior is **NOT VERIFIED**.
+- The 10-neuron persistent signal preprocessor remains active in parallel as a fallback. The 10k graph itself is fresh/in-memory per turn, with no learning or persistent graph state.
