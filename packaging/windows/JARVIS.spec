@@ -3,7 +3,7 @@
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
-ROOT = Path(SPECPATH).resolve().parents[2]
+ROOT = Path(SPECPATH).resolve().parents[1]
 STATIC = ROOT / "tools" / "jarvis_app" / "static"
 EXTENSION = ROOT / "tools" / "jarvis_app" / "browser_extension"
 
