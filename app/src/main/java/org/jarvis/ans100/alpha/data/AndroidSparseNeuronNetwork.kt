@@ -787,7 +787,7 @@ private class AndroidNeuronSqliteStore(
             featureNeuronIds.size > AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN
         ) throw AndroidNeuronNetworkException("dialogue readout feature batch is outside its bound")
         val placeholders = List(featureNeuronIds.size) { "?" }.joinToString(",")
-        val args = featureNeuronIds.map(Int::toString).toTypedArray()
+        val args = featureNeuronIds.map { it.toString() }.toTypedArray()
         val scores = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).associate { index ->
             AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index to 0.0
         }.toMutableMap()
