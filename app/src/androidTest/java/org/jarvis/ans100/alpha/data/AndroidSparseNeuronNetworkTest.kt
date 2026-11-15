@@ -1,5 +1,6 @@
 package org.jarvis.ans100.alpha.data
 
+import android.content.ContentValues
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -42,6 +43,50 @@ class AndroidSparseNeuronNetworkTest {
             assertEquals(9_000 * 8 + 996 * 4, stats.connectionCount)
             assertEquals(0, stats.residentNeuronCount)
             assertEquals(128, stats.hotSetCapacity)
+        }
+    }
+
+    @Test
+    fun upgradesDirectFeatureReadoutWeightsIntoTheHiddenProjection() {
+        AndroidSparseNeuronNetwork(context, databaseName).use { network ->
+            network.initializeSparseDialogueNetwork()
+        }
+
+        // Recreate a v1 direct feature-to-output graph with a deliberately
+        // distinguishable learned weight on feature 0, then remove its version tag.
+        val db = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        db.beginTransaction()
+        try {
+            db.delete("connections", null, null)
+            db.delete("metadata", "key='dialogue_topology_version'", null)
+            for (outputIndex in 0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS) {
+                val values = ContentValues().apply {
+                    put("connection_id", "dialog-feature-0-output-$outputIndex")
+                    put("source_id", 0)
+                    put("target_id", AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + outputIndex)
+                    put("delay_ns", AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS)
+                    put("weight", if (outputIndex == 0) 0.90 else 0.10)
+                }
+                db.insertOrThrow("connections", null, values)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+            db.close()
+        }
+
+        AndroidSparseNeuronNetwork(context, databaseName).use { upgraded ->
+            upgraded.initializeSparseDialogueNetwork()
+            val projectedHidden = AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START
+            assertEquals(0.90, upgraded.dialogueSynapseWeight(
+                projectedHidden,
+                AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START,
+            ), 0.000001)
+            assertEquals(0.10, upgraded.dialogueSynapseWeight(
+                projectedHidden,
+                AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 1,
+            ), 0.000001)
+            assertEquals(9_000 * 8 + 996 * 4, upgraded.stats().connectionCount)
         }
     }
 
