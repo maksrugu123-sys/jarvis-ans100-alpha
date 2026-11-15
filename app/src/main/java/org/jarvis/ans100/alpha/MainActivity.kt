@@ -570,9 +570,6 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onDownloadModel = viewModel::downloadConversationModel,
                                 onCancelDownload = viewModel::cancelConversationModelDownload,
                                 onRemoveModel = viewModel::removeConversationModel,
-                                onTrainDialogFeature = viewModel::trainDialogFeatureClassifier,
-                                onInitializeNativeNetwork = viewModel::initializeNativeNeuronNetwork,
-                                onRunNativeNetworkProbe = viewModel::runNativeNeuronProbe,
                                 storageReady = ui.storageReady, notice = ui.notice, runtime = ui.runtime,
                                 onConnect = viewModel::connectRuntime, onRefresh = viewModel::refreshRuntime,
                                 onCreateSession = viewModel::createRuntimeSession, onCreateTask = viewModel::createRuntimeTask,
@@ -2495,9 +2492,6 @@ private fun SettingsPanel(
     onDownloadModel: () -> Unit,
     onCancelDownload: () -> Unit,
     onRemoveModel: () -> Unit,
-    onTrainDialogFeature: (String) -> Unit,
-    onInitializeNativeNetwork: () -> Unit,
-    onRunNativeNetworkProbe: () -> Unit,
     storageReady: Boolean,
     notice: String?,
     runtime: RuntimeBridgeUiState,
@@ -2646,47 +2640,59 @@ private fun SettingsPanel(
                 }
             }
             "neural" -> {
-                val stats = conversation.nativeNetworkStats
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeading("Нативная сеть ANS-100 / JNVM", "разреженный SQLite runtime")
-                        Text(if (stats == null) "Состояние загружается…"
-                            else "Нейронов: ${stats.neuronCount} · связей: ${stats.connectionCount}\nОжидающих событий: ${stats.pendingEvents}\nRAM-кэш: ${stats.residentNeuronCount}/${stats.hotSetCapacity}",
-                            style = MaterialTheme.typography.bodyMedium)
-                        if ((stats?.neuronCount ?: 0) == 0) {
-                            Button(onClick = onInitializeNativeNetwork, enabled = !conversation.nativeNetworkBusy,
-                                modifier = Modifier.fillMaxWidth()) { Text("Создать сеть · 10 000 нейронов") }
-                        } else {
-                            OutlinedButton(onClick = onRunNativeNetworkProbe, enabled = !conversation.nativeNetworkBusy,
-                                modifier = Modifier.fillMaxWidth()) { Text("Запустить тестовый импульс") }
-                        }
-                        if (conversation.nativeNetworkBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        conversation.nativeNetworkMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        conversation.nativeNetworkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                        SectionHeading("Гибридная сеть ANS-100", "10 000 нейронов · 7 популяций · SQLite JNVM")
+                        Text(
+                            "Новая сеть запускается автоматически при обычных сообщениях. " +
+                                "Она проходит через группы входа, ассоциаций, рабочего состояния, кандидатов, критики, планирования и readout.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        conversation.hybridNetworkSummary?.let {
+                            Text(it.take(1_200), style = MaterialTheme.typography.bodySmall)
+                        } ?: Text(
+                            "Отправь обычное сообщение, чтобы увидеть результат последнего прохода.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        SectionHeading("Анализ диалога", "локальные признаки и обратная связь")
-                        Text("Активных признаков: ${conversation.dialogFeaturePrediction?.activeFeatureCount ?: 0}")
-                        Text("Обучено примеров: ${conversation.dialogFeaturePrediction?.trainedExamples ?: 0}")
-                        Text("Reward-событий: ${conversation.dialogFeaturePrediction?.rewardUpdates ?: 0}")
-                        Text("ANS-100 (10 нейронов): активно ${conversation.ans100ActiveNeuronCount}, событий ${conversation.ans100ProcessedEvents}, импульсов ${conversation.ans100SpikeCount}, attention gate: ${if (conversation.ans100AttentionGateActive) "да" else "нет"}",
-                            style = MaterialTheme.typography.bodySmall)
+                        SectionHeading("Core и передача Qwen", "предварительный анализ и структурированное решение")
                         conversation.understandingIntent?.let {
-                            Text("Предварительное намерение Core: $it · план: ${conversation.reasoningPlanSteps} шагов" +
-                                if (conversation.reasoningNeedsClarification) " · нужно уточнение" else "")
-                        }
-                        conversation.dialogFeatureError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                        Text("Уточни правильную категорию последнего сообщения — это сохранит обучающий пример.")
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = { onTrainDialogFeature("greeting") }, enabled = !conversation.isBusy) { Text("Приветствие") }
-                            TextButton(onClick = { onTrainDialogFeature("question") }, enabled = !conversation.isBusy) { Text("Вопрос") }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = { onTrainDialogFeature("thanks") }, enabled = !conversation.isBusy) { Text("Спасибо") }
-                            TextButton(onClick = { onTrainDialogFeature("farewell") }, enabled = !conversation.isBusy) { Text("Прощание") }
-                        }
+                            Text(
+                                "Предварительное намерение Core: $it · план: ${conversation.reasoningPlanSteps} шагов" +
+                                    if (conversation.reasoningNeedsClarification) " · требуется уточнение" else "",
+                            )
+                        } ?: Text(
+                            "Результат анализа появится после первого сообщения.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "ANS-100 проверяет полный проход по семи популяциям. Если часть сети не активировалась или очередь не обработана, она передаёт отказ вместо выбранного ответа. Core пока предлагает кандидата; самостоятельное семантическое мышление сети ещё не реализовано.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Qwen отвечает за естественную формулировку и не может отменять отказ или уточнение ANS-100.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        SectionHeading("Локальные сигналы", "низкоуровневый анализ формы сообщения")
+                        Text(
+                            "Активно нейронов: ${conversation.ans100ActiveNeuronCount}, событий: ${conversation.ans100ProcessedEvents}, импульсов: ${conversation.ans100SpikeCount}, attention gate: ${if (conversation.ans100AttentionGateActive) "да" else "нет"}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Этот сигнальный контур не заменяет гибридную сеть из 10 000 нейронов.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
