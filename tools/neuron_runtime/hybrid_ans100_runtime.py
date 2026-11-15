@@ -573,13 +573,15 @@ class HybridANS100Runtime:
 
         plan = understanding_context.get("reasoning_plan")
         plan = plan if isinstance(plan, Mapping) else {}
-        response_goal = (
-            _text(plan.get("goal"), 512) or "Ответить на исходное сообщение пользователя"
-            if status == "selected"
-            else _text(plan.get("clarification_question"), 512) or "Запросить недостающий контекст"
-            if status == "needs_clarification"
-            else "Не формировать неподтверждённый ответ"
-        )
+        if status == "selected":
+            response_goal = _text(plan.get("goal"), 512) or "Ответить на исходное сообщение пользователя"
+        elif status == "needs_clarification":
+            response_goal = (
+                _text(plan.get("clarification_question"), 512)
+                or "Запросить недостающий контекст"
+            )
+        else:
+            response_goal = "Не формировать неподтверждённый ответ"
 
         return {
             "runtime_version": self.VERSION,
