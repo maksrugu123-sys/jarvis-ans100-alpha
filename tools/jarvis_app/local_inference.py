@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 import threading
@@ -29,6 +30,17 @@ SYSTEM_MESSAGE = (
     "семантическим пониманием или полноценным рассуждением. Не выдумывай факты и не проси пароли."
 )
 
+
+
+def _bounded_unit_float(value: object) -> float:
+    """Convert an untrusted numeric hint without overflow or NaN leakage."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    try:
+        numeric = float(value)
+    except (OverflowError, ValueError):
+        return 0.0
+    return numeric if math.isfinite(numeric) and 0.0 <= numeric <= 1.0 else 0.0
 
 
 def _bounded_understanding_context(
@@ -374,9 +386,7 @@ class LiteRtLmLocalEngine:
                         for candidate in allowed_candidates:
                             value = raw_scores.get(candidate)
                             if isinstance(value, (int, float)) and not isinstance(value, bool):
-                                numeric = float(value)
-                                if 0.0 <= numeric <= 1.0:
-                                    safe_scores[candidate] = numeric
+                                safe_scores[candidate] = _bounded_unit_float(value)
                     candidate_ids = {
                         "respond_to_original_request",
                         "request_clarification",
@@ -389,16 +399,22 @@ class LiteRtLmLocalEngine:
                     if not isinstance(winner_id, str) or winner_id not in candidate_ids:
                         winner_id = None
                     raw_margin = ans100_context.get("winner_margin")
-                    safe_margin = (
-                        float(raw_margin)
-                        if isinstance(raw_margin, (int, float)) and not isinstance(raw_margin, bool)
-                        and 0.0 <= float(raw_margin) <= 1.0 else 0.0
-                    )
+                    safe_margin = _bounded_unit_float(raw_margin)
                     raw_status = ans100_context.get("decision_status")
                     if not isinstance(raw_status, str) or raw_status not in {
                         "selected", "needs_clarification", "abstained",
                     }:
                         raw_status = "abstained"
+                    # The status is authoritative: never pass contradictory candidate fields
+                    # from an untrusted or stale adapter result to the language model.
+                    selected = {
+                        "selected": "answer",
+                        "needs_clarification": "clarification",
+                        "abstained": "abstain",
+                    }[raw_status]
+                    selected_id = (
+                        "respond_to_original_request" if raw_status == "selected" else None
+                    )
                     def safe_list(key: str) -> list[str]:
                         value = ans100_context.get(key)
                         if not isinstance(value, list):
