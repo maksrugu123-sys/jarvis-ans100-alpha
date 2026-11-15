@@ -71,21 +71,6 @@ internal object PromptContextBudgeter {
             )
         }
 
-        // Keep complete newest exchanges. Once the newest pair does not fit, older
-        // pairs are not considered, so stale context never displaces recent context.
-        val historyPairs = recentHistory.takeLast(MAX_HISTORY_MESSAGES)
-            .chunked(2)
-            .asReversed()
-        for (pair in historyPairs) {
-            val boundedPair = pair.map { it.copy(text = it.text.take(MAX_HISTORY_MESSAGE_CHARS)) }
-            val candidate = boundedPair + selectedHistory
-            if (estimate(renderSystem(), candidate) <= INPUT_ESTIMATE_LIMIT) {
-                selectedHistory.addAll(0, boundedPair)
-            } else {
-                break
-            }
-        }
-
         val handoffText = ans100Handoff
             ?.takeIf { it.turnId.isNotBlank() && it.promptContext.length <= ANS100QwenHandoff.MAX_CONTEXT_CHARS }
             ?.let { handoff ->
@@ -103,6 +88,21 @@ internal object PromptContextBudgeter {
             val candidateSections = sections + section
             if (estimate(renderSystem(candidateSections), selectedHistory) <= INPUT_ESTIMATE_LIMIT) {
                 sections += section
+            }
+        }
+
+        // Keep complete newest exchanges. Once the newest pair does not fit, older
+        // pairs are not considered, so stale context never displaces recent context.
+        val historyPairs = recentHistory.takeLast(MAX_HISTORY_MESSAGES)
+            .chunked(2)
+            .asReversed()
+        for (pair in historyPairs) {
+            val boundedPair = pair.map { it.copy(text = it.text.take(MAX_HISTORY_MESSAGE_CHARS)) }
+            val candidate = boundedPair + selectedHistory
+            if (estimate(renderSystem(), candidate) <= INPUT_ESTIMATE_LIMIT) {
+                selectedHistory.addAll(0, boundedPair)
+            } else {
+                break
             }
         }
 
