@@ -352,7 +352,7 @@ class LiteRtLmLocalEngine:
                 if ans100_context is not None:
                     allowed_candidates = {"answer", "clarification", "abstain"}
                     selected = ans100_context.get("selected_candidate")
-                    if selected not in allowed_candidates:
+                    if not isinstance(selected, str) or selected not in allowed_candidates:
                         selected = "abstain"
                     def bounded_count(value: object, maximum: int = 100_000) -> int:
                         if isinstance(value, bool) or not isinstance(value, int):
@@ -386,7 +386,11 @@ class LiteRtLmLocalEngine:
                         "selected_candidate": selected,
                         "readout_spike_counts": safe_readouts,
                         "candidate_signal_scores": safe_scores,
+                        "readout_complete": ans100_context.get("readout_complete") is True,
                         "event_budget_exhausted": ans100_context.get("event_budget_exhausted") is True,
+                        "pending_events_at_budget_boundary": bounded_count(ans100_context.get("pending_events_at_budget_boundary")),
+                        "turn_boundary_events_discarded": ans100_context.get("turn_boundary_events_discarded") is True,
+                        "decision_reason": str(ans100_context.get("decision_reason", ""))[:80],
                         "decision_authority": "advisory_only",
                         "learning_enabled": False,
                         "persistent_state": False,
