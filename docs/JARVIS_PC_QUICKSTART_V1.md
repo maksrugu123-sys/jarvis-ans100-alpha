@@ -41,7 +41,9 @@ The seek-based I/O fallback has dedicated source tests, including a Windows-only
 
 ## Start on Windows 10 or Windows 11
 
-Open PowerShell in the repository directory:
+For a one-click first launch, double-click `start_jarvis_windows.bat` in the repository root. The launcher starts the local Python console if port 8765 is not already responding, waits for its health endpoint, and opens the JARVIS PWA in a dedicated Microsoft Edge app window (or the default browser if Edge is not installed). Keep the separate **JARVIS Core** terminal open. The one-time access token is printed there; enter it in the JARVIS sign-in panel. The launcher does not install Python, Playwright, Chromium or the language model.
+
+You can also start manually. Open PowerShell in the repository directory:
 
     py -3 --version
     py -3 -m tools.jarvis_app --port 8765 --platform desktop
@@ -56,6 +58,16 @@ Open a terminal in the repository directory:
 
     python3 --version
     python3 -m tools.jarvis_app --port 8765 --platform desktop
+
+## Chat commands for the visible browser
+
+After signing in, the chat accepts a deliberately small explicit command set:
+- `Открой браузер` — open the visible Chromium research window.
+- `Найди в интернете <запрос>` or `Открой браузер и найди <запрос>` — search in the visible browser and show source links in the JARVIS panel.
+- `Открой сайт <домен>` or `Открой <URL>` — navigate to a public page.
+- `Прочитай страницу` — extract bounded text from the currently open page.
+
+These are UI-level deterministic command routes to the existing read-only browser API. They do not make ANS-100 a general command interpreter and do not authorize shell commands, arbitrary application control, downloads, logins, forms, messages or purchases. The browser's URL/DNS/request guards still apply. Search/open/read require the optional Playwright + Chromium installation described below.
 
 ## Optional visible research browser
 
@@ -119,3 +131,8 @@ The PWA and Android Compose client use the same API contract when they connect t
 ## Verification status
 
 This is a documented launch procedure based on the current CLI source. It has not been executed or verified on Linux or macOS. Windows 10/11 support is experimental and has not been runtime-verified. No package, installer, desktop executable, build, test, or performance measurement is claimed.
+
+
+## Windows 10 first desktop window milestone
+
+The repository now includes `start_jarvis_windows.bat`, which opens the existing responsive dark JARVIS PWA in an Edge app-mode window. This is an app-like desktop window, not yet a native compiled Windows executable or installer. The browser command shortcuts are available in the chat and route only to the existing read-only visible-browser API. Windows 10 startup, Edge app-mode launch, Python storage behavior, Playwright/Chromium, and all command flows remain **NOT VERIFIED ON WINDOWS**. No build or tests were run for this change.
