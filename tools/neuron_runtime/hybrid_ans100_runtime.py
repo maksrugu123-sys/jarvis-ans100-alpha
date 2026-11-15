@@ -278,7 +278,7 @@ def _typed_evidence_records(
 
     evidence_notes = understanding.get("evidence")
     if isinstance(evidence_notes, (list, tuple)):
-        for index, note in enumerate(evidence_notes[:5]):
+        for index, note in enumerate(evidence_notes[:_MAX_CORE_HINTS]):
             clean = _text(note)
             if clean:
                 add(
