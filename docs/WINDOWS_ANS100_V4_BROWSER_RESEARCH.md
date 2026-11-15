@@ -63,7 +63,7 @@ Do not attach to a user's personal browser through remote-debugging flags or cop
 ## Verification record
 
 - `tools/neuron_runtime/test_hybrid_ans100.py` and `tools/jarvis_app/test_workspace_files.py`: authored, **NOT RUN**.
-- Folder endpoint and extension archive regression coverage updated in `tools/jarvis_app/test_server.py`; **NOT RUN**.
+- Folder endpoint, isolated-browser close-tab routing, and extension archive/ownership regression coverage updated in `tools/jarvis_app/test_server.py`; **NOT RUN**.
 - No Python tests, Windows launch, browser extension installation, Playwright launch, model inference, Gradle build, CI, or GitHub Actions workflow was run.
 - Browser Bridge 1.1.0 and the chat command route are source changes only; Chrome/Edge behavior is **NOT VERIFIED**.
 - The current 10-neuron signal preprocessor remains in the active desktop conversation path until the typed-evidence integration and persistence gates above are completed.
