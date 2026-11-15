@@ -97,18 +97,18 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun loadNeuron(neuronId: Int): AndroidNeuronState
     fun recordDialogueEligibility(
         contextId: String,
-        featureNeuronIds: List<Int>,
+        sourceNeuronIds: List<Int>,
         outputNeuronIds: List<Int>,
         preTimeNs: Long,
         postTimeNs: Long,
     ): Int
     fun applyDialogueReward(
         contextId: String,
-        featureNeuronIds: List<Int>,
+        sourceNeuronIds: List<Int>,
         outputRewards: Map<Int, Double>,
     ): AndroidDialogueRewardResult
-    fun dialogueSynapseWeight(featureNeuronId: Int, outputNeuronId: Int): Double
-    fun dialogueOutputScores(featureNeuronIds: List<Int>): Map<Int, Double>
+    fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double
+    fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double>
     fun commitTimestamp(
         timestampNs: Long,
         consumed: List<AndroidNeuronEvent>,
@@ -294,57 +294,57 @@ class AndroidSparseNeuronNetwork(
     @Synchronized
     fun recordDialogueEligibility(
         contextId: String,
-        featureNeuronIds: List<Int>,
+        sourceNeuronIds: List<Int>,
         outputNeuronIds: List<Int>,
         preTimeNs: Long,
         postTimeNs: Long,
     ): Int {
         validateDialogueContext(contextId)
-        val features = featureNeuronIds.distinct()
+        val sources = sourceNeuronIds.distinct()
         val outputs = outputNeuronIds.distinct()
-        require(features.isNotEmpty() && features.size <= MAX_DIALOGUE_FEATURES_PER_TURN)
-        require(features.all { it in 0 until DIALOGUE_FEATURE_NEURONS })
+        require(sources.isNotEmpty() && sources.size <= MAX_DIALOGUE_FEATURES_PER_TURN)
+        require(sources.all { it in DIALOGUE_HIDDEN_START until DIALOGUE_OUTPUT_START })
         require(outputs.isNotEmpty() && outputs.size <= DIALOGUE_OUTPUT_NEURONS)
-        require(outputs.all { it in DIALOGUE_FEATURE_NEURONS until MAX_NEURONS })
+        require(outputs.all { it in DIALOGUE_OUTPUT_START until MAX_NEURONS })
         require(preTimeNs >= 0L && postTimeNs >= preTimeNs)
         require(postTimeNs - preTimeNs <= MAX_DIALOGUE_PAIR_DELAY_NS)
-        return store.recordDialogueEligibility(contextId, features, outputs, preTimeNs, postTimeNs)
+        return store.recordDialogueEligibility(contextId, sources, outputs, preTimeNs, postTimeNs)
     }
 
-    /** Atomically apply delayed reward to selected output synapses and consume the turn trace. */
+    /** Apply delayed reward to hidden-to-output synapses and consume the turn trace. */
     @Synchronized
     fun applyDialogueReward(
         contextId: String,
-        featureNeuronIds: List<Int>,
+        sourceNeuronIds: List<Int>,
         outputRewards: Map<Int, Double>,
     ): AndroidDialogueRewardResult {
         validateDialogueContext(contextId)
-        val features = featureNeuronIds.distinct()
-        require(features.isNotEmpty() && features.size <= MAX_DIALOGUE_FEATURES_PER_TURN)
-        require(features.all { it in 0 until DIALOGUE_FEATURE_NEURONS })
+        val sources = sourceNeuronIds.distinct()
+        require(sources.isNotEmpty() && sources.size <= MAX_DIALOGUE_FEATURES_PER_TURN)
+        require(sources.all { it in DIALOGUE_HIDDEN_START until DIALOGUE_OUTPUT_START })
         require(outputRewards.isNotEmpty() && outputRewards.size <= DIALOGUE_OUTPUT_NEURONS)
-        require(outputRewards.keys.all { it in DIALOGUE_FEATURE_NEURONS until MAX_NEURONS })
+        require(outputRewards.keys.all { it in DIALOGUE_OUTPUT_START until MAX_NEURONS })
         require(outputRewards.values.all { it.isFinite() && it in -1.0..1.0 && it != 0.0 })
-        return store.applyDialogueReward(contextId, features, outputRewards)
+        return store.applyDialogueReward(contextId, sources, outputRewards)
     }
 
     @Synchronized
-    fun dialogueSynapseWeight(featureNeuronId: Int, outputNeuronId: Int): Double {
-        require(featureNeuronId in 0 until DIALOGUE_FEATURE_NEURONS)
-        require(outputNeuronId in DIALOGUE_FEATURE_NEURONS until MAX_NEURONS)
-        return store.dialogueSynapseWeight(featureNeuronId, outputNeuronId)
+    fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double {
+        require(sourceNeuronId in DIALOGUE_HIDDEN_START until DIALOGUE_OUTPUT_START)
+        require(outputNeuronId in DIALOGUE_OUTPUT_START until MAX_NEURONS)
+        return store.dialogueSynapseWeight(sourceNeuronId, outputNeuronId)
     }
 
     /**
-     * Read the learned four-way synaptic preference for the active feature set.
+     * Read the learned four-way synaptic preference for active hidden neurons.
      * Values are mean connection weights, not calibrated probabilities.
      */
     @Synchronized
-    fun dialogueOutputScores(featureNeuronIds: List<Int>): Map<Int, Double> {
-        val features = featureNeuronIds.distinct()
-        require(features.isNotEmpty() && features.size <= MAX_DIALOGUE_FEATURES_PER_TURN)
-        require(features.all { it in 0 until DIALOGUE_FEATURE_NEURONS })
-        return store.dialogueOutputScores(features)
+    fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double> {
+        val sources = hiddenNeuronIds.distinct()
+        require(sources.isNotEmpty() && sources.size <= MAX_DIALOGUE_FEATURES_PER_TURN)
+        require(sources.all { it in DIALOGUE_HIDDEN_START until DIALOGUE_OUTPUT_START })
+        return store.dialogueOutputScores(sources)
     }
 
     private fun validateDialogueContext(contextId: String) {
@@ -738,7 +738,7 @@ private class AndroidNeuronSqliteStore(
 
     override fun recordDialogueEligibility(
         contextId: String,
-        featureNeuronIds: List<Int>,
+        sourceNeuronIds: List<Int>,
         outputNeuronIds: List<Int>,
         preTimeNs: Long,
         postTimeNs: Long,
@@ -750,7 +750,7 @@ private class AndroidNeuronSqliteStore(
         try {
             db.delete("dialogue_eligibility", "created_at_ms<?", arrayOf((nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()))
             var inserted = 0
-            for (featureId in featureNeuronIds) {
+            for (featureId in sourceNeuronIds) {
                 for (outputId in outputNeuronIds) {
                     val connectionId = dialogueConnectionId(featureId, outputId)
                     val exists = db.rawQuery(
@@ -791,12 +791,12 @@ private class AndroidNeuronSqliteStore(
 
     override fun applyDialogueReward(
         contextId: String,
-        featureNeuronIds: List<Int>,
+        sourceNeuronIds: List<Int>,
         outputRewards: Map<Int, Double>,
     ): AndroidDialogueRewardResult {
         val db = writableDatabase
         val nowMs = System.currentTimeMillis()
-        val featureSet = featureNeuronIds.toHashSet()
+        val featureSet = sourceNeuronIds.toHashSet()
         db.beginTransaction()
         try {
             val expired = db.rawQuery(
@@ -863,14 +863,14 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
-    override fun dialogueOutputScores(featureNeuronIds: List<Int>): Map<Int, Double> {
-        if (featureNeuronIds.isEmpty() ||
-            featureNeuronIds.size > AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN
-        ) throw AndroidNeuronNetworkException("dialogue readout feature batch is outside its bound")
-        val placeholders = List(featureNeuronIds.size) { "?" }.joinToString(",")
-        val args = featureNeuronIds.map { it.toString() }.toTypedArray()
+    override fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double> {
+        if (hiddenNeuronIds.isEmpty() ||
+            hiddenNeuronIds.size > AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN
+        ) throw AndroidNeuronNetworkException("dialogue readout hidden batch is outside its bound")
+        val placeholders = List(hiddenNeuronIds.size) { "?" }.joinToString(",")
+        val args = hiddenNeuronIds.map { it.toString() }.toTypedArray()
         val scores = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).associate { index ->
-            AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index to 0.0
+            AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + index to 0.0
         }.toMutableMap()
         readableDatabase.rawQuery(
             "SELECT target_id, AVG(weight) FROM connections WHERE source_id IN ($placeholders) GROUP BY target_id",
@@ -897,7 +897,7 @@ private class AndroidNeuronSqliteStore(
     )
 
     private fun dialogueConnectionId(featureId: Int, outputId: Int): String {
-        val outputIndex = outputId - AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS
+        val outputIndex = outputId - AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
         return "dialog-feature-$featureId-output-$outputIndex"
     }
 
