@@ -108,6 +108,7 @@
       </form>
       <div id="browser-status" class="browser-status" role="status" aria-live="polite">Видимый браузер ещё не запущен.</div>
       <div class="browser-controls">
+        <a class="secondary-button browser-extension-download" href="/downloads/jarvis-browser-extension.zip" download="jarvis-browser-extension.zip">Скачать расширение для Chrome / Edge</a>
         <button id="browser-read" class="secondary-button" type="button" disabled>Прочитать открытую страницу</button>
         <button id="browser-takeover" class="secondary-button" type="button" disabled>Забрать управление</button>
         <button id="browser-stop" class="secondary-button" type="button" disabled>Закрыть браузер</button>
@@ -129,7 +130,8 @@
         </div>
         <p class="muted">JARVIS получит ограниченный фрагмент страницы как недоверенный контекст. Источник будет добавлен к сохранённому ответу.</p>
       </div>
-      <p class="muted">Первая версия выполняет только GET/HEAD навигацию. Отправка форм, покупки, сообщения, загрузка файлов и выполнение команд отключены. Для работы требуется установленный Playwright и Chromium; на ПК должна быть доступна графическая среда.</p>
+      <p class="muted">Расширение Chrome / Edge: нажмите «Скачать расширение», распакуйте ZIP, откройте chrome://extensions или edge://extensions, включите режим разработчика и выберите «Загрузить распакованное». Затем подключите расширение токеном из окна JARVIS Core. Оно открывает сайты/поиск в новых вкладках, а текст текущей страницы передаёт JARVIS только после вашего нажатия.</p>
+      <p class="muted">Первая версия видимого Chromium выполняет только GET/HEAD навигацию. Отправка форм, покупки, сообщения, загрузка файлов и выполнение команд отключены. Для этого отдельного браузера требуется установленный Playwright и Chromium; расширение работает с обычными вкладками Chrome / Edge без отдельного Chromium.</p>
     </section>
 
     <div class="columns">
