@@ -947,6 +947,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 ",out=" + activity.outgoingEventCount
                         })
                         append("; decision=").append(decision.status)
+                        append("; observed_eligible_synapses=").append(activatedConnectionIds.size)
                         decision.responseConstraints.firstOrNull { it.startsWith("Сравнение readout:") }?.let {
                             append("; ").append(it)
                         }
@@ -994,6 +995,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             messages = emptyList(),
                             isBusy = false,
                             error = null,
+                            hybridFeedbackAvailable = false,
+                            hybridFeedbackMessage = null,
                         ),
                     )
                 }
