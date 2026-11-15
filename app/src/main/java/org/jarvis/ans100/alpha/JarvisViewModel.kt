@@ -912,7 +912,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         val laneMarker = slot?.name?.lowercase()?.let { "-$it-" }
                         val candidateConnections = if (laneMarker == null) emptyList() else {
                             activatedConnectionIds.filter { it.contains(laneMarker) &&
-                                !it.startsWith("ans100-v4-candidate-input-") }
+                                !it.startsWith("ans100-v4-candidate-input-") }.take(2_000)
                         }
                         if (candidateConnections.isNotEmpty()) {
                             val saved = hybridNeuronNetwork.recordHybridCandidateEligibility(
