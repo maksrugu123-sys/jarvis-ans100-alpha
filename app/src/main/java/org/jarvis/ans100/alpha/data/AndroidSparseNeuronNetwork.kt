@@ -88,6 +88,7 @@ class AndroidNeuronBackpressureException(message: String) : AndroidNeuronNetwork
 internal interface AndroidNeuronStateStore : Closeable {
     fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double)
     fun initializeHybridTopology(topologyId: String, topologyVersion: Int, connections: List<AndroidNeuronConnection>): Boolean
+    fun matchesTopology(topologyId: String, topologyVersion: Int, neuronCount: Int, connectionCount: Int): Boolean
     fun initializeSparseDialogueNetwork(neuronCount: Int, featureNeuronCount: Int, delayNs: Long, weight: Double, inputToHiddenWeight: Double): Boolean
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
@@ -167,6 +168,35 @@ class AndroidSparseNeuronNetwork(
                 topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
                 connections = connections,
             )) hot.clear()
+    }
+
+    /**
+     * Atomically submits one turn's typed evidence batch only to the verified V2
+     * topology. A prior turn must be fully drained before the next turn is queued.
+     */
+    @Synchronized
+    fun scheduleHybridEvidence(batch: AndroidHybridEvidenceInputAdapter.ActivationBatch): Boolean {
+        if (batch.events.isEmpty()) return false
+        if (batch.turnId.isBlank() || batch.events.size > AndroidHybridEvidenceInputAdapter.MAX_ACTIVE_INPUTS_PER_TURN ||
+            batch.events.size != batch.trace.size ||
+            batch.events.any { it.timeNs != batch.timestampNs || it.targetNeuronId !in 0 until 1_200 } ||
+            batch.events.map { it.eventId }.toSet().size != batch.events.size ||
+            batch.events.map { it.targetNeuronId } != batch.trace.map { it.neuronId }
+        ) throw AndroidNeuronNetworkException("hybrid evidence batch is malformed or outside the input population")
+
+        if (!store.matchesTopology(
+                topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
+                topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
+                neuronCount = AndroidHybridTopologyV2.NEURON_COUNT,
+                connectionCount = AndroidHybridTopologyV2.connections().size,
+            )
+        ) throw AndroidNeuronNetworkException("network is not the initialized ANS-100 hybrid V2 topology")
+
+        if (store.stats(hot.size, hotSetCapacity).pendingEvents != 0) {
+            throw AndroidNeuronBackpressureException("previous hybrid turn must be drained before a new turn is queued")
+        }
+        scheduleInputs(batch.events)
+        return true
     }
 
     /**
@@ -577,6 +607,27 @@ private class AndroidNeuronSqliteStore(
         } finally {
             db.endTransaction()
         }
+    }
+
+    override fun matchesTopology(
+        topologyId: String,
+        topologyVersion: Int,
+        neuronCount: Int,
+        connectionCount: Int,
+    ): Boolean {
+        val db = readableDatabase
+        val actualNeurons = scalar(db, "SELECT COUNT(*) FROM neurons")
+        val actualConnections = scalar(db, "SELECT COUNT(*) FROM connections")
+        val actualId = db.rawQuery(
+            "SELECT value FROM metadata WHERE key='ans100_topology_id'", null,
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        val actualVersion = db.rawQuery(
+            "SELECT value FROM metadata WHERE key='ans100_topology_version'", null,
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0).toInt() else 0 }
+        return actualNeurons == neuronCount.toLong() &&
+            actualConnections == connectionCount.toLong() &&
+            actualId == topologyId &&
+            actualVersion == topologyVersion
     }
 
     override fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double) {
