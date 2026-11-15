@@ -2789,3 +2789,13 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Static inspection only. No Gradle build, unit tests, APK, inference, CI, GitHub Actions, or device lifecycle tests were run. Process-kill and real-device recovery behavior remain unverified.
 
 - Added conservative native-runtime recovery in `LiteRtLmResponseEngine`: a CPU generation failure now retires the cached engine; if the CPU retry after a GPU failure also fails, that fallback engine is retired too. Closing is best-effort so cleanup errors do not mask the generation error.
+
+## Android generation cancellation audit — 2026-11-15
+
+- Verified against the exact LiteRT-LM `v0.17.1` upstream Kotlin source that `Conversation.cancelProcess()` exists and is a no-op when no inference is active.
+- The current Android engine uses `runBlocking { sendMessageAsync(...).collect { ... } }` inside the single-thread `conversationExecutor` task. This blocks that executor for the whole stream, so queueing cancellation or engine close on the same executor cannot interrupt the active turn.
+- The LiteRT-LM `v0.17.1` Flow adapter's `awaitClose { }` is empty. Cancelling the collector alone therefore does not issue native cancellation; explicit `cancelProcess()` is required.
+- A cancelled Conversation must be retired and closed rather than reused. The native API documentation also warns that conversation state after cancellation is not suitable for reuse.
+- `onCleared()` currently queues engine close behind the active conversation task and then shuts down the executor. This is serialized and avoids closing the engine underneath active inference, but it is graceful cleanup, not immediate cancellation. Android process termination is ultimately handled by the OS.
+- No unsafe cross-thread call to `cancelProcess()`, `close()`, or `shutdownNow()` was introduced. Correct Stop/close behavior requires a suspend/callback-based generation refactor that lets the serialized executor process cancellation while the stream is suspended, followed by closing the cancelled Conversation before its Engine.
+- Static source audit only. No Gradle build, unit tests, APK, inference, CI, GitHub Actions, or device lifecycle tests were run.
