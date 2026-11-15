@@ -261,6 +261,9 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertIn('browserExtensionCommand("close-last-window")', app_js)
         self.assertIn('api("/api/folders"', app_js)
         self.assertIn('api("/api/browser/close-tab"', app_js)
+        self.assertIn("Закрыть последнюю вкладку, которую JARVIS открыл своей командой?", app_js)
+        self.assertIn("Закрыть последнее отдельное окно, которое JARVIS открыл своей командой?", app_js)
+        self.assertIn("Создай папку с именем", html)
 
         with urlopen(self.base_url + "/styles.css", timeout=3) as response:
             styles = response.read().decode("utf-8")
@@ -869,6 +872,11 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertIn("commandQueue", background)
         self.assertIn("chrome.tabs.remove(tab.id)", background)
         self.assertIn("chrome.windows.remove(win.id)", background)
+        self.assertIn("isJarvisOwnedWindow", background)
+        self.assertIn("ownedTabIds", background)
+        self.assertIn("tab.windowId", background)
+        self.assertIn("commandQueue", background)
+        self.assertNotIn('chrome.tabs.query({})', background)
         self.assertIn("JARVIS_LOCAL_CONSOLE", bridge)
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(manifest["version"], "1.1.1")
