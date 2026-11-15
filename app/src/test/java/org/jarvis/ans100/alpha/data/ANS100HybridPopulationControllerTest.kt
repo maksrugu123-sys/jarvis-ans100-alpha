@@ -30,37 +30,77 @@ class ANS100HybridPopulationControllerTest {
         },
     )
 
+    private fun decide(
+        evidence: TypedEvidenceBundle,
+        understanding: LocalUnderstanding,
+        telemetry: AndroidHybridRunTelemetry = telemetry(),
+        processed: Int = 20,
+        pending: Int = 0,
+        exhausted: Boolean = false,
+    ) = ANS100HybridPopulationController().decide(
+        evidence = evidence,
+        understanding = understanding,
+        telemetry = telemetry,
+        processedEventCount = processed,
+        pendingEvents = pending,
+        budgetExhausted = exhausted,
+    )
+
     @Test
-    fun selectsCoreCandidateOnlyAfterAllSevenPopulationsSpike() {
-        val (evidence, understanding) = evidence("Объясни, как работает сеть", "hybrid-gate-1")
-        val decision = ANS100HybridPopulationController().decide(
-            evidence = evidence,
-            understanding = understanding,
-            telemetry = telemetry(),
-            processedEventCount = 7,
-            pendingEvents = 0,
-            budgetExhausted = false,
-        )
+    fun comparesThreeCandidatesAndSelectsSupportedAnswerAfterAllPopulationsSpike() {
+        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-1")
+        val decision = decide(bundle, understanding)
 
         assertEquals(ANS100DecisionStatus.SELECTED, decision.status)
         assertEquals(ANS100TopologyVersion.HYBRID_SPARSE_POPULATIONS_V1, decision.topologyVersion)
         assertEquals(ANS100DecisionProducer.HYBRID_POPULATION_CONTROLLER_V1, decision.decisionProducer)
         assertEquals(7, decision.activePopulationIds.size)
-        assertEquals(0.0, decision.candidates.single().activation, 0.0)
-        decision.validateAgainst(evidence)
+        assertEquals(3, decision.candidates.size)
+        assertEquals("respond_to_original_request", decision.selectedCandidateId)
+        assertTrue(decision.candidates.all { it.activation == 0.0 })
+        decision.validateAgainst(bundle)
+    }
+
+    @Test
+    fun criticUsesClarificationEvidenceAgainstDirectAnswerCandidate() {
+        val (bundle, understanding) = evidence("Что это?", "hybrid-competition-2")
+        val decision = decide(bundle, understanding)
+        val clarificationId = bundle.records.single {
+            it.feature == EvidenceFeature.CORE_REQUIRES_CLARIFICATION_HINT
+        }.recordId
+        val answer = decision.candidates.single { it.candidateId == "respond_to_original_request" }
+        val clarification = decision.candidates.single { it.candidateId == "request_clarification" }
+
+        assertTrue(understanding.reasoningPlan.requiresClarification)
+        assertEquals(ANS100DecisionStatus.NEEDS_CLARIFICATION, decision.status)
+        assertTrue(clarificationId in answer.conflictingEvidenceIds)
+        assertTrue(clarificationId in clarification.supportingEvidenceIds)
+        assertEquals(null, decision.selectedCandidateId)
+    }
+
+    @Test
+    fun abstainsWhenCoreIntentTaskAndGoalEvidenceAreMissing() {
+        val (original, understanding) = evidence("Привет", "hybrid-competition-3")
+        val stripped = TypedEvidenceBundle(
+            turnId = original.turnId,
+            records = original.records.filterNot {
+                it.feature == EvidenceFeature.CORE_INTENT_HINT ||
+                    it.feature == EvidenceFeature.CORE_TASK_KIND_HINT ||
+                    it.feature == EvidenceFeature.CORE_PLAN_GOAL_HINT
+            },
+        )
+        val decision = decide(stripped, understanding)
+
+        assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
+        assertEquals(null, decision.selectedCandidateId)
+        assertTrue(decision.missingEvidence.contains("core_intent_or_task_kind_evidence_missing"))
+        assertTrue(decision.missingEvidence.contains("core_plan_goal_evidence_missing"))
     }
 
     @Test
     fun abstainsWhenAnyRequiredPopulationDoesNotSpike() {
-        val (evidence, understanding) = evidence("Объясни, как работает сеть", "hybrid-gate-2")
-        val decision = ANS100HybridPopulationController().decide(
-            evidence = evidence,
-            understanding = understanding,
-            telemetry = telemetry("critic_uncertainty"),
-            processedEventCount = 6,
-            pendingEvents = 0,
-            budgetExhausted = false,
-        )
+        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-4")
+        val decision = decide(bundle, understanding, telemetry("critic_uncertainty"))
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
         assertTrue(decision.abstentionReason!!.contains("critic_uncertainty"))
@@ -70,15 +110,8 @@ class ANS100HybridPopulationControllerTest {
 
     @Test
     fun abstainsWhenTheEventQueueHasNotDrained() {
-        val (evidence, understanding) = evidence("Что дальше?", "hybrid-gate-3")
-        val decision = ANS100HybridPopulationController().decide(
-            evidence = evidence,
-            understanding = understanding,
-            telemetry = telemetry(),
-            processedEventCount = 100,
-            pendingEvents = 3,
-            budgetExhausted = false,
-        )
+        val (bundle, understanding) = evidence("Что дальше?", "hybrid-competition-5")
+        val decision = decide(bundle, understanding, pending = 3)
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
         assertTrue(decision.computeBudgetExhausted)
@@ -86,20 +119,11 @@ class ANS100HybridPopulationControllerTest {
     }
 
     @Test
-    fun preservesCoreClarificationInsteadOfSelectingAnAnswer() {
-        val (evidence, understanding) = evidence("Что это?", "hybrid-gate-4")
-        val decision = ANS100HybridPopulationController().decide(
-            evidence = evidence,
-            understanding = understanding,
-            telemetry = telemetry(),
-            processedEventCount = 7,
-            pendingEvents = 0,
-            budgetExhausted = false,
-        )
+    fun preservesExplicitBudgetExhaustion() {
+        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-6")
+        val decision = decide(bundle, understanding, exhausted = true)
 
-        assertTrue(understanding.reasoningPlan.requiresClarification)
-        assertEquals(ANS100DecisionStatus.NEEDS_CLARIFICATION, decision.status)
-        assertTrue(!decision.abstentionReason.isNullOrBlank())
-        assertEquals(null, decision.selectedCandidateId)
+        assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
+        assertTrue(decision.computeBudgetExhausted)
     }
 }
