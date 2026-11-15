@@ -131,7 +131,7 @@ class HybridANS100RuntimeInputTests(unittest.TestCase):
         self.assertEqual(status["topology_id"], "ans100-hybrid-v2")
         self.assertEqual(status["neuron_count"], 10_000)
         self.assertEqual(status["connection_count"], 25_500)
-        self.assertEqual(status["input_contract"], "ANDROID_TYPED_EVIDENCE_V1")
+        self.assertEqual(status["input_contract"], "JARVIS_TYPED_EVIDENCE_V1")
         self.assertTrue(status["active_in_chat"])
         self.assertFalse(status["learning_enabled"])
         self.assertFalse(status["persistent_state"])
