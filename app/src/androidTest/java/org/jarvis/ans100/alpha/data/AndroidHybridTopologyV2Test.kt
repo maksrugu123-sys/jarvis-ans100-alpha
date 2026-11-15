@@ -92,6 +92,82 @@ class AndroidHybridTopologyV2Test {
     }
 
     @Test
+    fun schedulesOnlyVerifiedV2EvidenceAndRequiresPreviousTurnToDrain() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 16).use { network ->
+            fun batch(turnId: String, timestampNs: Long): AndroidHybridEvidenceInputAdapter.ActivationBatch {
+                val record = TypedEvidenceRecord(
+                    recordId = "user.message.text:0",
+                    turnId = turnId,
+                    feature = EvidenceFeature.USER_MESSAGE_TEXT,
+                    source = EvidenceSourceKind.USER_MESSAGE,
+                    status = EvidenceStatus.USER_PROVIDED,
+                    value = EvidenceValue.Text("hello"),
+                    activation = 1.0,
+                    provenanceRef = "turn:$turnId:user_message",
+                )
+                return AndroidHybridEvidenceInputAdapter.createBatch(
+                    TypedEvidenceBundle(turnId = turnId, records = listOf(record)),
+                    timestampNs,
+                )
+            }
+
+            assertTrue(network.scheduleHybridEvidence(batch("turn-a", 1L)))
+            assertEquals(1, network.stats().pendingEvents)
+
+            val firstPass = network.run(maxEvents = 64, maxTimestamps = 1)
+            assertEquals(1, firstPass.processedEvents)
+            assertTrue(network.stats().pendingEvents > 0)
+
+            var rejectedWhilePreviousTurnPending = false
+            try {
+                network.scheduleHybridEvidence(batch("turn-b", 10_000_000L))
+            } catch (_: AndroidNeuronBackpressureException) {
+                rejectedWhilePreviousTurnPending = true
+            }
+            assertTrue(rejectedWhilePreviousTurnPending)
+
+            network.run(maxEvents = 64, maxTimestamps = 16)
+            assertEquals(0, network.stats().pendingEvents)
+            assertTrue(network.scheduleHybridEvidence(batch("turn-b", 20_000_000L)))
+            assertEquals(1, network.stats().pendingEvents)
+        }
+    }
+
+    @Test
+    fun legacyDialogueDatabaseCannotAcceptHybridV2Evidence() {
+        val legacyName = "ans100-legacy-reject-hybrid-${System.nanoTime()}.db"
+        try {
+            AndroidSparseNeuronNetwork(context, legacyName).use { legacy ->
+                legacy.initializeSparseDialogueNetwork()
+                val record = TypedEvidenceRecord(
+                    recordId = "user.message.text:0",
+                    turnId = "legacy-test",
+                    feature = EvidenceFeature.USER_MESSAGE_TEXT,
+                    source = EvidenceSourceKind.USER_MESSAGE,
+                    status = EvidenceStatus.USER_PROVIDED,
+                    value = EvidenceValue.Text("hello"),
+                    activation = 1.0,
+                    provenanceRef = "turn:legacy-test:user_message",
+                )
+                val batch = AndroidHybridEvidenceInputAdapter.createBatch(
+                    TypedEvidenceBundle(turnId = "legacy-test", records = listOf(record)),
+                    1L,
+                )
+                var rejected = false
+                try {
+                    legacy.scheduleHybridEvidence(batch)
+                } catch (_: AndroidNeuronNetworkException) {
+                    rejected = true
+                }
+                assertTrue(rejected)
+                assertEquals(75_984, legacy.stats().connectionCount)
+            }
+        } finally {
+            context.deleteDatabase(legacyName)
+        }
+    }
+
+    @Test
     fun hybridV2UsesItsOwnDatabaseAndDoesNotReplaceLegacyTopology() {
         val legacyName = "ans100-legacy-isolation-${System.nanoTime()}.db"
         try {
