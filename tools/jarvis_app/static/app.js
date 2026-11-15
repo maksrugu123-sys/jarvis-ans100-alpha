@@ -1377,6 +1377,74 @@ $("#chat-form").addEventListener("submit", async event => {
 });
 let browserState = null;
 
+const ordinaryBrowserTabHandles = [];
+const ordinaryBrowserWindowHandles = [];
+const browserExtensionRequests = new Map();
+
+window.addEventListener("message", event => {
+  if (event.source !== window || event.origin !== window.location.origin) return;
+  const message = event.data;
+  if (!message || message.source !== "JARVIS_BROWSER_EXTENSION" ||
+      message.type !== "result" || typeof message.requestId !== "string") return;
+  const pending = browserExtensionRequests.get(message.requestId);
+  if (!pending) return;
+  browserExtensionRequests.delete(message.requestId);
+  window.clearTimeout(pending.timeout);
+  if (message.ok) pending.resolve(message.result || {});
+  else pending.reject(new Error(message.error || "Команда расширения не выполнена."));
+});
+
+function browserExtensionCommand(action, payload = {}) {
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      browserExtensionRequests.delete(requestId);
+      const error = new Error("Расширение JARVIS Browser Bridge не подключено к этому окну.");
+      error.code = "extension_bridge_unavailable";
+      reject(error);
+    }, 900);
+    browserExtensionRequests.set(requestId, {resolve, reject, timeout});
+    window.postMessage({
+      source: "JARVIS_LOCAL_CONSOLE",
+      type: "extension-command",
+      requestId,
+      action,
+      payload,
+    }, window.location.origin);
+  });
+}
+
+async function openOrdinaryBrowser(url, kind = "tab") {
+  const action = kind === "window" ? "open-window" : "open-tab";
+  try {
+    await browserExtensionCommand(action, {url});
+    return "extension";
+  } catch (error) {
+    if (error.code !== "extension_bridge_unavailable") throw error;
+    const features = kind === "window" ? "popup=yes,width=1200,height=820" : undefined;
+    const handle = window.open(url, "_blank", features);
+    if (!handle) {
+      throw new Error("Браузер заблокировал новую вкладку или окно. Разрешите всплывающие окна для JARVIS.");
+    }
+    try { handle.opener = null; } catch { /* Keep the newly opened page isolated. */ }
+    (kind === "window" ? ordinaryBrowserWindowHandles : ordinaryBrowserTabHandles).push(handle);
+    return "browser_fallback";
+  }
+}
+
+function closeFallbackHandle(handles) {
+  while (handles.length) {
+    const handle = handles.pop();
+    try {
+      if (!handle.closed) {
+        handle.close();
+        return true;
+      }
+    } catch { /* Drop stale or cross-origin window references. */ }
+  }
+  return false;
+}
+
 function publicBrowserCommandUrl(rawTarget) {
   const target = rawTarget.trim().replace(/[.,!?]+$/u, "");
   const knownSites = {
@@ -1410,19 +1478,88 @@ async function routeBrowserCommand(rawText) {
   const command = rawText.trim();
   const normalBrowserSearch = command.match(/^(?:найди|поищи)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?браузере\s+(.+)$/iu);
   const normalBrowserOpen = command.match(/^(?:открой|перейди)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?браузере\s+(.+)$/iu);
+  const normalBrowserWindowOpen = command.match(/^(?:открой|запусти)\s+в\s+(?:новом|отдельном)\s+окне\s+(.+)$/iu);
   if (normalBrowserSearch) {
     const query = normalBrowserSearch[1].trim();
     if (!query || query.length > 500) throw new Error("Поисковый запрос должен содержать не более 500 символов.");
-    window.open("https://www.bing.com/search?q=" + encodeURIComponent(query), "_blank", "noopener,noreferrer");
-    setNotice("Поиск передан обычному браузеру. Если вкладка не появилась, разрешите всплывающие окна для JARVIS.", "success");
+    const url = "https://www.bing.com/search?q=" + encodeURIComponent(query);
+    const mode = await openOrdinaryBrowser(url, "tab");
+    setNotice(mode === "extension"
+      ? "Поиск открыт в реальной вкладке Chrome/Edge через расширение JARVIS."
+      : "Поиск открыт в браузере, где запущен JARVIS. Без расширения JARVIS не может управлять этой вкладкой.", "success");
     return true;
   }
   if (normalBrowserOpen) {
     const url = publicBrowserCommandUrl(normalBrowserOpen[1]);
-    window.open(url, "_blank", "noopener,noreferrer");
-    setNotice("Сайт передан обычному браузеру. Если вкладка не появилась, разрешите всплывающие окна для JARVIS.", "success");
+    const mode = await openOrdinaryBrowser(url, "tab");
+    setNotice(mode === "extension"
+      ? "Сайт открыт в реальной вкладке Chrome/Edge через расширение JARVIS."
+      : "Сайт открыт в браузере, где запущен JARVIS. Без расширения JARVIS не может управлять этой вкладкой.", "success");
     return true;
   }
+  if (normalBrowserWindowOpen) {
+    const url = publicBrowserCommandUrl(normalBrowserWindowOpen[1]);
+    const mode = await openOrdinaryBrowser(url, "window");
+    setNotice(mode === "extension"
+      ? "Открыто отдельное окно Chrome/Edge, созданное JARVIS."
+      : "Окно открыто браузером, где запущен JARVIS. Без расширения доступ к окну ограничен.", "success");
+    return true;
+  }
+
+  const folderMatch = command.match(/^(?:создай|создать)\s+папку(?:\s+с\s+именем)?\s+(.+)$/iu);
+  if (folderMatch) {
+    const rawName = folderMatch[1].trim();
+    const name = rawName.replace(/^(["'“”])(.+)\1$/u, "$2");
+    const result = await api("/api/folders", {name});
+    setNotice("Папка «" + result.name + "» создана в workspace JARVIS: " + result.relative_path, "success");
+    return true;
+  }
+
+  const closeTabMatch = command.match(/^(?:закрой|закрыть)\s+(?:(?:последнюю|открытую|созданную|мою)\s+)?вкладку(?:\s+обычного\s+браузера)?$/iu);
+  const closeWindowMatch = command.match(/^(?:закрой|закрыть)\s+(?:(?:последнее|открытое|созданное|моё)\s+)?окно(?:\s+(?:обычного\s+)?браузера)?$/iu);
+  if (closeTabMatch) {
+    if (!window.confirm("Закрыть последнюю вкладку, которую JARVIS открыл своей командой? Другие вкладки не затрагиваются.")) return true;
+    try {
+      await browserExtensionCommand("close-last-tab");
+      setNotice("Последняя вкладка, открытая JARVIS, закрыта в Chrome/Edge.", "success");
+    } catch (error) {
+      if (error.code !== "extension_bridge_unavailable") throw error;
+      if (closeFallbackHandle(ordinaryBrowserTabHandles)) {
+        setNotice("Закрыта вкладка, ранее открытая командой JARVIS.", "success");
+      } else if (browserState?.browser_open) {
+        const result = await api("/api/browser/close-tab", {});
+        renderBrowserState(result);
+        $("#browser-page-text").textContent = "Текущая вкладка отдельного Chromium закрыта.";
+        $("#browser-page-text").classList.add("empty");
+        setNotice("Закрыта текущая вкладка отдельного браузера JARVIS.", "success");
+      } else {
+        throw new Error("Нет отслеживаемой вкладки JARVIS. Для управления вкладками обычного Chrome/Edge установите расширение.");
+      }
+    }
+    return true;
+  }
+  if (closeWindowMatch) {
+    if (!window.confirm("Закрыть последнее отдельное окно, которое JARVIS открыл своей командой? Остальные окна браузера не затрагиваются.")) return true;
+    try {
+      await browserExtensionCommand("close-last-window");
+      setNotice("Последнее окно, открытое JARVIS, закрыто в Chrome/Edge.", "success");
+    } catch (error) {
+      if (error.code !== "extension_bridge_unavailable") throw error;
+      if (closeFallbackHandle(ordinaryBrowserWindowHandles)) {
+        setNotice("Закрыто отдельное окно, ранее открытое командой JARVIS.", "success");
+      } else if (browserState?.browser_open) {
+        await api("/api/browser/stop", {});
+        await refreshBrowserState();
+        $("#browser-page-text").textContent = "Отдельное окно Chromium JARVIS закрыто.";
+        $("#browser-page-text").classList.add("empty");
+        setNotice("Закрыто отдельное окно Chromium JARVIS.", "success");
+      } else {
+        throw new Error("Нет окна, открытого JARVIS. Для управления отдельными окнами Chrome/Edge установите расширение.");
+      }
+    }
+    return true;
+  }
+
   const searchMatch = command.match(/^(?:открой(?:\s+браузер)?\s+и\s+)?(?:найди|поищи|поиск)\s+(?:в\s+интернете\s+)?(.+)$/iu);
   const openMatch = command.match(/^(?:открой|перейди\s+на)\s+(?:сайт\s+)?(.+)$/iu);
   const readMatch = command.match(/^(?:прочитай|прочти)\s+(?:открытую\s+)?страницу$/iu);
