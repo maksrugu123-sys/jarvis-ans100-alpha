@@ -27,7 +27,7 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn("Start-Process", source)
         self.assertIn("/api/health", source)
         self.assertIn("startup.log", source)
-        self.assertIn("Press Enter", source)
+        self.assertIn("Нажмите Enter", source)
         self.assertNotIn("run_jarvis_core.bat", source)
 
     def test_posix_only_policy_registry_does_not_break_windows_imports(self):
