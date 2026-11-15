@@ -97,6 +97,7 @@ class PromptContextBudgeterTest {
         val neural = DialogueNeuralAnalysis(
             networkNeuronCount = 10_000,
             activeFeatureCount = 18,
+            activeHiddenNeuronCount = 9,
             processedEvents = 22,
             processedNeuronBatches = 20,
             outputSpikeCount = 4,
@@ -125,6 +126,7 @@ class PromptContextBudgeterTest {
 
         assertTrue(plan.systemInstruction.contains("10000 nodes"))
         assertTrue(plan.systemInstruction.contains("active text-feature inputs=18"))
+        assertTrue(plan.systemInstruction.contains("active hidden neurons=9"))
         assertTrue(plan.systemInstruction.contains("not general semantic reasoning"))
         assertTrue(plan.systemInstruction.contains("greeting=0.750"))
         assertTrue(plan.systemInstruction.contains("not probabilities"))
