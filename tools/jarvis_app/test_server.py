@@ -251,6 +251,8 @@ class LocalConsoleHttpTests(unittest.TestCase):
             app_js = response.read().decode("utf-8")
         self.assertIn("normalBrowserSearch", app_js)
         self.assertIn("publicBrowserCommandUrl", app_js)
+        self.assertIn("Команда браузера", app_js)
+        self.assertIn("Команды браузера работают отдельно", app_js)
         self.assertIn('window.open("https://www.bing.com/search?q="', app_js)
 
         with urlopen(self.base_url + "/styles.css", timeout=3) as response:
