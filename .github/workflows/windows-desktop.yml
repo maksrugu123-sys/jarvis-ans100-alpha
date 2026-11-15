@@ -24,7 +24,84 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  windows-compatibility:
+    name: Windows compatibility (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-2025]
+    timeout-minutes: 25
+    steps:
+      - name: Check out selected branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packager
+        run: python -m pip install --upgrade pip "pyinstaller>=6.10,<7"
+
+      - name: Check Windows packaging contract
+        run: python -m unittest tools.jarvis_app.test_windows_packaging -v
+
+      - name: Build portable Windows application
+        run: python -m PyInstaller --noconfirm --clean packaging/windows/JARVIS.spec
+
+      - name: Smoke-test packaged server
+        shell: pwsh
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "jarvis-windows-compat-smoke"
+          New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
+          $data = Join-Path $smokeRoot "local-console.jpvr"
+          $workspace = Join-Path $smokeRoot "workspace.jpvr"
+          $auth = Join-Path $smokeRoot "auth-token"
+          $stdout = Join-Path $smokeRoot "stdout.log"
+          $stderr = Join-Path $smokeRoot "stderr.log"
+          $exe = (Resolve-Path "dist/JARVIS/JARVIS.exe").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList @(
+            "--port", "18766",
+            "--platform", "desktop",
+            "--data", $data,
+            "--workspace-file", $workspace,
+            "--auth-file", $auth
+          ) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 45; $i++) {
+              if ($proc.HasExited) {
+                $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "JARVIS exited before health check (code $($proc.ExitCode)). STDOUT: $out STDERR: $err"
+              }
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:18766/api/health" -TimeoutSec 2
+                if ($health.status -eq "ok" -and $health.platform -eq "desktop") {
+                  $ready = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) {
+              $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+              $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+              throw "JARVIS did not become healthy within 45 seconds. STDOUT: $out STDERR: $err"
+            }
+            Write-Host "Packaged JARVIS smoke test passed on ${{ matrix.runner }}."
+          } finally {
+            if (-not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force
+              $proc.WaitForExit()
+            }
+          }
+
   build-windows:
+    needs: windows-compatibility
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -127,5 +204,5 @@ jobs:
             Коммит: `${{ github.sha }}`
 
             Это переносимая папка приложения в ZIP, не установщик.
-            Успешный Windows smoke-test подтверждает запуск локального API на runner; Windows 10 и интеграция с Chrome/Edge требуют отдельной проверки.
+            Проверки упаковки и запуска выполняются на Windows Server 2022 и 2025 runners. Целевые настольные системы: Windows 10 22H2 и Windows 11 23H2/24H2 x64; проверка на физическом ПК Windows 11 и интеграция Chrome/Edge остаются отдельным этапом.
           files: dist/jarvis-windows-portable.zip
