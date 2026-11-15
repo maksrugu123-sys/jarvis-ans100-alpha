@@ -1041,7 +1041,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             ),
                         )
                     }
-                    NativeDialogueFeedbackContext(contextId, hiddenSpikes, analysis)
+                    NativeDialogueFeedbackContext(
+                        contextId,
+                        if (eligibilityCount > 0) hiddenSpikes else emptyList(),
+                        analysis,
+                    )
                 } catch (error: Exception) {
                     mainHandler.post {
                         val current = mutableState.value
