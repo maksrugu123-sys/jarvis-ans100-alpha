@@ -367,11 +367,6 @@ def _neuron_id_for(record: Mapping[str, object]) -> int:
     feature_index = _FEATURE_INDEX.get(feature)
     if feature_index is None:
         raise ValueError("feature is not assigned to the hybrid input population")
-    if not ordinal_text.isdigit():
-        raise ValueError("evidence record ordinal is invalid")
-    ordinal = int(ordinal_text)
-    if not 0 <= ordinal < _MAX_ORDINAL_PER_FEATURE:
-        raise ValueError("evidence feature ordinal exceeds its reserved input slots")
     value = record.get("value")
     channel = 1 if isinstance(value, bool) and value else 0
     neuron_id = feature_index * _SLOT_WIDTH_PER_FEATURE + ordinal * 2 + channel
