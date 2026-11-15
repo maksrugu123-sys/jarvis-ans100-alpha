@@ -65,8 +65,6 @@ object AndroidHybridTopologyV2 {
         val evidence = populations[0]
         val association = populations[1]
         val working = populations[2]
-        val candidate = populations[3]
-        val critic = populations[4]
         val goal = populations[5]
 
         val generalAssociation = slice(association, 0, 1_000, "association_general")
