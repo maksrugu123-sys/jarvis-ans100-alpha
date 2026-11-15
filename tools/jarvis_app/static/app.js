@@ -1345,8 +1345,50 @@ $("#chat-form").addEventListener("submit", async event => {
 });
 let browserState = null;
 
+function publicBrowserCommandUrl(rawTarget) {
+  const target = rawTarget.trim().replace(/[.,!?]+$/u, "");
+  const knownSites = {
+    youtube: "https://www.youtube.com/",
+    google: "https://www.google.com/",
+    bing: "https://www.bing.com/",
+    github: "https://github.com/",
+    wikipedia: "https://www.wikipedia.org/",
+    minecraft: "https://www.minecraft.net/",
+  };
+  let raw = knownSites[target.toLocaleLowerCase()] || target;
+  if (!/^[a-z][a-z0-9+.-]*:/iu.test(raw)) raw = "https://" + raw;
+  let parsed;
+  try { parsed = new URL(raw); }
+  catch { throw new Error("Не удалось распознать публичный адрес сайта."); }
+  const host = parsed.hostname.toLowerCase();
+  const localHost = host === "localhost" || host.endsWith(".localhost") ||
+    host.endsWith(".local") || host.endsWith(".internal") ||
+    host === "0.0.0.0" || host === "::1" || host.startsWith("fc") || host.startsWith("fe80:");
+  const ipv4 = /^\\d{1,3}(?:\\.\\d{1,3}){3}$/u.test(host);
+  if (!["http:", "https:"].includes(parsed.protocol) || !host.includes(".") ||
+      parsed.username || parsed.password || localHost || ipv4) {
+    throw new Error("Разрешены только публичные доменные адреса HTTP/HTTPS без IP-адресов, логинов и локальных хостов.");
+  }
+  return parsed.href;
+}
+
 async function routeBrowserCommand(rawText) {
   const command = rawText.trim();
+  const normalBrowserSearch = command.match(/^(?:найди|поищи)\\s+(?:в\\s+)?(?:моём\\s+)?(?:обычном\\s+)?(?:chrome|edge|браузере)\\s+(.+)$/iu);
+  const normalBrowserOpen = command.match(/^(?:открой|перейди)\\s+(?:в\\s+)?(?:моём\\s+)?(?:обычном\\s+)?(?:chrome|edge|браузере)\\s+(.+)$/iu);
+  if (normalBrowserSearch) {
+    const query = normalBrowserSearch[1].trim();
+    if (!query || query.length > 500) throw new Error("Поисковый запрос должен содержать не более 500 символов.");
+    window.open("https://www.bing.com/search?q=" + encodeURIComponent(query), "_blank", "noopener,noreferrer");
+    setNotice("Поиск передан обычному браузеру. Если вкладка не появилась, разрешите всплывающие окна для JARVIS.", "success");
+    return true;
+  }
+  if (normalBrowserOpen) {
+    const url = publicBrowserCommandUrl(normalBrowserOpen[1]);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setNotice("Сайт передан обычному браузеру. Если вкладка не появилась, разрешите всплывающие окна для JARVIS.", "success");
+    return true;
+  }
   const searchMatch = command.match(/^(?:открой(?:\s+браузер)?\s+и\s+)?(?:найди|поищи|поиск)\s+(?:в\s+интернете\s+)?(.+)$/iu);
   const openMatch = command.match(/^(?:открой|перейди\s+на)\s+(?:сайт\s+)?(.+)$/iu);
   const readMatch = command.match(/^(?:прочитай|прочти)\s+(?:открытую\s+)?страницу$/iu);
