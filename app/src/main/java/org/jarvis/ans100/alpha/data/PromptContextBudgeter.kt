@@ -73,14 +73,12 @@ internal object PromptContextBudgeter {
         val historyPairs = recentHistory.takeLast(MAX_HISTORY_MESSAGES)
             .chunked(2)
             .asReversed()
-        var stoppedAtHistoryLimit = false
         for (pair in historyPairs) {
             val boundedPair = pair.map { it.copy(text = it.text.take(MAX_HISTORY_MESSAGE_CHARS)) }
             val candidate = boundedPair + selectedHistory
             if (estimate(renderSystem(), candidate) <= INPUT_ESTIMATE_LIMIT) {
                 selectedHistory.addAll(0, boundedPair)
             } else {
-                stoppedAtHistoryLimit = true
                 break
             }
         }
