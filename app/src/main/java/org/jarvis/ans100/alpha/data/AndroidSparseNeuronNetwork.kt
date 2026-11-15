@@ -107,6 +107,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double)
     fun initializeHybridTopology(topologyId: String, topologyVersion: Int, connections: List<AndroidNeuronConnection>): Boolean
     fun matchesTopology(topologyId: String, topologyVersion: Int, neuronCount: Int, connectionCount: Int): Boolean
+    fun resetHybridTurnState(modelTimeNs: Long): Boolean
     fun initializeSparseDialogueNetwork(neuronCount: Int, featureNeuronCount: Int, delayNs: Long, weight: Double, inputToHiddenWeight: Double): Boolean
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
@@ -186,6 +187,36 @@ class AndroidSparseNeuronNetwork(
                 topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
                 connections = connections,
             )) hot.clear()
+    }
+
+    /**
+     * Starts a new isolated hybrid turn. Residual membrane/adaptation/refractory
+     * state is reset only after the previous event queue has drained; topology,
+     * learned connection weights and monotonic spike sequences are preserved.
+     */
+    @Synchronized
+    fun beginHybridTurn(batch: AndroidHybridEvidenceInputAdapter.ActivationBatch): Boolean {
+        if (batch.events.isEmpty()) return false
+        if (!store.matchesTopology(
+                topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
+                topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
+                neuronCount = AndroidHybridTopologyV2.NEURON_COUNT,
+                connectionCount = AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT,
+            )
+        ) throw AndroidNeuronNetworkException("network is not the initialized ANS-100 hybrid V2 topology")
+        if (store.stats(hot.size, hotSetCapacity).pendingEvents != 0) {
+            throw AndroidNeuronBackpressureException("previous hybrid turn must be drained before state isolation")
+        }
+        val currentTime = store.stats(hot.size, hotSetCapacity).currentTimeNs
+        if (batch.timestampNs <= currentTime) {
+            throw AndroidNeuronNetworkException("hybrid turn timestamp must be later than the committed model clock")
+        }
+        if (!store.resetHybridTurnState(currentTime)) {
+            throw AndroidNeuronNetworkException("hybrid turn state could not be isolated")
+        }
+        hot.clear()
+        scheduleHybridEvidence(batch)
+        return true
     }
 
     /**
@@ -703,6 +734,27 @@ private class AndroidNeuronSqliteStore(
             actualConnections == connectionCount.toLong() &&
             actualId == topologyId &&
             actualVersion == topologyVersion
+    }
+
+    override fun resetHybridTurnState(modelTimeNs: Long): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val pending = scalar(db, "SELECT COUNT(*) FROM events")
+            val clock = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'")
+            if (pending != 0L || modelTimeNs != clock) return false
+            val values = ContentValues().apply {
+                put("potential", 0.0)
+                put("adaptation", 0.0)
+                put("last_update_ns", modelTimeNs)
+                put("refractory_until_ns", modelTimeNs)
+            }
+            db.update("neurons", values, null, null)
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
     }
 
     override fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double) {
