@@ -1151,7 +1151,6 @@ private class AndroidNeuronSqliteStore(
 
     companion object {
         private const val DATABASE_VERSION = 2
-        private const val DATABASE_UNUSED_PLACEHOLDER = 0
         private const val MAX_DIALOGUE_ELIGIBILITY_ROWS = 50_000L
         private const val MAX_DIALOGUE_ELIGIBILITY_AGE_MS = 5 * 60 * 1_000L
         private const val DIALOGUE_ELIGIBILITY_TAU_NS = 20_000_000.0
