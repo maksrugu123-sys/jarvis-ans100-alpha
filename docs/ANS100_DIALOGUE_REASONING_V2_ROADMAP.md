@@ -1,0 +1,110 @@
+# ANS-100 Dialogue Reasoning V2
+
+Status: architecture and implementation contract; not a claim that V2 is implemented.
+
+Target branch: `experiment/jarvis-integrated-prototype-v1`
+
+## Goal
+
+Make ANS-100 a measurable analysis and decision-support stage before the language model. Qwen remains responsible for fluent natural-language realization. ANS-100 must contribute structured, inspectable evidence that changes the prompt in a useful way; it must not be represented as independently understanding arbitrary language until controlled evaluations demonstrate that capability.
+
+## Verified baseline
+
+The Android conversation path currently:
+- obtains up to 128 active feature-neuron IDs from the dialogue feature classifier;
+- schedules external events only for those feature neurons;
+- runs a persistent 10,000-node sparse LIF-DT network;
+- reads four legacy output units (greeting, question, thanks, farewell);
+- records eligibility traces and applies feedback-driven R-STDP rewards;
+- serializes a numeric network summary into the context passed to the response engine.
+
+The current 10,000-node layout is 9,996 text-feature input nodes plus four output/readout nodes. The four outputs are not a general reasoning network. The feature IDs are an encoded representation, not semantic understanding. The separate four-class classifier and the sparse network are distinct components and their outputs must remain separately labelled.
+
+## V2 architecture
+
+### 1. Semantic evidence encoder
+
+Create a deterministic, bounded Android encoder that converts already-available, explicitly named upstream evidence into typed features. Candidate sources:
+- the user's raw message (length, punctuation, language-independent structural signals);
+- Core understanding output (intent, entities, ambiguity/clarification flags, when present);
+- reasoning-plan metadata (goal, ordered step types, dependency/unknown counts, when present);
+- conversation context and user-approved memory references.
+
+Do not pretend that hashed token IDs or character counts encode meaning. Every feature must carry a source and feature-family identifier. Missing Core evidence must remain missing, not be fabricated. Bound feature count and payload size per turn.
+
+### 2. Sparse recurrent ANS-100 network
+
+Evolve the current fixed input-to-four-output classifier in small, reviewable stages:
+- retain the 10,000-node budget and sparse bounded connectivity;
+- introduce typed populations for input/evidence, association, working-state, candidate, critic/uncertainty, and readout roles;
+- use recurrent/feedback paths only with explicit fan-in/fan-out and event/time budgets;
+- preserve ALIF-DT state, synaptic delay, eligibility traces, and JPVR/JNVM persistence;
+- activate a bounded subset per request; never allocate all-to-all connectivity or run an unbounded event queue;
+- initialize role-specific topology and weights deterministically with a versioned seed so experiments are reproducible;
+- version the network schema and provide a safe migration/reset path before changing persisted topology.
+
+Do not count placeholder nodes as reasoning capacity. A node population counts as participating only when it receives meaningful input, propagates signals through documented connections, and can affect a measured readout.
+
+### 3. Structured decision/readout
+
+Replace the four-label-only handoff gradually with a versioned decision object containing:
+- interpreted task/intent evidence and its provenance;
+- candidate response goals or solution paths;
+- supporting and conflicting evidence references;
+- uncertainty and missing-information indicators;
+- suggested answer structure and constraints;
+- bounded memory references (never raw unapproved private memory);
+- network version, active populations, event budget, and confidence calibration metadata.
+
+The readout must be evidence-bearing and bounded. Do not describe raw synaptic means as probabilities. If the network has no reliable candidate, it must explicitly abstain and let Core/Qwen use the ordinary safe path.
+
+### 4. Qwen handoff
+
+The response pipeline should pass the structured ANS-100 decision alongside Core understanding, reasoning-plan evidence, approved memory, and the original user request. Qwen should:
+- answer the user's actual request;
+- follow the selected response goal/structure when supported;
+- preserve uncertainty and ask a clarification when required;
+- never treat an ANS-100 suggestion as verified fact or an authorization to perform an action.
+
+Keep the original user message available. Neural context is advisory, not a replacement for the message or safety checks.
+
+### 5. Learning
+
+Keep supervised labels and explicit user feedback distinct from inferred reward:
+- record the exact decision version and trace IDs used for each turn;
+- reward only the relevant trace and only from explicit feedback or verified outcomes;
+- prevent duplicate, stale, or cross-turn rewards;
+- use bounded updates and persist learning metadata;
+- do not claim Qwen weights are trained by ANS-100.
+
+## Evaluation gates
+
+Before enabling a new reasoning population in the default Android chat path, add deterministic unit tests and offline evaluation fixtures for:
+1. identical input + identical network version/seed => identical initial topology and readout;
+2. missing or malformed Core evidence => safe abstention, no fabricated feature;
+3. input cannot directly stimulate output/critic populations;
+4. propagation respects event, timestamp, fan-in, fan-out, and memory budgets;
+5. output changes when learned weights/evidence change, and remains unchanged for irrelevant perturbations;
+6. reward affects only the matching turn's eligibility trace;
+7. persistence/reload preserves topology version, state, and weights;
+8. decision serialization stays within prompt budget and does not expose unapproved memory;
+9. ablation: compare Core+Qwen against Core+ANS-100+Qwen on held-out tasks, with accuracy, calibration, latency, memory, and energy metrics.
+
+No claim of improved reasoning is accepted without the ablation results. Android device performance must be measured on real target hardware before increasing defaults.
+
+## Implementation sequence
+
+1. **V2 contract and baseline audit** — this document; no runtime behavior change.
+2. **Typed evidence model and encoder** — derive features from existing Core/understanding outputs; keep the legacy network as a side channel.
+3. **Decision object and prompt handoff** — add a versioned, bounded, provenance-preserving object; preserve fallback behavior.
+4. **Network topology V2** — only after tests and a migration design; introduce populations and bounded recurrent paths.
+5. **Learning/trace audit** — prove reward attribution and persistence across turns.
+6. **Offline evaluation and Android profiling** — enable by default only after measurable gains and acceptable resource use.
+
+## Non-goals and safeguards
+
+- This work does not create consciousness or human-like thought.
+- 10,000 nodes do not imply 10,000 simultaneously active neurons.
+- Qwen remains the language generator; ANS-100 does not modify Qwen's weights.
+- Do not run builds, tests, CI, or Android workflows unless explicitly approved by the project owner.
+- Do not modify `main`; all work stays on the target experiment branch until explicitly approved.
