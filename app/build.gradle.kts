@@ -34,6 +34,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.17.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation(kotlin("test-junit"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test:core:1.6.1")
