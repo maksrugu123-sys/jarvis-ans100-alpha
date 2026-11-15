@@ -297,7 +297,6 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             ConversationPanel(
                                 state = ui.conversation,
                                 onClear = viewModel::clearConversation,
-                                onRewardDialogFeature = viewModel::applyDialogRewardFeedback,
                                 glowEnabled = glowEnabled,
                                 modifier = Modifier.weight(1f).fillMaxWidth(),
                             )
@@ -2344,7 +2343,6 @@ private fun ChatTitleBar(
 private fun ConversationPanel(
     state: LocalConversationUiState,
     onClear: () -> Unit,
-    onRewardDialogFeature: (Double) -> Unit,
     glowEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -2418,21 +2416,6 @@ private fun ConversationPanel(
                                     color = if (userMessage) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.primary)
                                 MessageBodyText(message.text)
-                                if (!userMessage && message.id == latestAssistantId) {
-                                    if (state.lastRewardedAssistantMessageId == message.id) {
-                                        Text("Оценка сохранена", style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    } else {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            TextButton(onClick = { onRewardDialogFeature(-1.0) }, enabled = !state.isBusy) {
-                                                Text("👎 Неудачно")
-                                            }
-                                            TextButton(onClick = { onRewardDialogFeature(1.0) }, enabled = !state.isBusy) {
-                                                Text("👍 Полезно")
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
