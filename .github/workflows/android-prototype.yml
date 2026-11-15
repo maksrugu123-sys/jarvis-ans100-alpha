@@ -1,6 +1,9 @@
 name: Android first prototype
 
 on:
+  push:
+    branches:
+      - experiment/jarvis-integrated-prototype-v1
   workflow_dispatch:
 
 permissions:
