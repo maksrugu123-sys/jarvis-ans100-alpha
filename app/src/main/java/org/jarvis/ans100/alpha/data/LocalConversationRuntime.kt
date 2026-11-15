@@ -245,8 +245,10 @@ data class DialogueNeuralAnalysis(
     val statePersisted: Boolean,
     val activeHiddenNeuronCount: Int = 0,
     val networkOutputScores: Map<String, Double> = emptyMap(),
-    /** Descriptive seven-population activity from the experimental hybrid sidecar. */
+    /** Descriptive seven-population activity from the hybrid dialogue graph. */
     val hybridTelemetrySummary: String? = null,
+    /** Prebuilt, turn-bound decision package from the hybrid population controller. */
+    val hybridQwenHandoff: ANS100QwenHandoff? = null,
 ) {
     init {
         require(networkNeuronCount in 0..10_000)
