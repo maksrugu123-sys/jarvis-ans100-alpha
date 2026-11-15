@@ -5000,3 +5000,18 @@ The Qwen handoff builder preserves the exact original user message, validates th
 **Integration boundary:** this is an additive contract/builder only. `LiteRtLmResponseEngine` and `PromptContextBudgeter` are not changed; the live conversation still does not call this builder. No neural population decision producer has been connected yet. The next integration step must be behind a disabled-by-default rollout gate and retain the old response path as fallback.
 
 **Verification:** source and test files were committed; no tests/builds/CI/workflows/APK/device run. Static readback remains pending.
+
+
+## 3.84 Phase 3 — gated decision-to-Qwen wiring (implemented, disabled by default)
+
+Added:
+- `app/src/main/java/org/jarvis/ans100/alpha/data/ANS100DecisionPolicy.kt`
+- `app/src/test/java/org/jarvis/ans100/alpha/data/ANS100DecisionPolicyTest.kt`
+
+The policy adapter deliberately labels its producer `CORE_POLICY_V1` and its topology `LEGACY_DIALOGUE_READOUT_V1`. It uses the existing Core clarification signal and original-message evidence to create a bounded response/clarification decision. The existing sparse neural readout contributes only its processed-event telemetry; its label or score is not converted into a semantic answer or candidate confidence. This is not the future hybrid population controller and is not independent neural reasoning.
+
+`LiteRtLmResponseEngine` now has a persisted opt-in flag, `ans100_decision_handoff_enabled`, defaulting to false. When explicitly enabled in code, requests no longer than the typed-evidence limit are passed through the typed evidence encoder, conservative Core policy and Qwen handoff builder. The prompt budgeter adds the handoff only if it fits the existing estimated context budget; otherwise the previous prompt composition remains in effect. Requests over the typed-evidence bound also retain the previous path. The model-missing fallback path is unchanged.
+
+The flag has no user-facing settings control yet. No rollout is enabled by default. Existing app behavior is therefore unchanged unless a caller explicitly enables the experimental flag.
+
+**Verification:** source and test changes were fetched back and inspected statically. Tests were added but NOT run. No Gradle build, APK/AAB, CI, GitHub Actions, benchmark or device run was performed.
