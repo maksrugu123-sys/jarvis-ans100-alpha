@@ -373,8 +373,31 @@ class LiteRtLmLocalEngine:
                     if isinstance(raw_scores, Mapping):
                         for candidate in allowed_candidates:
                             value = raw_scores.get(candidate)
-                            if isinstance(value, int) and not isinstance(value, bool):
-                                safe_scores[candidate] = min(100_000, max(-100_000, value))
+                            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                                numeric = float(value)
+                                if 0.0 <= numeric <= 1.0:
+                                    safe_scores[candidate] = numeric
+                    candidate_ids = {
+                        "respond_to_original_request",
+                        "request_clarification",
+                        "abstain_without_supported_candidate",
+                    }
+                    selected_id = ans100_context.get("selected_candidate_id")
+                    winner_id = ans100_context.get("winner_candidate_id")
+                    if not isinstance(selected_id, str) or selected_id not in candidate_ids:
+                        selected_id = None
+                    if not isinstance(winner_id, str) or winner_id not in candidate_ids:
+                        winner_id = None
+                    raw_margin = ans100_context.get("winner_margin")
+                    safe_margin = (
+                        float(raw_margin)
+                        if isinstance(raw_margin, (int, float)) and not isinstance(raw_margin, bool)
+                        and 0.0 <= float(raw_margin) <= 1.0 else 0.0
+                    )
+                    safe_list = lambda key: [
+                        item[:64] for item in ans100_context.get(key, [])[:7]
+                        if isinstance(item, str)
+                    ] if isinstance(ans100_context.get(key), list) else []
                     safe_ans100 = {
                         "runtime_version": "JARVIS_ANS100_HYBRID_V4",
                         "topology_id": "ans100-hybrid-v2",
@@ -386,8 +409,21 @@ class LiteRtLmLocalEngine:
                         "selected_candidate": selected,
                         "readout_spike_counts": safe_readouts,
                         "candidate_signal_scores": safe_scores,
+                        "winner_candidate_id": winner_id,
+                        "selected_candidate_id": selected_id,
+                        "decision_status": (
+                            ans100_context.get("decision_status")
+                            if ans100_context.get("decision_status") in {"selected", "needs_clarification", "abstained"}
+                            else "abstained"
+                        ),
+                        "winner_margin": safe_margin,
+                        "active_population_ids": safe_list("active_population_ids"),
+                        "missing_populations": safe_list("missing_populations"),
+                        "readout_mismatch_slots": safe_list("readout_mismatch_slots"),
+                        "uncertainty": safe_list("uncertainty"),
                         "readout_complete": ans100_context.get("readout_complete") is True,
                         "event_budget_exhausted": ans100_context.get("event_budget_exhausted") is True,
+                        "compute_budget_exhausted": ans100_context.get("compute_budget_exhausted") is True,
                         "pending_events_at_budget_boundary": bounded_count(ans100_context.get("pending_events_at_budget_boundary")),
                         "turn_boundary_events_discarded": ans100_context.get("turn_boundary_events_discarded") is True,
                         "decision_reason": str(ans100_context.get("decision_reason", ""))[:80],
