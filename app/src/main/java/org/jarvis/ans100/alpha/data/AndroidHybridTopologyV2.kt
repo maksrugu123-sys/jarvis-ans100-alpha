@@ -7,16 +7,20 @@ import android.content.Context
  *
  * This is a topology/bootstrap contract only. It does not claim semantic learning,
  * useful reasoning, calibrated confidence, or runtime participation by every unit.
+ *
+ * Version 3 raises feed-forward pulses to the LIF threshold so a single verified
+ * upstream spike can cross each declared stage. Recurrent/feedback edges remain
+ * subthreshold modulators; they cannot sustain an unbounded spike loop on their own.
  */
 object AndroidHybridTopologyV2 {
     const val TOPOLOGY_ID = "ans100-hybrid-v2"
-    const val TOPOLOGY_VERSION = 2
-    const val DATABASE_NAME = "jarvis_ans100_hybrid_v2.db"
+    const val TOPOLOGY_VERSION = 3
+    const val DATABASE_NAME = "jarvis_ans100_hybrid_v3.db"
     const val NEURON_COUNT = 10_000
     const val MAX_CONNECTION_COUNT = 100_000
     const val EXPECTED_CONNECTION_COUNT = 27_000
     const val CONNECTION_DELAY_NS = 1_000_000L
-    const val FEED_FORWARD_WEIGHT = 0.35
+    const val FEED_FORWARD_WEIGHT = 1.0
     const val RECURRENT_WEIGHT = 0.18
 
     data class Population(
@@ -39,7 +43,7 @@ object AndroidHybridTopologyV2 {
     )
 
     /**
-     * Opens a dedicated V2 SQLite namespace. The existing legacy dialogue DB is
+     * Opens a dedicated hybrid V3 SQLite namespace. The existing legacy dialogue DB is
      * never migrated, cleared, or reused by this factory.
      */
     fun open(
