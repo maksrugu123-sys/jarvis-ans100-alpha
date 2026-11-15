@@ -807,7 +807,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(blocked.exception.code, 403)
 
     def test_extension_rejects_local_page_before_reading_or_sending_content(self):
-        with self.assertRaisesRegex(LocalConsoleError, "local and internal"):
+        with self.assertRaisesRegex(LocalConsoleError, "Private, loopback and reserved"):
             self.service.ask_about_extension_page(
                 "Summarize this page",
                 self.service.workspace_revision,
