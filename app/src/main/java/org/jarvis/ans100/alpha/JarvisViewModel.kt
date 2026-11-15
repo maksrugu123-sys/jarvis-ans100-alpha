@@ -934,7 +934,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             "Сохранённая диалоговая сеть имеет неожиданное число нейронов: ${prior.neuronCount}.",
                         )
                     }
-                    if (prior.currentTimeNs > Long.MAX_VALUE - DIALOGUE_INPUT_STEP_NS - AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS) {
+                    if (prior.currentTimeNs > Long.MAX_VALUE - DIALOGUE_INPUT_STEP_NS -
+                        2L * AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS) {
                         throw IllegalStateException("Модельные часы JNVM достигли предельного значения.")
                     }
                     val nextTime = prior.currentTimeNs + DIALOGUE_INPUT_STEP_NS
@@ -1023,8 +1024,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 nativeNetworkStats = stats,
                                 nativeNetworkError = null,
                                 nativeNetworkMessage =
-                                    "ANS-100: признаков ${featureEvents.size}, обработано событий ${result.processedEvents}, " +
-                                        "импульсов 4 legacy output-узлов ${outputSpikes.size}, eligibility-связей ${eligibilityCount}. " +
+                                    "ANS-100: входных признаков ${featureEvents.size}, активных скрытых нейронов ${hiddenSpikes.size}, " +
+                                        "выходных импульсов ${outputSpikes.size}, обработано событий ${result.processedEvents}, " +
+                                        "eligibility-связей ${eligibilityCount}. " +
                                         "Числовой результат передан языковой модели как ограниченный контекст; это ещё не самостоятельное мышление.",
                             ),
                         )
