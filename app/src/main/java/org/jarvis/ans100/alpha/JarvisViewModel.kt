@@ -680,9 +680,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 val hybridTelemetrySummary = if (!clean.startsWith("/")) {
                     runHybridDialoguePass(clean)
                 } else null
-                val hybridTelemetrySummary = if (!clean.startsWith("/")) {
-                    runHybridDialoguePass(clean)
-                } else null
                 val neuralAnalysisForModel = DialogueNeuralAnalysis(
                     networkNeuronCount = 0,
                     activeFeatureCount = 0,
