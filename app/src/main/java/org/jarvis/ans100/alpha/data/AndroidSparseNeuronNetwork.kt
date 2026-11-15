@@ -905,10 +905,10 @@ private class AndroidNeuronSqliteStore(
                 "SELECT value FROM metadata WHERE key='dialogue_topology_version'",
                 null,
             ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
-            if (topologyVersion > AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION) {
+            if (topologyVersion > AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION.toLong()) {
                 throw AndroidNeuronNetworkException("dialogue topology version is newer than this application")
             }
-            if (topologyVersion == AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION) {
+            if (topologyVersion == AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION.toLong()) {
                 val actualConnections = scalar(db, "SELECT COUNT(*) FROM connections")
                 if (actualConnections != connectionCount.toLong()) {
                     throw AndroidNeuronNetworkException("versioned dialogue topology has an unexpected connection count")
