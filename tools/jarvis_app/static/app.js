@@ -1262,10 +1262,10 @@ let browserState = null;
 
 async function routeBrowserCommand(rawText) {
   const command = rawText.trim();
-  const searchMatch = command.match(/^(?:открой(?:\\s+браузер)?\\s+и\\s+)?(?:найди|поищи|поиск)\\s+(?:в\\s+интернете\\s+)?(.+)$/iu);
-  const openMatch = command.match(/^(?:открой|перейди\\s+на)\\s+(?:сайт\\s+)?(.+)$/iu);
-  const readMatch = command.match(/^(?:прочитай|прочти)\\s+(?:открытую\\s+)?страницу$/iu);
-  const launchMatch = command.match(/^(?:открой|запусти)\\s+браузер$/iu);
+  const searchMatch = command.match(/^(?:открой(?:\s+браузер)?\s+и\s+)?(?:найди|поищи|поиск)\s+(?:в\s+интернете\s+)?(.+)$/iu);
+  const openMatch = command.match(/^(?:открой|перейди\s+на)\s+(?:сайт\s+)?(.+)$/iu);
+  const readMatch = command.match(/^(?:прочитай|прочти)\s+(?:открытую\s+)?страницу$/iu);
+  const launchMatch = command.match(/^(?:открой|запусти)\s+браузер$/iu);
   if (!searchMatch && !openMatch && !readMatch && !launchMatch) return false;
 
   if (browserState?.paused) {
@@ -1311,8 +1311,8 @@ async function routeBrowserCommand(rawText) {
       minecraft: "https://www.minecraft.net/",
     };
     const url = knownSites[target.toLocaleLowerCase()] ||
-      (/^https?:\\/\\//iu.test(target) ? target :
-        /^(?:www\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)+(?:\\/[^\\s]*)?$/iu.test(target)
+      (/^https?:\/\//iu.test(target) ? target :
+        /^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s]*)?$/iu.test(target)
           ? "https://" + target : null);
     if (!url) {
       throw new Error("Укажите адрес сайта или известное имя: YouTube, Google, GitHub, Wikipedia.");
