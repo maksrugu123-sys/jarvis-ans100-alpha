@@ -975,12 +975,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     } else {
                         nativeNeuronNetwork.dialogueOutputScores(hiddenSpikes)
                     }
-                    val networkOutputScores = mapOf(
-                        "greeting" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START] ?: 0.0),
-                        "question" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 1] ?: 0.0),
-                        "thanks" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 2] ?: 0.0),
-                        "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 3] ?: 0.0),
-                    )
+                    val networkOutputScores = if (rawReadout.isEmpty()) {
+                        emptyMap()
+                    } else {
+                        mapOf(
+                            "greeting" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START] ?: 0.0),
+                            "question" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 1] ?: 0.0),
+                            "thanks" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 2] ?: 0.0),
+                            "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 3] ?: 0.0),
+                        )
+                    }
                     val hiddenSpikeTimeNs = nextTime + AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS
                     val eligibilityCount = if (hiddenSpikes.isEmpty() || outputSpikes.isEmpty()) {
                         0
