@@ -1,4 +1,4 @@
-"""Focused tests for JARVIS Core turn orchestration and bounded memory recall."""
+"""Focused tests for JARVIS Core turn orchestration and bounded memory recall. NOT RUN."""
 from __future__ import annotations
 
 import unittest
