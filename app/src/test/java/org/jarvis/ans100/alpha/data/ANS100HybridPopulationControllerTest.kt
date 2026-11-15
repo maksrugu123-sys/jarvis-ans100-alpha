@@ -104,7 +104,7 @@ class ANS100HybridPopulationControllerTest {
         val decision = decide(bundle, understanding, emitted = emptySet())
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
-        assertTrue(decision.missingEvidence.any { it.startsWith("candidate_readout_missing:") })
+        assertTrue(decision.missingEvidence.any { it.startsWith("candidate_readout_mismatch:") })
         assertEquals(null, decision.selectedCandidateId)
     }
 
