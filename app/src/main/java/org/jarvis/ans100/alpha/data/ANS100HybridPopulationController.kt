@@ -1,23 +1,27 @@
 package org.jarvis.ans100.alpha.data
 
 /**
- * Bounded candidate competition for the current hybrid dialogue path.
+ * Reads candidate-specific neural output lanes from the version-4 sparse graph.
  *
- * Important boundary: candidate scores below are transparent controller rules
- * over typed Core evidence, NOT learned neural scores. The seven-population
- * graph is a required participation gate; its current generic topology does
- * not yet encode candidate identity or provide candidate-specific readout.
+ * Candidate support/conflict labels are supplied by typed Core heuristics.
+ * ANS-100 propagates them through isolated lanes and the controller compares
+ * actual spiking readout neurons. These counts are not learned probabilities.
  */
 class ANS100HybridPopulationController {
-    private data class CandidateScore(
+    private data class CandidateReadout(
         val candidate: ANS100Candidate,
-        val score: Int,
-    )
+        val supportSpikes: Int,
+        val conflictSpikes: Int,
+    ) {
+        val score: Int get() = supportSpikes - conflictSpikes
+        val hasOutput: Boolean get() = supportSpikes + conflictSpikes > 0
+    }
 
     fun decide(
         evidence: TypedEvidenceBundle,
         understanding: LocalUnderstanding,
         telemetry: AndroidHybridRunTelemetry,
+        emittedSpikeNeuronIds: Set<Int>,
         processedEventCount: Int,
         pendingEvents: Int,
         budgetExhausted: Boolean,
@@ -25,12 +29,13 @@ class ANS100HybridPopulationController {
         require(processedEventCount >= 0)
         require(pendingEvents >= 0)
         require(evidence.turnId.isNotBlank())
+        require(emittedSpikeNeuronIds.size <= 10_000)
 
         require(telemetry.topologyId == AndroidHybridTopologyV2.TOPOLOGY_ID) {
             "decision requires the ANS-100 hybrid topology"
         }
         require(telemetry.topologyVersion == AndroidHybridTopologyV2.TOPOLOGY_VERSION) {
-            "decision requires the current hybrid topology version"
+            "decision requires the current candidate-lane topology version"
         }
 
         val requiredPopulationIds = AndroidHybridTopologyV2.populations.map { it.id }
@@ -77,112 +82,142 @@ class ANS100HybridPopulationController {
         }?.value as? EvidenceValue.Category)?.value
         val ambiguousContext = understanding.refersToPreviousContext &&
             (contextStatus == "ambiguous" || contextStatus == "unavailable")
-        val intentValue = (intentRecord?.value as? EvidenceValue.Category)?.value
-        val taskKindValue = (taskKindRecord?.value as? EvidenceValue.Category)?.value
-        val reliableHeuristicIntent = intentValue != null &&
-            intentValue != "statement_or_unknown" &&
-            taskKindValue != null &&
-            understanding.intentConfidence >= 0.4
-        val hasIntent = reliableHeuristicIntent
-        val hasGoal = goalRecord != null && reliableHeuristicIntent
-        val questionMark = (evidence.records.singleOrNull {
-            it.feature == EvidenceFeature.MESSAGE_HAS_QUESTION_MARK
-        }?.value as? EvidenceValue.BooleanValue)?.value == true
+        val needsClarification = requiresClarification || ambiguousContext
+
+        val candidateSignals = ANS100CandidateSlotContract.Slot.values().associateWith { slot ->
+            ANS100CandidateSlotContract.Polarity.values().associateWith { polarity ->
+                val feature = ANS100CandidateSlotContract.evidenceFeature(slot, polarity)
+                val record = evidence.records.singleOrNull { it.feature == feature }
+                    ?: throw IllegalArgumentException("missing candidate signal: ${feature.stableId}")
+                require(record.source == EvidenceSourceKind.CORE_REASONING_PLAN)
+                require(record.status == EvidenceStatus.HEURISTIC)
+                val active = (record.value as? EvidenceValue.BooleanValue)?.value
+                    ?: throw IllegalArgumentException("candidate signal must be boolean")
+                require((record.activation > 0.0) == active) {
+                    "candidate signal activation does not match its boolean value"
+                }
+                record
+            }
+        }
 
         val answerSupport = listOfNotNull(
             userRecord.recordId,
             intentRecord?.recordId,
             taskKindRecord?.recordId,
             goalRecord?.recordId,
+            candidateSignals.getValue(ANS100CandidateSlotContract.Slot.ANSWER)
+                .getValue(ANS100CandidateSlotContract.Polarity.SUPPORT).recordId,
         ).distinct().take(ANS100Candidate.MAX_EVIDENCE_REFS)
+        val answerConflict = listOf(
+            candidateSignals.getValue(ANS100CandidateSlotContract.Slot.ANSWER)
+                .getValue(ANS100CandidateSlotContract.Polarity.CONFLICT).recordId,
+        )
         val clarificationSupport = listOfNotNull(
             userRecord.recordId,
             clarificationRecord.recordId.takeIf { requiresClarification },
             clarificationQuestionRecord?.recordId,
+            candidateSignals.getValue(ANS100CandidateSlotContract.Slot.CLARIFICATION)
+                .getValue(ANS100CandidateSlotContract.Polarity.SUPPORT).recordId,
         ).distinct().take(ANS100Candidate.MAX_EVIDENCE_REFS)
-
-        val answerCandidate = ANS100Candidate(
-            candidateId = "respond_to_original_request",
-            summary = "Подготовить ответ на исходное сообщение на основании доступных данных",
-            supportingEvidenceIds = answerSupport,
-            conflictingEvidenceIds = if (requiresClarification) {
-                listOf(clarificationRecord.recordId)
-            } else emptyList(),
+        val clarificationConflict = listOf(
+            candidateSignals.getValue(ANS100CandidateSlotContract.Slot.CLARIFICATION)
+                .getValue(ANS100CandidateSlotContract.Polarity.CONFLICT).recordId,
         )
-        val clarificationCandidate = ANS100Candidate(
-            candidateId = "request_clarification",
-            summary = "Запросить недостающий контекст вместо догадки",
-            supportingEvidenceIds = clarificationSupport,
-            conflictingEvidenceIds = if (!requiresClarification) {
-                listOf(clarificationRecord.recordId)
-            } else emptyList(),
+        val abstainSupport = listOf(
+            userRecord.recordId,
+            candidateSignals.getValue(ANS100CandidateSlotContract.Slot.ABSTAIN)
+                .getValue(ANS100CandidateSlotContract.Polarity.SUPPORT).recordId,
         )
-        val abstainCandidate = ANS100Candidate(
-            candidateId = "abstain_without_supported_candidate",
-            summary = "Воздержаться от выбора ответа при недостаточной опоре",
-            supportingEvidenceIds = listOf(userRecord.recordId),
+        val abstainConflict = listOf(
+            candidateSignals.getValue(ANS100CandidateSlotContract.Slot.ABSTAIN)
+                .getValue(ANS100CandidateSlotContract.Polarity.CONFLICT).recordId,
         )
 
-        // Critic rules are deliberately explicit and inspectable. These integer
-        // points are ranking heuristics, never probabilities or neural activations.
-        val answerScore = (if (hasIntent) 2 else 0) +
-            (if (hasGoal) 1 else 0) +
-            (if (questionMark) 1 else 0) +
-            (if (requiresClarification) -6 else 0)
-        val clarificationScore = (if (requiresClarification) 6 else 0) +
-            (if (ambiguousContext) 2 else 0) +
-            (if (clarificationQuestionRecord != null) 1 else 0)
-        val abstainScore = (if (!hasIntent && !hasGoal) 5 else 0) +
-            (if (understanding.intentConfidence < 0.4) 1 else 0)
-
-        val ranked = listOf(
-            CandidateScore(answerCandidate, answerScore),
-            CandidateScore(clarificationCandidate, clarificationScore),
-            CandidateScore(abstainCandidate, abstainScore),
+        val candidates = listOf(
+            ANS100Candidate(
+                candidateId = ANS100CandidateSlotContract.Slot.ANSWER.candidateId,
+                summary = "Подготовить ответ на исходное сообщение на основании доступных данных",
+                supportingEvidenceIds = answerSupport,
+                conflictingEvidenceIds = answerConflict,
+            ),
+            ANS100Candidate(
+                candidateId = ANS100CandidateSlotContract.Slot.CLARIFICATION.candidateId,
+                summary = "Запросить недостающий контекст вместо догадки",
+                supportingEvidenceIds = clarificationSupport,
+                conflictingEvidenceIds = clarificationConflict,
+            ),
+            ANS100Candidate(
+                candidateId = ANS100CandidateSlotContract.Slot.ABSTAIN.candidateId,
+                summary = "Воздержаться от выбора ответа при недостаточной опоре",
+                supportingEvidenceIds = abstainSupport,
+                conflictingEvidenceIds = abstainConflict,
+            ),
         )
-        val winner = ranked.maxOf { it.score }
-        val chosen = when {
-            clarificationScore > 0 && clarificationScore == winner -> "request_clarification"
-            answerScore > abstainScore && answerScore == winner -> "respond_to_original_request"
-            else -> "abstain_without_supported_candidate"
+
+        val readouts = candidates.mapIndexed { index, candidate ->
+            val slot = ANS100CandidateSlotContract.Slot.values()[index]
+            CandidateReadout(
+                candidate = candidate,
+                supportSpikes = ANS100CandidateSlotContract.readoutSpikeCount(
+                    emittedSpikeNeuronIds, slot, ANS100CandidateSlotContract.Polarity.SUPPORT,
+                ),
+                conflictSpikes = ANS100CandidateSlotContract.readoutSpikeCount(
+                    emittedSpikeNeuronIds, slot, ANS100CandidateSlotContract.Polarity.CONFLICT,
+                ),
+            )
         }
+        val missingReadoutSlots = readouts.filterNot { it.hasOutput }.map { it.candidate.candidateId }
+        val bestScore = readouts.maxOf { it.score }
+        val topReadouts = readouts.filter { it.score == bestScore }
+        val uniqueWinner = topReadouts.singleOrNull()?.takeIf { bestScore > 0 }
+        val selectedId = uniqueWinner?.candidate?.candidateId
 
         val uncertainty = linkedSetOf(ANS100UncertaintyKind.UNCALIBRATED_MODEL_OUTPUT)
-        if (missingPopulations.isNotEmpty()) uncertainty += ANS100UncertaintyKind.MISSING_EVIDENCE
-        if (requiresClarification || ambiguousContext) uncertainty += ANS100UncertaintyKind.AMBIGUOUS_REQUEST
+        if (missingPopulations.isNotEmpty() || missingReadoutSlots.isNotEmpty()) {
+            uncertainty += ANS100UncertaintyKind.MISSING_EVIDENCE
+        }
+        if (needsClarification) uncertainty += ANS100UncertaintyKind.AMBIGUOUS_REQUEST
         if (exhausted) uncertainty += ANS100UncertaintyKind.BUDGET_EXHAUSTED
-        if (!hasIntent || !hasGoal) uncertainty += ANS100UncertaintyKind.MISSING_EVIDENCE
+        if (uniqueWinner == null) uncertainty += ANS100UncertaintyKind.CONFLICTING_EVIDENCE
 
         val status = when {
-            exhausted || missingPopulations.isNotEmpty() -> ANS100DecisionStatus.ABSTAINED
-            chosen == "request_clarification" -> ANS100DecisionStatus.NEEDS_CLARIFICATION
-            chosen == "respond_to_original_request" -> ANS100DecisionStatus.SELECTED
+            exhausted || missingPopulations.isNotEmpty() || missingReadoutSlots.isNotEmpty() ->
+                ANS100DecisionStatus.ABSTAINED
+            selectedId == ANS100CandidateSlotContract.Slot.ANSWER.candidateId ->
+                ANS100DecisionStatus.SELECTED
+            selectedId == ANS100CandidateSlotContract.Slot.CLARIFICATION.candidateId ->
+                ANS100DecisionStatus.NEEDS_CLARIFICATION
             else -> ANS100DecisionStatus.ABSTAINED
         }
         val abstentionReason = when {
             exhausted -> "Ограниченный вычислительный бюджет исчерпан; обработка запроса не завершена."
             missingPopulations.isNotEmpty() ->
                 "Не подтверждён полный проход по группам ANS-100: " + missingPopulations.joinToString(", ")
+            missingReadoutSlots.isNotEmpty() ->
+                "Не получен отдельный нейронный readout для кандидатов: " + missingReadoutSlots.joinToString(", ")
             status == ANS100DecisionStatus.NEEDS_CLARIFICATION -> clarificationQuestion
+            status == ANS100DecisionStatus.ABSTAINED && selectedId == ANS100CandidateSlotContract.Slot.ABSTAIN.candidateId ->
+                "Нейронный readout поддержал воздержание: недостаточно оснований для прямого ответа."
             status == ANS100DecisionStatus.ABSTAINED ->
-                "Недостаточно типизированных оснований для выбора ответа; требуется дополнительный контекст."
+                "Нейронные readout-кандидаты дали ничью или не получили положительной поддержки."
             else -> null
         }
 
-        val candidates = ranked.map { it.candidate }
+        val readoutSummary = readouts.joinToString("; ") {
+            "${it.candidate.candidateId}:support=${it.supportSpikes},conflict=${it.conflictSpikes},score=${it.score}"
+        }
         val decision = ANS100Decision(
             turnId = evidence.turnId,
             topologyVersion = ANS100TopologyVersion.HYBRID_SPARSE_POPULATIONS_V1,
             decisionProducer = ANS100DecisionProducer.HYBRID_POPULATION_CONTROLLER_V1,
             status = status,
             candidates = candidates,
-            selectedCandidateId = if (status == ANS100DecisionStatus.SELECTED) chosen else null,
+            selectedCandidateId = if (status == ANS100DecisionStatus.SELECTED) selectedId else null,
             abstentionReason = abstentionReason,
             uncertainty = uncertainty,
             missingEvidence = buildList {
-                if (!hasIntent) add("core_intent_or_task_kind_evidence_missing")
-                if (!hasGoal) add("core_plan_goal_evidence_missing")
                 missingPopulations.forEach { add("hybrid_population_not_reached:$it") }
+                missingReadoutSlots.forEach { add("candidate_readout_missing:$it") }
             }.take(ANS100Decision.MAX_CONSTRAINTS),
             responseGoal = when (status) {
                 ANS100DecisionStatus.NEEDS_CLARIFICATION -> "Запросить уточнение: $clarificationQuestion"
@@ -194,9 +229,9 @@ class ANS100HybridPopulationController {
             },
             responseConstraints = listOf(
                 "Исходное сообщение пользователя — главный источник запроса",
-                "Ранжирование контроллера: answer=$answerScore, clarify=$clarificationScore, abstain=$abstainScore; целые эвристические баллы, не вероятности",
-                "Кандидаты и баллы сформированы прозрачными правилами над эвристическим Core evidence, а не обученной семантической сетью",
-                "Популяционная активность подтверждает прохождение вычислительного пути, но пока не ранжирует кандидатов по смыслу",
+                "Результат выбран по отдельным спайкам readout-коридоров кандидатов, не по эвристическим баллам и не по вероятности",
+                "Сигналы поддержки и конфликта сформированы Core-эвристиками; сеть пока не выводит их смысл самостоятельно и не обучена",
+                "Сравнение readout: $readoutSummary",
                 "Активация не является вероятностью; при уточнении или отказе не обходи это решение",
             ),
             activePopulationIds = activePopulationIds,
