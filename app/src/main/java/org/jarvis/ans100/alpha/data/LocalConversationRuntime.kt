@@ -235,6 +235,7 @@ internal object LocalConversationCodec {
 data class DialogueNeuralAnalysis(
     val networkNeuronCount: Int,
     val activeFeatureCount: Int,
+    val activeHiddenNeuronCount: Int = 0,
     val processedEvents: Int,
     val processedNeuronBatches: Int,
     val outputSpikeCount: Int,
@@ -248,6 +249,7 @@ data class DialogueNeuralAnalysis(
     init {
         require(networkNeuronCount in 0..10_000)
         require(activeFeatureCount in 0..128)
+        require(activeHiddenNeuronCount in 0..128)
         require(processedEvents in 0..100_000)
         require(processedNeuronBatches in 0..100_000)
         require(outputSpikeCount in 0..4)
@@ -263,7 +265,8 @@ data class DialogueNeuralAnalysis(
 
     fun toModelContext(): String = buildString {
         append("Android sparse LIF: ").append(networkNeuronCount).append(" nodes; active text-feature inputs=")
-        append(activeFeatureCount).append("; events=").append(processedEvents)
+        append(activeFeatureCount).append("; active hidden neurons=").append(activeHiddenNeuronCount)
+        append("; events=").append(processedEvents)
         append("; neuron batches=").append(processedNeuronBatches)
         append("; legacy output-unit spikes=").append(outputSpikeCount)
         append("; pending events=").append(pendingEvents)
