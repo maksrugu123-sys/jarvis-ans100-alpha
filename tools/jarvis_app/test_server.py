@@ -265,6 +265,24 @@ class LocalConsoleHttpTests(unittest.TestCase):
             worker = response.read().decode("utf-8")
         self.assertIn('jarvis-local-console-v14', worker)
 
+    def test_folder_creation_endpoint_is_authenticated_and_confined(self):
+        with self.assertRaises(HTTPError) as missing_auth:
+            self._post("/api/folders", {"name": "Projects"}, authenticated=False)
+        self.assertEqual(missing_auth.exception.code, 401)
+
+        status, payload = self._post("/api/folders", {"name": "Projects"})
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["name"], "Projects")
+        self.assertTrue(payload["created"])
+        self.assertTrue(os.path.isdir(os.path.join(self.temp.name, "workspace-files", "Projects")))
+
+        with self.assertRaises(HTTPError):
+            self._post("/api/folders", {"name": "../outside"})
+        self.assertFalse(os.path.exists(os.path.join(self.temp.name, "outside")))
+
+        with self.assertRaises(HTTPError):
+            self._post("/api/folders", {"name": "Projects"})
+
     def test_desktop_ans100_status_is_authenticated_and_not_claimed_active(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/ans100", timeout=3)
@@ -812,8 +830,12 @@ class LocalConsoleHttpTests(unittest.TestCase):
             self.assertIn("jarvis-browser-extension/manifest.json", names)
             self.assertIn("jarvis-browser-extension/popup.html", names)
             self.assertIn("jarvis-browser-extension/popup.js", names)
+            self.assertIn("jarvis-browser-extension/background.js", names)
+            self.assertIn("jarvis-browser-extension/bridge.js", names)
             manifest = json.loads(archive.read("jarvis-browser-extension/manifest.json"))
         self.assertEqual(manifest["manifest_version"], 3)
+        self.assertEqual(manifest["version"], "1.1.0")
+        self.assertEqual(manifest["background"]["service_worker"], "background.js")
         self.assertIn("activeTab", manifest["permissions"])
         self.assertNotIn("tabs", manifest["permissions"])
         self.assertEqual(
