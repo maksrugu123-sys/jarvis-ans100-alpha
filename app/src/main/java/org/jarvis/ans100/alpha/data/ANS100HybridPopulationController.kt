@@ -12,9 +12,8 @@ class ANS100HybridPopulationController {
         val candidate: ANS100Candidate,
         val supportSpikes: Int,
         val conflictSpikes: Int,
-    ) {
-        val score: Int get() = supportSpikes - conflictSpikes
-    }
+        val activation: Double,
+    )
 
     fun decide(
         evidence: TypedEvidenceBundle,
@@ -194,16 +193,33 @@ class ANS100HybridPopulationController {
             ),
         )
 
-        val readouts = candidates.mapIndexed { index, candidate ->
+        val rawReadouts = candidates.mapIndexed { index, candidate ->
             val slot = ANS100CandidateSlotContract.Slot.values()[index]
-            CandidateReadout(
-                candidate = candidate,
+            val supportLane = ANS100CandidateSlotContract.readoutLane(
+                slot, ANS100CandidateSlotContract.Polarity.SUPPORT,
+            )
+            val conflictLane = ANS100CandidateSlotContract.readoutLane(
+                slot, ANS100CandidateSlotContract.Polarity.CONFLICT,
+            )
+            ANS100CandidateCompetition.Input(
+                candidateId = candidate.candidateId,
                 supportSpikes = ANS100CandidateSlotContract.readoutSpikeCount(
                     emittedSpikeNeuronIds, slot, ANS100CandidateSlotContract.Polarity.SUPPORT,
                 ),
                 conflictSpikes = ANS100CandidateSlotContract.readoutSpikeCount(
                     emittedSpikeNeuronIds, slot, ANS100CandidateSlotContract.Polarity.CONFLICT,
                 ),
+                supportCapacity = supportLane.size,
+                conflictCapacity = conflictLane.size,
+            )
+        }
+        val competition = ANS100CandidateCompetition().evaluate(rawReadouts)
+        val readouts = rawReadouts.mapIndexed { index, input ->
+            CandidateReadout(
+                candidate = candidates[index],
+                supportSpikes = input.supportSpikes,
+                conflictSpikes = input.conflictSpikes,
+                activation = competition.activations.getValue(input.candidateId),
             )
         }
         val readoutMismatchSlots = readouts.filter { readout ->
@@ -217,10 +233,8 @@ class ANS100HybridPopulationController {
                 supportSignal != (readout.supportSpikes > 0) ||
                 conflictSignal != (readout.conflictSpikes > 0)
         }.map { it.candidate.candidateId }
-        val bestScore = readouts.maxOf { it.score }
-        val topReadouts = readouts.filter { it.score == bestScore }
-        val uniqueWinner = topReadouts.singleOrNull()?.takeIf { bestScore > 0 }
-        val selectedId = uniqueWinner?.candidate?.candidateId
+        val selectedId = competition.winnerCandidateId
+        val uniqueWinner = readouts.singleOrNull { it.candidate.candidateId == selectedId }
 
         val uncertainty = linkedSetOf(ANS100UncertaintyKind.UNCALIBRATED_MODEL_OUTPUT)
         if (missingPopulations.isNotEmpty() || readoutMismatchSlots.isNotEmpty()) {
@@ -254,8 +268,8 @@ class ANS100HybridPopulationController {
         }
 
         val readoutSummary = readouts.joinToString("; ") {
-            "${it.candidate.candidateId}:support=${it.supportSpikes},conflict=${it.conflictSpikes},score=${it.score}"
-        }
+            "${it.candidate.candidateId}:support=${it.supportSpikes},conflict=${it.conflictSpikes},activation=${"%.3f".format(java.util.Locale.ROOT, it.activation)}"
+        } + "; winner_margin=${"%.3f".format(java.util.Locale.ROOT, competition.winnerMargin)}"
         val decision = ANS100Decision(
             turnId = evidence.turnId,
             topologyVersion = ANS100TopologyVersion.HYBRID_SPARSE_POPULATIONS_V1,
@@ -279,7 +293,8 @@ class ANS100HybridPopulationController {
             },
             responseConstraints = listOf(
                 "Исходное сообщение пользователя — главный источник запроса",
-                "Результат выбран по отдельным спайкам readout-коридоров кандидатов, не по эвристическим баллам и не по вероятности",
+                "Кандидаты конкурируют по нормированной активности поддержки и конфликта с латеральным подавлением; activation не является вероятностью",
+                "Победитель принимается только при положительной активации и достаточном отрыве от второго кандидата",
                 "Сигналы поддержки и конфликта сформированы Core-эвристиками; сеть пока не выводит их смысл самостоятельно и не обучена",
                 "Сравнение readout: $readoutSummary",
                 "Активация не является вероятностью; при уточнении или отказе не обходи это решение",
