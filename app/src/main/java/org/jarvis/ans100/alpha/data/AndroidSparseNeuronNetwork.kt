@@ -87,6 +87,7 @@ class AndroidNeuronBackpressureException(message: String) : AndroidNeuronNetwork
  */
 internal interface AndroidNeuronStateStore : Closeable {
     fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double)
+    fun initializeHybridTopology(topologyId: String, topologyVersion: Int, connections: List<AndroidNeuronConnection>): Boolean
     fun initializeSparseDialogueNetwork(neuronCount: Int, featureNeuronCount: Int, delayNs: Long, weight: Double, inputToHiddenWeight: Double): Boolean
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
@@ -149,6 +150,23 @@ class AndroidSparseNeuronNetwork(
         require(delayNs > 0L && weight.isFinite() && weight in 0.0..1.0)
         store.initializeSparseChain(neuronCount, delayNs, weight)
         hot.clear()
+    }
+
+    /**
+     * Initializes the separate ANS-100 hybrid V2 database. This never migrates,
+     * clears or reinterprets the legacy dialogue database.
+     */
+    @Synchronized
+    fun initializeHybridTopologyV2() {
+        val connections = AndroidHybridTopologyV2.connections()
+        if (connections.size > MAX_CONNECTIONS) {
+            throw AndroidNeuronNetworkException("hybrid V2 topology exceeds the connection bound")
+        }
+        if (store.initializeHybridTopology(
+                topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
+                topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
+                connections = connections,
+            )) hot.clear()
     }
 
     /**
@@ -456,6 +474,14 @@ class AndroidSparseNeuronNetwork(
     }
 }
 
+private object AndroidNeuronNetworkLimits {
+    const val MAX_NEURONS = 10_000
+}
+
+private object AndroidNeuronSparseLimits {
+    const val MAX_CONNECTIONS = 100_000
+}
+
 private class AndroidNeuronSqliteStore(
     context: Context,
     name: String,
@@ -490,6 +516,67 @@ private class AndroidNeuronSqliteStore(
             "CREATE TABLE IF NOT EXISTS dialogue_eligibility (context_id TEXT NOT NULL, connection_id TEXT NOT NULL, feature_id INTEGER NOT NULL, output_id INTEGER NOT NULL, eligibility REAL NOT NULL, pre_time_ns INTEGER NOT NULL, post_time_ns INTEGER NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(context_id, connection_id))",
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS dialogue_eligibility_age_idx ON dialogue_eligibility(created_at_ms)")
+    }
+
+    override fun initializeHybridTopology(
+        topologyId: String,
+        topologyVersion: Int,
+        connections: List<AndroidNeuronConnection>,
+    ): Boolean {
+        if (!topologyId.matches(Regex("^[a-z0-9][a-z0-9._-]{0,63}$")) ||
+            topologyVersion <= 0 ||
+            connections.isEmpty() ||
+            connections.size > AndroidNeuronSparseLimits.MAX_CONNECTIONS ||
+            connections.map { it.connectionId }.toSet().size != connections.size ||
+            connections.any {
+                it.sourceNeuronId !in 0 until AndroidNeuronNetworkLimits.MAX_NEURONS ||
+                    it.targetNeuronId !in 0 until AndroidNeuronNetworkLimits.MAX_NEURONS
+            }
+        ) throw AndroidNeuronNetworkException("invalid bounded typed topology descriptor")
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val existingNeurons = scalar(db, "SELECT COUNT(*) FROM neurons")
+            val existingConnections = scalar(db, "SELECT COUNT(*) FROM connections")
+            val existingId = db.rawQuery(
+                "SELECT value FROM metadata WHERE key='ans100_topology_id'", null,
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            val existingVersion = db.rawQuery(
+                "SELECT value FROM metadata WHERE key='ans100_topology_version'", null,
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0).toInt() else 0 }
+            if (existingNeurons != 0L || existingConnections != 0L || existingId != null || existingVersion != 0) {
+                if (existingNeurons != AndroidNeuronNetworkLimits.MAX_NEURONS.toLong() ||
+                    existingConnections != connections.size.toLong() ||
+                    existingId != topologyId || existingVersion != topologyVersion
+                ) throw AndroidNeuronNetworkException(
+                    "hybrid V2 database contains a different or incomplete topology; refusing destructive reinitialization",
+                )
+                db.setTransactionSuccessful()
+                return false
+            }
+
+            for (id in 0 until AndroidNeuronNetworkLimits.MAX_NEURONS) insertNeuron(db, id)
+            for (connection in connections) {
+                if (connection.sourceNeuronId == connection.targetNeuronId) {
+                    throw AndroidNeuronNetworkException("typed topology cannot contain self-connections")
+                }
+                insertConnection(db, connection)
+            }
+            fun writeMetadata(key: String, value: String) {
+                val values = ContentValues().apply {
+                    put("key", key)
+                    put("value", value)
+                }
+                db.insertOrThrow("metadata", null, values)
+            }
+            writeMetadata("ans100_topology_id", topologyId)
+            writeMetadata("ans100_topology_version", topologyVersion.toString())
+            db.setTransactionSuccessful()
+            return true
+        } finally {
+            db.endTransaction()
+        }
     }
 
     override fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double) {
@@ -1064,6 +1151,7 @@ private class AndroidNeuronSqliteStore(
 
     companion object {
         private const val DATABASE_VERSION = 2
+        private const val DATABASE_UNUSED_PLACEHOLDER = 0
         private const val MAX_DIALOGUE_ELIGIBILITY_ROWS = 50_000L
         private const val MAX_DIALOGUE_ELIGIBILITY_AGE_MS = 5 * 60 * 1_000L
         private const val DIALOGUE_ELIGIBILITY_TAU_NS = 20_000_000.0
