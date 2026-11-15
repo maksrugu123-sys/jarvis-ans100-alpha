@@ -93,18 +93,19 @@
 
     <section class="panel neuron-panel" id="network">
       <div class="panel-heading">
-        <div><div class="eyebrow">ANS-100 EXPERIMENT · DIALOGUE R-STDP</div><h2>Экспериментальная диалоговая спайковая сеть</h2></div>
-        <span class="tag">4 LIF-DT · 256 ПРИЗНАКОВ</span>
+        <div><div class="eyebrow">ANS-100 V4 · HYBRID SPARSE NETWORK</div><h2>Разреженная сеть анализа JARVIS</h2></div>
+        <span class="tag">10 000 НЕЙРОНОВ · 25 500 СВЯЗЕЙ</span>
       </div>
-      <p class="panel-copy">Небольшой отдельный эксперимент: 4 выходных LIF-DT нейрона и по 256 признаковых синапсов на каждый. Сначала поступают текстовые признаки, затем отдельный импульс решения; веса меняются только после того, как вы явно выберете правильную метку. Это не языковая модель и не самостоятельное понимание смысла. Отдельный разреженный классификатор с 10 000 признаковых слотов не является этой спайковой сетью.</p>
+      <p class="panel-copy">Основная desktop-сеть ANS-100 V4 подключена к каждому сообщению чата: получает ограниченные структурные признаки и сигналы Core, распространяет импульсы по семи популяциям и возвращает оценку поддержки/конфликта для ответа, уточнения или воздержания. Результат передаётся языковой модели как вспомогательный сигнал. Это ещё не самостоятельное семантическое мышление: обучение и постоянное хранение состояния сети пока выключены.</p>
       <div class="ans100-overview">
         <div class="ans100-overview-heading">
           <div><strong>Desktop ANS-100 V4</strong><small>Разреженная семипопуляционная топология</small></div>
-          <span class="tag">SOURCE FOUNDATION</span>
+          <span class="tag">CONNECTED TO CHAT</span>
         </div>
         <div id="ans100-desktop-status" class="ans100-status" role="status" aria-live="polite">Загрузка описания desktop-топологии…</div>
       </div>
-      <div id="dialog-neuron-status" class="neuron-status" role="status" aria-live="polite">Загрузка состояния диалоговой R-STDP сети…</div>
+      <div class="ans100-overview-heading"><div><strong>Отдельный эксперимент R-STDP</strong><small>Классификатор признаков с явной обратной связью пользователя</small></div><span class="tag">OPTIONAL MODULE</span></div>
+      <div id="dialog-neuron-status" class="neuron-status" role="status" aria-live="polite">Загрузка состояния отдельного диалогового классификатора…</div>
       <form id="dialog-neuron-form" class="stack-form">
         <label for="dialog-neuron-sample">Пример для явного обучения</label>
         <textarea id="dialog-neuron-sample" rows="2" maxlength="900" placeholder="Например: Привет, JARVIS! Рад снова тебя видеть." required></textarea>
