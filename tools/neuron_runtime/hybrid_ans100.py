@@ -132,7 +132,7 @@ def build_network() -> NetworkRuntime:
     incoming: dict[int, dict[str, float]] = {node_id: {} for node_id in range(NEURON_COUNT)}
     for edge in connections:
         incoming[int(edge.target_neuron_id)][edge.target_synapse_id] = (
-            0.18 if "-recurrent-" in edge.connection_id else 1.0
+            0.18 if ("-recurrent-" in edge.connection_id or "-critic-candidate-" in edge.connection_id) else 1.0
         )
     for node_id in range(1_200):
         incoming[node_id][INPUT_SYNAPSE_ID] = 1.0
