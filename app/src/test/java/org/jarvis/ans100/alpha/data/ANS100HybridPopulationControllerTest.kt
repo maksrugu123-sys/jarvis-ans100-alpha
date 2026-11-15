@@ -14,23 +14,10 @@ class ANS100HybridPopulationControllerTest {
         return bundle to understanding
     }
 
-    private fun buildTelemetry(missingPopulation: String? = null) = AndroidHybridRunTelemetry(
-        topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
-        topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
-        populations = AndroidHybridTopologyV2.populations.map { population ->
-            val active = population.id != missingPopulation
-            AndroidNeuronPopulationActivity(
-                populationId = population.id,
-                receivedEventCount = if (active) 1 else 0,
-                uniqueNeuronsProcessed = if (active) 1 else 0,
-                uniqueSpikingNeurons = if (active) 1 else 0,
-                spikeCount = if (active) 1 else 0,
-                outgoingEventCount = 0,
-            )
-        },
-    )
-
-    private fun spikesForSignals(bundle: TypedEvidenceBundle): Set<Int> = buildSet {
+    private fun spikesForSignals(
+        bundle: TypedEvidenceBundle,
+        missingPopulation: String? = null,
+    ): Set<Int> = buildSet {
         ANS100CandidateSlotContract.Slot.values().forEach { slot ->
             ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
                 val feature = ANS100CandidateSlotContract.evidenceFeature(slot, polarity)
@@ -42,25 +29,48 @@ class ANS100HybridPopulationControllerTest {
                 }
             }
         }
+        AndroidHybridTopologyV2.populations.dropLast(1)
+            .filterNot { it.id == missingPopulation }
+            .forEach { add(it.startInclusive) }
     }
+
+    private fun buildTelemetry(emitted: Set<Int>) = AndroidHybridRunTelemetry(
+        topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
+        topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
+        populations = AndroidHybridTopologyV2.populations.map { population ->
+            val count = emitted.count(population::contains)
+            AndroidNeuronPopulationActivity(
+                populationId = population.id,
+                receivedEventCount = count,
+                uniqueNeuronsProcessed = count,
+                uniqueSpikingNeurons = count,
+                spikeCount = count,
+                outgoingEventCount = 0,
+            )
+        },
+    )
 
     private fun decide(
         evidence: TypedEvidenceBundle,
         understanding: LocalUnderstanding,
-        runTelemetry: AndroidHybridRunTelemetry = buildTelemetry(),
-        emitted: Set<Int> = spikesForSignals(evidence),
+        emitted: Set<Int>? = null,
+        missingPopulation: String? = null,
+        runTelemetry: AndroidHybridRunTelemetry? = null,
         processed: Int = 20,
         pending: Int = 0,
         exhausted: Boolean = false,
-    ) = ANS100HybridPopulationController().decide(
-        evidence = evidence,
-        understanding = understanding,
-        telemetry = runTelemetry,
-        emittedSpikeNeuronIds = emitted,
-        processedEventCount = processed,
-        pendingEvents = pending,
-        budgetExhausted = exhausted,
-    )
+    ): ANS100Decision {
+        val actualSpikes = emitted ?: spikesForSignals(evidence, missingPopulation)
+        return ANS100HybridPopulationController().decide(
+            evidence = evidence,
+            understanding = understanding,
+            telemetry = runTelemetry ?: buildTelemetry(actualSpikes),
+            emittedSpikeNeuronIds = actualSpikes,
+            processedEventCount = processed,
+            pendingEvents = pending,
+            budgetExhausted = exhausted,
+        )
+    }
 
     @Test
     fun selectsAnswerFromItsOwnPositiveReadoutLane() {
@@ -112,6 +122,7 @@ class ANS100HybridPopulationControllerTest {
     fun abstainsWhenReadoutScoresHaveNoPositiveUniqueWinner() {
         val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-4")
         val allLanes = buildSet {
+            addAll(spikesForSignals(bundle))
             ANS100CandidateSlotContract.Slot.values().forEach { slot ->
                 ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
                     val lane = ANS100CandidateSlotContract.readoutLane(slot, polarity)
@@ -128,7 +139,7 @@ class ANS100HybridPopulationControllerTest {
     @Test
     fun abstainsWhenAnyRequiredPopulationDoesNotSpike() {
         val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-5")
-        val decision = decide(bundle, understanding, runTelemetry = buildTelemetry("critic_uncertainty"))
+        val decision = decide(bundle, understanding, missingPopulation = "critic_uncertainty")
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
         assertTrue(decision.abstentionReason!!.contains("critic_uncertainty"))
