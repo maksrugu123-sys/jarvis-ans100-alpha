@@ -2892,3 +2892,25 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Installation is manual via browser Developer mode. No signed store package or native desktop installer exists yet.
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
+
+
+## Windows desktop workspace UI — 2026-11-15
+
+**Implemented on `experiment/jarvis-integrated-prototype-v1`:**
+- Added a persistent desktop left navigation rail with anchors for Overview, Chat, ANS-100, Browser, Tasks, Memory, Data Transfer, Planning, Settings and the event log. The active item follows visible sections; on narrow layouts it becomes a horizontally scrollable navigation strip.
+- Reorganized the desktop shell into a wider two-column workspace while retaining a single-column responsive layout for small screens.
+- Added local-only interface settings for compact spacing and reduced motion. Preferences are stored in the browser profile under `jarvis.ui.preferences.v1`; no tokens, model state, network weights or workspace records are stored by these controls.
+- Added live navigation status labels sourced from the existing authenticated health, conversation and dialogue R-STDP status APIs. The labels explicitly describe the existing small dialogue prototype and do not present it as the complete 10,000-neuron reasoning system.
+- Improved the Windows launcher to set UTF-8/unbuffered Python output and check common per-user/system Edge and Chrome installation locations before falling back to the default browser.
+- Bumped the PWA service-worker cache from v13 to v14 and added an HTTP regression test for navigation anchors, settings controls and unique event-list IDs.
+
+**Tests authored, not run:**
+- `LocalConsoleHttpTests.test_desktop_console_serves_navigation_and_local_preferences` verifies that the server returns the new navigation/settings controls and a unique event-list ID.
+- No browser rendering, responsive layout, Windows batch-file execution, browser launch, Playwright, Qwen inference, Python test suite, build, CI or GitHub Actions run was performed.
+
+**Known limitations:**
+- The new layout is shared by the local PWA and is responsive, but no real Windows 10 display scale, DPI, keyboard navigation or screen-reader run has been verified.
+- The settings are local presentation preferences only; they do not configure the model, GPU, browser extension, or neural network.
+- Chat browser commands continue to control the dedicated visible Playwright/Chromium research browser. The Chrome/Edge extension remains manually operated from its toolbar popup; it does not yet accept live commands from the chat window.
+
+**Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
