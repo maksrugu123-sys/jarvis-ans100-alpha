@@ -7,6 +7,7 @@ import android.os.Handler
 import android.net.Uri
 import android.os.Looper
 import androidx.lifecycle.AndroidViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,7 +75,11 @@ data class LocalConversationUiState(
     val responseGenerationMs: Long = 0L,
     val lastTurnDurationMs: Long = 0L,
     val responseTokenEstimate: Int = 0,
+    val timeToFirstTextMs: Long = 0L,
+    val contextTokenCount: Int = 0,
     val streamingResponse: String = "",
+    val canCancelGeneration: Boolean = false,
+    val isStoppingGeneration: Boolean = false,
     val ans100ProcessedEvents: Int = 0,
     val ans100SpikeCount: Int = 0,
     val ans100ActiveNeuronCount: Int = 0,
@@ -611,6 +616,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 isBusy = true,
                 error = null,
                 streamingResponse = "",
+                canCancelGeneration = false,
+                isStoppingGeneration = false,
                 nativeDialogueContextId = null,
                 nativeDialogueFeatureIds = emptyList(),
             ),
@@ -723,10 +730,24 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         }
                     }
                 }
+                conversationResponseEngine.onGenerationStateChanged = { generating ->
+                    mainHandler.post {
+                        if (nativeDialogueGeneration == dialogueGeneration) {
+                            val current = mutableState.value
+                            mutableState.value = current.copy(
+                                conversation = current.conversation.copy(
+                                    canCancelGeneration = generating,
+                                    isStoppingGeneration = if (generating) current.conversation.isStoppingGeneration else false,
+                                ),
+                            )
+                        }
+                    }
+                }
                 val messages = try {
                     conversationCoordinator.send(clean, signalContext)
                 } finally {
                     conversationResponseEngine.onPartialResponse = null
+                    conversationResponseEngine.onGenerationStateChanged = null
                 }
                 val elapsedMs = ((System.nanoTime() - turnStartedAtNs) / 1_000_000L).coerceAtLeast(0L)
                 val modelMetrics = conversationResponseEngine.performanceSnapshot()
@@ -738,6 +759,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             messages = messages,
                             isBusy = false,
                             streamingResponse = "",
+                            canCancelGeneration = false,
+                            isStoppingGeneration = false,
                             error = null,
                             backendLabel = conversationResponseEngine.backendLabel,
                             gpuEnabled = conversationResponseEngine.gpuEnabled,
@@ -750,6 +773,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             responseGenerationMs = modelMetrics.generationMs,
                             lastTurnDurationMs = elapsedMs,
                             responseTokenEstimate = modelMetrics.outputTokenEstimate,
+                            timeToFirstTextMs = modelMetrics.timeToFirstTextMs,
+                            contextTokenCount = modelMetrics.contextTokenCount,
                             ans100ProcessedEvents = signalContext?.processedEvents ?: 0,
                             ans100SpikeCount = signalContext?.spikeCount ?: 0,
                             ans100ActiveNeuronCount = signalContext?.activeNeuronCount ?: 0,
@@ -760,6 +785,20 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         ),
                     )
                 }
+            } catch (error: CancellationException) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            streamingResponse = "",
+                            canCancelGeneration = false,
+                            isStoppingGeneration = false,
+                            backendLabel = conversationResponseEngine.backendLabel,
+                            error = "Генерация остановлена. Неполный ответ не сохранён.",
+                        ),
+                    )
+                }
             } catch (error: Exception) {
                 mainHandler.post {
                     val current = mutableState.value
@@ -767,6 +806,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         conversation = current.conversation.copy(
                             isBusy = false,
                             streamingResponse = "",
+                            canCancelGeneration = false,
+                            isStoppingGeneration = false,
                             backendLabel = conversationResponseEngine.backendLabel,
                             gpuEnabled = conversationResponseEngine.gpuEnabled,
                             error = error.message ?: "Локальный ответ не сохранён.",
@@ -774,6 +815,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             }
+        }
+    }
+
+    fun cancelConversationGeneration() {
+        if (!conversationResponseEngine.cancelGeneration()) return
+        val current = mutableState.value
+        if (current.conversation.canCancelGeneration) {
+            mutableState.value = current.copy(
+                conversation = current.conversation.copy(isStoppingGeneration = true),
+            )
         }
     }
 
