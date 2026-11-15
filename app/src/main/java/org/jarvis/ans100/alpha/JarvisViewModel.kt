@@ -789,12 +789,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Runs the seven-population graph, applies a conservative population gate,
-     * and prepares the evidence-bound decision package consumed by Qwen.
-     * Core still proposes the candidate; neural activity can only validate a
-     * complete bounded path or force abstention, not claim semantic certainty.
-     */
-    /**
      * Applies one explicit rating to the latest eligible ANS-100 answer trace.
      * A rating is consumed once; model text and implicit behavior never reward it.
      */
@@ -829,6 +823,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Runs the seven-population graph, applies a conservative population gate,
+     * and prepares the evidence-bound decision package consumed by Qwen.
+     * Core still proposes the candidate; neural activity can only validate a
+     * complete bounded path or force abstention, not claim semantic certainty.
+     */
     private fun runHybridDialoguePass(
         message: String,
         recentHistory: List<LocalConversationMessage>,
