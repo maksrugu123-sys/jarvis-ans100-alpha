@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from io import BytesIO
 import os
+import zipfile
 import tempfile
 import threading
 import unittest
@@ -741,6 +743,98 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(payload["status"], "solved")
         self.assertEqual(payload["plan"][0]["action_id"], "boot")
         self.assertIn("не исполнялись", payload["notice"])
+
+    def test_browser_extension_archive_is_downloadable_and_has_manifest(self):
+        with urlopen(self.base_url + "/downloads/jarvis-browser-extension.zip", timeout=3) as response:
+            archive_bytes = response.read()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers.get_content_type(), "application/zip")
+            self.assertIn("attachment", response.headers.get("Content-Disposition", ""))
+
+        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+            names = set(archive.namelist())
+            self.assertIn("jarvis-browser-extension/manifest.json", names)
+            self.assertIn("jarvis-browser-extension/popup.html", names)
+            self.assertIn("jarvis-browser-extension/popup.js", names)
+            manifest = json.loads(archive.read("jarvis-browser-extension/manifest.json"))
+        self.assertEqual(manifest["manifest_version"], 3)
+        self.assertIn("activeTab", manifest["permissions"])
+        self.assertNotIn("tabs", manifest["permissions"])
+        self.assertEqual(
+            manifest["host_permissions"],
+            ["http://127.0.0.1:8765/*"],
+        )
+
+    def test_browser_extension_cors_is_narrow_and_authenticated(self):
+        extension_origin = "chrome-extension://" + ("a" * 32)
+        preflight = Request(
+            self.base_url + "/api/extension/state",
+            headers={
+                "Origin": extension_origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+            method="OPTIONS",
+        )
+        with urlopen(preflight, timeout=3) as response:
+            self.assertEqual(response.status, 204)
+            self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), extension_origin)
+            self.assertIn("GET", response.headers.get("Access-Control-Allow-Methods", ""))
+
+        request = Request(
+            self.base_url + "/api/extension/state",
+            headers={
+                "Origin": extension_origin,
+                "Authorization": "Bearer " + self.token,
+            },
+        )
+        with urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), extension_origin)
+        self.assertTrue(payload["supported"])
+        self.assertIn("revision", payload)
+        self.assertIn("chat_available", payload)
+
+        foreign = Request(
+            self.base_url + "/api/extension/state",
+            headers={
+                "Origin": "https://untrusted.example",
+                "Authorization": "Bearer " + self.token,
+            },
+        )
+        with self.assertRaises(HTTPError) as blocked:
+            urlopen(foreign, timeout=3)
+        self.assertEqual(blocked.exception.code, 403)
+
+    def test_extension_rejects_local_page_before_reading_or_sending_content(self):
+        with self.assertRaisesRegex(LocalConsoleError, "local and internal"):
+            self.service.ask_about_extension_page(
+                "Summarize this page",
+                self.service.workspace_revision,
+                "Local router",
+                "http://127.0.0.1/",
+                "private local page contents",
+            )
+
+    def test_extension_ask_endpoint_rejects_missing_token(self):
+        request = Request(
+            self.base_url + "/api/extension/ask",
+            data=json.dumps({
+                "question": "Summarize this page",
+                "expected_revision": self.service.workspace_revision,
+                "title": "Example",
+                "url": "https://example.com/",
+                "text": "Page text",
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Origin": "chrome-extension://" + ("a" * 32),
+            },
+            method="POST",
+        )
+        with self.assertRaises(HTTPError) as blocked:
+            urlopen(request, timeout=3)
+        self.assertEqual(blocked.exception.code, 401)
 
     def test_foreign_origin_is_rejected(self):
         created = self.service.create_session("Origin check")
