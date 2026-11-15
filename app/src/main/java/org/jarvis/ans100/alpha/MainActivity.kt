@@ -2331,7 +2331,7 @@ private fun ConversationPanel(
 ) {
     var showClearConfirmation by remember { mutableStateOf(false) }
     val messageListState = rememberLazyListState()
-    LaunchedEffect(state.messages.size, state.isBusy) {
+    LaunchedEffect(state.messages.size, state.isBusy, state.streamingResponse.length) {
         val target = state.messages.size - 1
         if (target >= 0) messageListState.animateScrollToItem(target)
     }
@@ -2419,11 +2419,26 @@ private fun ConversationPanel(
                     }
                 }
                 if (state.isBusy) {
-                    item(key = "jarvis-thinking") {
+                    item(key = "jarvis-streaming") {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                                Text("JARVIS думает…", modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(0.90f),
+                                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                                ) {
+                                    Text("JARVIS", style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                                    if (state.streamingResponse.isBlank()) {
+                                        Text("Думаю…", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodyMedium)
+                                    } else {
+                                        MessageBodyText(state.streamingResponse)
+                                    }
+                                }
                             }
                         }
                     }
