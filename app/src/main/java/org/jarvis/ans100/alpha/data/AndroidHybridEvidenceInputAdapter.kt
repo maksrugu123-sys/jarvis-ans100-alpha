@@ -1,5 +1,7 @@
 package org.jarvis.ans100.alpha.data
 
+import java.security.MessageDigest
+
 /**
  * Converts typed evidence into a bounded, provenance-preserving pulse batch for
  * the hybrid V2 evidence-input population (neuron IDs 0..1199).
