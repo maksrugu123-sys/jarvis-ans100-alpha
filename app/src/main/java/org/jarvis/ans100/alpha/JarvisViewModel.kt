@@ -833,6 +833,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         maxTimestamps = MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS,
                     )
                     var totalProcessedEvents = result.processedEvents
+                    val emittedSpikeNeuronIds = LinkedHashSet<Int>().apply {
+                        addAll(result.emittedSpikes.map { it.first })
+                    }
                     var passes = 1
                     while (result.pendingEvents > 0 && passes < MAX_HYBRID_DIALOGUE_MAX_PASSES) {
                         result = hybridNeuronNetwork.run(
@@ -840,6 +843,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             maxTimestamps = MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS,
                         )
                         totalProcessedEvents += result.processedEvents
+                        emittedSpikeNeuronIds.addAll(result.emittedSpikes.map { it.first })
                         passes++
                     }
                     val telemetry = result.hybridTelemetry ?: return@submit null
@@ -847,6 +851,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         evidence = evidence,
                         understanding = understanding,
                         telemetry = telemetry,
+                        emittedSpikeNeuronIds = emittedSpikeNeuronIds,
                         processedEventCount = totalProcessedEvents,
                         pendingEvents = result.pendingEvents,
                         budgetExhausted = result.budgetExhausted,
