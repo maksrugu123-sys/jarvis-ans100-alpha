@@ -80,7 +80,7 @@ data class AndroidNeuronPopulationActivity(
 data class AndroidHybridRunTelemetry(
     val topologyId: String,
     val topologyVersion: Int,
-    /** Counters cover this run() invocation only, not earlier or later partial runs. */
+    /** Counters accumulate for the active turn across partial run() calls. */
     val populations: List<AndroidNeuronPopulationActivity>,
 )
 
@@ -154,6 +154,23 @@ class AndroidSparseNeuronNetwork(
 ) : Closeable {
     private val store: AndroidNeuronStateStore
     private val hot = LinkedHashMap<Int, AndroidNeuronState>(hotSetCapacity, 0.75f, true)
+    private val hybridTelemetryLock = Any()
+    private var hybridTelemetryTurnId: String? = null
+    private val hybridReceivedEvents = IntArray(AndroidHybridTopologyV2.populations.size)
+    private val hybridProcessedNeuronIds = Array(AndroidHybridTopologyV2.populations.size) { HashSet<Int>() }
+    private val hybridSpikingNeuronIds = Array(AndroidHybridTopologyV2.populations.size) { HashSet<Int>() }
+    private val hybridSpikeCounts = IntArray(AndroidHybridTopologyV2.populations.size)
+    private val hybridOutgoingEventCounts = IntArray(AndroidHybridTopologyV2.populations.size)
+
+    private fun resetHybridTelemetry(turnId: String) = synchronized(hybridTelemetryLock) {
+        hybridTelemetryTurnId = turnId
+        hybridReceivedEvents.fill(0)
+        hybridProcessedNeuronIds.forEach { it.clear() }
+        hybridSpikingNeuronIds.forEach { it.clear() }
+        hybridSpikeCounts.fill(0)
+        hybridOutgoingEventCounts.fill(0)
+    }
+
 
     init {
         require(hotSetCapacity in 1..MAX_HOT_SET_CAPACITY)
@@ -222,6 +239,7 @@ class AndroidSparseNeuronNetwork(
             throw AndroidNeuronNetworkException("hybrid turn state could not be isolated")
         }
         hot.clear()
+        resetHybridTelemetry(batch.turnId)
         scheduleHybridEvidence(batch)
         return true
     }
@@ -342,11 +360,11 @@ class AndroidSparseNeuronNetwork(
             connectionCount = AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT,
         )
         val hybridPopulations = if (isHybridTopology) AndroidHybridTopologyV2.populations else emptyList()
-        val receivedEvents = if (isHybridTopology) IntArray(hybridPopulations.size) else null
-        val processedNeuronIds = if (isHybridTopology) Array(hybridPopulations.size) { HashSet<Int>() } else null
-        val spikingNeuronIds = if (isHybridTopology) Array(hybridPopulations.size) { HashSet<Int>() } else null
-        val spikeCounts = if (isHybridTopology) IntArray(hybridPopulations.size) else null
-        val outgoingEventCounts = if (isHybridTopology) IntArray(hybridPopulations.size) else null
+        val receivedEvents = if (isHybridTopology) hybridReceivedEvents else null
+        val processedNeuronIds = if (isHybridTopology) hybridProcessedNeuronIds else null
+        val spikingNeuronIds = if (isHybridTopology) hybridSpikingNeuronIds else null
+        val spikeCounts = if (isHybridTopology) hybridSpikeCounts else null
+        val outgoingEventCounts = if (isHybridTopology) hybridOutgoingEventCounts else null
         fun populationIndex(neuronId: Int): Int =
             hybridPopulations.indexOfFirst { it.contains(neuronId) }
 
