@@ -52,7 +52,7 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn('if (health.platform === "desktop")', app)
         self.assertIn('$("#auth-panel").hidden = true;', app)
         self.assertIn('В Windows вход выполняется автоматически. Токен не требуется.', app)
-        self.assertIn('jarvis-local-console-v21', (ROOT / "tools/jarvis_app/static/sw.js").read_text(encoding="utf-8"))
+        self.assertIn('jarvis-local-console-v22', (ROOT / "tools/jarvis_app/static/sw.js").read_text(encoding="utf-8"))
         html = (ROOT / "tools/jarvis_app/static/index.html").read_text(encoding="utf-8")
         self.assertIn('Эта форма предназначена только для Android', html)
         self.assertNotIn('подключите расширение токеном из окна JARVIS Core', html)
