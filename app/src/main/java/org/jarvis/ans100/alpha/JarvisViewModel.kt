@@ -917,8 +917,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             messages = emptyList(),
                             isBusy = false,
                             error = null,
-                            dialogFeaturePrediction = null,
-                            dialogFeatureError = null,
                         ),
                     )
                 }
