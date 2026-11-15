@@ -474,7 +474,7 @@ class HybridANS100Runtime:
                 time_ns=1,
                 neuron_id=str(neuron_id),
                 synapse_id="external_evidence",
-                event_id=f"ans100-v4-{index:02d}",
+                event_id=f"ans100-v4-{turn_id[:12]}-{index:02d}",
                 # Android uses presence pulses; activationHint is trace metadata,
                 # not a probability or a fractional synaptic strength.
                 strength=1.0,
