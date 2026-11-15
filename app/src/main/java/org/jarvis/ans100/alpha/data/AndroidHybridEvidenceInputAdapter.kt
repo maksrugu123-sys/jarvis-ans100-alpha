@@ -71,6 +71,10 @@ object AndroidHybridEvidenceInputAdapter {
             "hybrid input record budget exceeded"
         }
 
+        val turnToken = MessageDigest.getInstance("SHA-256")
+            .digest(bundle.turnId.toByteArray(Charsets.UTF_8))
+            .take(8)
+            .joinToString("") { byte -> "%02x".format(byte) }
         val events = ArrayList<AndroidNeuronEvent>(bundle.records.size)
         val trace = ArrayList<TraceEntry>(bundle.records.size)
         val usedNeuronIds = HashSet<Int>()
@@ -85,7 +89,7 @@ object AndroidHybridEvidenceInputAdapter {
             if (record.activation <= 0.0) return@forEachIndexed
 
             events += AndroidNeuronEvent(
-                eventId = "ans100-v2-$timestampNs-$index",
+                eventId = "ans100-v2-$timestampNs-$turnToken-$index",
                 timeNs = timestampNs,
                 targetNeuronId = neuronId,
                 // The current LIF threshold is 1.0. This is a presence pulse;
