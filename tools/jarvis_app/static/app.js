@@ -1232,22 +1232,30 @@ async function refreshConversation() {
 function renderDialogTurnTrace(trace) {
   const root = $("#chat-neuron-trace");
   if (!trace || typeof trace !== "object") {
-    root.textContent = "Диалоговая нейронная сводка для последнего хода недоступна.";
+    root.textContent = "Нейронная сводка для последнего хода недоступна.";
     return;
   }
-  const count = Number(trace.dialog_neuron_count || 0).toLocaleString("ru-RU");
-  const active = Number(trace.dialog_neuron_active_features || 0).toLocaleString("ru-RU");
-  const trained = Number(trace.dialog_neuron_trained_examples || 0).toLocaleString("ru-RU");
-  const label = trace.dialog_neuron_predicted_label || "нет уверенной метки";
-  const classifier = trace.dialog_neuron_context_invoked
-    ? "10 000-признаковый слой: " + count + " адресуемых нейронов · активно признаков: " + active +
-      " · метка: " + label + " · обучающих примеров: " + trained
-    : "Диалоговый классификатор не смог обработать этот ход.";
-  const signal = trace.ans100_signal_invoked
-    ? "ANS-100: сигнальный проход выполнен · attention gate: " +
+  const events = Number(trace.ans100_network_processed_events || 0).toLocaleString("ru-RU");
+  const spikes = Number(trace.ans100_network_spike_count || 0).toLocaleString("ru-RU");
+  const decision = trace.ans100_network_decision || "abstain";
+  const graph = trace.ans100_network_invoked
+    ? "ANS-100 V4: 10 000 нейронов · 25 500 связей · событий: " + events +
+      " · импульсов: " + spikes + " · сигнал-кандидат: " + decision
+    : trace.ans100_network_error
+      ? "ANS-100 V4: ошибка прохода; использован резервный путь."
+      : "ANS-100 V4: runtime не подключён к этому ядру.";
+  const legacy = trace.ans100_signal_invoked
+    ? "Старый сигнальный препроцессор: attention gate " +
       (trace.ans100_attention_gate_active ? "активен" : "не активен")
-    : "ANS-100: сигнальный проход недоступен для этого хода.";
-  root.textContent = classifier + ". " + signal + ". Классификация признаков не является пониманием смысла.";
+    : "Старый сигнальный препроцессор недоступен.";
+  const classifier = trace.dialog_neuron_context_invoked
+    ? "Отдельный диалоговый классификатор: " +
+      Number(trace.dialog_neuron_count || 0).toLocaleString("ru-RU") +
+      " адресуемых признаков · обучающих примеров: " +
+      Number(trace.dialog_neuron_trained_examples || 0).toLocaleString("ru-RU")
+    : "Отдельный диалоговый классификатор недоступен.";
+  root.textContent = graph + ". " + legacy + ". " + classifier +
+    ". ANS-100 выдаёт ограниченные структурные сигналы, а не самостоятельное понимание смысла.";
 }
 
 async function refreshAns100Status() {
@@ -1255,21 +1263,26 @@ async function refreshAns100Status() {
   try {
     const status = await api("/api/ans100");
     const topology = status.desktop_topology || {};
+    const runtime = status.runtime || {};
     const count = Number(topology.neuron_count || 0).toLocaleString("ru-RU");
     const edges = Number(topology.declared_connection_count || 0).toLocaleString("ru-RU");
     const populations = Array.isArray(topology.populations) ? topology.populations.length : 0;
     const active = status.active_in_chat === true;
+    const runtimeMode = runtime.runtime_mode === "fresh_in_memory_graph_per_turn"
+      ? "Новая сеть запускается для каждого сообщения."
+      : "Режим runtime не подтверждён.";
     root.textContent =
-      count + " нейронов · " + edges + " заявленных связей · " + populations +
-      " популяций · версия " + String(topology.version || "—") + ". " +
+      count + " нейронов · " + edges + " связей · " + populations +
+      " популяций · версия V" + String(topology.version || "—") + ". " +
       (active
-        ? "Топология подключена к активному диалогу."
-        : "Топология описана в исходном коде, но пока не запущена и не подключена к диалогу.") +
-      " Текущий диалоговый сигнальный путь остаётся отдельным.";
+        ? "Подключена к чату перед языковой моделью. " + runtimeMode +
+          " Обучение и постоянное хранение состояния пока выключены."
+        : "Топология описана, но не активна в текущем чате.") +
+      " Решение сети — вспомогательный сигнал, не самостоятельное понимание.";
     setNavHealth(
       $("#nav-core-state")?.textContent || "Ядро: подключено",
       $("#nav-model-state")?.textContent || "Диалог: проверка",
-      "ANS-100 V4: " + count + " · не активна в чате",
+      active ? "ANS-100 V4: " + count + " · активна" : "ANS-100: не активна",
       true
     );
     return status;
