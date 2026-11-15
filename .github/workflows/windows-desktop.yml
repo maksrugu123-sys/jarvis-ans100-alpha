@@ -6,6 +6,7 @@ on:
       - experiment/jarvis-integrated-prototype-v1
     paths:
       - ".github/workflows/windows-desktop.yml"
+      - "docs/JARVIS_WINDOWS_COMPATIBILITY.md"
       - "packaging/windows/**"
       - "start_jarvis_windows_exe.bat"
       - "start_jarvis_windows.bat"
@@ -207,6 +208,7 @@ jobs:
             Собрана из ветки: `${{ github.ref_name }}`
             Коммит: `${{ github.sha }}`
 
-            Это переносимая папка приложения в ZIP, не установщик.
-            Проверки упаковки и запуска выполняются на Windows Server 2022 и 2025 runners. Целевые настольные системы: Windows 10 22H2 и Windows 11 23H2/24H2 x64; проверка на физическом ПК Windows 11 и интеграция Chrome/Edge остаются отдельным этапом.
+            Это переносимая папка приложения в ZIP, не установщик. Основной интерфейс открывается в собственном окне JARVIS через WebView2, без запуска Chrome/Edge как браузера.
+            Требуется Microsoft Edge WebView2 Runtime (входит в Windows 11; на Windows 10 может потребоваться установка).
+            Проверки упаковки и API выполняются на Windows Server 2022 и 2025 runners. Физическая проверка самого окна приложения на Windows 10/11 остаётся отдельным этапом.
           files: dist/jarvis-windows-portable.zip
