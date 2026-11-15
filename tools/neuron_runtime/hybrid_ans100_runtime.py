@@ -310,11 +310,42 @@ def _typed_evidence_records(
     return tuple(records)
 
 
+def _validate_source_status(feature: str, source: object, status: object) -> None:
+    """Mirror AndroidHybridEvidenceInputAdapter.validateSourceAndStatus."""
+    if feature == "user.message.text":
+        expected = ("USER_MESSAGE", "USER_PROVIDED")
+    elif feature in {
+        "message.structure.length_chars",
+        "message.structure.has_question_mark",
+        "message.structure.has_exclamation_mark",
+        "message.structure.has_line_break",
+    }:
+        expected = ("MESSAGE_STRUCTURE", "OBSERVED_STRUCTURE")
+    elif feature in {
+        "core.plan_step_hint",
+        "core.requires_clarification_hint",
+        "core.clarification_question_hint",
+        *(item[0] for item in _CANDIDATE_INPUTS.values()),
+    }:
+        expected = ("CORE_REASONING_PLAN", "HEURISTIC")
+    elif feature == "memory.approved_reference":
+        expected = ("APPROVED_MEMORY", "USER_APPROVED_REFERENCE")
+    elif feature == "tool.verified_result":
+        expected = ("VERIFIED_TOOL_RESULT", "VERIFIED_TOOL_OUTPUT")
+    elif feature in _FEATURE_INDEX:
+        expected = ("CORE_UNDERSTANDING", "HEURISTIC")
+    else:
+        raise ValueError("feature is not assigned to the hybrid input population")
+    if (source, status) != expected:
+        raise ValueError("typed evidence source/status does not match its declared feature")
+
+
 def _neuron_id_for(record: Mapping[str, object]) -> int:
     """Mirror AndroidHybridEvidenceInputAdapter.neuronIdFor exactly."""
     feature = record.get("feature")
     if not isinstance(feature, str):
         raise ValueError("typed evidence feature must be a string")
+    _validate_source_status(feature, record.get("source"), record.get("status"))
     for (_candidate, _polarity), (candidate_feature, neuron_id) in _CANDIDATE_INPUTS.items():
         if feature == candidate_feature:
             return neuron_id
