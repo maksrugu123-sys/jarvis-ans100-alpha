@@ -87,7 +87,7 @@ class AndroidNeuronBackpressureException(message: String) : AndroidNeuronNetwork
  */
 internal interface AndroidNeuronStateStore : Closeable {
     fun initializeSparseChain(neuronCount: Int, delayNs: Long, weight: Double)
-    fun initializeSparseDialogueNetwork(neuronCount: Int, featureNeuronCount: Int, delayNs: Long, weight: Double)
+    fun initializeSparseDialogueNetwork(neuronCount: Int, featureNeuronCount: Int, delayNs: Long, weight: Double, inputToHiddenWeight: Double): Boolean
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
     fun enqueue(event: AndroidNeuronEvent)
@@ -159,16 +159,20 @@ class AndroidSparseNeuronNetwork(
     @Synchronized
     fun initializeSparseDialogueNetwork(
         neuronCount: Int = MAX_NEURONS,
-        featureNeuronCount: Int = neuronCount - DIALOGUE_OUTPUT_NEURONS,
+        featureNeuronCount: Int = DIALOGUE_INPUT_NEURONS,
         delayNs: Long = DEFAULT_CONNECTION_DELAY_NS,
-        weight: Double = 1.0,
+        weight: Double = DEFAULT_CONNECTION_WEIGHT,
+        inputToHiddenWeight: Double = DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
     ) {
         require(neuronCount == MAX_NEURONS)
-        require(featureNeuronCount == DIALOGUE_FEATURE_NEURONS)
-        require(featureNeuronCount.toLong() * DIALOGUE_OUTPUT_NEURONS <= MAX_CONNECTIONS)
+        require(featureNeuronCount == DIALOGUE_INPUT_NEURONS)
+        require(featureNeuronCount.toLong() * DIALOGUE_INPUT_FAN_OUT +
+            DIALOGUE_HIDDEN_NEURONS.toLong() * DIALOGUE_OUTPUT_NEURONS <= MAX_CONNECTIONS)
         require(delayNs > 0L && weight.isFinite() && weight in 0.0..1.0)
-        store.initializeSparseDialogueNetwork(neuronCount, featureNeuronCount, delayNs, weight)
-        hot.clear()
+        require(inputToHiddenWeight.isFinite() && inputToHiddenWeight in 0.0..1.0)
+        if (store.initializeSparseDialogueNetwork(
+                neuronCount, featureNeuronCount, delayNs, weight, inputToHiddenWeight,
+            )) hot.clear()
     }
 
     @Synchronized
@@ -417,9 +421,15 @@ class AndroidSparseNeuronNetwork(
         const val MAX_PENDING_EVENTS = 100_000
         const val MAX_HOT_SET_CAPACITY = 4_096
         const val DIALOGUE_OUTPUT_NEURONS = 4
+        const val DIALOGUE_INPUT_NEURONS = 9_000
+        const val DIALOGUE_HIDDEN_START = DIALOGUE_INPUT_NEURONS
+        const val DIALOGUE_OUTPUT_START = MAX_NEURONS - DIALOGUE_OUTPUT_NEURONS
+        const val DIALOGUE_HIDDEN_NEURONS = DIALOGUE_OUTPUT_START - DIALOGUE_HIDDEN_START
+        const val DIALOGUE_FEATURE_NEURONS = DIALOGUE_INPUT_NEURONS
+        const val DIALOGUE_INPUT_FAN_OUT = 8
+        const val DIALOGUE_TOPOLOGY_VERSION = 2
         const val MAX_DIALOGUE_FEATURES_PER_TURN = 128
         const val MAX_DIALOGUE_PAIR_DELAY_NS = 10_000_000L
-        const val DIALOGUE_FEATURE_NEURONS = MAX_NEURONS - DIALOGUE_OUTPUT_NEURONS
         const val DEFAULT_HOT_SET_CAPACITY = 128
         const val MAX_EVENTS_PER_TIMESTAMP = 10_000
         const val MAX_EVENTS_PER_RUN = 100_000
@@ -428,7 +438,8 @@ class AndroidSparseNeuronNetwork(
         const val DEFAULT_MAX_TIMESTAMPS_PER_RUN = 128
         const val DEFAULT_DATABASE_NAME = "jarvis_android_dialogue_jnvm_v2.db"
         const val DEFAULT_CONNECTION_DELAY_NS = 1_000_000L
-        const val DEFAULT_CONNECTION_WEIGHT = 0.75
+        const val DEFAULT_CONNECTION_WEIGHT = 0.15
+        const val DEFAULT_INPUT_TO_HIDDEN_WEIGHT = 0.75
         private const val POTENTIAL_MIN = -2.0
         private const val POTENTIAL_MAX = 2.0
         private const val RESET_POTENTIAL = 0.0
@@ -504,41 +515,111 @@ private class AndroidNeuronSqliteStore(
         featureNeuronCount: Int,
         delayNs: Long,
         weight: Double,
-    ) {
-        val connectionCount = featureNeuronCount.toLong() * AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS
-        if (neuronCount !in (AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS + 1)..AndroidSparseNeuronNetwork.MAX_NEURONS ||
-            featureNeuronCount < 1 ||
-            neuronCount - featureNeuronCount != AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS ||
+        inputToHiddenWeight: Double,
+    ): Boolean {
+        val hiddenCount = AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_NEURONS
+        val outputStart = AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
+        val connectionCount = featureNeuronCount.toLong() * AndroidSparseNeuronNetwork.DIALOGUE_INPUT_FAN_OUT +
+            hiddenCount.toLong() * AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS
+        if (neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS ||
+            featureNeuronCount != AndroidSparseNeuronNetwork.DIALOGUE_INPUT_NEURONS ||
             connectionCount > AndroidSparseNeuronNetwork.MAX_CONNECTIONS ||
-            delayNs <= 0L || !weight.isFinite() || weight !in 0.0..1.0
-        ) throw AndroidNeuronNetworkException("invalid bounded dialogue topology")
+            delayNs <= 0L || !weight.isFinite() || weight !in 0.0..1.0 ||
+            !inputToHiddenWeight.isFinite() || inputToHiddenWeight !in 0.0..1.0
+        ) throw AndroidNeuronNetworkException("invalid bounded multi-stage dialogue topology")
 
         val db = writableDatabase
         db.beginTransaction()
+        var changed = false
         try {
-            val existing = scalar(db, "SELECT COUNT(*) FROM neurons")
-            if (existing != 0L) throw AndroidNeuronNetworkException("network is already initialized")
-            for (id in 0 until neuronCount) insertNeuron(db, id)
-            val firstOutputId = featureNeuronCount
-            for (featureId in 0 until featureNeuronCount) {
-                for (outputIndex in 0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS) {
-                    val outputId = firstOutputId + outputIndex
+            val existingNeurons = scalar(db, "SELECT COUNT(*) FROM neurons")
+            if (existingNeurons == 0L) {
+                for (id in 0 until neuronCount) insertNeuron(db, id)
+                changed = true
+            } else if (existingNeurons != neuronCount.toLong()) {
+                throw AndroidNeuronNetworkException("existing dialogue network has an unexpected neuron count")
+            }
+
+            val topologyVersion = db.rawQuery(
+                "SELECT value FROM metadata WHERE key='dialogue_topology_version'",
+                null,
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+            if (topologyVersion > AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION) {
+                throw AndroidNeuronNetworkException("dialogue topology version is newer than this application")
+            }
+            if (topologyVersion == AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION) {
+                val actualConnections = scalar(db, "SELECT COUNT(*) FROM connections")
+                if (actualConnections != connectionCount) {
+                    throw AndroidNeuronNetworkException("versioned dialogue topology has an unexpected connection count")
+                }
+                db.setTransactionSuccessful()
+                return false
+            }
+
+            // Upgrade the former feature-to-output graph in place. Keep the
+            // old weights attached to the 996 nodes now assigned as hidden units.
+            val preservedWeights = HashMap<Pair<Int, Int>, Double>()
+            if (existingNeurons > 0L) {
+                db.rawQuery(
+                    "SELECT source_id, target_id, weight FROM connections WHERE source_id>=? AND source_id<? AND target_id>=?",
+                    arrayOf(
+                        AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START.toString(),
+                        outputStart.toString(),
+                        outputStart.toString(),
+                    ),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        preservedWeights[cursor.getInt(0) to cursor.getInt(1)] = cursor.getDouble(2)
+                    }
+                }
+                db.delete("connections", null, null)
+                db.delete("events", null, null)
+            }
+
+            for (inputId in 0 until featureNeuronCount) {
+                for (slot in 0 until AndroidSparseNeuronNetwork.DIALOGUE_INPUT_FAN_OUT) {
+                    val hiddenOffset = (inputId * 37 + slot * 113) % hiddenCount
+                    val hiddenId = AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START + hiddenOffset
                     insertConnection(
                         db,
                         AndroidNeuronConnection(
-                            connectionId = "dialog-feature-$featureId-output-$outputIndex",
-                            sourceNeuronId = featureId,
-                            targetNeuronId = outputId,
+                            connectionId = "dialog-input-$inputId-hidden-$hiddenId",
+                            sourceNeuronId = inputId,
+                            targetNeuronId = hiddenId,
                             delayNs = delayNs,
-                            weight = weight,
+                            weight = inputToHiddenWeight,
                         ),
                     )
                 }
             }
+            for (hiddenId in AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until outputStart) {
+                for (outputIndex in 0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS) {
+                    val outputId = outputStart + outputIndex
+                    insertConnection(
+                        db,
+                        AndroidNeuronConnection(
+                            connectionId = "dialog-feature-$hiddenId-output-$outputIndex",
+                            sourceNeuronId = hiddenId,
+                            targetNeuronId = outputId,
+                            delayNs = delayNs,
+                            weight = preservedWeights[hiddenId to outputId] ?: weight,
+                        ),
+                    )
+                }
+            }
+            val metadataValues = ContentValues().apply {
+                put("value", AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION)
+            }
+            if (db.update("metadata", metadataValues, "key='dialogue_topology_version'", null) == 0) {
+                metadataValues.put("key", "dialogue_topology_version")
+                db.insertOrThrow("metadata", null, metadataValues)
+            }
+            changed = true
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+        return changed
     }
 
     override fun registerNeuron(neuronId: Int) {
