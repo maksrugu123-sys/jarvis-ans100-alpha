@@ -30,10 +30,25 @@ class ANS100HybridPopulationControllerTest {
         },
     )
 
+    private fun spikesForSignals(bundle: TypedEvidenceBundle): Set<Int> = buildSet {
+        ANS100CandidateSlotContract.Slot.values().forEach { slot ->
+            ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
+                val feature = ANS100CandidateSlotContract.evidenceFeature(slot, polarity)
+                val record = bundle.records.single { it.feature == feature }
+                val active = (record.value as EvidenceValue.BooleanValue).value
+                if (active) {
+                    val lane = ANS100CandidateSlotContract.readoutLane(slot, polarity)
+                    addAll(lane.startInclusive until lane.endExclusive)
+                }
+            }
+        }
+    }
+
     private fun decide(
         evidence: TypedEvidenceBundle,
         understanding: LocalUnderstanding,
         runTelemetry: AndroidHybridRunTelemetry = buildTelemetry(),
+        emitted: Set<Int> = spikesForSignals(evidence),
         processed: Int = 20,
         pending: Int = 0,
         exhausted: Boolean = false,
@@ -41,13 +56,14 @@ class ANS100HybridPopulationControllerTest {
         evidence = evidence,
         understanding = understanding,
         telemetry = runTelemetry,
+        emittedSpikeNeuronIds = emitted,
         processedEventCount = processed,
         pendingEvents = pending,
         budgetExhausted = exhausted,
     )
 
     @Test
-    fun comparesThreeCandidatesAndSelectsSupportedAnswerAfterAllPopulationsSpike() {
+    fun selectsAnswerFromItsOwnPositiveReadoutLane() {
         val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-1")
         val decision = decide(bundle, understanding)
 
@@ -58,49 +74,61 @@ class ANS100HybridPopulationControllerTest {
         assertEquals(3, decision.candidates.size)
         assertEquals("respond_to_original_request", decision.selectedCandidateId)
         assertTrue(decision.candidates.all { it.activation == 0.0 })
+        assertTrue(decision.responseConstraints.any { it.contains("отдельным спайкам readout") })
         decision.validateAgainst(bundle)
     }
 
     @Test
-    fun criticUsesClarificationEvidenceAgainstDirectAnswerCandidate() {
+    fun criticConflictLaneSuppressesDirectAnswerAndSelectsClarification() {
         val (bundle, understanding) = evidence("Что это?", "hybrid-competition-2")
         val decision = decide(bundle, understanding)
-        val clarificationId = bundle.records.single {
-            it.feature == EvidenceFeature.CORE_REQUIRES_CLARIFICATION_HINT
+        val answerConflictId = bundle.records.single {
+            it.feature == EvidenceFeature.CANDIDATE_ANSWER_CONFLICT
+        }.recordId
+        val clarificationSupportId = bundle.records.single {
+            it.feature == EvidenceFeature.CANDIDATE_CLARIFICATION_SUPPORT
         }.recordId
         val answer = decision.candidates.single { it.candidateId == "respond_to_original_request" }
         val clarification = decision.candidates.single { it.candidateId == "request_clarification" }
 
         assertTrue(understanding.reasoningPlan.requiresClarification)
         assertEquals(ANS100DecisionStatus.NEEDS_CLARIFICATION, decision.status)
-        assertTrue(clarificationId in answer.conflictingEvidenceIds)
-        assertTrue(clarificationId in clarification.supportingEvidenceIds)
+        assertTrue(answerConflictId in answer.conflictingEvidenceIds)
+        assertTrue(clarificationSupportId in clarification.supportingEvidenceIds)
         assertEquals(null, decision.selectedCandidateId)
     }
 
     @Test
-    fun abstainsWhenCoreIntentTaskAndGoalEvidenceAreMissing() {
-        val (original, understanding) = evidence("Привет", "hybrid-competition-3")
-        val stripped = TypedEvidenceBundle(
-            turnId = original.turnId,
-            records = original.records.filterNot {
-                it.feature == EvidenceFeature.CORE_INTENT_HINT ||
-                    it.feature == EvidenceFeature.CORE_TASK_KIND_HINT ||
-                    it.feature == EvidenceFeature.CORE_PLAN_GOAL_HINT
-            },
-        )
-        val decision = decide(stripped, understanding)
+    fun abstainsWhenAnyCandidateReadoutLaneIsMissing() {
+        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-3")
+        val decision = decide(bundle, understanding, emitted = emptySet())
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
+        assertTrue(decision.missingEvidence.any { it.startsWith("candidate_readout_missing:") })
         assertEquals(null, decision.selectedCandidateId)
-        assertTrue(decision.missingEvidence.contains("core_intent_or_task_kind_evidence_missing"))
-        assertTrue(decision.missingEvidence.contains("core_plan_goal_evidence_missing"))
+    }
+
+    @Test
+    fun abstainsWhenReadoutScoresHaveNoPositiveUniqueWinner() {
+        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-4")
+        val allLanes = buildSet {
+            ANS100CandidateSlotContract.Slot.values().forEach { slot ->
+                ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
+                    val lane = ANS100CandidateSlotContract.readoutLane(slot, polarity)
+                    addAll(lane.startInclusive until lane.endExclusive)
+                }
+            }
+        }
+        val decision = decide(bundle, understanding, emitted = allLanes)
+
+        assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
+        assertTrue(decision.uncertainty.contains(ANS100UncertaintyKind.CONFLICTING_EVIDENCE))
     }
 
     @Test
     fun abstainsWhenAnyRequiredPopulationDoesNotSpike() {
-        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-4")
-        val decision = decide(bundle, understanding, buildTelemetry("critic_uncertainty"))
+        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-5")
+        val decision = decide(bundle, understanding, runTelemetry = buildTelemetry("critic_uncertainty"))
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
         assertTrue(decision.abstentionReason!!.contains("critic_uncertainty"))
@@ -110,7 +138,7 @@ class ANS100HybridPopulationControllerTest {
 
     @Test
     fun abstainsWhenTheEventQueueHasNotDrained() {
-        val (bundle, understanding) = evidence("Что дальше?", "hybrid-competition-5")
+        val (bundle, understanding) = evidence("Что дальше?", "hybrid-competition-6")
         val decision = decide(bundle, understanding, pending = 3)
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
@@ -120,7 +148,7 @@ class ANS100HybridPopulationControllerTest {
 
     @Test
     fun preservesExplicitBudgetExhaustion() {
-        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-6")
+        val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-7")
         val decision = decide(bundle, understanding, exhausted = true)
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
