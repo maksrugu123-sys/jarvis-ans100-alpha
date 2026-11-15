@@ -1415,19 +1415,27 @@ function browserExtensionCommand(action, payload = {}) {
 }
 
 async function openOrdinaryBrowser(url, kind = "tab") {
+  const features = kind === "window" ? "popup=yes,width=1200,height=820" : undefined;
+  // Reserve a blank browser surface synchronously during the user's submit gesture.
+  // This keeps the no-extension fallback compatible with popup blockers while the
+  // extension bridge gets a brief chance to open the tab/window itself.
+  const fallbackHandle = window.open("about:blank", "_blank", features);
   const action = kind === "window" ? "open-window" : "open-tab";
   try {
     await browserExtensionCommand(action, {url});
+    if (fallbackHandle && !fallbackHandle.closed) fallbackHandle.close();
     return "extension";
   } catch (error) {
-    if (error.code !== "extension_bridge_unavailable") throw error;
-    const features = kind === "window" ? "popup=yes,width=1200,height=820" : undefined;
-    const handle = window.open(url, "_blank", features);
-    if (!handle) {
-      throw new Error("Браузер заблокировал новую вкладку или окно. Разрешите всплывающие окна для JARVIS.");
+    if (error.code !== "extension_bridge_unavailable") {
+      if (fallbackHandle && !fallbackHandle.closed) fallbackHandle.close();
+      throw error;
     }
-    try { handle.opener = null; } catch { /* Keep the newly opened page isolated. */ }
-    (kind === "window" ? ordinaryBrowserWindowHandles : ordinaryBrowserTabHandles).push(handle);
+    if (!fallbackHandle) {
+      throw new Error("Браузер заблокировал новую вкладку или окно. Разрешите всплывающие окна для JARVIS или установите Browser Bridge.");
+    }
+    fallbackHandle.location.href = url;
+    try { fallbackHandle.opener = null; } catch { /* Keep the newly opened page isolated. */ }
+    (kind === "window" ? ordinaryBrowserWindowHandles : ordinaryBrowserTabHandles).push(fallbackHandle);
     return "browser_fallback";
   }
 }
@@ -1509,7 +1517,8 @@ async function routeBrowserCommand(rawText) {
   const folderMatch = command.match(/^(?:создай|создать)\s+папку(?:\s+с\s+именем)?\s+(.+)$/iu);
   if (folderMatch) {
     const rawName = folderMatch[1].trim();
-    const name = rawName.replace(/^(["'“”])(.+)\1$/u, "$2");
+    const quotedName = rawName.match(/^(?:"([^"]+)"|'([^']+)'|“([^”]+)”|„([^”]+)”)$/u);
+    const name = quotedName ? quotedName.slice(1).find(Boolean) : rawName;
     const result = await api("/api/folders", {name});
     setNotice("Папка «" + result.name + "» создана в workspace JARVIS: " + result.relative_path, "success");
     return true;
