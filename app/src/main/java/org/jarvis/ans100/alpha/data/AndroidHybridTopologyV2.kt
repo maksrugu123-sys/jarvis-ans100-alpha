@@ -106,7 +106,7 @@ object AndroidHybridTopologyV2 {
                 }
                 add(
                     AndroidNeuronConnection(
-                        connectionId = "ans100-v2-$kind-$sourceId-$targetId",
+                        connectionId = "ans100-v3-$kind-$sourceId-$targetId",
                         sourceNeuronId = sourceId,
                         targetNeuronId = targetId,
                         delayNs = CONNECTION_DELAY_NS,
