@@ -599,7 +599,7 @@ class LocalConsoleService:
             "notice": (
                 "The 10,000-neuron ANS-100 V4 graph is connected to each desktop chat turn "
                 "as an advisory structural-signal stage before language generation. "
-                "The legacy 10-neuron signal preprocessor remains as a separate fallback. "
+                "The legacy 10-neuron signal preprocessor continues in parallel and remains a fallback. "
                 "This is not independent semantic reasoning; learning and persistent graph state are disabled."
                 if active else
                 "The desktop ANS-100 V4 graph is not active in this runtime."
