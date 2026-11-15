@@ -2734,3 +2734,24 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** source/API inspection only (project branch and upstream LiteRT-LM tag `v0.17.1`). No code/runtime change, Gradle build, tests, APK, model inference, CI or device test was performed.
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
+
+## 2026-11-15 — Inspect LiteRT-LM native/JNI route for exact token preflight
+
+**Exact-version findings:**
+- Re-read the pinned upstream v0.17.1 Kotlin wrapper, JNI declarations, JNI C++ implementation and C++ Conversation header.
+- Conversation.getTokenCount() maps to nativeConversationGetTokenCount(), which calls C++ Conversation::GetTokenCount() and reports the current conversation KV-cache count.
+- The v0.17.1 Kotlin wrapper has no countTokens() method; its LiteRtLmJni.kt has no native count-messages declaration; and its JNI C++ file has no nativeConversationCountTokens bridge. The v0.17.1 C++ header also has no Conversation::CountTokens method. Thus a bridge cannot be called from the existing AAR: the required operation is not present in that pinned release.
+- The experimental renderMessageIntoString() / renderPrefaceIntoString() methods only render prompt text. They do not return token counts and must not be treated as a tokenizer.
+- Checked the newer v0.18.1 tag: it still does not expose CountTokens in the C++ Conversation header or the Android Kotlin/JNI API.
+- The current upstream main C++ header has since added Conversation::CountTokens(messages, optional_args), documented to include prompt-template tokens and media soft tokens without mutating the KV cache. However, the current main Kotlin wrapper and JNI declarations/implementation still do not bridge that operation. Therefore neither upgrading to 0.18.1 nor merely upgrading to current Kotlin sources supplies an Android-callable preflight API.
+- The app currently uses Kotlin Android plugin 2.3.10, so the Kotlin metadata compatibility note for newer LiteRT-LM releases is not, by itself, the main blocker. The missing Android Kotlin/JNI bridge remains the blocker.
+
+**Decision:**
+- Do not add speculative JNI calls, reflection against private native pointers, or a hand-written tokenizer. The existing prebuilt AAR does not expose a supported exact preflight entry point, and a safe custom bridge would require a deliberately rebuilt/maintained LiteRT-LM native artifact plus ABI, lifecycle, packaging and licensing verification.
+- Do not upgrade LiteRT-LM solely for token budgeting: the inspected 0.18.1 and current Kotlin/JNI layers still lack the bridge.
+- Keep the 4,000-character guard unchanged. Keep post-generation KV-cache count labelled as such. If a future approximate warning is desired, implement and label it separately as an estimate, never as exact token count.
+- Revisit exact budgeting only after upstream ships an Android Kotlin/JNI API or the project explicitly approves maintaining a custom native LiteRT-LM build.
+
+**Verification:** read-only source inspection of the project dependency/build configuration and upstream LiteRT-LM tags v0.17.1, v0.18.1 and main. No source/runtime changes outside this documentation entry; no Gradle build, unit tests, APK, AAR download/inspection, native build, model inference, CI or device test was run.
+
+**Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
