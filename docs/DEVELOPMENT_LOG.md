@@ -2681,7 +2681,7 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 
 **Changed:**
 - Removed Settings from the bottom navigation. A single top-left gear control now opens the unified settings destination from chat and the other main sections; the same control becomes a back-to-chat arrow while Settings is open.
-- Added a persisted GPU preference for the Qwen3 LiteRT-LM engine. GPU is opt-in; CPU remains the default.
+- Added a persisted GPU preference for the Qwen3 LiteRT-LM engine. GPU is opt-in; CPU remains the default. Engine reconfiguration is dispatched through the existing single-thread conversation executor so engine creation/use/close retain one owner thread.
 - Added LiteRT-LM's optional Android native-library declarations for `libvndksupport.so` and `libOpenCL.so`.
 - Added initialization-time GPU-to-CPU fallback and one same-turn CPU retry if GPU inference fails after initialization. A failed GPU attempt disables the preference to avoid repeating a known-bad backend on every message.
 - Exposed the GPU preference in model settings and refresh the active backend label after generation.

@@ -398,23 +398,43 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setGpuEnabled(enabled: Boolean) {
-        val current = mutableState.value
-        if (current.conversation.isBusy) return
-        try {
-            conversationResponseEngine.setGpuEnabled(enabled)
-            mutableState.value = current.copy(
-                conversation = current.conversation.copy(
-                    gpuEnabled = conversationResponseEngine.gpuEnabled,
-                    backendLabel = conversationResponseEngine.backendLabel,
-                    error = null,
-                ),
-            )
-        } catch (error: Exception) {
-            mutableState.value = current.copy(
-                conversation = current.conversation.copy(
-                    error = error.message ?: "Не удалось изменить режим GPU.",
-                ),
-            )
+        val before = mutableState.value
+        if (before.conversation.isBusy || before.conversation.gpuEnabled == enabled) return
+        // LiteRT-LM Engine creation, use and close stay on the conversation executor.
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(
+                isBusy = true,
+                gpuEnabled = enabled,
+                error = null,
+            ),
+        )
+        conversationExecutor.execute {
+            try {
+                conversationResponseEngine.setGpuEnabled(enabled)
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            gpuEnabled = conversationResponseEngine.gpuEnabled,
+                            backendLabel = conversationResponseEngine.backendLabel,
+                            error = null,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            gpuEnabled = conversationResponseEngine.gpuEnabled,
+                            backendLabel = conversationResponseEngine.backendLabel,
+                            error = error.message ?: "Не удалось изменить режим GPU.",
+                        ),
+                    )
+                }
+            }
         }
     }
 
