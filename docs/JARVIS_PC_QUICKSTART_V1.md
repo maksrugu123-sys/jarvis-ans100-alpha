@@ -175,3 +175,16 @@ This is a documented launch procedure based on the current CLI source. It has no
 ## Windows 10 first desktop window milestone
 
 The repository now includes `start_jarvis_windows.bat`, which opens the existing responsive dark JARVIS PWA in an Edge app-mode window. This is an app-like desktop window, not yet a native compiled Windows executable or installer. The browser command shortcuts are available in the chat and route only to the existing read-only visible-browser API. Windows 10 startup, Edge app-mode launch, Python storage behavior, Playwright/Chromium, and all command flows remain **NOT VERIFIED ON WINDOWS**. No build or tests were run for this change.
+
+
+## First packaged Windows desktop build
+
+A PyInstaller **onedir** packaging definition is now provided at `packaging/windows/JARVIS.spec`. It packages the local Python console into `JARVIS/JARVIS.exe` and includes the PWA static assets and Browser Bridge extension files. The console remains enabled because the current authentication flow prints a one-time access token to the Core terminal.
+
+For the packaged build, extract the complete build archive and place `start_jarvis_windows_exe.bat` beside the `JARVIS` folder, then double-click the BAT file. It starts the bundled desktop Core and opens the PWA in Edge or Chrome app mode. This is a portable folder build, **not an installer**. Do not move only the EXE out of its folder.
+
+The first Windows build is produced by the dedicated workflow `.github/workflows/windows-desktop.yml` on pushes to `experiment/jarvis-integrated-prototype-v1` that touch the Windows packaging or desktop runtime paths. The artifact is named `jarvis-windows-portable`. The build is performed on a Windows runner; it does not execute the Android Gradle build or the Python test suite.
+
+The base package does not bundle the optional LiteRT-LM runtime/model or Playwright/Chromium. Those remain separate optional installations. Browser extension installation remains manual through Chrome/Edge developer mode. The packaged build and Windows/Chrome/Edge runtime must be considered **unverified until the workflow succeeds and a user performs a real Windows smoke test**.
+
+Regression coverage: `tools/jarvis_app/test_windows_packaging.py` checks the packaging entry point, included UI/extension assets and launcher contract. Status: **NOT RUN**.
