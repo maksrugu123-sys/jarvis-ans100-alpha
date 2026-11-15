@@ -1238,9 +1238,13 @@ function renderDialogTurnTrace(trace) {
   const events = Number(trace.ans100_network_processed_events || 0).toLocaleString("ru-RU");
   const spikes = Number(trace.ans100_network_spike_count || 0).toLocaleString("ru-RU");
   const decision = trace.ans100_network_decision || "abstain";
+  const decisionStatus = trace.ans100_network_decision_status || "неизвестен";
+  const margin = Number(trace.ans100_network_winner_margin || 0).toFixed(2);
+  const readout = trace.ans100_network_readout_complete ? "полный" : "неполный";
   const graph = trace.ans100_network_invoked
     ? "ANS-100 V4: 10 000 нейронов · 25 500 связей · событий: " + events +
-      " · импульсов: " + spikes + " · сигнал-кандидат: " + decision
+      " · импульсов: " + spikes + " · кандидат: " + decision +
+      " · статус: " + decisionStatus + " · отрыв: " + margin + " · readout: " + readout
     : trace.ans100_network_error
       ? "ANS-100 V4: ошибка прохода; использован резервный путь."
       : "ANS-100 V4: runtime не подключён к этому ядру.";
@@ -1273,11 +1277,14 @@ async function refreshAns100Status() {
     const runtimeMode = runtime.runtime_mode === "fresh_in_memory_graph_per_turn"
       ? "Новая сеть запускается для каждого сообщения."
       : "Режим runtime не подтверждён.";
+    const inputContract = runtime.input_contract === "ANDROID_TYPED_EVIDENCE_V1"
+      ? "Входные слоты совместимы с Android Typed Evidence."
+      : "Контракт входных признаков не подтверждён.";
     root.textContent =
       count + " нейронов · " + edges + " связей · " + populations +
       " популяций · версия V" + String(topology.version || "—") + ". " +
       (active
-        ? "Подключена к чату перед языковой моделью. " + runtimeMode +
+        ? "Подключена к чату перед языковой моделью. " + inputContract + " " + runtimeMode +
           " Обучение и постоянное хранение состояния пока выключены."
         : "Топология описана, но не активна в текущем чате.") +
       " Решение сети — вспомогательный сигнал, не самостоятельное понимание.";
