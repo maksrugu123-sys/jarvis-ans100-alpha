@@ -47,6 +47,13 @@ class ANS100HybridPopulationController {
         val activePopulationIds = requiredPopulationIds.filter { populationId ->
             (activityById[populationId]?.uniqueSpikingNeurons ?: 0) > 0
         }
+        AndroidHybridTopologyV2.populations.forEach { population ->
+            val telemetryCount = activityById.getValue(population.id).uniqueSpikingNeurons
+            val emittedCount = emittedSpikeNeuronIds.count(population::contains)
+            require(telemetryCount == emittedCount) {
+                "population telemetry and emitted spike IDs disagree for ${population.id}"
+            }
+        }
         val missingPopulations = requiredPopulationIds.filterNot { it in activePopulationIds }
         val exhausted = budgetExhausted || pendingEvents > 0
 
