@@ -399,10 +399,11 @@ class LiteRtLmLocalEngine:
                         "selected", "needs_clarification", "abstained",
                     }:
                         raw_status = "abstained"
-                    safe_list = lambda key: [
-                        item[:64] for item in ans100_context.get(key, [])[:7]
-                        if isinstance(item, str)
-                    ] if isinstance(ans100_context.get(key), list) else []
+                    def safe_list(key: str) -> list[str]:
+                        value = ans100_context.get(key)
+                        if not isinstance(value, list):
+                            return []
+                        return [item[:64] for item in value[:7] if isinstance(item, str)]
                     safe_ans100 = {
                         "runtime_version": "JARVIS_ANS100_HYBRID_V4",
                         "topology_id": "ans100-hybrid-v2",
