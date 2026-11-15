@@ -14,7 +14,6 @@ class ANS100HybridPopulationController {
         val conflictSpikes: Int,
     ) {
         val score: Int get() = supportSpikes - conflictSpikes
-        val hasOutput: Boolean get() = supportSpikes + conflictSpikes > 0
     }
 
     fun decide(
