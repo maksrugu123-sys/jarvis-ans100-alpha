@@ -1546,7 +1546,7 @@ async function routeBrowserCommand(rawText) {
     return true;
   }
 
-  const closeTabMatch = command.match(/^(?:закрой|закрыть)\s+(?:(?:последнюю|открытую|созданную|мою)\s+)?вкладку(?:\s+обычного\s+браузера)?$/iu);
+  const closeTabMatch = command.match(/^(?:закрой|закрыть)\s+(?:(?:последнюю|открытую|созданную|мою)\s+)?вкладку(?:\s+(?:обычного\s+)?браузера)?$/iu);
   const closeWindowMatch = command.match(/^(?:закрой|закрыть)\s+(?:(?:последнее|открытое|созданное|моё)\s+)?окно(?:\s+(?:обычного\s+)?браузера)?$/iu);
   if (closeTabMatch) {
     if (!window.confirm("Закрыть последнюю вкладку, которую JARVIS открыл своей командой? Другие вкладки не затрагиваются.")) return true;
