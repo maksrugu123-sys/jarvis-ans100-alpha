@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jarvis-windows-package-${{ github.ref }}
@@ -56,3 +56,24 @@ jobs:
           path: dist/jarvis-windows-portable.zip
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish or update public Windows preview release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-experimental-latest
+          name: JARVIS Windows — latest experimental build
+          target_commitish: ${{ github.ref_name }}
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+          body: |
+            Автоматически обновляемая экспериментальная Windows-сборка JARVIS.
+
+            Собрана из ветки: `${{ github.ref_name }}`
+            Коммит: `${{ github.sha }}`
+
+            Это переносимая папка приложения в ZIP, не установщик.
+            Работа на Windows 10 и взаимодействие с Chrome/Edge должны быть проверены отдельно.
+          files: dist/jarvis-windows-portable.zip
