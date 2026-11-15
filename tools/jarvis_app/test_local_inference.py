@@ -74,6 +74,44 @@ class LiteRtLmLocalEngineTests(unittest.TestCase):
         self.assertIn('"execution_authorized":false', system_message)
         self.assertIn('"task_id":"review"', system_message)
 
+    def test_ans100_v4_context_is_passed_as_bounded_advisory_signal(self) -> None:
+        self.adapter.respond(
+            "Помоги разобраться",
+            [],
+            ans100_context={
+                "runtime_version": "JARVIS_ANS100_HYBRID_V4",
+                "neuron_count": 10_000,
+                "connection_count": 25_500,
+                "processed_events": 420,
+                "spike_count": 38,
+                "input_neuron_count": 17,
+                "selected_candidate": "clarification",
+                "readout_spike_counts": {
+                    "answer": {"support": 0, "conflict": 3},
+                    "clarification": {"support": 8, "conflict": 0},
+                    "abstain": {"support": 0, "conflict": 0},
+                },
+                "candidate_signal_scores": {
+                    "answer": -3, "clarification": 8, "abstain": 0,
+                },
+                "readout_complete": True,
+                "event_budget_exhausted": False,
+                "pending_events_at_budget_boundary": 0,
+                "turn_boundary_events_discarded": False,
+                "decision_reason": "highest_positive_readout_score",
+                "decision_authority": "advisory_only",
+                "learning_enabled": False,
+                "persistent_state": False,
+                "scope": "bounded_structural_signal_routing_not_semantic_reasoning",
+            },
+        )
+        system_message = self.fake_engine.options["system_message"]
+        self.assertIn("ANS-100 V4", system_message)
+        self.assertIn('"neuron_count":10000', system_message)
+        self.assertIn('"selected_candidate":"clarification"', system_message)
+        self.assertIn("advisory-сигнал", system_message)
+        self.assertIn("не самостоятельное понимание", system_message)
+
     def test_external_page_context_is_marked_untrusted_and_not_executable(self) -> None:
         self.adapter.respond(
             "Summarize this page",
