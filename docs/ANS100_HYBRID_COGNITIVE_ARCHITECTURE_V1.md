@@ -188,3 +188,14 @@ The versioned `ANS100Decision` contract supports up to eight candidates, same-tu
 **Not yet done:** no call site in `LiteRtLmResponseEngine`/conversation coordinator, no neural population producer, no memory/tool adapter, and no rollout flag. Existing runtime behavior is unchanged. The next phase must integrate behind a disabled-by-default flag, preserve fallback, and collect measured evidence before enabling the hybrid path.
 
 Tests were added but not executed. No Gradle build, APK/AAB, CI, GitHub Actions, benchmark or device run was performed.
+
+
+## 14. Phase 3 implementation status — gated legacy bridge
+
+Added `ANS100DecisionPolicy` and wired its output through `LiteRtLmResponseEngine` and `PromptContextBudgeter` behind the persisted `ans100_decision_handoff_enabled` flag, whose default is false. The adapter is explicitly marked `CORE_POLICY_V1` / `LEGACY_DIALOGUE_READOUT_V1`: it uses Core's current clarification heuristic and original user-message evidence. Existing neural readout measurements contribute event telemetry only; neural labels/scores are not promoted to semantic decisions or probabilities.
+
+The handoff is built only for messages within the typed-evidence input limit and is appended only when the current estimated prompt budget allows it. Otherwise the existing Qwen prompt path is preserved. The fallback response path and normal default behavior remain unchanged. The flag currently has no user-facing settings control.
+
+This is an integration bridge, **not** the selected 10,000-neuron hybrid cognitive architecture. No new populations, recurrent semantic association, candidate/critic network, learning update, or hybrid decision controller has been implemented. The hybrid controller must replace this conservative policy only after its population topology, event budgets, evidence attribution and ablation evaluation are implemented.
+
+Tests were added for policy labeling and optional prompt inclusion but were not executed. No build, CI, workflow, APK/AAB, benchmark or device run was performed.
