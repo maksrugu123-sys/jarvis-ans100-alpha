@@ -883,8 +883,8 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
-    override fun dialogueSynapseWeight(featureNeuronId: Int, outputNeuronId: Int): Double {
-        val connectionId = dialogueConnectionId(featureNeuronId, outputNeuronId)
+    override fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double {
+        val connectionId = dialogueConnectionId(sourceNeuronId, outputNeuronId)
         return readableDatabase.rawQuery(
             "SELECT weight FROM connections WHERE connection_id=?",
             arrayOf(connectionId),
