@@ -128,6 +128,10 @@ internal interface AndroidNeuronStateStore : Closeable {
         sourceNeuronIds: List<Int>,
         outputRewards: Map<Int, Double>,
     ): AndroidDialogueRewardResult
+    fun recordHybridCandidateEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
+    fun applyHybridCandidateFeedback(turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
+    fun recordHybridCandidateEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
+    fun applyHybridCandidateFeedback(turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double
     fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double>
     fun commitTimestamp(
@@ -510,6 +514,49 @@ class AndroidSparseNeuronNetwork(
         return store.applyDialogueReward(contextId, sources, outputRewards)
     }
 
+    /**
+     * Records eligibility only for existing v4 synapses belonging to the named candidate lane.
+     * Callers must supply connection IDs observed in this turn's actual spike path.
+     */
+    @Synchronized
+    fun recordHybridCandidateEligibility(
+        turnId: String,
+        candidateId: String,
+        connectionIds: List<String>,
+        eligibility: Double,
+    ): Int {
+        validateHybridCandidateTrace(turnId, candidateId, connectionIds, eligibility)
+        return store.recordHybridCandidateEligibility(turnId, candidateId, connectionIds.distinct(), eligibility)
+    }
+
+    /** Consumes one turn/candidate trace; only explicit user or verified outcome feedback can update it. */
+    @Synchronized
+    fun applyHybridCandidateFeedback(
+        turnId: String,
+        candidateId: String,
+        reward: Double,
+        source: ANS100CandidateFeedbackLearner.FeedbackSource,
+    ): Int {
+        require(turnId.isNotBlank() && turnId.length <= 128)
+        require(ANS100CandidateSlotContract.slotForCandidateId(candidateId) != null)
+        require(reward.isFinite() && reward in -1.0..1.0 && reward != 0.0)
+        return store.applyHybridCandidateFeedback(turnId, candidateId, reward, source)
+    }
+
+    private fun validateHybridCandidateTrace(
+        turnId: String,
+        candidateId: String,
+        connectionIds: List<String>,
+        eligibility: Double,
+    ) {
+        require(turnId.isNotBlank() && turnId.length <= 128)
+        require(ANS100CandidateSlotContract.slotForCandidateId(candidateId) != null)
+        require(connectionIds.isNotEmpty() && connectionIds.size <= 2_000)
+        require(connectionIds.distinct().size == connectionIds.size)
+        require(connectionIds.all { it.startsWith("ans100-v4-") })
+        require(eligibility.isFinite() && eligibility in 0.0..1.0)
+    }
+
     @Synchronized
     fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double {
         require(sourceNeuronId in DIALOGUE_HIDDEN_START until DIALOGUE_OUTPUT_START)
@@ -658,6 +705,7 @@ private class AndroidNeuronSqliteStore(
         )
         db.execSQL("CREATE INDEX connections_source_idx ON connections(source_id)")
         createDialogueEligibilityTable(db)
+        createHybridCandidateEligibilityTable(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
         )
@@ -668,9 +716,17 @@ private class AndroidNeuronSqliteStore(
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) createDialogueEligibilityTable(db)
+        if (oldVersion < 3) createHybridCandidateEligibilityTable(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
+    }
+
+    private fun createHybridCandidateEligibilityTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS hybrid_candidate_eligibility (turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, connection_id TEXT NOT NULL, eligibility REAL NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(turn_id, candidate_id, connection_id))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS hybrid_candidate_eligibility_age_idx ON hybrid_candidate_eligibility(created_at_ms)")
     }
 
     private fun createDialogueEligibilityTable(db: SQLiteDatabase) {
@@ -1174,6 +1230,112 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
+    override fun recordHybridCandidateEligibility(
+        turnId: String,
+        candidateId: String,
+        connectionIds: List<String>,
+        eligibility: Double,
+    ): Int {
+        val slot = ANS100CandidateSlotContract.slotForCandidateId(candidateId)
+            ?: throw AndroidNeuronNetworkException("unknown ANS-100 candidate lane")
+        val db = writableDatabase
+        val nowMs = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            db.delete("hybrid_candidate_eligibility", "created_at_ms<?", arrayOf((nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()))
+            for (connectionId in connectionIds) {
+                val endpoints = db.rawQuery(
+                    "SELECT source_id, target_id FROM connections WHERE connection_id=?",
+                    arrayOf(connectionId),
+                ).use { cursor ->
+                    if (!cursor.moveToFirst()) throw AndroidNeuronNetworkException("candidate trace references an unknown synapse")
+                    cursor.getInt(0) to cursor.getInt(1)
+                }
+                if (!belongsToCandidateLane(endpoints.first, slot) || !belongsToCandidateLane(endpoints.second, slot)) {
+                    throw AndroidNeuronNetworkException("candidate trace references a synapse outside its isolated lane")
+                }
+                val values = ContentValues().apply {
+                    put("turn_id", turnId)
+                    put("candidate_id", candidateId)
+                    put("connection_id", connectionId)
+                    put("eligibility", eligibility)
+                    put("created_at_ms", nowMs)
+                }
+                db.insertOrThrow("hybrid_candidate_eligibility", null, values)
+            }
+            val total = scalar(db, "SELECT COUNT(*) FROM hybrid_candidate_eligibility")
+            val excess = total - MAX_HYBRID_CANDIDATE_ELIGIBILITY_ROWS
+            if (excess > 0L) db.execSQL(
+                "DELETE FROM hybrid_candidate_eligibility WHERE rowid IN (SELECT rowid FROM hybrid_candidate_eligibility ORDER BY created_at_ms ASC, rowid ASC LIMIT ?)",
+                arrayOf(excess),
+            )
+            db.setTransactionSuccessful()
+            return connectionIds.size
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun applyHybridCandidateFeedback(
+        turnId: String,
+        candidateId: String,
+        reward: Double,
+        source: ANS100CandidateFeedbackLearner.FeedbackSource,
+    ): Int {
+        val db = writableDatabase
+        val nowMs = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            if (source != ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER &&
+                source != ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME
+            ) {
+                db.delete("hybrid_candidate_eligibility", "turn_id=? AND candidate_id=?", arrayOf(turnId, candidateId))
+                db.setTransactionSuccessful()
+                return 0
+            }
+            val rows = mutableListOf<Pair<String, Double>>()
+            db.rawQuery(
+                "SELECT connection_id, eligibility FROM hybrid_candidate_eligibility WHERE turn_id=? AND candidate_id=? AND created_at_ms>=?",
+                arrayOf(turnId, candidateId, (nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()),
+            ).use { cursor -> while (cursor.moveToNext()) rows += cursor.getString(0) to cursor.getDouble(1) }
+            var updated = 0
+            for ((connectionId, eligibility) in rows) {
+                val current = db.rawQuery("SELECT weight FROM connections WHERE connection_id=?", arrayOf(connectionId)).use {
+                    if (!it.moveToFirst()) throw AndroidNeuronNetworkException("candidate synapse disappeared before feedback commit")
+                    it.getDouble(0)
+                }
+                val delta = (HYBRID_CANDIDATE_LEARNING_RATE * reward * eligibility)
+                    .coerceIn(-HYBRID_CANDIDATE_MAX_DELTA, HYBRID_CANDIDATE_MAX_DELTA)
+                val next = (current + delta).coerceIn(HYBRID_CANDIDATE_MIN_WEIGHT, 1.0)
+                if (next != current) {
+                    val values = ContentValues().apply { put("weight", next) }
+                    if (db.update("connections", values, "connection_id=?", arrayOf(connectionId)) != 1) {
+                        throw AndroidNeuronNetworkException("candidate synapse update did not affect exactly one row")
+                    }
+                    updated++
+                }
+            }
+            db.delete("hybrid_candidate_eligibility", "turn_id=? AND candidate_id=?", arrayOf(turnId, candidateId))
+            db.setTransactionSuccessful()
+            return updated
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun belongsToCandidateLane(neuronId: Int, slot: ANS100CandidateSlotContract.Slot): Boolean {
+        val ranges = ANS100CandidateSlotContract.Polarity.values().flatMap { polarity ->
+            listOf(
+                ANS100CandidateSlotContract.associationLane(slot, polarity),
+                ANS100CandidateSlotContract.workingLane(slot, polarity),
+                ANS100CandidateSlotContract.candidateLane(slot, polarity),
+                ANS100CandidateSlotContract.criticLane(slot, polarity),
+                ANS100CandidateSlotContract.readoutLane(slot, polarity),
+            )
+        }
+        return ranges.any { it.contains(neuronId) }
+    }
+
     override fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double {
         val connectionId = dialogueConnectionId(sourceNeuronId, outputNeuronId)
         return readableDatabase.rawQuery(
@@ -1354,7 +1516,11 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
+        private const val MAX_HYBRID_CANDIDATE_ELIGIBILITY_ROWS = 50_000L
+        private const val HYBRID_CANDIDATE_LEARNING_RATE = 0.02
+        private const val HYBRID_CANDIDATE_MAX_DELTA = 0.01
+        private const val HYBRID_CANDIDATE_MIN_WEIGHT = 0.05
         private const val MAX_DIALOGUE_ELIGIBILITY_ROWS = 50_000L
         private const val MAX_DIALOGUE_ELIGIBILITY_AGE_MS = 5 * 60 * 1_000L
         private const val DIALOGUE_ELIGIBILITY_TAU_NS = 20_000_000.0
