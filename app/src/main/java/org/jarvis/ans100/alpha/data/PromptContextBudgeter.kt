@@ -119,8 +119,9 @@ internal object PromptContextBudgeter {
             }
         }
 
-        val handoffText = ans100Handoff?.promptContext
-            ?.takeIf { ans100Handoff.turnId.isNotBlank() && it.length <= ANS100QwenHandoff.MAX_CONTEXT_CHARS }
+        val handoffText = ans100Handoff
+            ?.takeIf { it.turnId.isNotBlank() && it.promptContext.length <= ANS100QwenHandoff.MAX_CONTEXT_CHARS }
+            ?.promptContext
         if (handoffText != null) {
             val section = "Структурированная передача ANS-100 для языковой реализации (контракт, не доказательство):\n$handoffText"
             val candidateSections = sections + section
