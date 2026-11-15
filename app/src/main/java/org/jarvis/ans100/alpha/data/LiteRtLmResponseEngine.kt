@@ -146,7 +146,9 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val file = modelStore.installedFile() ?: return fallback.respond(
             clean, recentHistory, memoryContext, signalContext, understanding,
         )
-        val decisionHandoff = if (
+        // The live hybrid turn supplies its own evidence-bound decision package.
+        // The older opt-in Core policy remains only as a compatibility fallback.
+        val decisionHandoff = dialogueNeuralAnalysis?.hybridQwenHandoff ?: if (
             ans100DecisionHandoffRequested &&
             clean.length <= TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS
         ) {
