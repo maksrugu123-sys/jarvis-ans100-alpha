@@ -287,3 +287,13 @@ Missing, unexpected or tied readout activity results in abstention. Readout coun
 New source tests cover the three-candidate arbitration, clarification conflict, no-positive-winner tie, missing readout, missing population and event-budget paths. Android instrumentation tests cover deterministic edge count, six-lane isolation, one-candidate-to-one-readout propagation, and seven-population activity. All tests are authored but NOT run. No build, CI, APK/AAB, benchmark or Android device validation was performed.
 
 **Remaining scientific gap:** the Core still decides which typed support/conflict labels to send. To demonstrate independent neural reasoning, the next phase must replace these labels with independently extracted evidence features, train or otherwise learn the candidate/critic transformations, and show on held-out examples that perturbing evidence changes the correct readout while irrelevant perturbations do not. The current implementation is a candidate-specific neural routing/readout prototype, not a trained semantic reasoner.
+
+## 20. 2026-11-15 candidate-specific sparse lanes (topology storage version 4)
+
+The separate hybrid database now stores topology version 4. Six reserved input neurons represent support/conflict for three bounded candidates. Each signal has its own bounded lane through association, working state, candidate and critic populations, ending in a dedicated readout range. The six readout ranges are disjoint and cover the 600-neuron decision population. The topology is deterministic and has 25,500 directed edges.
+
+The Core encoder supplies the six Boolean support/conflict labels as HEURISTIC typed evidence. The network propagates those pulses through candidate-specific routes; the controller compares the resulting readout spike counts (support minus conflict). It does not interpret raw text, discover evidence, or learn those labels. Therefore the current result is candidate-specific neural routing and readout of Core-provided heuristic signals, not independent semantic reasoning or trained hypothesis selection. Readout counts are uncalibrated and must not be described as probabilities.
+
+The v4 database name is jarvis_ans100_hybrid_v4.db; the previous v3 and legacy databases are left untouched. Existing initializer checks exact topology metadata and edge counts and refuses to reinterpret a mismatched database.
+
+Tests now cover lane isolation, disjoint readout ranges, propagation of a single candidate pulse and equal route structure. They are authored but NOT run. No build, CI, APK/AAB, benchmark or device validation was performed.
