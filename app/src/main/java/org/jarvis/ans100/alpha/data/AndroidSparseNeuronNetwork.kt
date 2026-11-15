@@ -88,13 +88,13 @@ data class AndroidNeuronRunResult(
     val processedEvents: Int,
     val processedNeuronBatches: Int,
     val emittedSpikes: List<Pair<Int, Long>>,
-    /** Synapses whose propagated event reached a neuron that spiked in this run. */
-    val activatedConnectionIds: Set<String> = emptySet(),
     val pendingEvents: Int,
     val budgetExhausted: Boolean,
     val currentTimeNs: Long,
     /** Present only when this database matches the versioned seven-population hybrid topology. */
     val hybridTelemetry: AndroidHybridRunTelemetry? = null,
+    /** Synapses whose propagated event reached a neuron that spiked in this run. */
+    val activatedConnectionIds: Set<String> = emptySet(),
 )
 
 private fun connectionIdFromPropagatedEvent(eventId: String): String? =
