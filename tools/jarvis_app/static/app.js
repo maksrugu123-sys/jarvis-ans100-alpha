@@ -1236,6 +1236,10 @@ $("#chat-form").addEventListener("submit", async event => {
   button.disabled = true;
   button.textContent = "Модель отвечает…";
   try {
+    if (await routeBrowserCommand(text)) {
+      input.value = "";
+      return;
+    }
     const before = await api("/api/conversation");
     const result = await api("/api/conversation", {text, expected_revision: before.revision});
     input.value = "";
@@ -1255,6 +1259,82 @@ $("#chat-form").addEventListener("submit", async event => {
   }
 });
 let browserState = null;
+
+async function routeBrowserCommand(rawText) {
+  const command = rawText.trim();
+  const searchMatch = command.match(/^(?:открой(?:\\s+браузер)?\\s+и\\s+)?(?:найди|поищи|поиск)\\s+(?:в\\s+интернете\\s+)?(.+)$/iu);
+  const openMatch = command.match(/^(?:открой|перейди\\s+на)\\s+(?:сайт\\s+)?(.+)$/iu);
+  const readMatch = command.match(/^(?:прочитай|прочти)\\s+(?:открытую\\s+)?страницу$/iu);
+  const launchMatch = command.match(/^(?:открой|запусти)\\s+браузер$/iu);
+  if (!searchMatch && !openMatch && !readMatch && !launchMatch) return false;
+
+  if (browserState?.paused) {
+    throw new Error("Сначала верните управление браузером JARVIS.");
+  }
+
+  const panel = document.querySelector(".browser-panel");
+  const reveal = () => panel?.scrollIntoView({behavior: "smooth", block: "start"});
+
+  if (searchMatch) {
+    const query = searchMatch[1].trim();
+    if (!query || query.length > 500) throw new Error("Поисковый запрос должен содержать не более 500 символов.");
+    $("#browser-query").value = query;
+    $("#browser-status").textContent = "Команда из чата: поиск в видимом Chromium…";
+    const result = await api("/api/browser/search", {query});
+    renderBrowserState(result);
+    renderBrowserSources(result.sources);
+    $("#browser-page-text").textContent = "Поисковая выдача открыта в отдельном окне браузера. Выберите источник ниже.";
+    $("#browser-page-text").classList.add("empty");
+    setNotice("JARVIS выполнил команду поиска в видимом браузере.", "success");
+    reveal();
+    return true;
+  }
+
+  if (launchMatch) {
+    const result = await api("/api/browser/open", {url: "https://www.bing.com"});
+    renderBrowserState(result);
+    $("#browser-page-text").textContent = "Браузер открыт. Напишите «Найди в интернете …», чтобы выполнить поиск.";
+    $("#browser-page-text").classList.add("empty");
+    setNotice("Видимый браузер открыт по команде.", "success");
+    reveal();
+    return true;
+  }
+
+  if (openMatch) {
+    const target = openMatch[1].trim().replace(/[.,!?]+$/u, "");
+    const knownSites = {
+      youtube: "https://www.youtube.com/",
+      google: "https://www.google.com/",
+      bing: "https://www.bing.com/",
+      github: "https://github.com/",
+      wikipedia: "https://www.wikipedia.org/",
+      minecraft: "https://www.minecraft.net/",
+    };
+    const url = knownSites[target.toLocaleLowerCase()] ||
+      (/^https?:\\/\\//iu.test(target) ? target :
+        /^(?:www\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)+(?:\\/[^\\s]*)?$/iu.test(target)
+          ? "https://" + target : null);
+    if (!url) {
+      throw new Error("Укажите адрес сайта или известное имя: YouTube, Google, GitHub, Wikipedia.");
+    }
+    const result = await api("/api/browser/open", {url});
+    renderBrowserState(result);
+    $("#browser-page-text").textContent = "Страница открыта. Напишите «Прочитай страницу», чтобы JARVIS извлёк её текст.";
+    $("#browser-page-text").classList.add("empty");
+    setNotice("JARVIS открыл сайт в видимом браузере.", "success");
+    reveal();
+    return true;
+  }
+
+  const result = await api("/api/browser/read", {});
+  $("#browser-page-meta").textContent = result.title + " · " + result.url +
+    (result.truncated ? " · текст ограничен лимитом" : "");
+  $("#browser-page-text").textContent = result.text;
+  $("#browser-page-text").classList.remove("empty");
+  setNotice("JARVIS прочитал открытую страницу. Её содержимое считается недоверенным.", "success");
+  reveal();
+  return true;
+}
 
 function renderBrowserState(state) {
   browserState = state;
