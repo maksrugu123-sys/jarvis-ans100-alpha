@@ -13,10 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.jarvis.ans100.alpha.data.LocalConversationCoordinator
 import org.jarvis.ans100.alpha.data.LocalConversationSignalRuntime
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationSignalStorage
-import org.jarvis.ans100.alpha.data.DialogFeaturePrediction
 import org.jarvis.ans100.alpha.data.DialogueNeuralAnalysis
-import org.jarvis.ans100.alpha.data.LocalDialogFeatureClassifier
-import org.jarvis.ans100.alpha.data.SharedPreferencesDialogFeatureStorage
 import org.jarvis.ans100.alpha.data.LocalConversationMessage
 import org.jarvis.ans100.alpha.data.LocalConversationRepository
 import org.jarvis.ans100.alpha.data.LocalWorkspaceMemory
@@ -43,9 +40,6 @@ import org.jarvis.ans100.alpha.data.RuntimeWorkspaceMergePlan
 import org.jarvis.ans100.alpha.data.SharedPreferencesDraftStorage
 import org.jarvis.ans100.alpha.data.shouldUseTermuxSignal
 import org.jarvis.ans100.alpha.data.AndroidWebSearchService
-import org.jarvis.ans100.alpha.data.AndroidSparseNeuronNetwork
-import org.jarvis.ans100.alpha.data.AndroidNeuronNetworkStats
-import org.jarvis.ans100.alpha.data.AndroidNeuronEvent
 import org.jarvis.ans100.alpha.data.AndroidHybridTopologyV2
 import org.jarvis.ans100.alpha.data.AndroidHybridEvidenceInputAdapter
 import org.jarvis.ans100.alpha.data.TypedEvidenceEncoder
@@ -69,15 +63,7 @@ data class LocalConversationUiState(
     val modelStatus: String = "Модель не установлена.",
     val modelDownloadProgress: Float? = null,
     val modelDownloadStatus: String? = null,
-    val dialogFeaturePrediction: DialogFeaturePrediction? = null,
-    val dialogFeatureError: String? = null,
-    val lastRewardedAssistantMessageId: String? = null,
-    val nativeNetworkStats: AndroidNeuronNetworkStats? = null,
-    val nativeNetworkBusy: Boolean = false,
-    val nativeNetworkError: String? = null,
-    val nativeNetworkMessage: String? = null,
-    val nativeDialogueContextId: String? = null,
-    val nativeDialogueRewardNeuronIds: List<Int> = emptyList(),
+    val hybridNetworkSummary: String? = null,
     val modelInitializationMs: Long = 0L,
     val responseGenerationMs: Long = 0L,
     val lastTurnDurationMs: Long = 0L,
@@ -96,12 +82,6 @@ data class LocalConversationUiState(
     val understandingIntent: String? = null,
     val reasoningPlanSteps: Int = 0,
     val reasoningNeedsClarification: Boolean = false,
-)
-
-private data class NativeDialogueFeedbackContext(
-    val contextId: String,
-    val rewardNeuronIds: List<Int>,
-    val analysis: DialogueNeuralAnalysis,
 )
 
 data class RuntimeBridgeUiState(
@@ -191,21 +171,17 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         application.applicationContext, modelStore,
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
-    private val nativeNetworkExecutor = Executors.newSingleThreadExecutor()
-    private val nativeNeuronNetwork = AndroidSparseNeuronNetwork(application.applicationContext)
+    private val hybridNetworkExecutor = Executors.newSingleThreadExecutor()
     /** Separate SQLite namespace; never shares or migrates the legacy dialogue graph. */
     private val hybridNeuronNetworkDelegate = lazy {
         AndroidHybridTopologyV2.open(application.applicationContext)
     }
     private val hybridNeuronNetwork by hybridNeuronNetworkDelegate
-    @Volatile private var nativeDialogueGeneration: Long = 0L
+    @Volatile private var conversationGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
     private val localSignalRuntime = LocalConversationSignalRuntime(
         SharedPreferencesConversationSignalStorage(application.applicationContext),
-    )
-    private val dialogFeatureClassifier = LocalDialogFeatureClassifier(
-        SharedPreferencesDialogFeatureStorage(application.applicationContext),
     )
     private val workspaceMemoryCache = LocalWorkspaceMemoryCache(
         SharedPreferencesLocalWorkspaceMemoryStorage(application.applicationContext),
@@ -624,15 +600,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val searchIntent = AndroidWebSearchIntent.extract(clean)
-        val dialogueGeneration = nativeDialogueGeneration + 1L
-        nativeDialogueGeneration = dialogueGeneration
+        val dialogueGeneration = conversationGeneration + 1L
+        conversationGeneration = dialogueGeneration
         mutableState.value = before.copy(
             conversation = before.conversation.copy(
                 isBusy = true,
                 error = null,
                 streamingResponse = "",
-                nativeDialogueContextId = null,
-                nativeDialogueRewardNeuronIds = emptyList(),
             ),
         )
         if (searchIntent != null) {
@@ -648,11 +622,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 messages = messages,
                                 isBusy = false,
                                 error = null,
-                                dialogFeaturePrediction = null,
-                                dialogFeatureError = null,
-                                lastRewardedAssistantMessageId = null,
-                                nativeDialogueContextId = null,
-                                nativeDialogueRewardNeuronIds = emptyList(),
                             ),
                         )
                     }
@@ -674,11 +643,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val turnStartedAtNs = System.nanoTime()
             conversationResponseEngine.resetTurnMetrics()
             try {
-                // The seven-population ANS-100 graph is now the only neural graph
-                // used in the ordinary dialogue route. The legacy three-layer
-                // classifier/readout is intentionally excluded from this turn.
-                val dialogPredictionResult: Pair<DialogFeaturePrediction?, String?> = null to null
-                val nativeFeedbackContext: NativeDialogueFeedbackContext? = null
+                // The seven-population ANS-100 graph is the only dialogue neural network.
                 val hybridDialogueAnalysis = if (!clean.startsWith("/")) {
                     runHybridDialoguePass(clean, before.conversation.messages)
                 } else null
@@ -745,7 +710,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 // when both the Termux endpoint and the in-process checkpoint are unavailable.
                 conversationResponseEngine.onPartialResponse = { partial ->
                     mainHandler.post {
-                        if (nativeDialogueGeneration == dialogueGeneration) {
+                        if (conversationGeneration == dialogueGeneration) {
                             val current = mutableState.value
                             mutableState.value = current.copy(
                                 conversation = current.conversation.copy(streamingResponse = partial),
@@ -771,11 +736,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             error = null,
                             backendLabel = conversationResponseEngine.backendLabel,
                             gpuEnabled = conversationResponseEngine.gpuEnabled,
-                            dialogFeaturePrediction = dialogPredictionResult.first,
-                            dialogFeatureError = dialogPredictionResult.second,
-                            lastRewardedAssistantMessageId = null,
-                            nativeDialogueContextId = nativeFeedbackContext?.contextId,
-                            nativeDialogueRewardNeuronIds = nativeFeedbackContext?.rewardNeuronIds.orEmpty(),
+                            hybridNetworkSummary = if (clean.startsWith("/")) {
+                                current.conversation.hybridNetworkSummary
+                            } else {
+                                hybridDialogueAnalysis?.hybridTelemetrySummary
+                                    ?: "Гибридный проход не завершён; ответ продолжен без решения ANS-100."
+                            },
                             modelInitializationMs = modelMetrics.initializationMs,
                             responseGenerationMs = modelMetrics.generationMs,
                             lastTurnDurationMs = elapsedMs,
@@ -813,102 +779,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun trainDialogFeatureClassifier(expectedLabel: String) {
-        if (expectedLabel !in LocalDialogFeatureClassifier.LABELS) return
-        val before = mutableState.value
-        if (before.conversation.isBusy) return
-        val latestUserMessage = before.conversation.messages.lastOrNull {
-            it.role == org.jarvis.ans100.alpha.data.ConversationRole.USER
-        } ?: return
-        mutableState.value = before.copy(
-            conversation = before.conversation.copy(isBusy = true, dialogFeatureError = null),
-        )
-        conversationExecutor.execute {
-            try {
-                val prediction = dialogFeatureClassifier.learn(latestUserMessage.text, expectedLabel)
-                val nativeContextId = before.conversation.nativeDialogueContextId
-                val nativeRewardNeurons = before.conversation.nativeDialogueRewardNeuronIds
-                if (nativeContextId != null && nativeRewardNeurons.isNotEmpty()) {
-                    enqueueNativeDialogueLabelReward(nativeContextId, nativeRewardNeurons, expectedLabel)
-                }
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            isBusy = false,
-                            dialogFeaturePrediction = prediction,
-                            dialogFeatureError = null,
-                        ),
-                    )
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            isBusy = false,
-                            dialogFeatureError = error.message ?: "Не удалось сохранить обучение.",
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-
-    fun applyDialogRewardFeedback(reward: Double) {
-        if (reward != -1.0 && reward != 1.0) return
-        val before = mutableState.value
-        if (before.conversation.isBusy) return
-        val assistantMessage = before.conversation.messages.lastOrNull {
-            it.role == org.jarvis.ans100.alpha.data.ConversationRole.ASSISTANT
-        } ?: return
-        if (before.conversation.lastRewardedAssistantMessageId == assistantMessage.id) return
-        val assistantIndex = before.conversation.messages.indexOfLast { it.id == assistantMessage.id }
-        val userMessage = before.conversation.messages.take(assistantIndex).lastOrNull {
-            it.role == org.jarvis.ans100.alpha.data.ConversationRole.USER
-        } ?: return
-        mutableState.value = before.copy(
-            conversation = before.conversation.copy(isBusy = true, dialogFeatureError = null),
-        )
-        conversationExecutor.execute {
-            try {
-                val prediction = dialogFeatureClassifier.applyReward(userMessage.text, reward)
-                val nativeContextId = before.conversation.nativeDialogueContextId
-                val nativeRewardNeurons = before.conversation.nativeDialogueRewardNeuronIds
-                val predictedLabel = before.conversation.dialogFeaturePrediction?.predictedLabel
-                if (nativeContextId != null && nativeRewardNeurons.isNotEmpty() && predictedLabel != null) {
-                    enqueueNativeDialogueReward(
-                        nativeContextId,
-                        nativeRewardNeurons,
-                        mapOf(dialogueOutputNeuronId(predictedLabel) to reward),
-                    )
-                }
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            isBusy = false,
-                            dialogFeaturePrediction = prediction,
-                            dialogFeatureError = null,
-                            lastRewardedAssistantMessageId = assistantMessage.id,
-                        ),
-                    )
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            isBusy = false,
-                            dialogFeatureError = error.message ?: "Не удалось применить reward-сигнал.",
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
     /**
      * Runs the seven-population graph, applies a conservative population gate,
      * and prepares the evidence-bound decision package consumed by Qwen.
@@ -921,7 +791,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ): DialogueNeuralAnalysis? {
         if (message.isBlank() || message.length > TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS) return null
         return try {
-            nativeNetworkExecutor.submit<DialogueNeuralAnalysis?> {
+            hybridNetworkExecutor.submit<DialogueNeuralAnalysis?> {
                 try {
                     hybridNeuronNetwork.initializeHybridTopologyV2()
                     var prior = hybridNeuronNetwork.stats()
@@ -1028,420 +898,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             }.get()
         } catch (_: Exception) {
             null
-        }
-    }
-
-    /**
-     * Feeds a bounded text-feature batch through the 9,996-input/4-output
-     * SQLite LIF-DT graph. Output bias events arrive with the feature batch;
-     * delayed feature→output events determine which output neurons spike.
-     * Eligibility is stored only for pairs that actually participated in a
-     * postsynaptic spike. Ordinary chat never changes synaptic weights.
-     */
-    private fun enqueueNativeDialogueFeatures(
-        featureIds: List<Int>,
-        generation: Long,
-        classifierPrediction: DialogFeaturePrediction?,
-    ): NativeDialogueFeedbackContext? {
-        val boundedIds = featureIds.asSequence()
-            .map { it % AndroidSparseNeuronNetwork.DIALOGUE_INPUT_NEURONS }
-            .distinct()
-            .take(MAX_DIALOGUE_FEATURE_EVENTS)
-            .toList()
-        if (boundedIds.isEmpty()) return null
-
-        val contextId = "dialog-${UUID.randomUUID()}"
-        // Wait for the bounded native pass before invoking the language model. The
-        // network has its own single-thread executor, so SQLite/JNVM work never runs
-        // on the conversation or main thread.
-        return try {
-            nativeNetworkExecutor.submit<NativeDialogueFeedbackContext?> {
-                try {
-                    mainHandler.post {
-                        val current = mutableState.value
-                        mutableState.value = current.copy(
-                            conversation = current.conversation.copy(
-                                nativeNetworkMessage = "Проверка и подготовка трёхслойной сети ANS-100 из 10 000 нейронов…",
-                            ),
-                        )
-                    }
-                    nativeNeuronNetwork.initializeSparseDialogueNetwork(
-                        neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
-                        weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
-                        inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
-                    )
-                    val prior = nativeNeuronNetwork.stats()
-                    if (prior.neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS) {
-                        throw IllegalStateException(
-                            "Сохранённая диалоговая сеть имеет неожиданное число нейронов: ${prior.neuronCount}.",
-                        )
-                    }
-                    if (prior.currentTimeNs > Long.MAX_VALUE - DIALOGUE_INPUT_STEP_NS -
-                        2L * AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS) {
-                        throw IllegalStateException("Модельные часы JNVM достигли предельного значения.")
-                    }
-                    val nextTime = prior.currentTimeNs + DIALOGUE_INPUT_STEP_NS
-                    val featureEvents = boundedIds.mapIndexed { index, neuronId ->
-                        AndroidNeuronEvent(
-                            eventId = "chat-$contextId-feature-$index",
-                            timeNs = nextTime,
-                            targetNeuronId = neuronId,
-                            strength = 1.0,
-                        )
-                    }
-                    // Only text-feature neurons receive external input. Output units
-                    // must activate through learned synaptic propagation, never a direct bias event.
-                    nativeNeuronNetwork.scheduleInputs(featureEvents)
-                    val result = nativeNeuronNetwork.run(
-                        maxEvents = MAX_DIALOGUE_EVENTS_PER_TURN,
-                        maxTimestamps = MAX_DIALOGUE_TIMESTAMPS_PER_TURN,
-                    )
-                    val activeHiddenSpikes = result.emittedSpikes.asSequence()
-                        .map { it.first }
-                        .filter {
-                            it in AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until
-                                AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
-                        }
-                        .distinct()
-                        .toList()
-                    // Keep feedback/readout work bounded even if a large feature
-                    // batch activates a substantial part of the hidden population.
-                    val hiddenSpikes = activeHiddenSpikes
-                        .take(AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN)
-                    val outputSpikes = result.emittedSpikes.asSequence()
-                        .map { it.first }
-                        .filter {
-                            it in AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START until
-                                AndroidSparseNeuronNetwork.MAX_NEURONS
-                        }
-                        .distinct()
-                        .toList()
-                    val rawReadout = if (hiddenSpikes.isEmpty()) {
-                        emptyMap()
-                    } else {
-                        nativeNeuronNetwork.dialogueOutputScores(hiddenSpikes)
-                    }
-                    val networkOutputScores = if (rawReadout.isEmpty()) {
-                        emptyMap()
-                    } else {
-                        mapOf(
-                            "greeting" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START] ?: 0.0),
-                            "question" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 1] ?: 0.0),
-                            "thanks" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 2] ?: 0.0),
-                            "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 3] ?: 0.0),
-                        )
-                    }
-                    val readoutSummary = if (networkOutputScores.isEmpty()) {
-                        "нет активного readout"
-                    } else {
-                        networkOutputScores.toSortedMap().entries.joinToString(", ") { (label, score) ->
-                            "$label=${String.format(java.util.Locale.ROOT, "%.2f", score)}"
-                        }
-                    }
-                    val hiddenSpikeTimeNs = nextTime + AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS
-                    val eligibilityCount = if (hiddenSpikes.isEmpty() || outputSpikes.isEmpty()) {
-                        0
-                    } else {
-                        nativeNeuronNetwork.recordDialogueEligibility(
-                            contextId = contextId,
-                            sourceNeuronIds = hiddenSpikes,
-                            outputNeuronIds = outputSpikes,
-                            preTimeNs = hiddenSpikeTimeNs,
-                            postTimeNs = result.currentTimeNs,
-                        )
-                    }
-                    if (generation != nativeDialogueGeneration) return@submit null
-                    val stats = nativeNeuronNetwork.stats()
-                    val predictionLabel = classifierPrediction?.predictedLabel
-                    val analysis = DialogueNeuralAnalysis(
-                        networkNeuronCount = stats.neuronCount,
-                        activeFeatureCount = boundedIds.size,
-                        activeHiddenNeuronCount = activeHiddenSpikes.size,
-                        processedEvents = result.processedEvents,
-                        processedNeuronBatches = result.processedNeuronBatches,
-                        outputSpikeCount = outputSpikes.size,
-                        pendingEvents = result.pendingEvents,
-                        classifierLabel = predictionLabel,
-                        classifierConfidenceMargin = if (predictionLabel != null) {
-                            classifierPrediction?.confidenceMargin
-                        } else null,
-                        classifierTrainedExamples = classifierPrediction?.trainedExamples ?: 0,
-                        statePersisted = true,
-                        networkOutputScores = networkOutputScores,
-                    )
-                    mainHandler.post {
-                        val current = mutableState.value
-                        mutableState.value = current.copy(
-                            conversation = current.conversation.copy(
-                                nativeNetworkStats = stats,
-                                nativeNetworkError = null,
-                                nativeNetworkMessage =
-                                    "ANS-100: входных признаков ${featureEvents.size}, активных скрытых нейронов ${activeHiddenSpikes.size}, " +
-                                        "выходных импульсов ${outputSpikes.size}, обработано событий ${result.processedEvents}, " +
-                                        "eligibility-связей ${eligibilityCount}; readout-веса: $readoutSummary. " +
-                                        "Это слабые подсказки для языковой модели, не вероятности и не самостоятельное мышление.",
-                            ),
-                        )
-                    }
-                    NativeDialogueFeedbackContext(
-                        contextId,
-                        if (eligibilityCount > 0) hiddenSpikes else emptyList(),
-                        analysis,
-                    )
-                } catch (error: Exception) {
-                    mainHandler.post {
-                        val current = mutableState.value
-                        mutableState.value = current.copy(
-                            conversation = current.conversation.copy(
-                                nativeNetworkError = error.message ?: "Диалоговый нейронный проход недоступен.",
-                                nativeNetworkMessage = "Чат продолжен без нейронного контекста.",
-                            ),
-                        )
-                    }
-                    null
-                }
-            }.get()
-        } catch (error: InterruptedException) {
-            Thread.currentThread().interrupt()
-            null
-        } catch (error: Exception) {
-            null
-        }
-    }
-
-    private fun dialogueOutputNeuronId(label: String): Int {
-        val index = when (label) {
-            "greeting" -> 0
-            "question" -> 1
-            "thanks" -> 2
-            "farewell" -> 3
-            else -> throw IllegalArgumentException("Неизвестная метка диалога.")
-        }
-        return AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + index
-    }
-
-    /** Explicit class selection rewards the selected output and weakens alternatives. */
-    private fun enqueueNativeDialogueLabelReward(
-        contextId: String,
-        rewardNeuronIds: List<Int>,
-        expectedLabel: String,
-    ) {
-        val selected = dialogueOutputNeuronId(expectedLabel)
-        val rewards = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).associate { index ->
-            val outputId = AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + index
-            outputId to if (outputId == selected) 1.0 else -1.0 / 3.0
-        }
-        enqueueNativeDialogueReward(contextId, rewardNeuronIds, rewards)
-    }
-
-    /** User feedback is attached to the latest assistant response and its pending spike trace. */
-    private fun enqueueNativeDialogueReward(
-        contextId: String,
-        rewardNeuronIds: List<Int>,
-        rewards: Map<Int, Double>,
-    ) {
-        nativeNetworkExecutor.execute {
-            try {
-                val result = nativeNeuronNetwork.applyDialogueReward(contextId, rewardNeuronIds, rewards)
-                val stats = nativeNeuronNetwork.stats()
-                mainHandler.post {
-                    val current = mutableState.value
-                    val ownsFeedbackContext =
-                        current.conversation.nativeDialogueContextId == contextId
-                    val nextConversation = current.conversation.copy(
-                        nativeNetworkStats = stats,
-                        nativeNetworkError = if (ownsFeedbackContext && result.updatedSynapses == 0) {
-                            null
-                        } else if (ownsFeedbackContext) {
-                            null
-                        } else {
-                            current.conversation.nativeNetworkError
-                        },
-                        nativeNetworkMessage = if (ownsFeedbackContext) {
-                            if (result.updatedSynapses > 0) {
-                                "R-STDP reward применён: обновлено синапсов ${result.updatedSynapses}; " +
-                                    "просрочено eligibility: ${result.expiredSynapses}."
-                            } else {
-                                "R-STDP reward не изменил веса: для этого хода не найден действующий eligibility-след."
-                            }
-                        } else {
-                            current.conversation.nativeNetworkMessage
-                        },
-                        nativeDialogueContextId = if (ownsFeedbackContext) null
-                            else current.conversation.nativeDialogueContextId,
-                        nativeDialogueRewardNeuronIds = if (ownsFeedbackContext) emptyList()
-                            else current.conversation.nativeDialogueRewardNeuronIds,
-                    )
-                    mutableState.value = current.copy(conversation = nextConversation)
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    val current = mutableState.value
-                    val ownsFeedbackContext =
-                        current.conversation.nativeDialogueContextId == contextId
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkError = if (ownsFeedbackContext) {
-                                error.message ?: "Не удалось применить R-STDP reward."
-                            } else {
-                                current.conversation.nativeNetworkError
-                            },
-                            nativeDialogueContextId = if (ownsFeedbackContext) null
-                                else current.conversation.nativeDialogueContextId,
-                            nativeDialogueRewardNeuronIds = if (ownsFeedbackContext) emptyList()
-                                else current.conversation.nativeDialogueRewardNeuronIds,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    fun refreshNativeNeuronNetwork() {
-        nativeNetworkExecutor.execute {
-            try {
-                val stats = nativeNeuronNetwork.stats()
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkStats = stats,
-                            nativeNetworkError = null,
-                        ),
-                    )
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkError = error.message ?: "Не удалось прочитать состояние JNVM.",
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    fun initializeNativeNeuronNetwork() {
-        val before = mutableState.value
-        if (before.conversation.nativeNetworkBusy) return
-        mutableState.value = before.copy(
-            conversation = before.conversation.copy(
-                nativeNetworkBusy = true,
-                nativeNetworkError = null,
-                nativeNetworkMessage = "Создание или обновление трёхслойной разреженной сети из 10 000 нейронов…",
-            ),
-        )
-        nativeNetworkExecutor.execute {
-            try {
-                nativeNeuronNetwork.initializeSparseDialogueNetwork(
-                    neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
-                    weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
-                    inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
-                )
-                val stats = nativeNeuronNetwork.stats()
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkBusy = false,
-                            nativeNetworkStats = stats,
-                            nativeNetworkError = null,
-                            nativeNetworkMessage = "Подготовлена трёхслойная сеть: 9 000 входных, 996 скрытых и 4 выходных LIF-DT нейрона; до 75 984 разреженных синапсов, состояние хранится в SQLite JNVM.",
-                        ),
-                    )
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkBusy = false,
-                            nativeNetworkError = error.message ?: "Не удалось создать сеть.",
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    fun runNativeNeuronProbe() {
-        val before = mutableState.value
-        if (before.conversation.nativeNetworkBusy) return
-        mutableState.value = before.copy(
-            conversation = before.conversation.copy(
-                nativeNetworkBusy = true,
-                nativeNetworkError = null,
-                nativeNetworkMessage = "Обработка ограниченного пакета нейронных событий…",
-            ),
-        )
-        nativeNetworkExecutor.execute {
-            try {
-                val prior = nativeNeuronNetwork.stats()
-                if (prior.neuronCount == 0) {
-                    throw IllegalStateException("Сначала создай сеть из 10 000 нейронов.")
-                }
-                nativeNeuronNetwork.initializeSparseDialogueNetwork(
-                    neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
-                    weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
-                    inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
-                )
-                if (prior.currentTimeNs > Long.MAX_VALUE - 10_000_000L -
-                    2L * AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS
-                ) {
-                    throw IllegalStateException("Модельные часы JNVM достигли предела.")
-                }
-                val nextTime = prior.currentTimeNs + 10_000_000L
-                nativeNeuronNetwork.scheduleInputs(
-                    listOf(
-                        AndroidNeuronEvent(
-                            eventId = "phone-probe-a-${UUID.randomUUID()}",
-                            timeNs = nextTime,
-                            targetNeuronId = 0,
-                            strength = 1.0,
-                        ),
-                        AndroidNeuronEvent(
-                            eventId = "phone-probe-b-${UUID.randomUUID()}",
-                            timeNs = nextTime,
-                            targetNeuronId = 996,
-                            strength = 1.0,
-                        ),
-                    ),
-                )
-                val result = nativeNeuronNetwork.run(maxEvents = 4_096, maxTimestamps = 4)
-                val stats = nativeNeuronNetwork.stats()
-                val hiddenSpikes = result.emittedSpikes.count {
-                    it.first in AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until
-                        AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
-                }
-                val outputSpikes = result.emittedSpikes.count {
-                    it.first in AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START until
-                        AndroidSparseNeuronNetwork.MAX_NEURONS
-                }
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkBusy = false,
-                            nativeNetworkStats = stats,
-                            nativeNetworkError = null,
-                            nativeNetworkMessage = "Тест трёх слоёв: событий ${result.processedEvents}; скрытых импульсов ${hiddenSpikes}; выходных импульсов ${outputSpikes}; очередь ${result.pendingEvents}.",
-                        ),
-                    )
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    val current = mutableState.value
-                    mutableState.value = current.copy(
-                        conversation = current.conversation.copy(
-                            nativeNetworkBusy = false,
-                            nativeNetworkStats = runCatching { nativeNeuronNetwork.stats() }.getOrNull(),
-                            nativeNetworkError = error.message ?: "Импульсный тест не выполнен.",
-                        ),
-                    )
-                }
-            }
         }
     }
 
@@ -2628,11 +2084,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val TERMUX_PACKAGE_NAME = "com.termux"
-        private const val MAX_DIALOGUE_FEATURE_EVENTS = 128
-        private const val MAX_DIALOGUE_EVENTS_PER_TURN = 4_096
-        private const val MAX_DIALOGUE_TIMESTAMPS_PER_TURN = 4
-        private const val DIALOGUE_INPUT_STEP_NS = 10_000_000L
-        private const val DIALOGUE_INITIAL_SYNAPSE_WEIGHT = 0.15
         private const val HYBRID_DIALOGUE_INPUT_STEP_NS = 10_000_000L
         private const val MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS = 4_096
         private const val MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS = 128
@@ -2644,14 +2095,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         // Disconnect it first so the worker can finish and close the model engine.
         modelStore.cancelDownload()
         conversationExecutor.execute { conversationResponseEngine.close() }
-        nativeNetworkExecutor.execute {
-            nativeNeuronNetwork.close()
+        hybridNetworkExecutor.execute {
             if (hybridNeuronNetworkDelegate.isInitialized()) {
                 runCatching { hybridNeuronNetwork.close() }
             }
         }
         conversationExecutor.shutdown()
-        nativeNetworkExecutor.shutdown()
+        hybridNetworkExecutor.shutdown()
         runtimeExecutor.shutdownNow()
         peerSyncExecutor.shutdownNow()
         super.onCleared()
