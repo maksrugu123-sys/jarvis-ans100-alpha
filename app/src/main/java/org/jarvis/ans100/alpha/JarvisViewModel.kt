@@ -46,6 +46,11 @@ import org.jarvis.ans100.alpha.data.AndroidWebSearchService
 import org.jarvis.ans100.alpha.data.AndroidSparseNeuronNetwork
 import org.jarvis.ans100.alpha.data.AndroidNeuronNetworkStats
 import org.jarvis.ans100.alpha.data.AndroidNeuronEvent
+import org.jarvis.ans100.alpha.data.AndroidHybridTopologyV2
+import org.jarvis.ans100.alpha.data.AndroidHybridEvidenceInputAdapter
+import org.jarvis.ans100.alpha.data.TypedEvidenceEncoder
+import org.jarvis.ans100.alpha.data.TypedEvidenceInput
+import org.jarvis.ans100.alpha.data.LocalUnderstandingPipeline
 import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
 import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
@@ -186,6 +191,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val conversationExecutor = Executors.newSingleThreadExecutor()
     private val nativeNetworkExecutor = Executors.newSingleThreadExecutor()
     private val nativeNeuronNetwork = AndroidSparseNeuronNetwork(application.applicationContext)
+    /** Separate SQLite namespace; never shares or migrates the legacy dialogue graph. */
+    private val hybridNeuronNetwork by lazy {
+        AndroidHybridTopologyV2.open(application.applicationContext)
+    }
     @Volatile private var nativeDialogueGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
@@ -674,6 +683,25 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         activeFeatureIds, dialogueGeneration, dialogPredictionResult.first,
                     )
                 } else null
+                // Experimental seven-population sidecar runs before generation. Its
+                // bounded activity report is passed to Qwen as advisory context only.
+                val hybridTelemetrySummary = if (!clean.startsWith("/")) {
+                    runHybridDialoguePass(clean)
+                } else null
+                val neuralAnalysisForModel = (
+                    nativeFeedbackContext?.analysis ?: DialogueNeuralAnalysis(
+                        networkNeuronCount = 0,
+                        activeFeatureCount = 0,
+                        processedEvents = 0,
+                        processedNeuronBatches = 0,
+                        outputSpikeCount = 0,
+                        pendingEvents = 0,
+                        classifierLabel = null,
+                        classifierConfidenceMargin = null,
+                        classifierTrainedExamples = 0,
+                        statePersisted = false,
+                    )
+                ).copy(hybridTelemetrySummary = hybridTelemetrySummary)
                 val runtimeState = mutableState.value.runtime
                 val signalContext = if (!clean.startsWith("/")) {
                     val useTermuxSignal = shouldUseTermuxSignal(
@@ -734,7 +762,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
                 val messages = try {
-                    conversationCoordinator.send(clean, signalContext, nativeFeedbackContext?.analysis)
+                    conversationCoordinator.send(clean, signalContext, neuralAnalysisForModel)
                 } finally {
                     conversationResponseEngine.onPartialResponse = null
                 }
@@ -886,6 +914,74 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Runs the isolated seven-population network as a bounded dialogue sidecar.
+     * The report is descriptive telemetry passed to the response engine; it is
+     * not used as a truth score, action permission, or semantic decision.
+     */
+    private fun runHybridDialoguePass(message: String): String? {
+        if (message.isBlank() || message.length > TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS) return null
+        return try {
+            nativeNetworkExecutor.submit<String?> {
+                try {
+                    hybridNeuronNetwork.initializeHybridTopologyV2()
+                    val prior = hybridNeuronNetwork.stats()
+                    if (prior.currentTimeNs > Long.MAX_VALUE - HYBRID_DIALOGUE_INPUT_STEP_NS) {
+                        return@submit null
+                    }
+                    val turnId = "hybrid-" + UUID.randomUUID()
+                    val understanding = LocalUnderstandingPipeline().analyze(message)
+                    val evidence = TypedEvidenceEncoder().encode(
+                        TypedEvidenceInput(
+                            turnId = turnId,
+                            rawUserMessage = message,
+                            understanding = understanding,
+                        ),
+                    )
+                    val batch = AndroidHybridEvidenceInputAdapter.createBatch(
+                        evidence,
+                        prior.currentTimeNs + HYBRID_DIALOGUE_INPUT_STEP_NS,
+                    )
+                    if (!hybridNeuronNetwork.beginHybridTurn(batch)) return@submit null
+
+                    var result = hybridNeuronNetwork.run(
+                        maxEvents = MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS,
+                        maxTimestamps = MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS,
+                    )
+                    var passes = 1
+                    while (result.pendingEvents > 0 && passes < MAX_HYBRID_DIALOGUE_MAX_PASSES) {
+                        result = hybridNeuronNetwork.run(
+                            maxEvents = MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS,
+                            maxTimestamps = MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS,
+                        )
+                        passes++
+                    }
+                    val telemetry = result.hybridTelemetry ?: return@submit null
+                    buildString {
+                        append("topology=").append(telemetry.topologyId)
+                        append(" v").append(telemetry.topologyVersion)
+                        append("; events=").append(telemetry.populations.sumOf { it.receivedEventCount })
+                        append("; passes=").append(passes)
+                        append("; pending=").append(result.pendingEvents)
+                        append("; budgetExhausted=").append(result.budgetExhausted)
+                        append("; populations=")
+                        append(telemetry.populations.joinToString(" | ") { activity ->
+                            activity.populationId + ":received=" + activity.receivedEventCount +
+                                ",processed=" + activity.uniqueNeuronsProcessed +
+                                ",spiked=" + activity.uniqueSpikingNeurons +
+                                ",spikes=" + activity.spikeCount +
+                                ",out=" + activity.outgoingEventCount
+                        })
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+            }.get()
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -2491,6 +2587,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         private const val MAX_DIALOGUE_TIMESTAMPS_PER_TURN = 4
         private const val DIALOGUE_INPUT_STEP_NS = 10_000_000L
         private const val DIALOGUE_INITIAL_SYNAPSE_WEIGHT = 0.15
+        private const val HYBRID_DIALOGUE_INPUT_STEP_NS = 10_000_000L
+        private const val MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS = 4_096
+        private const val MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS = 128
+        private const val MAX_HYBRID_DIALOGUE_MAX_PASSES = 4
     }
 
     override fun onCleared() {
@@ -2498,7 +2598,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         // Disconnect it first so the worker can finish and close the model engine.
         modelStore.cancelDownload()
         conversationExecutor.execute { conversationResponseEngine.close() }
-        nativeNetworkExecutor.execute { nativeNeuronNetwork.close() }
+        nativeNetworkExecutor.execute {
+            nativeNeuronNetwork.close()
+            if (runCatching { hybridNeuronNetwork }.isSuccess) {
+                runCatching { hybridNeuronNetwork.close() }
+            }
+        }
         conversationExecutor.shutdown()
         nativeNetworkExecutor.shutdown()
         runtimeExecutor.shutdownNow()
