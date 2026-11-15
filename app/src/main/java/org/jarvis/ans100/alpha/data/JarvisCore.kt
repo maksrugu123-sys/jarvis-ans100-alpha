@@ -196,6 +196,11 @@ data class ConversationSignalContext(
  * They do not replace open-ended language-model replies.
  */
 internal object LocalDialogueFastPaths {
+    /**
+     * Bounded deterministic replies for identity and explicitly stated user facts.
+     * Facts are extracted only from locally saved user messages; no personal trait
+     * is inferred and nothing is written to a second profile store.
+     */
     fun assistantIdentityReply(
         prompt: String,
         recentHistory: List<LocalConversationMessage> = emptyList(),
@@ -208,49 +213,106 @@ internal object LocalDialogueFastPaths {
 
         fun introducedName(value: String): String? {
             val normalizedValue = normalize(value)
-            return Regex("меня зовут\\s+([\\p{L}][\\p{L}-]{1,29})")
+            return Regex("(?:меня зовут|мое имя)\\s+([\\p{L}][\\p{L}-]{1,29})")
                 .find(normalizedValue)?.groupValues?.getOrNull(1)
                 ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
         }
 
+        fun introducedProject(value: String): String? {
+            // The look-ahead allows dots inside names such as RAZLOM.NET while
+            // stopping at the final sentence punctuation.
+            val match = Regex(
+                "(?:мой проект(?: называется)?|проект называется|разрабатываю(?: проект)?|создаю проект|работаю над проектом)\\s+([^\\n!?;]{2,80}?)(?=\\s*[.!?;]|$)",
+                RegexOption.IGNORE_CASE,
+            ).find(value) ?: return null
+            val project = match.groupValues.getOrNull(1)
+                ?.substringBefore(',')
+                ?.replace(Regex("\\s+"), " ")
+                ?.trim()
+                ?.trimEnd('.', ',', ':', ';')
+                ?.take(72)
+            return project?.takeIf {
+                it.length >= 2 && normalize(it) !in setOf("этот проект", "свой проект", "новый проект")
+            }
+        }
+
+        val userMessages = recentHistory.asReversed().asSequence()
+            .filter { it.role == ConversationRole.USER }
+            .take(MAX_RECENT_FACT_LOOKBACK)
+            .toList()
+        val rememberedName = introducedName(prompt)
+            ?: userMessages.asSequence().mapNotNull { introducedName(it.text) }.firstOrNull()
+        val rememberedProject = introducedProject(prompt)
+            ?: userMessages.asSequence().mapNotNull { introducedProject(it.text) }.firstOrNull()
         val normalized = normalize(prompt)
+
+        val asksIdentity = normalized.contains("а тебя") ||
+            normalized == "а ты" ||
+            normalized.contains("как тебя зовут") ||
+            normalized.contains("твое имя") ||
+            normalized.contains("назови свое имя") ||
+            normalized.contains("назвать свое имя") ||
+            normalized.contains("кто ты")
+        if (asksIdentity) {
+            return if (rememberedName.isNullOrBlank()) {
+                "Меня зовут JARVIS. Я локальный помощник, который работает на этом устройстве."
+            } else {
+                "Меня зовут JARVIS. Приятно познакомиться, " + rememberedName + "!"
+            }
+        }
+
         val asksUserName = normalized.contains("как меня зовут") ||
             normalized.contains("ты помнишь мое имя") ||
             normalized.contains("мое имя")
         if (asksUserName) {
-            val rememberedName = recentHistory.asReversed().asSequence()
-                .take(MAX_RECENT_NAME_LOOKBACK)
-                .filter { it.role == ConversationRole.USER }
-                .mapNotNull { introducedName(it.text) }
-                .firstOrNull()
             return if (rememberedName.isNullOrBlank()) {
                 "Ты ещё не называл мне своё имя в сохранённой истории этого чата."
             } else {
-                "Тебя зовут $rememberedName. Ты сообщил это в нашей переписке."
+                "Тебя зовут " + rememberedName + ". Ты сообщил это в нашей переписке."
             }
         }
 
-        val asksIdentity = normalized.contains("а тебя") ||
-            normalized.contains("как тебя зовут") ||
-            normalized.contains("твое имя") ||
-            normalized.contains("назови свое имя") ||
-            normalized.contains("назвать свое имя")
-        if (!asksIdentity) return null
+        val asksProject = listOf(
+            "над чем я работаю", "какой у меня проект", "как называется мой проект",
+            "что я разрабатываю", "какой проект я делаю", "что за проект я делаю",
+            "мой проект",
+        ).any { normalized.contains(it) }
+        if (asksProject) {
+            return if (rememberedProject.isNullOrBlank()) {
+                "В сохранённой переписке я пока не нашёл явного названия твоего проекта."
+            } else {
+                "По нашей переписке ты работаешь над проектом: " + rememberedProject + "."
+            }
+        }
 
-        val name = introducedName(prompt) ?: recentHistory.asReversed().asSequence()
-            .take(MAX_RECENT_NAME_LOOKBACK)
-            .filter { it.role == ConversationRole.USER }
-            .mapNotNull { introducedName(it.text) }
-            .firstOrNull()
+        val asksAboutUser = listOf(
+            "что ты знаешь обо мне", "что ты помнишь обо мне",
+            "расскажи что ты знаешь обо мне", "какие факты ты знаешь обо мне",
+        ).any { normalized.contains(it) }
+        if (asksAboutUser) {
+            val facts = buildList {
+                rememberedName?.let { add("тебя зовут " + it) }
+                rememberedProject?.let { add("ты работаешь над проектом " + it) }
+            }
+            return if (facts.isEmpty()) {
+                "В сохранённой переписке пока нет фактов, которые я могу надёжно подтвердить."
+            } else {
+                "По сохранённой переписке могу подтвердить: " + facts.joinToString("; ") +
+                    ". Это только сведения, которые ты явно сообщал в этом чате."
+            }
+        }
 
-        return if (name.isNullOrBlank()) {
-            "Меня зовут JARVIS. Я локальный помощник, который работает на этом устройстве."
-        } else {
-            "Меня зовут JARVIS. Приятно познакомиться, $name!"
+        return when {
+            normalized in setOf("привет", "здравствуй", "здравствуйте", "hello", "hi") ||
+                normalized.startsWith("привет ") ->
+                "Привет! Я JARVIS. Чем могу помочь?"
+            normalized.startsWith("спасибо") -> "Пожалуйста! Рад помочь."
+            normalized in setOf("пока", "до свидания", "до встречи") -> "До связи!"
+            else -> null
         }
     }
 
-    private const val MAX_RECENT_NAME_LOOKBACK = 12
+    private const val MAX_RECENT_FACT_LOOKBACK = LocalConversationRepository.MAX_MESSAGES
 }
 
 /**
@@ -362,7 +424,8 @@ class JarvisCore(
             throw LocalConversationException("Сообщение должно содержать от 1 до 4 000 символов.")
         }
 
-        val context = repository.load().takeLast(MAX_CONTEXT_MESSAGES)
+        val fullHistory = repository.load()
+        val context = fullHistory.takeLast(MAX_CONTEXT_MESSAGES)
         val response = when (clean.lowercase(Locale.ROOT)) {
             "/status" -> status().toUserMessage()
             "/help" -> HELP_MESSAGE
@@ -380,7 +443,7 @@ class JarvisCore(
                     emptyList()
                 }
                 lastRetrievedMemoryCount = memories.size
-                LocalDialogueFastPaths.assistantIdentityReply(clean, context)
+                LocalDialogueFastPaths.assistantIdentityReply(clean, fullHistory)
                     ?: languageEngine.respond(clean, context, memories, signalContext, understanding)
             }
         }

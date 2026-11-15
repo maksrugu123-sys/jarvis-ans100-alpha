@@ -26,6 +26,12 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     @Volatile private var lastGenerationMs: Long = 0L
     @Volatile private var lastOutputTokenEstimate: Int = 0
 
+    /** Clear per-turn generation metrics without losing the last engine initialization measurement. */
+    fun resetTurnMetrics() {
+        lastGenerationMs = 0L
+        lastOutputTokenEstimate = 0
+    }
+
     fun performanceSnapshot(): LiteRtLmPerformanceSnapshot = LiteRtLmPerformanceSnapshot(
         initializationMs = lastInitializationMs,
         generationMs = lastGenerationMs,
@@ -108,7 +114,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val config = ConversationConfig(
             systemInstruction = Contents.of(systemInstruction),
             initialMessages = initial,
-            samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.6),
+            samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.45),
             automaticToolCalling = false,
             channels = emptyList(),
             maxOutputToken = MAX_OUTPUT_TOKENS,
@@ -175,8 +181,8 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     companion object {
         private const val MAX_OUTPUT_TOKENS = 96
         private const val MAX_PROMPT_CHARS = 750
-        private const val MAX_HISTORY = 6
-        private const val MAX_HISTORY_CHARS = 220
+        private const val MAX_HISTORY = 8
+        private const val MAX_HISTORY_CHARS = 256
         private const val MAX_MEMORY_CONTEXT_ITEMS = 2
         private const val MAX_MEMORY_CONTEXT_CHARS = 120
         private const val MIN_AVAILABLE_MEMORY_BYTES = 1280L * 1024L * 1024L

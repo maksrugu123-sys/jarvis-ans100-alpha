@@ -603,6 +603,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
         conversationExecutor.execute {
             val turnStartedAtNs = System.nanoTime()
+            conversationResponseEngine.resetTurnMetrics()
             try {
                 // The sparse intent classifier is an optional side channel; it never blocks chat.
                 val dialogPredictionResult = try {

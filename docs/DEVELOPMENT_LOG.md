@@ -2657,3 +2657,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Adjusted the feature-classifier token-cap test to keep its 300 distinct short tokens within the classifier's explicit 900-character input limit.
 - Added a pure-JVM `org.json` test dependency so JSON payload tests exercise the real JSON implementation rather than Android's unmocked framework stubs.
 - Re-run the full Android unit suite before APK packaging; no tests are disabled.
+
+
+## 2026-11-15 — Extend local dialogue recall and clarify inference timing
+
+- Expanded deterministic local recall from only the assistant/user name exchange to explicitly stated user name and project facts in the saved conversation. Queries such as “Как меня зовут?”, “Над чем я работаю?” and “Что ты помнишь обо мне?” search the complete bounded local conversation history (up to the repository's 120-message retention limit).
+- The fact extractor reports only explicit phrases from user messages, never infers personal traits, and writes no separate profile database. If no matching fact is present, it says so instead of guessing.
+- Kept the language model as the open-ended answer generator. The model receives up to eight prior messages (256 characters each) rather than six; sampling temperature was reduced from 0.60 to 0.45 for more consistent answers.
+- Reset generation timing/token estimates for each ordinary chat turn, so fast Core replies do not display stale LLM-generation measurements. The Speed settings page shows an approximate words-per-second estimate only when an LLM generation measurement exists.
+- Added JVM tests for alternate same-message identity wording, long-history name recall, explicit project recall (including dotted names), safe fact summaries, and the no-invention path.
+- Verification is delegated to Android Actions after this commit. No local Android build or test run is claimed.
+- Branch boundary: experiment/jarvis-integrated-prototype-v1; main remains untouched.

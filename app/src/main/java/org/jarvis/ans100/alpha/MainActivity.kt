@@ -2535,10 +2535,19 @@ private fun SettingsPanel(
                         if (conversation.lastTurnDurationMs <= 0L) {
                             Text("Пока нет измерений. Отправь сообщение в чат, чтобы JARVIS записал время загрузки модели и генерации.")
                         } else {
-                            Text("Инициализация модели: ${conversation.modelInitializationMs} мс")
+                            Text("Последняя инициализация движка: ${conversation.modelInitializationMs} мс")
                             Text("Генерация последнего ответа: ${conversation.responseGenerationMs} мс")
                             Text("Весь ход диалога: ${conversation.lastTurnDurationMs} мс")
                             Text("Оценка количества слов: ${conversation.responseTokenEstimate}")
+                            if (conversation.responseGenerationMs > 0L) {
+                                val estimatedWordsPerSecond = conversation.responseTokenEstimate * 1000.0 /
+                                    conversation.responseGenerationMs.toDouble()
+                                Text("Темп вывода: ${String.format(java.util.Locale.ROOT, "%.1f", estimatedWordsPerSecond)} слов/с · приблизительно")
+                            } else {
+                                Text("Последний ответ не требовал отдельной генерации языковой моделью или метрика не была получена.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                         Text(
                             "Время инициализации измеряется отдельно от генерации. Первый запуск может быть дольше; следующий ответ обычно использует уже подготовленный движок, пока Android не выгрузит приложение.",
