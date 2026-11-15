@@ -249,7 +249,7 @@ data class DialogueNeuralAnalysis(
     init {
         require(networkNeuronCount in 0..10_000)
         require(activeFeatureCount in 0..128)
-        require(activeHiddenNeuronCount in 0..256)
+        require(activeHiddenNeuronCount in 0..996)
         require(processedEvents in 0..100_000)
         require(processedNeuronBatches in 0..100_000)
         require(outputSpikeCount in 0..4)
