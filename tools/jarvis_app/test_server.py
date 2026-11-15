@@ -271,6 +271,22 @@ class LocalConsoleHttpTests(unittest.TestCase):
             worker = response.read().decode("utf-8")
         self.assertIn('jarvis-local-console-v15', worker)
 
+    def test_browser_close_tab_endpoint_dispatches_without_launching_a_browser(self):
+        original = self.service.browser_close_tab
+        self.service.browser_close_tab = lambda: {
+            "supported": True,
+            "browser_open": True,
+            "closed_tab": True,
+            "remaining_tabs": 1,
+        }
+        try:
+            status, payload = self._post("/api/browser/close-tab", {})
+        finally:
+            self.service.browser_close_tab = original
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["closed_tab"])
+        self.assertEqual(payload["remaining_tabs"], 1)
+
     def test_folder_creation_endpoint_is_authenticated_and_confined(self):
         with self.assertRaises(HTTPError) as missing_auth:
             self._post("/api/folders", {"name": "Projects"}, authenticated=False)
@@ -839,6 +855,13 @@ class LocalConsoleHttpTests(unittest.TestCase):
             self.assertIn("jarvis-browser-extension/background.js", names)
             self.assertIn("jarvis-browser-extension/bridge.js", names)
             manifest = json.loads(archive.read("jarvis-browser-extension/manifest.json"))
+            background = archive.read("jarvis-browser-extension/background.js").decode("utf-8")
+            bridge = archive.read("jarvis-browser-extension/bridge.js").decode("utf-8")
+        self.assertIn("closeLastOwnedTab", background)
+        self.assertIn("closeLastOwnedWindow", background)
+        self.assertIn("chrome.tabs.remove(tab.id)", background)
+        self.assertIn("chrome.windows.remove(win.id)", background)
+        self.assertIn("JARVIS_LOCAL_CONSOLE", bridge)
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(manifest["version"], "1.1.0")
         self.assertEqual(manifest["background"]["service_worker"], "background.js")
