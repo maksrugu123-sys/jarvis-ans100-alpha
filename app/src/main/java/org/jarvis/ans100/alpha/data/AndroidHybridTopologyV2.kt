@@ -14,6 +14,7 @@ object AndroidHybridTopologyV2 {
     const val DATABASE_NAME = "jarvis_ans100_hybrid_v2.db"
     const val NEURON_COUNT = 10_000
     const val MAX_CONNECTION_COUNT = 100_000
+    const val EXPECTED_CONNECTION_COUNT = 27_000
     const val CONNECTION_DELAY_NS = 1_000_000L
     const val FEED_FORWARD_WEIGHT = 0.35
     const val RECURRENT_WEIGHT = 0.18
@@ -71,7 +72,7 @@ object AndroidHybridTopologyV2 {
         addProjection("critic-decision", populations[4], populations[6], fanOut = 1, salt = 167)
         addProjection("goal-decision", populations[5], populations[6], fanOut = 1, salt = 181)
     }.also { edges ->
-        require(edges.size == 27_000)
+        require(edges.size == EXPECTED_CONNECTION_COUNT)
         require(edges.size <= MAX_CONNECTION_COUNT)
         require(edges.map { it.connectionId }.toSet().size == edges.size)
     }
