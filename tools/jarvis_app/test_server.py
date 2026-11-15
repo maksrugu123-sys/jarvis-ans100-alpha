@@ -242,6 +242,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
             'id="compact-ui-toggle"',
             'id="motion-ui-toggle"',
             'id="settings-platform"',
+            'id="ans100-desktop-status"',
         ):
             self.assertIn(expected, html)
         self.assertEqual(html.count('id="events"'), 1)
@@ -260,6 +261,24 @@ class LocalConsoleHttpTests(unittest.TestCase):
         with urlopen(self.base_url + "/sw.js", timeout=3) as response:
             worker = response.read().decode("utf-8")
         self.assertIn('jarvis-local-console-v14', worker)
+
+    def test_desktop_ans100_status_is_authenticated_and_not_claimed_active(self):
+        with self.assertRaises(HTTPError) as missing_auth:
+            urlopen(self.base_url + "/api/ans100", timeout=3)
+        self.assertEqual(missing_auth.exception.code, 401)
+
+        request = Request(
+            self.base_url + "/api/ans100",
+            headers={"Authorization": "Bearer " + self.token},
+        )
+        with urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        topology = payload["desktop_topology"]
+        self.assertEqual(topology["neuron_count"], 10_000)
+        self.assertEqual(topology["connection_count"], 25_500)
+        self.assertEqual(len(topology["populations"]), 7)
+        self.assertFalse(payload["active_in_chat"])
+        self.assertEqual(payload["runtime_state"], "source_topology_only")
 
     def test_visible_browser_status_is_authenticated_and_desktop_only(self):
         with self.assertRaises(HTTPError) as missing_auth:
