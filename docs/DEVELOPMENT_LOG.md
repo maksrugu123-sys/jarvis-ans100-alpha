@@ -2799,3 +2799,25 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - `onCleared()` currently queues engine close behind the active conversation task and then shuts down the executor. This is serialized and avoids closing the engine underneath active inference, but it is graceful cleanup, not immediate cancellation. Android process termination is ultimately handled by the OS.
 - No unsafe cross-thread call to `cancelProcess()`, `close()`, or `shutdownNow()` was introduced. Correct Stop/close behavior requires a suspend/callback-based generation refactor that lets the serialized executor process cancellation while the stream is suspended, followed by closing the cancelled Conversation before its Engine.
 - Static source audit only. No Gradle build, unit tests, APK, inference, CI, GitHub Actions, or device lifecycle tests were run.
+
+
+## Android dialogue neural-context integration — 2026-11-15
+
+**Changed:**
+- Traced the Android dialogue path and distinguished the 10-neuron request-shape signal runtime from the separate SQLite-backed 10,000-node sparse LIF dialogue network.
+- Confirmed the existing 10,000-node topology contains 9,996 hashed text-feature input nodes and four legacy output/feedback nodes. The four outputs are currently driven as feedback targets and are not four meaningful semantic decisions; the network must not be described as a complete reasoning system.
+- Added a bounded `DialogueNeuralAnalysis` value containing measured network size, active feature count, processed event/batch counts, legacy output spikes, pending events, persisted-state status, and an optional explicitly trained four-class feature-classifier candidate.
+- Changed ordinary Android chat turns to lazily initialize the 10,000-node sparse network on first use, process the bounded active feature set on its dedicated single-thread executor, and wait for that pass before invoking JARVIS Core. The conversation thread waits on a Future; SQLite/JNVM work remains on the native-network executor and never runs on the UI thread.
+- Routed the measured analysis through `LocalConversationCoordinator` / `JarvisCore` and the response-engine interface into the LiteRT-LM prompt packer. Qwen receives the analysis as bounded evidence alongside Core's existing understanding/plan; it is explicitly instructed not to treat legacy output spikes as semantic decisions.
+- Preserved the existing explicit user-feedback eligibility/reward path. The feature classifier's label is included only when it has a confident prediction backed by explicit training examples; otherwise no label is claimed.
+- Updated the built-in help text to distinguish the 10-neuron shape-signal pass from the experimental 10,000-node Android network. Added a prompt-packing unit test for the new neural evidence section.
+
+**Important limitations / next work:**
+- This is the first integration step, not completion of 10,000-neuron reasoning. The present native topology is still a sparse feature-to-four-feedback-output structure; it does not yet perform multi-stage semantic reasoning, recurrent planning, evidence comparison, or independent answer selection.
+- The four legacy output units are not used as semantic labels. The optional four-class classifier is only a small explicit-feedback classifier and is not a general-purpose language understanding model.
+- The network pass is now on the critical path for ordinary non-command chat after lazy initialization. First-use initialization and real-device latency, memory use, heat, and battery impact are unmeasured.
+- The new prompt section is bounded and may be omitted when the conservative estimated context budget is full. The context-size estimator remains heuristic.
+
+**Verification:** GitHub source read-back only. The new prompt-packing test was authored but not run. No Gradle build, unit tests, APK, model inference, CI/GitHub Actions, or device test was run. Automatic Actions remain manual-only; no workflow was dispatched.
+
+**Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
