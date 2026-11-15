@@ -6,6 +6,12 @@ enum class ANS100TopologyVersion {
     HYBRID_SPARSE_POPULATIONS_V1,
 }
 
+enum class ANS100DecisionProducer {
+    CORE_POLICY_V1,
+    LEGACY_NEURAL_READOUT_ADVISORY,
+    HYBRID_POPULATION_CONTROLLER_V1,
+}
+
 enum class ANS100DecisionStatus {
     SELECTED,
     NEEDS_CLARIFICATION,
@@ -54,6 +60,7 @@ data class ANS100Decision(
     val turnId: String,
     val topologyVersion: ANS100TopologyVersion,
     val status: ANS100DecisionStatus,
+    val decisionProducer: ANS100DecisionProducer = ANS100DecisionProducer.CORE_POLICY_V1,
     val candidates: List<ANS100Candidate>,
     val selectedCandidateId: String? = null,
     val abstentionReason: String? = null,
@@ -115,7 +122,7 @@ data class ANS100Decision(
 
     fun toModelContext(): String = buildString {
         appendLine("ANS-100 DECISION $schema")
-        appendLine("Статус: $status; топология: $topologyVersion; калибровка: $calibrationStatus.")
+        appendLine("Статус: $status; producer: $decisionProducer; топология: $topologyVersion; калибровка: $calibrationStatus.")
         appendLine("Цель ответа: $responseGoal")
         if (selectedCandidateId != null) {
             val selected = candidates.first { it.candidateId == selectedCandidateId }
