@@ -14,7 +14,7 @@ class ANS100HybridPopulationControllerTest {
         return bundle to understanding
     }
 
-    private fun telemetry(missingPopulation: String? = null) = AndroidHybridRunTelemetry(
+    private fun buildTelemetry(missingPopulation: String? = null) = AndroidHybridRunTelemetry(
         topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
         topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
         populations = AndroidHybridTopologyV2.populations.map { population ->
@@ -33,14 +33,14 @@ class ANS100HybridPopulationControllerTest {
     private fun decide(
         evidence: TypedEvidenceBundle,
         understanding: LocalUnderstanding,
-        telemetry: AndroidHybridRunTelemetry = telemetry(),
+        runTelemetry: AndroidHybridRunTelemetry = buildTelemetry(),
         processed: Int = 20,
         pending: Int = 0,
         exhausted: Boolean = false,
     ) = ANS100HybridPopulationController().decide(
         evidence = evidence,
         understanding = understanding,
-        telemetry = telemetry,
+        telemetry = runTelemetry,
         processedEventCount = processed,
         pendingEvents = pending,
         budgetExhausted = exhausted,
@@ -100,7 +100,7 @@ class ANS100HybridPopulationControllerTest {
     @Test
     fun abstainsWhenAnyRequiredPopulationDoesNotSpike() {
         val (bundle, understanding) = evidence("Объясни, как работает сеть", "hybrid-competition-4")
-        val decision = decide(bundle, understanding, telemetry("critic_uncertainty"))
+        val decision = decide(bundle, understanding, buildTelemetry("critic_uncertainty"))
 
         assertEquals(ANS100DecisionStatus.ABSTAINED, decision.status)
         assertTrue(decision.abstentionReason!!.contains("critic_uncertainty"))
