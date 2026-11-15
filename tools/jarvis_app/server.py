@@ -7,14 +7,18 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import ipaddress
 import ssl
+import socket
 import mimetypes
 import os
+import re
 from pathlib import Path
 import threading
+import zipfile
 import time
 import uuid
 from urllib.parse import urlsplit
@@ -30,6 +34,7 @@ from .visible_browser import (
     VisibleBrowserResearchError,
     VisibleBrowserUnavailable,
     VisibleBrowserResearchService,
+    validate_external_url,
 )
 from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
 
@@ -82,6 +87,8 @@ MAX_PEER_SYNC_BYTES = 4 * 1024 * 1024
 MAX_PREVIEW_ACTIONS = 64
 _STATE_EVENT_LIMIT = 100
 _STATIC_DIR = Path(__file__).with_name("static")
+_BROWSER_EXTENSION_DIR = Path(__file__).with_name("browser_extension")
+_BROWSER_EXTENSION_API_PATHS = frozenset({"/api/extension/state", "/api/extension/ask"})
 _STATIC_FILES = {
     "/": "index.html",
     "/index.html": "index.html",
@@ -91,6 +98,39 @@ _STATIC_FILES = {
     "/sw.js": "sw.js",
     "/icon.svg": "icon.svg",
 }
+
+
+def _is_browser_extension_origin(origin: str | None) -> bool:
+    if not isinstance(origin, str):
+        return False
+    try:
+        parsed = urlsplit(origin)
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "chrome-extension"
+        and re.fullmatch(r"[a-p]{32}", parsed.netloc) is not None
+        and not parsed.path
+        and not parsed.query
+        and not parsed.fragment
+    )
+
+
+def _build_browser_extension_archive() -> bytes:
+    if not _BROWSER_EXTENSION_DIR.is_dir():
+        raise FileNotFoundError("browser extension source directory is missing")
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        files = sorted(
+            path for path in _BROWSER_EXTENSION_DIR.iterdir()
+            if path.is_file() and not path.is_symlink()
+            and path.suffix.lower() in {".json", ".html", ".css", ".js", ".md"}
+        )
+        if not files or not any(path.name == "manifest.json" for path in files):
+            raise FileNotFoundError("browser extension manifest is missing")
+        for path in files:
+            archive.write(path, f"jarvis-browser-extension/{path.name}")
+    return buffer.getvalue()
 
 
 class LocalConsoleError(ValueError):
@@ -512,6 +552,68 @@ class LocalConsoleService:
             }
         return {"supported": True, **self.visible_browser.status()}
 
+    def browser_extension_state(self) -> dict[str, object]:
+        if self.platform != "desktop":
+            return {
+                "supported": False,
+                "chat_available": False,
+                "revision": self.workspace_revision,
+                "chat_mode": "unavailable",
+            }
+        state = self.conversation_state()
+        return {
+            "supported": True,
+            "revision": state["revision"],
+            "chat_available": state["chat_available"],
+            "chat_mode": state["chat_mode"],
+            "backend_label": state["backend_label"],
+        }
+
+    def ask_about_extension_page(
+        self,
+        question: object,
+        expected_revision: object,
+        title: object,
+        url: object,
+        page_text: object,
+    ) -> dict[str, object]:
+        self._require_desktop_browser()
+        clean_question = _required_text(question, "question", maximum=900)
+        clean_title = _required_text(title, "title", maximum=300)
+        if not isinstance(page_text, str):
+            raise LocalConsoleError("page text must be text")
+        clean_text = page_text.strip()
+        if not clean_text or len(clean_text) > 12_000 or "\x00" in clean_text:
+            raise LocalConsoleError("page text must contain 1..12000 characters")
+        try:
+            clean_url = validate_external_url(url)
+        except VisibleBrowserResearchError as exc:
+            raise LocalConsoleError(str(exc)) from exc
+        parsed = urlsplit(clean_url)
+        host = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        try:
+            addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        except OSError as exc:
+            raise LocalConsoleError("cannot verify the page host; no page text was accepted") from exc
+        if not addresses or any(
+            not ipaddress.ip_address(item[4][0].split("%", 1)[0]).is_global
+            for item in addresses
+        ):
+            raise LocalConsoleError("local, private or reserved network pages cannot be sent to JARVIS")
+        retrieved_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        external_context = {
+            "title": clean_title,
+            "url": clean_url,
+            "retrieved_at": retrieved_at,
+            "text": clean_text,
+        }
+        return self.send_conversation_message(
+            clean_question,
+            expected_revision,
+            external_context=external_context,
+        )
+
     def browser_search(self, query: object) -> dict[str, object]:
         self._require_desktop_browser()
         return {"supported": True, **self.visible_browser.search(query)}
@@ -924,7 +1026,14 @@ def create_http_server(
             # Local task titles and identifiers are deliberately not written to logs.
             return
 
-        def _send(self, status: int, payload: object, content_type: str = "application/json; charset=utf-8") -> None:
+        def _send(
+            self,
+            status: int,
+            payload: object,
+            content_type: str = "application/json; charset=utf-8",
+            *,
+            extra_headers: dict[str, str] | None = None,
+        ) -> None:
             if content_type.startswith("application/json"):
                 body = json.dumps(
                     payload, ensure_ascii=False, allow_nan=False,
@@ -939,6 +1048,13 @@ def create_http_server(
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+            request_path = urlsplit(self.path).path
+            origin = self.headers.get("Origin")
+            if request_path in _BROWSER_EXTENSION_API_PATHS and _is_browser_extension_origin(origin):
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+            for header_name, header_value in (extra_headers or {}).items():
+                self.send_header(header_name, header_value)
             self.end_headers()
             self.wfile.write(body)
 
@@ -952,7 +1068,12 @@ def create_http_server(
                 return False
             origin = self.headers.get("Origin")
             expected_origin = ("https" if self.server.is_tls else "http") + "://" + expected_host
-            if origin is not None and origin != expected_origin:
+            path = urlsplit(self.path).path
+            extension_request = (
+                path in _BROWSER_EXTENSION_API_PATHS
+                and _is_browser_extension_origin(origin)
+            )
+            if origin is not None and origin != expected_origin and not extension_request:
                 self._error(403, "Запросы с другого источника запрещены")
                 return False
             return True
@@ -996,6 +1117,35 @@ def create_http_server(
                 return None
             return value
 
+        def do_OPTIONS(self) -> None:
+            path = urlsplit(self.path).path
+            expected_host = f"{self.server.bound_host}:{self.server.server_port}"
+            origin = self.headers.get("Origin")
+            request_method = self.headers.get("Access-Control-Request-Method", "").upper()
+            requested_headers = {
+                item.strip().lower()
+                for item in self.headers.get("Access-Control-Request-Headers", "").split(",")
+                if item.strip()
+            }
+            if (
+                self.headers.get("Host") != expected_host
+                or path not in _BROWSER_EXTENSION_API_PATHS
+                or not _is_browser_extension_origin(origin)
+                or request_method not in ({"GET"} if path.endswith("/state") else {"POST"})
+                or not requested_headers.issubset({"authorization", "content-type"})
+            ):
+                self._error(403, "Предварительный запрос расширения отклонён")
+                return
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Max-Age", "300")
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+
         def do_GET(self) -> None:
             if not self._check_local_origin():
                 return
@@ -1038,6 +1188,24 @@ def create_http_server(
                     return
                 self._send(200, service.browser_status())
                 return
+            if path == "/api/extension/state":
+                if not self._require_auth():
+                    return
+                self._send(200, service.browser_extension_state())
+                return
+            if path == "/downloads/jarvis-browser-extension.zip":
+                try:
+                    archive = _build_browser_extension_archive()
+                except (OSError, zipfile.BadZipFile):
+                    self._error(503, "Архив расширения временно недоступен")
+                    return
+                self._send(
+                    200,
+                    archive,
+                    "application/zip",
+                    extra_headers={"Content-Disposition": 'attachment; filename="jarvis-browser-extension.zip"'},
+                )
+                return
             filename = _STATIC_FILES.get(path)
             if filename is None:
                 self._error(404, "Страница не найдена")
@@ -1071,6 +1239,18 @@ def create_http_server(
             if payload is None:
                 return
             try:
+                if path == "/api/extension/ask":
+                    expected = {"question", "expected_revision", "title", "url", "text"}
+                    if set(payload) != expected:
+                        raise LocalConsoleError("ожидались поля question, expected_revision, title, url и text")
+                    self._send(200, service.ask_about_extension_page(
+                        payload["question"],
+                        payload["expected_revision"],
+                        payload["title"],
+                        payload["url"],
+                        payload["text"],
+                    ))
+                    return
                 if path == "/api/browser/search":
                     if set(payload) != {"query"}:
                         raise LocalConsoleError("ожидалось поле query")
