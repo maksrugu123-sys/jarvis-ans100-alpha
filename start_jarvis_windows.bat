@@ -11,7 +11,7 @@ echo  JARVIS ANS-100 - Windows 10
 echo  ----------------------------
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; for($i=0;$i -lt 2;$i++){try{$r=Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8765/api/health' -TimeoutSec 2;if($r.StatusCode -eq 200){$ok=$true;break}}catch{};Start-Sleep -Seconds 1};if($ok){exit 0}else{exit 1}" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; for($i=0;$i -lt 2;$i++){try{$h=Invoke-RestMethod 'http://127.0.0.1:8765/api/health' -TimeoutSec 2;if($h.status -eq 'ok' -and $h.platform -eq 'desktop' -and $h.auth_required -eq $false -and $h.auth_scheme -eq 'none'){$ok=$true;break}}catch{};Start-Sleep -Seconds 1};if($ok){exit 0}else{exit 1}" >nul 2>&1
 if errorlevel 1 (
     echo Starting local JARVIS core...
     where py >nul 2>&1
@@ -32,7 +32,7 @@ if errorlevel 1 (
 )
 
 echo Waiting for JARVIS...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ready=$false;for($i=0;$i -lt 40;$i++){try{$r=Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8765/api/health' -TimeoutSec 2;if($r.StatusCode -eq 200){$ready=$true;break}}catch{};Start-Sleep -Seconds 1};if($ready){exit 0}else{exit 1}"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ready=$false;for($i=0;$i -lt 40;$i++){try{$h=Invoke-RestMethod 'http://127.0.0.1:8765/api/health' -TimeoutSec 2;if($h.status -eq 'ok' -and $h.platform -eq 'desktop' -and $h.auth_required -eq $false -and $h.auth_scheme -eq 'none'){$ready=$true;break}}catch{};Start-Sleep -Seconds 1};if($ready){exit 0}else{exit 1}"
 if errorlevel 1 (
     echo JARVIS did not start. Check the JARVIS Core window for the error.
     pause
@@ -58,7 +58,7 @@ if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
 )
 
 echo.
-echo JARVIS opened. Enter the one-time access token shown in the Core window.
+echo JARVIS opened. Local desktop mode connects automatically; no token is needed.
 echo Keep the Core window open while using JARVIS.
 echo.
 endlocal
