@@ -227,6 +227,25 @@ class LocalConsoleHttpTests(unittest.TestCase):
         with urlopen(request, timeout=3) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
 
+    def test_desktop_console_serves_navigation_and_local_preferences(self):
+        with urlopen(self.base_url + "/", timeout=3) as response:
+            html = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn("text/html", response.headers.get("Content-Type", ""))
+
+        for expected in (
+            'class="side-nav"',
+            'data-nav-target="chat"',
+            'data-nav-target="network"',
+            'data-nav-target="browser"',
+            'data-nav-target="settings"',
+            'id="compact-ui-toggle"',
+            'id="motion-ui-toggle"',
+            'id="settings-platform"',
+        ):
+            self.assertIn(expected, html)
+        self.assertEqual(html.count('id="events"'), 1)
+
     def test_visible_browser_status_is_authenticated_and_desktop_only(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/browser", timeout=3)
