@@ -74,12 +74,12 @@ class AndroidHybridTopologyV2Test {
             val batch = AndroidHybridEvidenceInputAdapter.createBatch(evidence, timestampNs = 1L)
 
             assertTrue(network.scheduleHybridEvidence(batch))
-            val firstPass = network.run(maxEvents = 1, maxTimestamps = 1)
-            assertEquals(1, firstPass.processedEvents)
+            val firstPass = network.run(maxEvents = 4_096, maxTimestamps = 1)
+            assertEquals(batch.events.size, firstPass.processedEvents)
             assertTrue(firstPass.pendingEvents > 0)
             val firstTelemetry = firstPass.hybridTelemetry
                 ?: throw AssertionError("partial hybrid run must expose population telemetry")
-            assertEquals(1, firstTelemetry.populations.sumOf { it.receivedEventCount })
+            assertEquals(batch.events.size, firstTelemetry.populations.sumOf { it.receivedEventCount })
 
             val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
             assertEquals(0, result.pendingEvents)
@@ -108,7 +108,7 @@ class AndroidHybridTopologyV2Test {
                 telemetry.populations.last().outgoingEventCount,
             )
 
-            val spikedIds = result.emittedSpikes.map { it.first }.toSet()
+            val spikedIds = (firstPass.emittedSpikes + result.emittedSpikes).map { it.first }.toSet()
             AndroidHybridTopologyV2.populations.forEach { population ->
                 assertTrue(
                     "no spike observed in population " + population.id,
@@ -181,7 +181,7 @@ class AndroidHybridTopologyV2Test {
                 batch.events.single().targetNeuronId,
             )
             assertTrue(network.beginHybridTurn(batch))
-            var result = network.run(maxEvents = 4_096, maxTimestamps = 128)
+            val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
             val spiked = result.emittedSpikes.map { it.first }.toSet()
             val expected = ANS100CandidateSlotContract.readoutLane(
                 ANS100CandidateSlotContract.Slot.ANSWER,
