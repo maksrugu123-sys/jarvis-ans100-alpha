@@ -558,20 +558,31 @@ private class AndroidNeuronSqliteStore(
                 return false
             }
 
-            // Upgrade the former feature-to-output graph in place. Keep the
-            // old weights attached to the 996 nodes now assigned as hidden units.
-            val preservedWeights = HashMap<Pair<Int, Int>, Double>()
+            // Project the former direct feature-to-output weights through the
+            // new deterministic input-to-hidden mapping. This preserves learned
+            // readout tendencies without pretending old feature IDs are hidden IDs.
+            val projectedWeightSums = HashMap<Pair<Int, Int>, Double>()
+            val projectedWeightCounts = HashMap<Pair<Int, Int>, Int>()
             if (existingNeurons > 0L) {
                 db.rawQuery(
-                    "SELECT source_id, target_id, weight FROM connections WHERE source_id>=? AND source_id<? AND target_id>=?",
-                    arrayOf(
-                        AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START.toString(),
-                        outputStart.toString(),
-                        outputStart.toString(),
-                    ),
+                    "SELECT source_id, target_id, weight FROM connections WHERE source_id>=0 AND source_id<? AND target_id>=?",
+                    arrayOf(outputStart.toString(), outputStart.toString()),
                 ).use { cursor ->
                     while (cursor.moveToNext()) {
-                        preservedWeights[cursor.getInt(0) to cursor.getInt(1)] = cursor.getDouble(2)
+                        val oldFeatureId = cursor.getInt(0)
+                        val outputId = cursor.getInt(1)
+                        val oldWeight = cursor.getDouble(2)
+                        if (outputId !in outputStart until AndroidSparseNeuronNetwork.MAX_NEURONS ||
+                            !oldWeight.isFinite() || oldWeight !in 0.0..1.0
+                        ) throw AndroidNeuronNetworkException("old dialogue readout contains an invalid synaptic weight")
+                        val inputId = oldFeatureId % featureNeuronCount
+                        for (slot in 0 until AndroidSparseNeuronNetwork.DIALOGUE_INPUT_FAN_OUT) {
+                            val hiddenOffset = (inputId * 37 + slot * 113) % hiddenCount
+                            val hiddenId = AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START + hiddenOffset
+                            val key = hiddenId to outputId
+                            projectedWeightSums[key] = (projectedWeightSums[key] ?: 0.0) + oldWeight
+                            projectedWeightCounts[key] = (projectedWeightCounts[key] ?: 0) + 1
+                        }
                     }
                 }
                 db.delete("connections", null, null)
@@ -619,7 +630,9 @@ private class AndroidNeuronSqliteStore(
                             sourceNeuronId = hiddenId,
                             targetNeuronId = outputId,
                             delayNs = delayNs,
-                            weight = preservedWeights[hiddenId to outputId] ?: weight,
+                            weight = projectedWeightCounts[hiddenId to outputId]?.let { count ->
+                                (projectedWeightSums.getValue(hiddenId to outputId) / count).coerceIn(0.0, 1.0)
+                            } ?: weight,
                         ),
                     )
                 }
