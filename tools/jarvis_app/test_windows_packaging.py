@@ -23,7 +23,7 @@ class WindowsPackagingContractTests(unittest.TestCase):
 
     def test_packaged_launcher_targets_the_bundled_executable(self):
         source = (ROOT / "start_jarvis_windows_exe.bat").read_text(encoding="utf-8")
-        self.assertIn(r"JARVIS\\JARVIS.exe", source)
+        self.assertIn(r"JARVIS\JARVIS.exe", source)
         self.assertIn("--platform desktop", source)
         self.assertIn("--app=%JARVIS_URL%", source)
 
