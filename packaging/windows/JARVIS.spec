@@ -10,7 +10,14 @@ EXTENSION = ROOT / "tools" / "jarvis_app" / "browser_extension"
 # including platform-specific test helpers; that caused Windows analysis to try
 # importing POSIX-only fcntl. The production server uses normal static imports,
 # which PyInstaller follows recursively from windows_entry.py.
-hiddenimports = []
+hiddenimports = [
+    # pywebview selects its Windows WebView2 backend dynamically at runtime.
+    "webview",
+    "webview.platforms.edgechromium",
+    "webview.platforms.winforms",
+    "clr",
+    "clr_loader",
+]
 
 a = Analysis(
     [str(ROOT / "tools" / "jarvis_app" / "windows_entry.py")],
