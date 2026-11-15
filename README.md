@@ -612,3 +612,5 @@ Windows 10, Edge/Chrome extension installation, browser integration, and local m
 ## Windows desktop workspace UI V1
 
 The local PC console now has a responsive navigation rail, section anchors, live backend/R-STDP status labels, and local compact/reduced-motion preferences. The Windows launcher checks common Edge and Chrome locations before falling back to the default browser and sets UTF-8/unbuffered Python output. The navigation/settings HTTP regression test is authored but NOT RUN; no Windows or real browser runtime was executed. See `docs/JARVIS_PC_QUICKSTART_V1.md`.
+
+The PC console also reports the source-defined desktop ANS-100 V4 topology (10,000 neuron IDs / 25,500 expected edges / seven populations) without constructing it. It is not yet wired into live chat; current conversation preprocessing remains separate. The authenticated status endpoint regression is authored but NOT RUN.
