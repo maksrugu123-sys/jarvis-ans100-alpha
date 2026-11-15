@@ -84,6 +84,25 @@ class ANS100HybridPopulationController {
             (contextStatus == "ambiguous" || contextStatus == "unavailable")
         val needsClarification = requiresClarification || ambiguousContext
 
+        val intentValue = (intentRecord?.value as? EvidenceValue.Category)?.value
+        val taskKindValue = (taskKindRecord?.value as? EvidenceValue.Category)?.value
+        val usableIntent = intentValue != null && intentValue != "statement_or_unknown" &&
+            taskKindValue != null && understanding.intentConfidence >= 0.4
+        val hasGoal = usableIntent && goalRecord != null
+        val expectedSignals = mapOf(
+            ANS100CandidateSlotContract.Slot.ANSWER to mapOf(
+                ANS100CandidateSlotContract.Polarity.SUPPORT to (hasGoal && !needsClarification),
+                ANS100CandidateSlotContract.Polarity.CONFLICT to (!hasGoal || needsClarification),
+            ),
+            ANS100CandidateSlotContract.Slot.CLARIFICATION to mapOf(
+                ANS100CandidateSlotContract.Polarity.SUPPORT to needsClarification,
+                ANS100CandidateSlotContract.Polarity.CONFLICT to !needsClarification,
+            ),
+            ANS100CandidateSlotContract.Slot.ABSTAIN to mapOf(
+                ANS100CandidateSlotContract.Polarity.SUPPORT to (!hasGoal && !needsClarification),
+                ANS100CandidateSlotContract.Polarity.CONFLICT to (hasGoal || needsClarification),
+            ),
+        )
         val candidateSignals = ANS100CandidateSlotContract.Slot.values().associateWith { slot ->
             ANS100CandidateSlotContract.Polarity.values().associateWith { polarity ->
                 val feature = ANS100CandidateSlotContract.evidenceFeature(slot, polarity)
@@ -96,8 +115,18 @@ class ANS100HybridPopulationController {
                 require((record.activation > 0.0) == active) {
                     "candidate signal activation does not match its boolean value"
                 }
+                require(active == expectedSignals.getValue(slot).getValue(polarity)) {
+                    "candidate signal does not match the current typed Core evidence"
+                }
                 record
             }
+        }
+        ANS100CandidateSlotContract.Slot.values().forEach { slot ->
+            val support = (candidateSignals.getValue(slot)
+                .getValue(ANS100CandidateSlotContract.Polarity.SUPPORT).value as EvidenceValue.BooleanValue).value
+            val conflict = (candidateSignals.getValue(slot)
+                .getValue(ANS100CandidateSlotContract.Polarity.CONFLICT).value as EvidenceValue.BooleanValue).value
+            require(support != conflict) { "each candidate must have exactly one support/conflict signal" }
         }
 
         val answerSupport = listOfNotNull(
@@ -166,14 +195,24 @@ class ANS100HybridPopulationController {
                 ),
             )
         }
-        val missingReadoutSlots = readouts.filterNot { it.hasOutput }.map { it.candidate.candidateId }
+        val readoutMismatchSlots = readouts.filter { readout ->
+            val slot = ANS100CandidateSlotContract.slotForCandidateId(readout.candidate.candidateId)
+                ?: return@filter true
+            val supportSignal = (candidateSignals.getValue(slot)
+                .getValue(ANS100CandidateSlotContract.Polarity.SUPPORT).value as EvidenceValue.BooleanValue).value
+            val conflictSignal = (candidateSignals.getValue(slot)
+                .getValue(ANS100CandidateSlotContract.Polarity.CONFLICT).value as EvidenceValue.BooleanValue).value
+            supportSignal == conflictSignal ||
+                supportSignal != (readout.supportSpikes > 0) ||
+                conflictSignal != (readout.conflictSpikes > 0)
+        }.map { it.candidate.candidateId }
         val bestScore = readouts.maxOf { it.score }
         val topReadouts = readouts.filter { it.score == bestScore }
         val uniqueWinner = topReadouts.singleOrNull()?.takeIf { bestScore > 0 }
         val selectedId = uniqueWinner?.candidate?.candidateId
 
         val uncertainty = linkedSetOf(ANS100UncertaintyKind.UNCALIBRATED_MODEL_OUTPUT)
-        if (missingPopulations.isNotEmpty() || missingReadoutSlots.isNotEmpty()) {
+        if (missingPopulations.isNotEmpty() || readoutMismatchSlots.isNotEmpty()) {
             uncertainty += ANS100UncertaintyKind.MISSING_EVIDENCE
         }
         if (needsClarification) uncertainty += ANS100UncertaintyKind.AMBIGUOUS_REQUEST
@@ -181,7 +220,7 @@ class ANS100HybridPopulationController {
         if (uniqueWinner == null) uncertainty += ANS100UncertaintyKind.CONFLICTING_EVIDENCE
 
         val status = when {
-            exhausted || missingPopulations.isNotEmpty() || missingReadoutSlots.isNotEmpty() ->
+            exhausted || missingPopulations.isNotEmpty() || readoutMismatchSlots.isNotEmpty() ->
                 ANS100DecisionStatus.ABSTAINED
             selectedId == ANS100CandidateSlotContract.Slot.ANSWER.candidateId ->
                 ANS100DecisionStatus.SELECTED
@@ -193,8 +232,8 @@ class ANS100HybridPopulationController {
             exhausted -> "Ограниченный вычислительный бюджет исчерпан; обработка запроса не завершена."
             missingPopulations.isNotEmpty() ->
                 "Не подтверждён полный проход по группам ANS-100: " + missingPopulations.joinToString(", ")
-            missingReadoutSlots.isNotEmpty() ->
-                "Не получен отдельный нейронный readout для кандидатов: " + missingReadoutSlots.joinToString(", ")
+            readoutMismatchSlots.isNotEmpty() ->
+                "Не получен отдельный нейронный readout для кандидатов: " + readoutMismatchSlots.joinToString(", ")
             status == ANS100DecisionStatus.NEEDS_CLARIFICATION -> clarificationQuestion
             status == ANS100DecisionStatus.ABSTAINED && selectedId == ANS100CandidateSlotContract.Slot.ABSTAIN.candidateId ->
                 "Нейронный readout поддержал воздержание: недостаточно оснований для прямого ответа."
@@ -217,7 +256,7 @@ class ANS100HybridPopulationController {
             uncertainty = uncertainty,
             missingEvidence = buildList {
                 missingPopulations.forEach { add("hybrid_population_not_reached:$it") }
-                missingReadoutSlots.forEach { add("candidate_readout_missing:$it") }
+                readoutMismatchSlots.forEach { add("candidate_readout_mismatch:$it") }
             }.take(ANS100Decision.MAX_CONSTRAINTS),
             responseGoal = when (status) {
                 ANS100DecisionStatus.NEEDS_CLARIFICATION -> "Запросить уточнение: $clarificationQuestion"
