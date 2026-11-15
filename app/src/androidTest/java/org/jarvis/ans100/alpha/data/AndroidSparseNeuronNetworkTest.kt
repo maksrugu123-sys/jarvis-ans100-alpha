@@ -310,6 +310,38 @@ class AndroidSparseNeuronNetworkTest {
     }
 
     @Test
+    fun hybridRunReportsPropagatedSynapsesThatReachSpikingTargets() {
+        val slot = ANS100CandidateSlotContract.Slot.ANSWER
+        val sourceLane = ANS100CandidateSlotContract.associationLane(
+            slot,
+            ANS100CandidateSlotContract.Polarity.SUPPORT,
+        )
+        val targetLane = ANS100CandidateSlotContract.workingLane(
+            slot,
+            ANS100CandidateSlotContract.Polarity.SUPPORT,
+        )
+        val edge = AndroidHybridTopologyV2.connections().first {
+            sourceLane.contains(it.sourceNeuronId) && targetLane.contains(it.targetNeuronId)
+        }
+
+        AndroidSparseNeuronNetwork(context, databaseName).use { network ->
+            network.initializeHybridTopologyV2()
+            network.scheduleInput(
+                eventId = "test-source-spike",
+                timeNs = 1_000_000L,
+                neuronId = edge.sourceNeuronId,
+                strength = 1.0,
+            )
+            val sourcePass = network.run(maxEvents = 64, maxTimestamps = 1)
+            assertTrue(sourcePass.emittedSpikes.any { it.first == edge.sourceNeuronId })
+
+            val targetPass = network.run(maxEvents = 64, maxTimestamps = 1)
+            assertTrue(targetPass.emittedSpikes.any { it.first == edge.targetNeuronId })
+            assertTrue(targetPass.activatedConnectionIds.contains(edge.connectionId))
+        }
+    }
+
+    @Test
     fun hybridCandidateFeedbackIsIsolatedBoundedAndPersisted() {
         val slot = ANS100CandidateSlotContract.Slot.ANSWER
         val association = ANS100CandidateSlotContract.associationLane(slot, ANS100CandidateSlotContract.Polarity.SUPPORT)
