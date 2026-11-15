@@ -192,9 +192,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val nativeNetworkExecutor = Executors.newSingleThreadExecutor()
     private val nativeNeuronNetwork = AndroidSparseNeuronNetwork(application.applicationContext)
     /** Separate SQLite namespace; never shares or migrates the legacy dialogue graph. */
-    private val hybridNeuronNetwork by lazy {
+    private val hybridNeuronNetworkDelegate = lazy {
         AndroidHybridTopologyV2.open(application.applicationContext)
     }
+    private val hybridNeuronNetwork by hybridNeuronNetworkDelegate
     @Volatile private var nativeDialogueGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
@@ -2600,7 +2601,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute { conversationResponseEngine.close() }
         nativeNetworkExecutor.execute {
             nativeNeuronNetwork.close()
-            if (runCatching { hybridNeuronNetwork }.isSuccess) {
+            if (hybridNeuronNetworkDelegate.isInitialized()) {
                 runCatching { hybridNeuronNetwork.close() }
             }
         }
