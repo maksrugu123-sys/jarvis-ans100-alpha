@@ -4,7 +4,7 @@ import java.security.MessageDigest
 
 /**
  * Converts typed evidence into a bounded, provenance-preserving pulse batch for
- * the hybrid V2 evidence-input population (neuron IDs 0..1199).
+ * the hybrid v4 evidence-input population (neuron IDs 0..1199).
  *
  * This is deliberately a presence encoder, not a semantic text encoder:
  * non-boolean values activate a stable feature slot but their contents are not
@@ -118,7 +118,7 @@ object AndroidHybridEvidenceInputAdapter {
         )
     }
 
-    /** Stable, explicit feature/ordinal mapping into the first 1,056 input IDs. */
+    /** Stable feature/ordinal mapping into IDs 0..1055; candidate lanes use reserved IDs 1056..1061. */
     fun neuronIdFor(record: TypedEvidenceRecord): Int {
         validateSourceAndStatus(record)
         val candidateInputId = when (record.feature) {
