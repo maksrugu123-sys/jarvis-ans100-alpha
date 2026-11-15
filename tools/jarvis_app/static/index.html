@@ -43,6 +43,7 @@
         <a class="side-nav-link" href="#transfer" data-nav-target="transfer"><span>07</span> Перенос данных</a>
         <a class="side-nav-link" href="#reasoning" data-nav-target="reasoning"><span>08</span> Планирование</a>
         <a class="side-nav-link" href="#settings" data-nav-target="settings"><span>09</span> Настройки</a>
+        <a class="side-nav-link" href="#events-panel" data-nav-target="events-panel"><span>10</span> Журнал</a>
         <div class="nav-health" aria-live="polite">
           <span class="nav-health-dot"></span>
           <div><strong id="nav-core-state">Ядро: ожидание</strong><small id="nav-model-state">Модель: проверка</small><small id="nav-network-state">ANS-100: ожидание</small></div>
@@ -310,7 +311,7 @@
       <div id="reasoning-result" class="reasoning-result empty">Результат планирования появится здесь.</div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="events-panel">
       <div class="panel-heading">
         <div><div class="eyebrow">АУДИТ</div><h2>Журнал событий</h2></div>
       </div>
@@ -336,13 +337,6 @@
         <span>Подключение</span><strong>Только локальный API · 127.0.0.1</strong>
         <span>Внешние действия</span><strong>Отключены, кроме явно разрешённых браузерных команд</strong>
       </div>
-    </section>
-
-    <section class="panel" id="events-panel">
-      <div class="panel-heading">
-        <div><div class="eyebrow">АУДИТ</div><h2>Журнал событий</h2></div>
-      </div>
-      <div id="events" class="event-list empty">Событий пока нет.</div>
     </section>
 
     <footer>
