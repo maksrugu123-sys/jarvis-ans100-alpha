@@ -2691,3 +2691,13 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** source edits only. No Gradle build, unit tests, APK, GPU inference, device profiling, latency comparison, thermal test or battery test was run. Automatic Actions triggers remain disabled; the Android workflow is manual-only.
 
 **Limitations / next:** verify OpenCL availability and real Qwen3 GPU inference on the phone. If GPU initialization or inference fails, the same chat turn should retry on CPU. CPU remains the default until a successful device test demonstrates a benefit.
+
+
+## 2026-11-15 — Stream local Qwen responses and remove the 750-character rejection
+
+- Replaced the blocking LiteRT-LM `sendMessage` call with the 0.17.1 `sendMessageAsync` Flow, collected on the existing serialized conversation worker. Engine/Conversation creation, use and close remain on that worker.
+- The response engine publishes cumulative visible text chunks; the ViewModel forwards them to the main thread and Compose displays a live assistant bubble while generation continues. The completed assistant response is still committed through the existing conversation coordinator and local history repository.
+- Raised the engine-side prompt character guard from 750 to the same 4,000-character limit already enforced by the chat repository/UI. This removes the immediate mismatch; it does not guarantee every 4,000-character request fits the 1,280-token model context because the system instruction and history also consume context.
+- No cancellation control is included in this change; cancellation needs a separately verified lifecycle-safe path.
+- **Verification:** source edits only. No Gradle build, unit tests, APK, LiteRT-LM inference or phone test was run. Automatic Actions triggers remain disabled and no workflow was dispatched.
+- Branch boundary: `experiment/jarvis-integrated-prototype-v1`; `main` remains untouched.
