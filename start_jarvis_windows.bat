@@ -3,6 +3,8 @@ setlocal
 cd /d "%~dp0"
 
 set "JARVIS_URL=http://127.0.0.1:8765/"
+set "PYTHONUTF8=1"
+set "PYTHONUNBUFFERED=1"
 
 echo.
 echo  JARVIS ANS-100 - Windows 10
@@ -41,7 +43,17 @@ if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
     start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app=%JARVIS_URL%
 ) else if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" (
     start "" "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" --app=%JARVIS_URL%
+) else if exist "%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe" (
+    start "" "%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe" --app=%JARVIS_URL%
+) else if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
+    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app=%JARVIS_URL%
+) else if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
+    start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app=%JARVIS_URL%
+) else if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" (
+    start "" "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" --app=%JARVIS_URL%
 ) else (
+    echo Edge / Chrome not found in common install locations.
+    echo Opening the default browser instead.
     start "" "%JARVIS_URL%"
 )
 
