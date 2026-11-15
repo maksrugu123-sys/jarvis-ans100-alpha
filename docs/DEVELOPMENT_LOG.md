@@ -2755,3 +2755,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** read-only source inspection of the project dependency/build configuration and upstream LiteRT-LM tags v0.17.1, v0.18.1 and main. No source/runtime changes outside this documentation entry; no Gradle build, unit tests, APK, AAR download/inspection, native build, model inference, CI or device test was run.
 
 **Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
+
+## 2026-11-15 — Add conservative context packing for Android LiteRT-LM
+
+**Changed:**
+- Added `PromptContextBudgeter` for the Android Qwen/LiteRT-LM path. It estimates input size using a conservative character heuristic (2 characters per estimated token), with a 96-token output reserve and a further 128-token template/safety reserve against the configured 1,280-token limit. This is explicitly an estimate, not tokenizer output or a guarantee.
+- The base system instruction and current user request are mandatory. The current request is never silently truncated; if the mandatory estimate is over budget, JARVIS returns a clear message asking the user to shorten or split the request.
+- The packer keeps only the newest complete history exchanges that fit (up to 8 messages, each bounded to 256 characters). Older pairs are omitted first. It then adds optional Core understanding, ANS-100 signal context and up to two approved JPVR notes only when they fit. Unapproved memory is never included.
+- The planner runs before loading the model engine, so an obviously oversized request is rejected without first initializing the model.
+- Added speed-panel diagnostics for estimated input context size, omitted history messages and included/omitted approved memory notes.
+- Added focused unit tests for newest-pair preservation, oversized-request rejection, approved-memory filtering and estimate labelling.
+
+**Limitations:** LiteRT-LM Android 0.17.1 still has no preflight tokenizer API. The character heuristic can under- or over-estimate Qwen tokenization and chat-template overhead; it reduces risk but cannot prove that every accepted prompt fits the native context. The post-generation KV-cache count remains a separate actual runtime measurement. The configured limits and heuristic should be validated against real prompts after a permitted build/device test.
+
+**Verification:** GitHub source read-back only. Unit tests were authored but not executed. No Gradle build, APK, inference, CI/workflow dispatch or device test was run. Automatic Actions triggers remain disabled.
+
+**Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
