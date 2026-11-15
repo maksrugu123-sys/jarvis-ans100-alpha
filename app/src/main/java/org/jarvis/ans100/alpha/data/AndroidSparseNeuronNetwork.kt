@@ -910,7 +910,7 @@ private class AndroidNeuronSqliteStore(
             }
             if (topologyVersion == AndroidSparseNeuronNetwork.DIALOGUE_TOPOLOGY_VERSION) {
                 val actualConnections = scalar(db, "SELECT COUNT(*) FROM connections")
-                if (actualConnections != connectionCount) {
+                if (actualConnections != connectionCount.toLong()) {
                     throw AndroidNeuronNetworkException("versioned dialogue topology has an unexpected connection count")
                 }
                 db.setTransactionSuccessful()
