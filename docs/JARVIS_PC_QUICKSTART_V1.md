@@ -88,6 +88,9 @@ These are UI-level deterministic command routes to the existing read-only browse
 
 The ANS-100 panel reports the source-defined desktop V4 topology contract: seven populations, 10,000 declared neuron IDs, and 25,500 expected directed connections. This status endpoint reads metadata only; it does not construct the network or allocate 10,000 runtime neurons. The topology is currently a source-level foundation and is **not connected to the live desktop conversation path**. The existing 10-neuron structural conversation signal preprocessor remains separate, as does the small four-output dialogue R-STDP experiment shown below it. Do not interpret the declared connection count as a measured runtime graph until the topology builder tests and integration/parity work have been run.
 
+
+Browser-only chat commands remain available even when the local language-model runtime is missing. The send button changes to **Команда браузера**; recognized browser commands are handled locally in the PWA before any model request. Non-browser chat messages still require the configured LiteRT-LM runtime and return a clear unavailable message instead of being sent to a missing model.
+
 ## Chrome / Edge browser extension
 
 The JARVIS panel includes a download link for a Manifest V3 companion extension. To install it on Windows 10:
