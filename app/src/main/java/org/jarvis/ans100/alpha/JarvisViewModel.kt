@@ -915,23 +915,20 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         return try {
             nativeNetworkExecutor.submit<NativeDialogueFeedbackContext?> {
                 try {
-                    var prior = nativeNeuronNetwork.stats()
-                    if (prior.neuronCount == 0) {
-                        mainHandler.post {
-                            val current = mutableState.value
-                            mutableState.value = current.copy(
-                                conversation = current.conversation.copy(
-                                    nativeNetworkMessage = "Первичная настройка ANS-100: создаётся разреженная сеть из 10 000 нейронов…",
-                                ),
-                            )
-                        }
-                        nativeNeuronNetwork.initializeSparseDialogueNetwork(
-                            neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
-                            weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
-                            inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
+                    mainHandler.post {
+                        val current = mutableState.value
+                        mutableState.value = current.copy(
+                            conversation = current.conversation.copy(
+                                nativeNetworkMessage = "Проверка и подготовка трёхслойной сети ANS-100 из 10 000 нейронов…",
+                            ),
                         )
-                        prior = nativeNeuronNetwork.stats()
                     }
+                    nativeNeuronNetwork.initializeSparseDialogueNetwork(
+                        neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
+                        weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
+                        inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
+                    )
+                    val prior = nativeNeuronNetwork.stats()
                     if (prior.neuronCount != AndroidSparseNeuronNetwork.MAX_NEURONS) {
                         throw IllegalStateException(
                             "Сохранённая диалоговая сеть имеет неожиданное число нейронов: ${prior.neuronCount}.",
@@ -1058,7 +1055,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             "farewell" -> 3
             else -> throw IllegalArgumentException("Неизвестная метка диалога.")
         }
-        return AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index
+        return AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + index
     }
 
     /** Explicit class selection rewards the selected output and weakens alternatives. */
@@ -1069,7 +1066,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val selected = dialogueOutputNeuronId(expectedLabel)
         val rewards = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).associate { index ->
-            val outputId = AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index
+            val outputId = AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + index
             outputId to if (outputId == selected) 1.0 else -1.0 / 3.0
         }
         enqueueNativeDialogueReward(contextId, featureIds, rewards)
@@ -1167,12 +1164,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun initializeNativeNeuronNetwork() {
         val before = mutableState.value
         if (before.conversation.nativeNetworkBusy) return
-        if ((before.conversation.nativeNetworkStats?.neuronCount ?: 0) > 0) return
         mutableState.value = before.copy(
             conversation = before.conversation.copy(
                 nativeNetworkBusy = true,
                 nativeNetworkError = null,
-                nativeNetworkMessage = "Создание разреженной сети из 10 000 нейронов…",
+                nativeNetworkMessage = "Создание или обновление трёхслойной разреженной сети из 10 000 нейронов…",
             ),
         )
         nativeNetworkExecutor.execute {
@@ -1190,7 +1186,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             nativeNetworkBusy = false,
                             nativeNetworkStats = stats,
                             nativeNetworkError = null,
-                            nativeNetworkMessage = "Создана сеть: 9 996 признаковых и 4 выходных LIF-DT нейрона; связи разреженные, активный набор ограничен LRU-кэшем, состояние хранится в SQLite JNVM.",
+                            nativeNetworkMessage = "Подготовлена трёхслойная сеть: 9 000 входных, 996 скрытых и 4 выходных LIF-DT нейрона; до 75 984 разреженных синапсов, состояние хранится в SQLite JNVM.",
                         ),
                     )
                 }
