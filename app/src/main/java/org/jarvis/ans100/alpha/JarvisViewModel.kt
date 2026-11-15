@@ -1229,18 +1229,43 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 if (prior.neuronCount == 0) {
                     throw IllegalStateException("Сначала создай сеть из 10 000 нейронов.")
                 }
-                if (prior.currentTimeNs > Long.MAX_VALUE - 10_000_000L) {
+                nativeNeuronNetwork.initializeSparseDialogueNetwork(
+                    neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
+                    weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
+                    inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
+                )
+                if (prior.currentTimeNs > Long.MAX_VALUE - 10_000_000L -
+                    2L * AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS
+                ) {
                     throw IllegalStateException("Модельные часы JNVM достигли предела.")
                 }
                 val nextTime = prior.currentTimeNs + 10_000_000L
-                nativeNeuronNetwork.scheduleInput(
-                    eventId = "phone-probe-${UUID.randomUUID()}",
-                    timeNs = nextTime,
-                    neuronId = 0,
-                    strength = 1.0,
+                nativeNeuronNetwork.scheduleInputs(
+                    listOf(
+                        AndroidNeuronEvent(
+                            eventId = "phone-probe-a-${UUID.randomUUID()}",
+                            timeNs = nextTime,
+                            targetNeuronId = 0,
+                            strength = 1.0,
+                        ),
+                        AndroidNeuronEvent(
+                            eventId = "phone-probe-b-${UUID.randomUUID()}",
+                            timeNs = nextTime,
+                            targetNeuronId = 996,
+                            strength = 1.0,
+                        ),
+                    ),
                 )
-                val result = nativeNeuronNetwork.run(maxEvents = 4_096, maxTimestamps = 32)
+                val result = nativeNeuronNetwork.run(maxEvents = 4_096, maxTimestamps = 4)
                 val stats = nativeNeuronNetwork.stats()
+                val hiddenSpikes = result.emittedSpikes.count {
+                    it.first in AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until
+                        AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
+                }
+                val outputSpikes = result.emittedSpikes.count {
+                    it.first in AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START until
+                        AndroidSparseNeuronNetwork.MAX_NEURONS
+                }
                 mainHandler.post {
                     val current = mutableState.value
                     mutableState.value = current.copy(
@@ -1248,7 +1273,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             nativeNetworkBusy = false,
                             nativeNetworkStats = stats,
                             nativeNetworkError = null,
-                            nativeNetworkMessage = "Обработано событий: ${result.processedEvents}; импульсов: ${result.emittedSpikes.size}; осталось в очереди: ${result.pendingEvents}.",
+                            nativeNetworkMessage = "Тест трёх слоёв: событий ${result.processedEvents}; скрытых импульсов ${hiddenSpikes}; выходных импульсов ${outputSpikes}; очередь ${result.pendingEvents}.",
                         ),
                     )
                 }
