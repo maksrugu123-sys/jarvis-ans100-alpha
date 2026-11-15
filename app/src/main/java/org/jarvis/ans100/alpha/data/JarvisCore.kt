@@ -333,6 +333,10 @@ data class JarvisCoreStatus(
     val ans100AdaptiveStatePersisted: Boolean = false,
     val ans100NetworkNeuronCount: Int = 10,
     val ans100ActiveNeuronCount: Int = 0,
+    val androidDialogueNetworkIntegrated: Boolean = false,
+    val androidDialogueNetworkNeuronCount: Int = 0,
+    val androidDialogueNetworkActiveFeatureCount: Int = 0,
+    val androidDialogueNetworkProcessedEvents: Int = 0,
     val understandingIntegratedIntoConversation: Boolean = false,
     val lastUnderstandingIntent: String? = null,
     val lastUnderstandingConfidence: Double? = null,
@@ -367,7 +371,12 @@ data class JarvisCoreStatus(
                 appendLine("Предварительный план: $lastReasoningPlanStepCount шагов; требуется уточнение: $lastReasoningPlanRequiresClarification.")
             }
             appendLine("Reasoning Engine: ${if (reasoningIntegratedIntoConversation) "участвует в обработке запросов" else "структурированный preview пока отдельно от обычного диалога"}.")
-            appendLine("ANS-100: сеть из $ans100NetworkNeuronCount нейронов; активно в последнем проходе: $ans100ActiveNeuronCount.")
+            appendLine("ANS-100 shape-signal: сеть из $ans100NetworkNeuronCount нейронов; активно в последнем проходе: $ans100ActiveNeuronCount.")
+            appendLine("Android dialogue network: " + if (androidDialogueNetworkIntegrated) {
+                "$androidDialogueNetworkNeuronCount узлов; активных признаков: $androidDialogueNetworkActiveFeatureCount; событий: $androidDialogueNetworkProcessedEvents."
+            } else {
+                "10 000-узловая разреженная сеть ещё не обработала завершённый ход."
+            })
             appendLine("Результат: $neural.")
             appendLine("STDP-обучение на диалоге выключено; адаптивное состояние ALIF сохранено отдельно: $ans100AdaptiveStatePersisted.")
             append("Внешние действия: ${if (externalActionsEnabled) "разрешены отдельной политикой" else "выключены"}.")
@@ -381,6 +390,7 @@ class JarvisCore(
     private val memoryCache: LocalWorkspaceMemoryCache = LocalWorkspaceMemoryCache(),
 ) {
     private var lastSignalContext: ConversationSignalContext? = null
+    private var lastDialogueNeuralAnalysis: DialogueNeuralAnalysis? = null
     private var lastUnderstanding: LocalUnderstanding? = null
     private var lastRetrievedMemoryCount: Int = 0
 
@@ -402,6 +412,10 @@ class JarvisCore(
             ans100AdaptiveStatePersisted = signal?.statePersisted == true,
             ans100NetworkNeuronCount = signal?.networkNeuronCount ?: 10,
             ans100ActiveNeuronCount = signal?.activeNeuronCount ?: 0,
+            androidDialogueNetworkIntegrated = lastDialogueNeuralAnalysis != null,
+            androidDialogueNetworkNeuronCount = lastDialogueNeuralAnalysis?.networkNeuronCount ?: 0,
+            androidDialogueNetworkActiveFeatureCount = lastDialogueNeuralAnalysis?.activeFeatureCount ?: 0,
+            androidDialogueNetworkProcessedEvents = lastDialogueNeuralAnalysis?.processedEvents ?: 0,
             understandingIntegratedIntoConversation = lastUnderstanding != null,
             lastUnderstandingIntent = lastUnderstanding?.intent,
             lastUnderstandingConfidence = lastUnderstanding?.intentConfidence,
@@ -438,6 +452,7 @@ class JarvisCore(
                 )
                 lastUnderstanding = understanding
                 lastSignalContext = signalContext
+                lastDialogueNeuralAnalysis = dialogueNeuralAnalysis
                 val memories = if (languageEngine.languageModelConfigured) {
                     retrieveMemories(clean)
                 } else {
@@ -481,6 +496,7 @@ class JarvisCore(
             reasoningResult = LocalReasoningEngine().planFor(parsedUnderstanding),
         )
         lastSignalContext = signalContext
+        lastDialogueNeuralAnalysis = null
         lastRetrievedMemoryCount = 0
         return repository.appendExchange(cleanPrompt, cleanResponse)
     }
