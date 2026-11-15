@@ -4982,6 +4982,21 @@ The new `JARVIS_TYPED_EVIDENCE_V1` contract provides:
 
 The encoder intentionally treats question/exclamation marks and line breaks as message structure only. Core key terms/entities remain heuristic hints, not verified semantic facts. Approved memory is represented by a bounded reference and category, not copied private memory content. Tool summaries are accepted only through module-internal input wrappers intended for permission-gated adapters; this type system alone is not a cryptographic trust boundary.
 
-**Current limitation:** this phase adds the typed contract and deterministic Core adapter only. It does not yet feed the sparse neuron network, change the active Android reply path, serialize the contract into Qwen prompts, or implement memory/tool adapters. The old path remains unchanged.
+**Current limitation:** this phase adds the typed contract and deterministic Core adapter only. It does not yet feed the sparse neuron network, change the active Android reply path, or implement memory/tool adapters. Phase 2 adds a standalone decision contract and bounded Qwen handoff builder, but this builder is not yet called by the active response engine. The old path remains unchanged.
 
 **Verification:** changed files were fetched back from the experiment branch and inspected statically. The test source was added but NOT executed. No Gradle build, APK/AAB, CI, GitHub Actions, benchmark or device run was performed. Do not report this phase as runtime-verified.
+
+
+## 3.83 Phase 2 — ANS-100 decision contract and Qwen handoff (implemented, not runtime-integrated)
+
+Added:
+- `app/src/main/java/org/jarvis/ans100/alpha/data/ANS100Decision.kt`
+- `app/src/test/java/org/jarvis/ans100/alpha/data/ANS100DecisionTest.kt`
+
+The decision contract is versioned and turn-scoped. It represents bounded candidate decisions, supporting/conflicting evidence IDs, explicit selected/clarification/abstention states, missing evidence, uncertainty categories, response goal/constraints, population metadata, processed-event count and budget exhaustion. Candidate evidence references are validated against the same turn's typed evidence bundle. V1 hard-codes calibration status to UNCALIBRATED; activation is never described as probability.
+
+The Qwen handoff builder preserves the exact original user message, validates that it matches the user-message evidence record, includes bounded Core analysis and decision context, includes only approved-memory references (not private memory contents), and labels tool summaries by provenance. It explicitly tells Qwen to realize the response only, not execute tools/actions or invent evidence. Handoff context is capped at 3,200 characters.
+
+**Integration boundary:** this is an additive contract/builder only. `LiteRtLmResponseEngine` and `PromptContextBudgeter` are not changed; the live conversation still does not call this builder. No neural population decision producer has been connected yet. The next integration step must be behind a disabled-by-default rollout gate and retain the old response path as fallback.
+
+**Verification:** source and test files were committed; no tests/builds/CI/workflows/APK/device run. Static readback remains pending.
