@@ -19,10 +19,10 @@ class ANS100DecisionPolicyTest {
             neuralAnalysis = null,
         )
 
-        assertEquals(ANS100DecisionProducer.CORE_POLICY_V1, decision.decisionProducer)
-        assertEquals(ANS100TopologyVersion.LEGACY_DIALOGUE_READOUT_V1, decision.topologyVersion)
-        assertEquals(ANS100DecisionStatus.SELECTED, decision.status)
-        assertEquals("respond_to_original_request", decision.selectedCandidateId)
+        assertEquals("decision producer", ANS100DecisionProducer.CORE_POLICY_V1, decision.decisionProducer)
+        assertEquals("topology version", ANS100TopologyVersion.LEGACY_DIALOGUE_READOUT_V1, decision.topologyVersion)
+        assertEquals("decision status", ANS100DecisionStatus.SELECTED, decision.status)
+        assertEquals("selected candidate", "respond_to_original_request", decision.selectedCandidateId)
         decision.validateAgainst(evidence)
     }
 
