@@ -117,7 +117,7 @@ class PromptContextBudgeterTest {
             dialogueNeuralAnalysis = neural,
         )
 
-        assertTrue(plan.systemInstruction.contains("10 000 nodes"))
+        assertTrue(plan.systemInstruction.contains("10000 nodes"))
         assertTrue(plan.systemInstruction.contains("active text-feature inputs=18"))
         assertTrue(plan.systemInstruction.contains("not semantic reasoning decisions"))
     }
