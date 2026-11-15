@@ -240,7 +240,7 @@ The first static review found that version-2 feed-forward weights (0.35) were be
 - keeps association recurrence, working-state recurrence and critic-to-candidate feedback at 0.18, below the single-input threshold, so feedback does not independently sustain a spike loop;
 - adds an instrumentation fixture that sends one typed input and checks that all seven populations emit at least one spike, the event queue drains, and the event budget is not exhausted.
 
-This is a source-level design and test fixture only. The instrumentation test has NOT been run. The hybrid scheduler is still not called by the live conversation coordinator. The beginHybridTurn() state-isolation and cumulative-telemetry paths have instrumentation fixtures, but those fixtures have NOT been run. The hybrid scheduler is still not called by the live conversation coordinator. No build, test, CI, APK/AAB, benchmark or device execution was performed.
+This calibration was initially authored with source-level instrumentation fixtures only. The hybrid scheduler is now connected to the live conversation route as described in section 18. The topology propagation, turn isolation and cumulative-telemetry instrumentation fixtures have NOT been run. No build, test, CI, APK/AAB, benchmark or device execution was performed.
 
 
 ## 18. 2026-11-15 hybrid dialogue decision handoff
@@ -251,4 +251,4 @@ This is a source-level design and test fixture only. The instrumentation test ha
 
 The resulting turn-bound `ANS100QwenHandoff` is attached to `DialogueNeuralAnalysis`. `LiteRtLmResponseEngine` prefers this prebuilt hybrid handoff over the older opt-in Core-policy fallback, and `PromptContextBudgeter` gives the handoff priority over optional telemetry. Qwen is instructed to preserve abstention and clarification rather than bypass them.
 
-Legacy manual diagnostic/reward entry points remain for later cleanup. All changes are source-level only; no build, test, CI, APK/AAB, benchmark or device validation was performed.
+Legacy manual diagnostic/reward entry points remain for later cleanup. A JVM test file covers the population gate's selected, abstained, budget-exhausted and clarification paths. These tests are authored but NOT run. All changes are source-level only; no build, test, CI, APK/AAB, benchmark or device validation was performed.
