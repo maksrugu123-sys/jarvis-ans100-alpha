@@ -1363,8 +1363,8 @@ function publicBrowserCommandUrl(rawTarget) {
   const host = parsed.hostname.toLowerCase();
   const localHost = host === "localhost" || host.endsWith(".localhost") ||
     host.endsWith(".local") || host.endsWith(".internal") ||
-    host === "0.0.0.0" || host === "::1" || host.startsWith("fc") || host.startsWith("fe80:");
-  const ipv4 = /^\\d{1,3}(?:\\.\\d{1,3}){3}$/u.test(host);
+    host === "0.0.0.0" || host === "[::1]" || host.endsWith(".test") || host.endsWith(".invalid");
+  const ipv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(host);
   if (!["http:", "https:"].includes(parsed.protocol) || !host.includes(".") ||
       parsed.username || parsed.password || localHost || ipv4) {
     throw new Error("Разрешены только публичные доменные адреса HTTP/HTTPS без IP-адресов, логинов и локальных хостов.");
@@ -1374,8 +1374,8 @@ function publicBrowserCommandUrl(rawTarget) {
 
 async function routeBrowserCommand(rawText) {
   const command = rawText.trim();
-  const normalBrowserSearch = command.match(/^(?:найди|поищи)\\s+(?:в\\s+)?(?:моём\\s+)?(?:обычном\\s+)?(?:chrome|edge|браузере)\\s+(.+)$/iu);
-  const normalBrowserOpen = command.match(/^(?:открой|перейди)\\s+(?:в\\s+)?(?:моём\\s+)?(?:обычном\\s+)?(?:chrome|edge|браузере)\\s+(.+)$/iu);
+  const normalBrowserSearch = command.match(/^(?:найди|поищи)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?(?:chrome|edge|браузере)\s+(.+)$/iu);
+  const normalBrowserOpen = command.match(/^(?:открой|перейди)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?(?:chrome|edge|браузере)\s+(.+)$/iu);
   if (normalBrowserSearch) {
     const query = normalBrowserSearch[1].trim();
     if (!query || query.length > 500) throw new Error("Поисковый запрос должен содержать не более 500 символов.");
