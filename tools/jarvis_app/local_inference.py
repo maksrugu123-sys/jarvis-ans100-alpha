@@ -394,6 +394,11 @@ class LiteRtLmLocalEngine:
                         if isinstance(raw_margin, (int, float)) and not isinstance(raw_margin, bool)
                         and 0.0 <= float(raw_margin) <= 1.0 else 0.0
                     )
+                    raw_status = ans100_context.get("decision_status")
+                    if not isinstance(raw_status, str) or raw_status not in {
+                        "selected", "needs_clarification", "abstained",
+                    }:
+                        raw_status = "abstained"
                     safe_list = lambda key: [
                         item[:64] for item in ans100_context.get(key, [])[:7]
                         if isinstance(item, str)
@@ -411,11 +416,7 @@ class LiteRtLmLocalEngine:
                         "candidate_signal_scores": safe_scores,
                         "winner_candidate_id": winner_id,
                         "selected_candidate_id": selected_id,
-                        "decision_status": (
-                            ans100_context.get("decision_status")
-                            if ans100_context.get("decision_status") in {"selected", "needs_clarification", "abstained"}
-                            else "abstained"
-                        ),
+                        "decision_status": raw_status,
                         "winner_margin": safe_margin,
                         "active_population_ids": safe_list("active_population_ids"),
                         "missing_populations": safe_list("missing_populations"),
