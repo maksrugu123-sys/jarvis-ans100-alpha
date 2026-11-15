@@ -96,7 +96,7 @@ class JarvisCoreTests(unittest.TestCase):
             def __init__(self):
                 self.calls = 0
 
-            def analyze(self, prompt, understanding_context, reasoning_context=None, external_context=None):
+            def analyze(self, prompt, understanding_context, reasoning_context=None, external_context=None, approved_memories=()):
                 self.calls += 1
                 self.prompt = prompt
                 return {
