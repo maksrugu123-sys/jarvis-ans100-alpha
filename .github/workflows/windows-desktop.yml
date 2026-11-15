@@ -81,7 +81,7 @@ jobs:
               }
               try {
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:18766/api/health" -TimeoutSec 2
-                if ($health.status -eq "ok" -and $health.platform -eq "desktop") {
+                if ($health.status -eq "ok" -and $health.platform -eq "desktop" -and $health.auth_required -eq $false -and $health.auth_scheme -eq "none") {
                   $ready = $true
                   break
                 }
@@ -153,7 +153,7 @@ jobs:
               }
               try {
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:18765/api/health" -TimeoutSec 2
-                if ($health.status -eq "ok" -and $health.platform -eq "desktop") {
+                if ($health.status -eq "ok" -and $health.platform -eq "desktop" -and $health.auth_required -eq $false -and $health.auth_scheme -eq "none") {
                   $ready = $true
                   break
                 }
