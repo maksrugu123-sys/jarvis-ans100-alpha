@@ -243,8 +243,12 @@ The first static review found that version-2 feed-forward weights (0.35) were be
 This is a source-level design and test fixture only. The instrumentation test has NOT been run. The hybrid scheduler is still not called by the live conversation coordinator. The beginHybridTurn() state-isolation and cumulative-telemetry paths have instrumentation fixtures, but those fixtures have NOT been run. The hybrid scheduler is still not called by the live conversation coordinator. No build, test, CI, APK/AAB, benchmark or device execution was performed.
 
 
-## 18. 2026-11-15 dialogue graph cutover status
+## 18. 2026-11-15 hybrid dialogue decision handoff
 
-`JarvisViewModel.sendConversationMessage()` now excludes the legacy three-layer dialogue graph/classifier from ordinary message processing and runs the seven-population hybrid graph as the sole neural preprocessing path. Startup no longer refreshes the legacy graph. Legacy code and its separate SQLite data are retained, not deleted, so the cutover does not destroy old state.
+`JarvisViewModel.sendConversationMessage()` excludes the legacy three-layer dialogue graph/classifier from ordinary message processing and runs the seven-population hybrid graph. Legacy code and its separate SQLite data are retained, not deleted or migrated.
 
-This does **not** mean the hybrid graph is already the decision-maker: its current output is population telemetry; `ANS100DecisionPolicy` remains Core-policy based and no hybrid-selected candidate is yet passed to Qwen. Legacy manual diagnostic/reward entry points still need cleanup. No builds/tests/device validation were performed.
+`ANS100HybridPopulationController` consumes the current topology's cumulative per-turn telemetry. It requires at least one spiking neuron in every declared population and a drained event queue before forwarding the Core-proposed candidate as selected. If the queue is still pending, the event budget is exhausted, or any population did not spike, the controller returns an explicit abstention. Core still proposes the only candidate and determines whether clarification is needed. The network does not yet decode text meaning, rank learned semantic hypotheses, or provide calibrated confidence; this controller is a bounded participation gate, not independent semantic reasoning.
+
+The resulting turn-bound `ANS100QwenHandoff` is attached to `DialogueNeuralAnalysis`. `LiteRtLmResponseEngine` prefers this prebuilt hybrid handoff over the older opt-in Core-policy fallback, and `PromptContextBudgeter` gives the handoff priority over optional telemetry. Qwen is instructed to preserve abstention and clarification rather than bypass them.
+
+Legacy manual diagnostic/reward entry points remain for later cleanup. All changes are source-level only; no build, test, CI, APK/AAB, benchmark or device validation was performed.
