@@ -208,6 +208,11 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val startedAtNs = System.nanoTime()
         try {
             candidate.initialize()
+        } catch (error: Exception) {
+            // A failed native initialization may already have allocated backend resources.
+            // Close the candidate before a GPU→CPU fallback attempts another engine.
+            runCatching { candidate.close() }
+            throw error
         } finally {
             lastInitializationMs = ((System.nanoTime() - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
         }
