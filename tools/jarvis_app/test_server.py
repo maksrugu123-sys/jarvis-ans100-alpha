@@ -873,7 +873,6 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(manifest["version"], "1.1.1")
         self.assertEqual(manifest["background"]["service_worker"], "background.js")
-        self.assertEqual(manifest["version"], "1.1.0")
         self.assertEqual(manifest["background"]["service_worker"], "background.js")
         self.assertIn("activeTab", manifest["permissions"])
         self.assertNotIn("tabs", manifest["permissions"])
