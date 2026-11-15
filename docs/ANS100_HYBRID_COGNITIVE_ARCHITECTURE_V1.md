@@ -213,3 +213,18 @@ The V2 initializer uses the separate `jarvis_ans100_hybrid_v2.db` SQLite databas
 **Important boundary:** this phase creates and stores a topology only. It does not yet activate the seven populations from typed dialogue evidence, implement the six controller roles, establish useful learning, or connect V2 readouts to `ANS100Decision`/Qwen. The factory is not called by normal app startup, so the default app path remains unchanged.
 
 **Verification:** instrumentation tests were authored for stable population ranges, deterministic edge generation, sparse bounds, idempotent initialization and legacy-database isolation. Tests have NOT been run. No Gradle build, APK/AAB, CI, workflow, benchmark or device run was performed.
+
+
+## 16. Phase 4 implementation status — typed evidence input mapping
+
+Added:
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidHybridEvidenceInputAdapter.kt`
+- `app/src/test/java/org/jarvis/ans100/alpha/data/AndroidHybridEvidenceInputAdapterTest.kt`
+
+The adapter creates a deterministic activation batch from a same-turn `TypedEvidenceBundle`. Its explicit feature-order table assigns the 22 current feature families to 48-slot regions within the evidence/input population. Each repeated feature uses a bounded ordinal; boolean false and true values use separate paired slots. The current 22 feature families occupy IDs 0–1,055, leaving 144 input IDs reserved. Feature order is a persisted mapping contract: existing entries must not be reordered.
+
+Only records with a positive activation hint produce events. Each event is a 1.0 presence pulse because the current LIF threshold is 1.0; the original activation hint is preserved in the trace but is not interpreted as confidence. Source/status combinations are checked before mapping. The trace records turn, record ID, feature ID, source/status, value kind, provenance reference and activation hint. Event IDs include a SHA-256-derived turn token to avoid collisions between different turns scheduled at the same model timestamp.
+
+This remains a **pure batch builder**. It does not yet enqueue events into the SQLite-backed hybrid V2 network, because the caller must first verify topology identity and own a monotonic per-turn timestamp/lifecycle. Non-boolean text/category/numeric contents are not semantically decoded or hashed into neuron IDs; the adapter currently signals only typed feature presence (and boolean polarity). Therefore this stage does not demonstrate semantic understanding or meaningful population-level reasoning.
+
+JVM tests were authored for feature coverage, stable bounded IDs, boolean polarity, deterministic batches, provenance, zero-activation omission, invalid source/status rejection and record-budget enforcement. Tests were NOT run. No build, CI, APK/AAB, benchmark or device run was performed.
