@@ -71,7 +71,7 @@ object AndroidHybridTopologyV2 {
         addProjection("working-candidate", populations[2], populations[3], fanOut = 2, salt = 79)
         addProjection("working-goal", populations[2], populations[5], fanOut = 1, salt = 97)
         addProjection("candidate-critic", populations[3], populations[4], fanOut = 2, salt = 113)
-        addProjection("critic-candidate", populations[4], populations[3], fanOut = 1, salt = 131)
+        addProjection("critic-candidate", populations[4], populations[3], fanOut = 1, salt = 131, recurrent = true)
         addProjection("candidate-decision", populations[3], populations[6], fanOut = 1, salt = 149)
         addProjection("critic-decision", populations[4], populations[6], fanOut = 1, salt = 167)
         addProjection("goal-decision", populations[5], populations[6], fanOut = 1, salt = 181)
