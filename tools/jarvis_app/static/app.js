@@ -1532,7 +1532,8 @@ async function routeBrowserCommand(rawText) {
       await browserExtensionCommand("close-last-tab");
       setNotice("Последняя вкладка, открытая JARVIS, закрыта в Chrome/Edge.", "success");
     } catch (error) {
-      if (error.code !== "extension_bridge_unavailable") throw error;
+      if (error.code !== "extension_bridge_unavailable" &&
+          !String(error.message || "").startsWith("Нет вкладок, которые JARVIS открыл")) throw error;
       if (closeFallbackHandle(ordinaryBrowserTabHandles)) {
         setNotice("Закрыта вкладка, ранее открытая командой JARVIS.", "success");
       } else if (browserState?.browser_open) {
@@ -1553,7 +1554,8 @@ async function routeBrowserCommand(rawText) {
       await browserExtensionCommand("close-last-window");
       setNotice("Последнее окно, открытое JARVIS, закрыто в Chrome/Edge.", "success");
     } catch (error) {
-      if (error.code !== "extension_bridge_unavailable") throw error;
+      if (error.code !== "extension_bridge_unavailable" &&
+          !String(error.message || "").startsWith("Нет окон, которые JARVIS открыл")) throw error;
       if (closeFallbackHandle(ordinaryBrowserWindowHandles)) {
         setNotice("Закрыто отдельное окно, ранее открытое командой JARVIS.", "success");
       } else if (browserState?.browser_open) {
