@@ -114,6 +114,17 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         memoryContext: List<LocalWorkspaceMemory>,
         signalContext: ConversationSignalContext?,
         understandingContext: LocalUnderstanding?,
+    ): String = respond(
+        prompt, recentHistory, memoryContext, signalContext, understandingContext, null,
+    )
+
+    override fun respond(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage>,
+        memoryContext: List<LocalWorkspaceMemory>,
+        signalContext: ConversationSignalContext?,
+        understandingContext: LocalUnderstanding?,
+        dialogueNeuralAnalysis: DialogueNeuralAnalysis?,
     ): String {
         val clean = prompt.trim()
         if (clean.length > MAX_PROMPT_CHARS) throw LocalConversationException("Ограничение компактной модели — " + MAX_PROMPT_CHARS + " символов на запрос.")
@@ -128,6 +139,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
             memoryContext = memoryContext,
             signalContext = signalContext,
             understandingContext = understanding,
+            dialogueNeuralAnalysis = dialogueNeuralAnalysis,
         )
         val initial = contextBudget.history.map { item ->
             if (item.role == ConversationRole.USER) Message.user(item.text)
