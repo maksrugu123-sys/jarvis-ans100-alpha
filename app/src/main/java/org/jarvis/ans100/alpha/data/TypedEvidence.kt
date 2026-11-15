@@ -361,7 +361,7 @@ class TypedEvidenceEncoder {
             EvidenceFeature.CANDIDATE_CLARIFICATION_SUPPORT to needsClarification,
             EvidenceFeature.CANDIDATE_CLARIFICATION_CONFLICT to !needsClarification,
             EvidenceFeature.CANDIDATE_ABSTAIN_SUPPORT to (!hasGoal && !needsClarification),
-            EvidenceFeature.CANDIDATE_ABSTAIN_CONFLICT to (hasGoal && !needsClarification),
+            EvidenceFeature.CANDIDATE_ABSTAIN_CONFLICT to !( !hasGoal && !needsClarification ),
         )
         candidateSignals.forEach { (feature, active) ->
             add(
