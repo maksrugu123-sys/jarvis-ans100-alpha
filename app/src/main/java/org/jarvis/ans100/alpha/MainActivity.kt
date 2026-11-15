@@ -225,7 +225,10 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                     viewModel.sendConversationMessage(message)
                                     conversationInput = ""
                                 },
+                                onCancelGeneration = { viewModel.cancelConversationGeneration() },
                                 isBusy = ui.conversation.isBusy,
+                                canCancelGeneration = ui.conversation.canCancelGeneration,
+                                isStoppingGeneration = ui.conversation.isStoppingGeneration,
                                 glowEnabled = glowEnabled,
                             )
                         }
@@ -2263,7 +2266,10 @@ private fun ConversationComposer(
     input: String,
     onInputChange: (String) -> Unit,
     onSend: (String) -> Unit,
+    onCancelGeneration: () -> Unit,
     isBusy: Boolean,
+    canCancelGeneration: Boolean,
+    isStoppingGeneration: Boolean,
     glowEnabled: Boolean = true,
 ) {
     Surface(
@@ -2290,6 +2296,15 @@ private fun ConversationComposer(
                 modifier = Modifier.heightIn(min = 56.dp),
             ) {
                 Text("Отправить")
+            }
+            if (canCancelGeneration) {
+                OutlinedButton(
+                    onClick = onCancelGeneration,
+                    enabled = !isStoppingGeneration,
+                    modifier = Modifier.heightIn(min = 56.dp),
+                ) {
+                    Text(if (isStoppingGeneration) "Остановка…" else "Стоп")
+                }
             }
         }
     }
@@ -2583,6 +2598,12 @@ private fun SettingsPanel(
                         } else {
                             Text("Последняя инициализация движка: ${conversation.modelInitializationMs} мс")
                             Text("Генерация последнего ответа: ${conversation.responseGenerationMs} мс")
+                            if (conversation.timeToFirstTextMs > 0L) {
+                                Text("До первого фрагмента текста: ${conversation.timeToFirstTextMs} мс")
+                            }
+                            if (conversation.contextTokenCount > 0) {
+                                Text("Токенов в KV-кэше после ответа: ${conversation.contextTokenCount}")
+                            }
                             Text("Весь ход диалога: ${conversation.lastTurnDurationMs} мс")
                             Text("Оценка количества слов: ${conversation.responseTokenEstimate}")
                             if (conversation.responseGenerationMs > 0L) {
@@ -2601,7 +2622,7 @@ private fun SettingsPanel(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "Количество слов — приблизительная оценка, не настоящий токенизатор и не скорость токенов в секунду.",
+                            "KV-токены — фактический размер контекста в кэше LiteRT-LM (включает историю, запрос и ответ). Время до первого фрагмента измеряется по первому текстовому чанку, а не по внутреннему первому токену.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
