@@ -155,6 +155,50 @@ class HybridANS100RuntimeInputTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _neuron_id_for(invalid)
 
+    def test_analyze_executes_the_full_seven_population_graph(self):
+        runtime = HybridANS100Runtime()
+        result = runtime.analyze(
+            "Как продолжить проект JARVIS?",
+            {
+                "language": "ru_or_cyrillic",
+                "intent": "question",
+                "intent_confidence": 0.8,
+                "task_kind": "answer_question",
+                "key_terms": ["продолжить", "проект"],
+                "entities": ["JARVIS"],
+                "contains_negation": False,
+                "asks_for_explanation": False,
+                "refers_to_previous_context": False,
+                "context_reference": {"status": "unavailable", "method": "no_recent_user_turn"},
+                "reasoning_plan": {
+                    "goal": "Answer the question",
+                    "steps": ["Review the current project context"],
+                    "requires_clarification": False,
+                },
+                "evidence": ["question_marker"],
+            },
+        )
+        self.assertEqual(result["neuron_count"], 10_000)
+        self.assertEqual(result["connection_count"], 25_500)
+        self.assertTrue(result["readout_complete"])
+        self.assertFalse(result["compute_budget_exhausted"])
+        self.assertEqual(result["decision_status"], "selected")
+        self.assertEqual(result["selected_candidate"], "answer")
+        self.assertEqual(result["missing_populations"], [])
+        self.assertEqual(result["readout_mismatch_slots"], [])
+        self.assertEqual(
+            set(result["active_population_ids"]),
+            {
+                "evidence_input",
+                "association",
+                "working_state",
+                "candidate",
+                "critic_uncertainty",
+                "goal_planning",
+                "decision_readout",
+            },
+        )
+
     def test_runtime_status_matches_android_hybrid_topology_contract(self):
         runtime = HybridANS100Runtime()
         status = runtime.status()
