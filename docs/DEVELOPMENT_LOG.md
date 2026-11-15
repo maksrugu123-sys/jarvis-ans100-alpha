@@ -2914,3 +2914,11 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Chat browser commands continue to control the dedicated visible Playwright/Chromium research browser. The Chrome/Edge extension remains manually operated from its toolbar popup; it does not yet accept live commands from the chat window.
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
+
+
+**Follow-up — chat commands for the active desktop browser:**
+- Added two explicit commands: `Открой в обычном браузере <домен>` opens a new tab/window in the same browser hosting the JARVIS PWA; `Найди в браузере <запрос>` opens a Bing search in that browser.
+- The command handler calls `window.open` synchronously from the user-submitted chat action and does not call the extension or remote browser-control APIs. It accepts HTTP/HTTPS domain URLs and rejects credentials, literal IPs and common local hostnames.
+- The command does not switch between Chrome and Edge. The browser hosting JARVIS is used. Existing `Открой сайт` / `Найди в интернете` commands continue to use the separate visible Playwright/Chromium research window.
+- The Chrome/Edge extension still works independently from its toolbar popup. Chat-to-extension background command relay is not implemented; this limitation is documented in the PC quickstart.
+- Static asset regression coverage includes the normal-browser command route and service-worker v14. Tests remain NOT RUN.
