@@ -71,7 +71,7 @@ object ANS100CandidateSlotContract {
     }
 
     fun slotForCandidateId(candidateId: String): Slot? =
-        Slot.entries.firstOrNull { it.candidateId == candidateId }
+        Slot.values().firstOrNull { it.candidateId == candidateId }
 
     private fun lane(
         population: AndroidHybridTopologyV2.Population,
@@ -80,7 +80,12 @@ object ANS100CandidateSlotContract {
         laneSize: Int,
     ): AndroidHybridTopologyV2.Population {
         val laneIndex = slot.index * 2 + polarity.index
-        val start = population.startInclusive + laneIndex * laneSize
+        val sharedPrefix = when (population.id) {
+            "association" -> 1_000
+            "working_state" -> 300
+            else -> 0
+        }
+        val start = population.startInclusive + sharedPrefix + laneIndex * laneSize
         return AndroidHybridTopologyV2.Population(
             id = "${population.id}_${slot.name.lowercase()}_${polarity.name.lowercase()}",
             startInclusive = start,
