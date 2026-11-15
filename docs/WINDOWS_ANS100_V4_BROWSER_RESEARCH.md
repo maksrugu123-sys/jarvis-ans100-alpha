@@ -44,19 +44,26 @@ Public projects inspected:
 - [Playwriter](https://github.com/remorses/playwriter): connects to the user's existing Chrome via an extension rather than requiring a separate browser profile; this trades isolation for access to existing tabs and sessions.
 - [Playwright Chrome Extension](https://github.com/microsoft/playwright/tree/main/packages/extension): demonstrates an extension-mediated connection to selected existing browser tabs.
 
-### Recommended JARVIS design
+### Browser modes and chat commands
 
-Keep two explicit browser modes:
+There are now two explicit browser modes plus a limited no-extension fallback:
 
-1. **Connected Chrome/Edge (extension mode):** user installs and explicitly connects the Browser Bridge; JARVIS sends typed commands through a loopback-only authenticated bridge; the extension returns structured results. Only the active/selected tab is exposed, and page extraction happens only for a user-requested read. Do not request cookies, history, bookmarks, all-sites access, or downloads.
-2. **Isolated research browser (Playwright mode):** retain the existing visible, headed Chromium with its separate persistent JARVIS profile and read-only request guard. It remains the fallback for research when the extension is unavailable.
+1. **Ordinary Chrome/Edge without the extension:** chat commands use `window.open()` to open a public URL or Bing search in the browser that hosts the JARVIS page. This opens a real browser tab/window, but JARVIS cannot inspect arbitrary page text, enumerate existing tabs, or close user-owned tabs/windows. Browser popup policy may block this action. This is open-only functionality, not full computer control.
+2. **Connected Chrome/Edge (extension mode):** Manifest V3 Browser Bridge 1.1.0 adds a content-script relay on the local JARVIS origin and a background service worker. The allowlist is deliberately narrow: `open-tab`, `open-window`, `close-last-tab`, `close-last-window`, and `ping`. The worker records only the tab/window IDs it created through explicit JARVIS commands; close commands use this registry and never query or close arbitrary user tabs. The JARVIS chat confirms before a close. The extension keeps its existing narrow permissions (`activeTab`, `scripting`, `storage`) and does not request the broad `tabs` permission or all-sites access. Reading the current ordinary-browser page remains a separate, deliberate popup action using `activeTab`.
+3. **Isolated research browser (Playwright mode):** retain the existing visible, headed Chromium with its separate persistent JARVIS profile and read-only request guard. Its own active tab can be closed, and the whole isolated window can be stopped independently of ordinary Chrome/Edge.
 
-The extension should use a background service worker with reconnect/backoff and a local authenticated transport, plus a small command allowlist (open URL, search, read selected page, report tab state). Every command should have an ID, expiry, selected-tab scope, explicit result/error response and audit entry. Destructive actions, form submission, downloads, account changes and message sending remain disabled until a separate permission/confirmation design exists.
+The page-to-extension relay accepts only same-window messages from the local JARVIS page, checks the message action against an allowlist, uses a bounded request ID/response wait, and checks the sender origin again in the extension worker. Local JARVIS HTTP APIs continue to use bearer-token authentication. The worker stores at most 40 recently JARVIS-created tab/window IDs. This is a local control bridge, not a remote network service.
+
+Chat folder command `Создай папку Проекты` (or `Создай папку с именем «Проекты»`) creates a single new directory below the application-owned `workspace-files` directory next to JARVIS data. The command accepts a name, not a path. Traversal, hidden/system names, invalid Windows characters, existing folders and names over 80 characters are rejected; existing contents are never overwritten.
+
+Supported close commands are `Закрой вкладку` and `Закрой окно`. JARVIS asks for confirmation and closes only the last tracked JARVIS-created resource, or its own isolated Playwright tab/window. It does not close the current user tab, unrelated windows, or a tab merely because it is active.
 
 Do not attach to a user's personal browser through remote-debugging flags or copy cookies into the isolated profile. Existing JARVIS extension permissions remain unchanged in this milestone.
 
 ## Verification record
 
-- `tools/neuron_runtime/test_hybrid_ans100.py`: authored, **NOT RUN**.
+- `tools/neuron_runtime/test_hybrid_ans100.py` and `tools/jarvis_app/test_workspace_files.py`: authored, **NOT RUN**.
+- Folder endpoint and extension archive regression coverage updated in `tools/jarvis_app/test_server.py`; **NOT RUN**.
 - No Python tests, Windows launch, browser extension installation, Playwright launch, model inference, Gradle build, CI, or GitHub Actions workflow was run.
+- Browser Bridge 1.1.0 and the chat command route are source changes only; Chrome/Edge behavior is **NOT VERIFIED**.
 - The current 10-neuron signal preprocessor remains in the active desktop conversation path until the typed-evidence integration and persistence gates above are completed.
