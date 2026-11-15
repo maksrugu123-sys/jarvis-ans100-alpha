@@ -206,7 +206,7 @@ Added:
 - `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidHybridTopologyV2.kt`
 - `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidHybridTopologyV2Test.kt`
 
-The builder defines the seven contiguous stable ID ranges from the allocation table and creates 27,000 deterministic sparse directed connections under the 100,000-edge limit. The graph includes evidence→association, association recurrence and association→working, working recurrence and working→candidate/goal, candidate→critic, critic→candidate feedback, and candidate/critic/goal→decision paths. There is no direct evidence→decision shortcut. Feed-forward and recurrent weights are explicit starting values, not calibrated parameters.
+The builder defines the seven contiguous stable ID ranges from the allocation table and creates 27,000 deterministic sparse directed connections under the 100,000-edge limit. The graph includes evidence→association, association recurrence and association→working, working recurrence and working→candidate/goal, candidate→critic, critic→candidate feedback, and candidate/critic/goal→decision paths. There is no direct evidence→decision shortcut. In the version-3 calibration, feed-forward edges use 1.0 to meet the current LIF threshold; association/working recurrence and critic-to-candidate feedback use 0.18 to remain subthreshold for a single incoming pulse. These values are propagation-safety starting values, not learned or empirically optimized parameters.
 
 The version-3 initializer uses the separate `jarvis_ans100_hybrid_v3.db` SQLite database. Neuron rows, edges and topology identity/version metadata are created in one SQLite transaction. Reopening the same initialized topology is idempotent; a different or incomplete pre-existing database is rejected rather than cleared or migrated. The legacy dialogue database and its learned state are not used by this initializer.
 
@@ -229,7 +229,7 @@ This is now callable through `AndroidSparseNeuronNetwork.scheduleHybridEvidence(
 
 **Still not wired to live chat:** no conversation coordinator currently constructs this batch and calls the scheduler. Per-turn trace persistence/reward attribution and explicit residual-state isolation are not implemented; draining pending events prevents queued-event overlap, but neuron membrane/adaptation state persists and decays according to the existing LIF-DT runtime. Non-boolean text/category/numeric contents are not semantically decoded or hashed into neuron IDs; the adapter signals only typed feature presence (and boolean polarity). Therefore this stage does not demonstrate semantic understanding or meaningful population-level reasoning.
 
-JVM tests were authored for feature coverage, stable bounded IDs, boolean polarity, deterministic batches, provenance, zero-activation omission, invalid source/status rejection and record-budget enforcement. Instrumentation tests were authored for V2-only scheduling, pending-turn backpressure and legacy-database rejection. Tests were NOT run. No build, CI, APK/AAB, benchmark or device run was performed.
+JVM tests were authored for feature coverage, stable bounded IDs, boolean polarity, deterministic batches, provenance, zero-activation omission, invalid source/status rejection and record-budget enforcement. Instrumentation tests were authored for versioned hybrid-only scheduling, pending-turn backpressure and legacy-database rejection. Tests were NOT run. No build, CI, APK/AAB, benchmark or device run was performed.
 
 
 ## 17. Signal propagation calibration — hybrid topology version 3
