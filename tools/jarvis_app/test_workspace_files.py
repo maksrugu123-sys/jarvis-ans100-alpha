@@ -45,6 +45,20 @@ class WorkspaceFolderTests(unittest.TestCase):
                 create_workspace_folder(root, "Projects")
             self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
 
+    def test_rejects_workspace_root_symlink(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            outside = base / "outside"
+            outside.mkdir()
+            root = base / "workspace-files"
+            try:
+                root.symlink_to(outside, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("directory symlinks are unavailable in this environment")
+            with self.assertRaises(WorkspaceFolderError):
+                create_workspace_folder(root, "must-not-appear")
+            self.assertFalse((outside / "must-not-appear").exists())
+
     def test_rejects_empty_or_oversized_names(self):
         with self.assertRaises(WorkspaceFolderError):
             validate_folder_name("   ")
