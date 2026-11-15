@@ -1277,7 +1277,7 @@ async function refreshAns100Status() {
     const runtimeMode = runtime.runtime_mode === "fresh_in_memory_graph_per_turn"
       ? "Новая сеть запускается для каждого сообщения."
       : "Режим runtime не подтверждён.";
-    const inputContract = runtime.input_contract === "ANDROID_TYPED_EVIDENCE_V1"
+    const inputContract = runtime.input_contract === "JARVIS_TYPED_EVIDENCE_V1"
       ? "Входные слоты совместимы с Android Typed Evidence."
       : "Контракт входных признаков не подтверждён.";
     root.textContent =
