@@ -395,3 +395,26 @@ body.auth-required .workspace-content > .columns { display:none; }
   .settings-meta strong { margin-bottom:8px; }
   html { scroll-padding-top:120px; }
 }
+
+.ans100-overview {
+  margin:0 0 12px;
+  padding:13px;
+  border:1px solid #31515d;
+  border-radius:12px;
+  background:linear-gradient(120deg,rgba(25,67,75,.42),rgba(12,24,36,.92));
+}
+.ans100-overview-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:8px;
+}
+.ans100-overview-heading strong,.ans100-overview-heading small { display:block; }
+.ans100-overview-heading strong { font-size:13px; }
+.ans100-overview-heading small { margin-top:2px;color:var(--muted);font-size:10px; }
+.ans100-status {
+  color:#c7dbe8;
+  font-size:12px;
+  line-height:1.6;
+}
