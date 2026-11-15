@@ -20,7 +20,7 @@ object AndroidHybridTopologyV2 {
     const val DATABASE_NAME = "jarvis_ans100_hybrid_v4.db"
     const val NEURON_COUNT = 10_000
     const val MAX_CONNECTION_COUNT = 100_000
-    const val EXPECTED_CONNECTION_COUNT = 26_100
+    const val EXPECTED_CONNECTION_COUNT = 25_500
     const val CONNECTION_DELAY_NS = 1_000_000L
     const val FEED_FORWARD_WEIGHT = 1.0
     const val RECURRENT_WEIGHT = 0.18
