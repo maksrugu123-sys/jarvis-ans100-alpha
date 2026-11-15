@@ -596,6 +596,7 @@ class JarvisCore:
                     understanding_context,
                     reasoning_context=reasoning_context,
                     external_context=safe_external_context,
+                    approved_memories=recalled,
                 )
             except Exception:
                 # A failed large graph pass must not block the legacy-safe chat path.
