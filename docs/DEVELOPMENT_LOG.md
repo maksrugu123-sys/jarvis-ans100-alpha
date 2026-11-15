@@ -2787,3 +2787,5 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Found that the chat composer cleared a submitted prompt immediately, while the repository commits a user/assistant pair only after a complete response. On generation/search failure the prompt was therefore absent from history and had already been erased from the composer.
 - Updated the chat UI to retain the submitted text until a new matching user/assistant pair is observed in persisted conversation state. On failure, the draft remains available for correction or retry; a later successful response clears it only if the composer still contains that same text.
 - Static inspection only. No Gradle build, unit tests, APK, inference, CI, GitHub Actions, or device lifecycle tests were run. Process-kill and real-device recovery behavior remain unverified.
+
+- Added conservative native-runtime recovery in `LiteRtLmResponseEngine`: a CPU generation failure now retires the cached engine; if the CPU retry after a GPU failure also fails, that fallback engine is retired too. Closing is best-effort so cleanup errors do not mask the generation error.
