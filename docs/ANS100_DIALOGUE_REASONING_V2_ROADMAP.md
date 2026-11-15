@@ -92,14 +92,17 @@ Before enabling a new reasoning population in the default Android chat path, add
 
 No claim of improved reasoning is accepted without the ablation results. Android device performance must be measured on real target hardware before increasing defaults.
 
-## Implementation sequence
+## Implementation status and next sequence
 
-1. **V2 contract and baseline audit** — this document; no runtime behavior change.
-2. **Typed evidence model and encoder** — derive features from existing Core/understanding outputs; keep the legacy network as a side channel.
-3. **Decision object and prompt handoff** — add a versioned, bounded, provenance-preserving object; preserve fallback behavior.
-4. **Three-stage topology V2 source implementation** — implemented as a bounded feed-forward input/hidden/readout graph with an in-place weight-projection migration; instrumentation tests are authored but not run. Bounded recurrent, critic, working-state, and candidate populations remain future work.
-5. **Typed evidence and structured decision object** — still required: provenance-bearing evidence, candidate response goals, supporting/conflicting evidence, uncertainty, suggested answer structure, and explicit abstention.
-6. **Learning/trace audit and offline evaluation** — prove reward attribution, add held-out ablations against Core+Qwen, and measure latency/RAM/energy on the target Android device before claiming a reasoning improvement.
+1. **Architecture contract and baseline audit — specified.** The selected design is one sparse 10,000-neuron network split into seven typed populations, with six bounded software-controller roles. The allocation is a starting design, not a measured optimum.
+2. **Typed evidence contract — implemented in source.** `TypedEvidence.kt` and its tests exist. Core-derived fields remain explicitly heuristic; raw user text and structural message features keep separate provenance. Tests have not been run.
+3. **Decision object and Qwen handoff — implemented as a gated legacy bridge.** `ANS100Decision.kt`, `ANS100DecisionPolicy.kt`, and the prompt-budget integration exist. The current producer is `CORE_POLICY_V1`, not the hybrid neural network. The persisted flag defaults to disabled and has no user-facing settings control. The bridge preserves the existing fallback path; runtime behavior has not been verified.
+4. **Legacy Android network — implemented in source, not the selected hybrid topology.** It currently uses 9,000 hashed text-feature inputs, 996 LIF-DT hidden neurons and four readout neurons. Hashed features are not semantic embeddings; the four outputs are not general reasoning.
+5. **Hybrid V2 topology builder — next implementation phase.** Create deterministic, versioned ranges for the seven populations and sparse typed connectivity in a separate database namespace. Do not reinterpret or destructively migrate the existing V1 SQLite state. Add topology inspection, deterministic fixtures and safe initialization/reset behavior before runtime integration.
+6. **Bounded agent orchestration — pending.** Implement Router, Evidence Analyst, Hypothesis Manager, Critic, Decision Arbiter and Memory/Tool Planner as bounded controllers; integrate one population and one controller path at a time.
+7. **Learning, persistence audit and evaluation — pending.** Prove turn/trace-specific reward attribution, persistence/reopen correctness, per-population participation and ablations against Core+Qwen and the legacy ANS path. Measure latency, peak RAM, CPU and energy on the target Android device before enabling the hybrid path.
+
+All source-level implementation statements above are based on static inspection. No Gradle build, unit test, CI workflow, APK/AAB, benchmark or device run was performed.
 
 ## Non-goals and safeguards
 
