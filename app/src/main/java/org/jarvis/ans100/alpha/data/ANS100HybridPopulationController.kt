@@ -76,7 +76,7 @@ class ANS100HybridPopulationController {
             it.feature == EvidenceFeature.CORE_CONTEXT_REFERENCE_STATUS
         }?.value as? EvidenceValue.Category)?.value
         val ambiguousContext = understanding.refersToPreviousContext &&
-            contextStatus in setOf("ambiguous", "unavailable")
+            (contextStatus == "ambiguous" || contextStatus == "unavailable")
         val intentValue = (intentRecord?.value as? EvidenceValue.Category)?.value
         val taskKindValue = (taskKindRecord?.value as? EvidenceValue.Category)?.value
         val reliableHeuristicIntent = intentValue != null &&
