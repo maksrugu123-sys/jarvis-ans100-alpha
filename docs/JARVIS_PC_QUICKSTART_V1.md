@@ -41,7 +41,7 @@ The seek-based I/O fallback has dedicated source tests, including a Windows-only
 
 ## Start on Windows 10 or Windows 11
 
-For a one-click first launch, double-click `start_jarvis_windows.bat` in the repository root. The launcher starts the local Python console if port 8765 is not already responding, waits for its health endpoint, and opens the JARVIS PWA in a dedicated Microsoft Edge app window (or the default browser if Edge is not installed). Keep the separate **JARVIS Core** terminal open. The one-time access token is printed there; enter it in the JARVIS sign-in panel. The launcher does not install Python, Playwright, Chromium or the language model.
+For a one-click first launch, double-click `start_jarvis_windows.bat` in the repository root. The launcher starts the local Python console if port 8765 is not already responding, waits for its health endpoint, and opens the JARVIS PWA in an app-mode window. It checks common system-wide and per-user install locations for Microsoft Edge first, then Google Chrome, and falls back to the default browser if neither is found. It sets Python UTF-8 and unbuffered-output environment flags for clearer Windows terminal logs. Keep the separate **JARVIS Core** terminal open. The one-time access token is printed there; enter it in the JARVIS sign-in panel. The launcher does not install Python, Playwright, Chromium or the language model.
 
 You can also start manually. Open PowerShell in the repository directory:
 
@@ -51,6 +51,15 @@ You can also start manually. Open PowerShell in the repository directory:
 If the Python launcher is unavailable, use `python -m tools.jarvis_app --port 8765 --platform desktop` after confirming that `python` points to a supported Python 3 installation. Then open `http://127.0.0.1:8765/` in a browser on the same PC and enter the one-time token printed in PowerShell. Keep the terminal open while using JARVIS.
 
 The JPVR implementation is intended to use the same adapter on Windows 10 and 11, but neither OS has been run in this development environment. Before storing important information, verify that `%USERPROFILE%\\.jarvis-ans100-alpha` inherits a private ACL for the current Windows account. The application does not yet inspect or configure Windows ACL entries.
+
+
+### Desktop interface navigation and preferences
+
+After authentication, the desktop console shows a persistent left navigation rail for Overview, Chat, ANS-100, Browser, Tasks, Memory, Data Transfer, Planning, Settings and the event log. On narrow/mobile screens the navigation becomes a horizontal scrollable strip. The selected section follows the visible panel; selecting a navigation item scrolls to that section.
+
+The Settings panel currently contains only local display preferences: compact spacing and reduced motion. These values are saved in the current browser profile under `jarvis.ui.preferences.v1`; they do not modify model files, network weights, memories, credentials or server configuration. The navigation status area reports the platform, configured conversation backend availability, and the separate dialogue R-STDP prototype's output/input dimensions. It does not claim that the complete 10,000-neuron ANS-100 reasoning design is implemented.
+
+The service worker cache version is v14 for this UI revision. If a previously installed PWA keeps showing the older layout, close its windows and reload after the local console has been updated.
 
 ## Start on Linux or macOS
 
