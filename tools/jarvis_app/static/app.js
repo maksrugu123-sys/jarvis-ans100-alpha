@@ -1,7 +1,7 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
-let accessToken = sessionStorage.getItem("jarvis.console.access.v2") || "";
+let accessToken = "";
 let refreshTimer = null;
 let consolePlatform = null;
 
@@ -12,9 +12,8 @@ function lockConsole(message) {
     window.clearInterval(refreshTimer);
     refreshTimer = null;
   }
-  const androidNeedsToken = consolePlatform === "android";
-  document.body.classList.toggle("auth-required", androidNeedsToken);
-  $("#auth-panel").hidden = !androidNeedsToken;
+  document.body.classList.remove("auth-required");
+  $("#auth-panel").hidden = true;
   $("#logout").hidden = true;
   if (message) setNotice(message, "error");
 }
@@ -26,13 +25,11 @@ function unlockConsole() {
 }
 
 $("#logout").addEventListener("click", () => {
-  if (consolePlatform !== "android") return;
-  lockConsole("Вы вышли из локальной консоли. Для входа нужен токен доступа.");
+  setNotice("Ручной выход отключён: установленное приложение подключается автоматически.", "info");
 });
 
 async function api(path, body) {
   const headers = { "Accept": "application/json" };
-  if (accessToken) headers.Authorization = "Bearer " + accessToken;
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const response = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
@@ -43,9 +40,6 @@ async function api(path, body) {
   let payload;
   try { payload = await response.json(); }
   catch { throw new Error("Сервер вернул некорректный ответ."); }
-  if (response.status === 401 && path !== "/api/health") {
-    lockConsole(payload.error || "Токен доступа отклонён. Вставьте актуальный токен.");
-  }
   if (!response.ok) {
     const error = new Error(payload.error || "Локальный запрос не выполнен.");
     error.status = response.status;
@@ -2000,10 +1994,9 @@ async function enterConsole(token = "") {
   accessToken = token.trim();
   try {
     const health = await api("/api/health");
-    const desktopNoToken = health.platform === "desktop" && health.auth_required === false && health.auth_scheme === "none";
-    const bearerMode = health.auth_required === true && health.auth_scheme === "Bearer";
     if (health.api_schema !== "jarvis.local-console" || health.api_version !== 2 ||
-        (!desktopNoToken && !bearerMode) || health.workspace_api_version !== 1 ||
+        health.auth_required !== false || health.auth_scheme !== "none" ||
+        health.workspace_api_version !== 1 ||
         !["desktop", "android"].includes(health.platform)) {
       throw new Error("Версия локальной консоли не поддерживается.");
     }
@@ -2011,12 +2004,10 @@ async function enterConsole(token = "") {
     $("#settings-platform").textContent = health.platform === "desktop" ? "Windows / PC (режим desktop)" : "Android";
     setNavHealth("Ядро: онлайн · " + health.platform, "Диалог: проверка", "ANS-100: проверка", true);
     await refresh();
-    if (accessToken) sessionStorage.setItem("jarvis.console.access.v2", accessToken);
-    else sessionStorage.removeItem("jarvis.console.access.v2");
     unlockConsole();
     $("#auth-panel").hidden = true;
-    $("#logout").hidden = health.platform === "desktop";
-    setNotice(health.platform === "desktop" ? "JARVIS подключён · локальный режим без ручного токена" : "Ядро подключено · " + health.storage.toUpperCase() + " · защищённый локальный режим", "success");
+    $("#logout").hidden = true;
+    setNotice("JARVIS подключён · локальный режим без токена", "success");
     if (refreshTimer !== null) window.clearInterval(refreshTimer);
     refreshTimer = window.setInterval(() => {
       refresh().catch(error => setNotice(error.message, "error"));
@@ -2025,21 +2016,6 @@ async function enterConsole(token = "") {
     lockConsole(error.message || "Не удалось подключиться к JARVIS.");
   }
 }
-
-$("#auth-form").addEventListener("submit", event => {
-  event.preventDefault();
-  if (consolePlatform !== "android") {
-    setNotice("В Windows вход выполняется автоматически. Токен не требуется.", "error");
-    return;
-  }
-  const value = $("#access-token").value.trim();
-  if (!/^[A-Za-z0-9_-]{43}$/.test(value)) {
-    setNotice("Токен должен состоять ровно из 43 символов Base64URL.", "error");
-    return;
-  }
-  $("#access-token").value = "";
-  enterConsole(value);
-});
 
 async function boot() {
   // Never show a token prompt while the desktop server is being discovered.
@@ -2058,12 +2034,8 @@ async function boot() {
         throw new Error("Эта Windows-сборка устарела: обновите JARVIS, токен для Windows не используется.");
       }
       await enterConsole("");
-    } else if (accessToken) {
-      await enterConsole(accessToken);
     } else {
-      document.body.classList.add("auth-required");
-      $("#auth-panel").hidden = false;
-      setNotice("Android: введите локальный токен доступа.", "info");
+      await enterConsole("");
     }
   } catch (error) {
     // A missing/offline server is not an invitation to enter a token.
