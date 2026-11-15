@@ -2434,7 +2434,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS
         private const val MAX_DIALOGUE_TIMESTAMPS_PER_TURN = 4
         private const val DIALOGUE_INPUT_STEP_NS = 10_000_000L
-        private const val DIALOGUE_OUTPUT_BIAS = 0.90
         private const val DIALOGUE_INITIAL_SYNAPSE_WEIGHT = 0.15
     }
 
