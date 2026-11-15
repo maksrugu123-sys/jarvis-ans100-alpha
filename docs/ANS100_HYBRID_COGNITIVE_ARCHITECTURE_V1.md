@@ -173,3 +173,18 @@ The encoder emits deterministic, bounded `JARVIS_TYPED_EVIDENCE_V1` records from
 This is a data contract and adapter, not evidence that ANS-100 semantically understands language. It is not yet connected to the neural network or Qwen prompt. The current Android conversation path is unchanged. Memory/tool input wrappers are internal adapter contracts, not cryptographic proof of approval or tool verification.
 
 Static readback only. Tests were added but not run; no build, CI, workflow, APK/AAB or device execution was performed.
+
+
+## 13. Phase 2 implementation status — decision contract and handoff builder
+
+**Implemented as additive source (not yet connected to live inference):**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/ANS100Decision.kt`
+- `app/src/test/java/org/jarvis/ans100/alpha/data/ANS100DecisionTest.kt`
+
+The versioned `ANS100Decision` contract supports up to eight candidates, same-turn supporting/conflicting evidence references, selected/clarification/abstention outcomes, explicit uncertainty and missing-evidence fields, response goals/constraints, active-population metadata, processed-event counts and compute-budget exhaustion. It rejects invalid status combinations, unknown/cross-turn evidence references and any V1 claim of calibrated confidence.
+
+`ANS100QwenHandoffBuilder` preserves the exact original user message and validates it against the typed evidence bundle. It packages bounded Core heuristic context, decision context, approved-memory references only, and provenance-labeled verified-tool summaries in a 3,200-character maximum context. Qwen is explicitly the natural-language realizer, not an action executor or source of invented evidence.
+
+**Not yet done:** no call site in `LiteRtLmResponseEngine`/conversation coordinator, no neural population producer, no memory/tool adapter, and no rollout flag. Existing runtime behavior is unchanged. The next phase must integrate behind a disabled-by-default flag, preserve fallback, and collect measured evidence before enabling the hybrid path.
+
+Tests were added but not executed. No Gradle build, APK/AAB, CI, GitHub Actions, benchmark or device run was performed.
