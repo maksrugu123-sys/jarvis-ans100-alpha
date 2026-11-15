@@ -91,7 +91,8 @@ internal object PromptContextBudgeter {
             ?.let { handoff ->
                 val decisionStart = handoff.promptContext.indexOf("ANS-100 DECISION ")
                 if (decisionStart >= 0) {
-                    "Исходное сообщение — текущий запрос пользователя выше.\n" +
+                    "JARVIS HANDOFF ${ANS100QwenHandoff.SCHEMA_V1}\n" +
+                        "Исходное сообщение — текущий запрос пользователя выше.\n" +
                         handoff.promptContext.substring(decisionStart)
                 } else {
                     handoff.promptContext
