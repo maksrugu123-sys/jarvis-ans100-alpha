@@ -139,7 +139,7 @@ class LiteRtLmLocalEngineTests(unittest.TestCase):
             },
         )
         system_message = self.fake_engine.options["system_message"]
-        payload = json.loads(system_message.rsplit("Данные:\\n", 1)[1])
+        payload = json.loads(system_message.rsplit("Данные:", 1)[1].strip())
         self.assertEqual(payload["decision_status"], "needs_clarification")
         self.assertEqual(payload["selected_candidate"], "clarification")
         self.assertIsNone(payload["selected_candidate_id"])
