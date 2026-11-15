@@ -418,3 +418,8 @@ body.auth-required .workspace-content > .columns { display:none; }
   font-size:12px;
   line-height:1.6;
 }
+
+.side-nav-link:focus-visible,.setting-row input:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:3px;
+}
