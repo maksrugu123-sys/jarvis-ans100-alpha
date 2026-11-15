@@ -160,3 +160,16 @@ No claim of better reasoning or generalization is allowed without held-out resul
 - No replacement of Qwen as the natural-language generator in this architecture.
 - No builds, tests, CI, GitHub Actions, APK/AAB generation or device workflows without separate explicit user authorization.
 - All implementation remains on `experiment/jarvis-integrated-prototype-v1`; `main` is untouched.
+
+
+## 12. Phase 1 implementation status
+
+**Implemented in source (not yet integrated into the live conversation/network path):**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/TypedEvidence.kt`
+- `app/src/test/java/org/jarvis/ans100/alpha/data/TypedEvidenceTest.kt`
+
+The encoder emits deterministic, bounded `JARVIS_TYPED_EVIDENCE_V1` records from the raw message and existing `LocalUnderstanding`/reasoning-plan fields. Every Core-derived field is marked HEURISTIC. Raw user text, observed message structure, approved-memory references and verified-tool results have distinct source/status labels. Feature identifiers are declared constants, not hashes of arbitrary text. Bundle validation enforces turn isolation, unique record IDs and a 64-record maximum. Raw input is bounded at 2,048 characters.
+
+This is a data contract and adapter, not evidence that ANS-100 semantically understands language. It is not yet connected to the neural network or Qwen prompt. The current Android conversation path is unchanged. Memory/tool input wrappers are internal adapter contracts, not cryptographic proof of approval or tool verification.
+
+Static readback only. Tests were added but not run; no build, CI, workflow, APK/AAB or device execution was performed.
