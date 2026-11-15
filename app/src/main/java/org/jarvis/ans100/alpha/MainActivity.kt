@@ -297,6 +297,9 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             ConversationPanel(
                                 state = ui.conversation,
                                 onClear = viewModel::clearConversation,
+                                onRateLatestAnswer = viewModel::rateLatestHybridAnswer,
+                                feedbackAvailable = ui.conversation.hybridFeedbackAvailable,
+                                feedbackMessage = ui.conversation.hybridFeedbackMessage,
                                 glowEnabled = glowEnabled,
                                 modifier = Modifier.weight(1f).fillMaxWidth(),
                             )
@@ -2343,6 +2346,9 @@ private fun ChatTitleBar(
 private fun ConversationPanel(
     state: LocalConversationUiState,
     onClear: () -> Unit,
+    onRateLatestAnswer: (Boolean) -> Unit,
+    feedbackAvailable: Boolean,
+    feedbackMessage: String?,
     glowEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -2416,6 +2422,12 @@ private fun ConversationPanel(
                                     color = if (userMessage) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.primary)
                                 MessageBodyText(message.text)
+                                if (!userMessage && message.id == latestAssistantId && feedbackAvailable) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { onRateLatestAnswer(true) }) { Text("Полезно 👍") }
+                                        TextButton(onClick = { onRateLatestAnswer(false) }) { Text("Не помогло 👎") }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2448,6 +2460,10 @@ private fun ConversationPanel(
             }
         }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        feedbackMessage?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
     if (showClearConfirmation) {
         AlertDialog(
