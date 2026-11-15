@@ -5015,3 +5015,13 @@ The policy adapter deliberately labels its producer `CORE_POLICY_V1` and its top
 The flag has no user-facing settings control yet. No rollout is enabled by default. Existing app behavior is therefore unchanged unless a caller explicitly enables the experimental flag.
 
 **Verification:** source and test changes were fetched back and inspected statically. Tests were added but NOT run. No Gradle build, APK/AAB, CI, GitHub Actions, benchmark or device run was performed.
+
+## 3.85 Phase 4 — isolated ANS-100 hybrid V2 topology builder (implemented in source)
+
+Added `AndroidHybridTopologyV2.kt` and `AndroidHybridTopologyV2Test.kt`. The builder defines seven contiguous populations totalling 10,000 logical neurons and 27,000 deterministic sparse directed edges. The typed paths include association and working-state recurrence, candidate↔critic feedback, and candidate/critic/goal paths into decision/readout. No direct evidence-to-decision edge is generated.
+
+The initializer creates a separate `jarvis_ans100_hybrid_v2.db` namespace and writes all 10,000 neuron rows, 27,000 connections, and topology identity/version metadata in one SQLite transaction. Reopening the same topology is idempotent. A different or incomplete database is rejected; no legacy V1 state is migrated, cleared or reinterpreted.
+
+**Not integrated:** normal app startup does not open this database. Typed dialogue evidence is not yet routed into the V2 populations, no bounded agents are active, and no V2 decision is sent to Qwen. This is topology/bootstrap source only, not a demonstrated reasoning improvement.
+
+**Verification:** instrumentation test sources cover allocation, determinism, sparse bounds, idempotency and separation from the legacy database. They have NOT been run. No build, APK/AAB, CI/workflow, benchmark or device run was performed.
