@@ -1,4 +1,4 @@
-"""Regression tests for the loopback-only JARVIS local console."""
+"""Regression tests for the loopback-only JARVIS local console. NOT RUN."""
 from __future__ import annotations
 
 import json
