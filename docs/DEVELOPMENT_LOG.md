@@ -2716,3 +2716,21 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** static source read-back and API documentation review only. No Gradle build, unit tests, APK, model inference or device test was run. TTFT is a UI-visible first-text-chunk proxy, not a hardware-level first-token timestamp. KV-cache count is post-generation and is not yet used as a pre-generation context-budget gate. Automatic Actions remain manual-only; no workflow was dispatched.
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
+
+## 2026-11-15 — Verify pre-generation token-budget API before implementation
+
+**Investigation:**
+- Inspected the exact LiteRT-LM Android Kotlin source at tag `v0.17.1`, matching the app dependency.
+- The pinned Kotlin `Conversation` API exposes `getTokenCount()` for the current KV cache and experimental prompt-rendering helpers, but it does **not** expose the C++ `CountTokens(messages)` preflight API.
+- The C++ runtime documents `CountTokens` as including prompt-template tokens and media soft tokens, but that method is not bridged by the pinned Android Kotlin wrapper. The similarly named current-runtime C++ API must not be mistaken for an available Kotlin call.
+- Therefore, the existing post-generation KV-cache count cannot safely be repurposed as a pre-send count. A character-to-token ratio would only be a heuristic and must not be labelled as an exact token count.
+
+**Decision:**
+- Do not add a fictitious `countTokens()` call or claim exact preflight budgeting with LiteRT-LM Android 0.17.1.
+- Keep the current 4,000-character input contract unchanged until a reliable budget path is selected.
+- A proper exact implementation requires either a supported tokenizer/preflight API exposed to Android (for example, a verified JNI bridge around the runtime count operation) or a supported upstream Kotlin API. A render-length heuristic can be added separately, clearly labelled approximate and tested against real model measurements.
+- Before choosing a JNI bridge, inspect the packaged 0.17.1 AAR/native ABI and licensing/build implications; do not introduce native code or upgrade the dependency speculatively.
+
+**Verification:** source/API inspection only (project branch and upstream LiteRT-LM tag `v0.17.1`). No code/runtime change, Gradle build, tests, APK, model inference, CI or device test was performed.
+
+**Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
