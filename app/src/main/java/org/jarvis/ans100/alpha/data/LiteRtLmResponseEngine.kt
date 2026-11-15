@@ -34,6 +34,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     private var engine: Engine? = null
     private var loadedPath: String? = null
     @Volatile private var activeConversation: Conversation? = null
+    @Volatile private var cancellationRequested: Boolean = false
     @Volatile var onPartialResponse: ((String) -> Unit)? = null
     @Volatile var onGenerationStateChanged: ((Boolean) -> Unit)? = null
     @Volatile private var lastInitializationMs: Long = 0L
@@ -105,6 +106,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         understandingContext: LocalUnderstanding?,
     ): String {
         val clean = prompt.trim()
+        cancellationRequested = false
         if (clean.length > MAX_PROMPT_CHARS) throw LocalConversationException("Ограничение компактной модели — " + MAX_PROMPT_CHARS + " символов на запрос.")
         val understanding = understandingContext ?: LocalUnderstandingPipeline().analyze(clean)
         val file = modelStore.installedFile() ?: return fallback.respond(
@@ -159,7 +161,9 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val rawAnswer = try {
             generate(activeEngine, config, clean)
         } catch (error: Exception) {
-            if (error is CancellationException) throw error
+            if (cancellationRequested || error is CancellationException) {
+                throw CancellationException("Генерация остановлена пользователем.", error)
+            }
             if (!gpuRequested || activeBackend != "GPU") throw error
             disableGpuAfterFailure(file)
             generate(getEngine(file), config, clean)
@@ -247,6 +251,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
                 }
                 lastTimeToFirstTextMs = if (firstTextAtNs == 0L) 0L
                     else ((firstTextAtNs - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
+                if (cancellationRequested) throw CancellationException("Генерация остановлена пользователем.")
                 lastContextTokenCount = runCatching { conversation.getTokenCount() }.getOrDefault(0)
                 output.toString()
             } finally {
@@ -262,10 +267,14 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     /** Safe to call from the UI thread; the cancelled Conversation is closed in generate()'s finally block. */
     fun cancelGeneration(): Boolean {
         val conversation = activeConversation ?: return false
+        cancellationRequested = true
         return runCatching {
             conversation.cancelProcess()
             true
-        }.getOrDefault(false)
+        }.getOrElse {
+            cancellationRequested = false
+            false
+        }
     }
 
     private fun disableGpuAfterFailure(file: File) {
