@@ -2771,3 +2771,11 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** GitHub source read-back only. Unit tests were authored but not executed. No Gradle build, APK, inference, CI/workflow dispatch or device test was run. Automatic Actions triggers remain disabled.
 
 **Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
+
+## Android conversation pipeline audit — 2026-11-15
+
+- Traced the Android send path through `JarvisViewModel`, `LocalConversationCoordinator` / `JarvisCore`, `PromptContextBudgeter`, and `LiteRtLmResponseEngine`.
+- Confirmed statically that prompt-budget rejection occurs before engine creation; conversation persistence occurs only after a nonblank, bounded response; failures clear the transient streaming text and surface an error instead of committing a fabricated assistant message.
+- Confirmed the GPU runtime-failure path retries generation on CPU and replaces the streaming preview with the CPU attempt's accumulated output.
+- Fixed a resource-lifecycle defect in `initializeEngine`: if native engine initialization throws, the partially initialized candidate is now closed best-effort before the exception is propagated and any CPU fallback begins.
+- Static inspection only. No Gradle build, unit tests, APK, inference, CI, or GitHub Actions were run. Device behavior remains unverified.
