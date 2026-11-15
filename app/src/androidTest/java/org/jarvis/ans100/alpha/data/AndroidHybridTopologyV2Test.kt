@@ -134,7 +134,16 @@ class AndroidHybridTopologyV2Test {
                 val criticLane = ANS100CandidateSlotContract.criticLane(slot, polarity)
                 val readoutLane = ANS100CandidateSlotContract.readoutLane(slot, polarity)
 
-                assertTrue(edges.any { it.sourceNeuronId == inputId && associationLane.contains(it.targetNeuronId) })
+                val inputEdges = edges.filter { it.sourceNeuronId == inputId }
+                assertEquals(3, inputEdges.size)
+                assertTrue(inputEdges.all { associationLane.contains(it.targetNeuronId) })
+                val workingLane = ANS100CandidateSlotContract.workingLane(slot, polarity)
+                assertTrue(edges.filter { it.connectionId.contains("association-working-${slot.name.lowercase()}-${polarity.name.lowercase()}") }
+                    .all { associationLane.contains(it.sourceNeuronId) && workingLane.contains(it.targetNeuronId) })
+                assertTrue(edges.filter { it.connectionId.contains("working-candidate-${slot.name.lowercase()}-${polarity.name.lowercase()}") }
+                    .all { workingLane.contains(it.sourceNeuronId) && candidateLane.contains(it.targetNeuronId) })
+                assertTrue(edges.filter { it.connectionId.contains("critic-candidate-${slot.name.lowercase()}-${polarity.name.lowercase()}") }
+                    .all { criticLane.contains(it.sourceNeuronId) && candidateLane.contains(it.targetNeuronId) })
                 assertTrue(edges.filter { it.connectionId.contains("candidate-critic-${slot.name.lowercase()}-${polarity.name.lowercase()}") }
                     .all { candidateLane.contains(it.sourceNeuronId) && criticLane.contains(it.targetNeuronId) })
                 assertTrue(edges.filter { it.connectionId.contains("candidate-readout-${slot.name.lowercase()}-${polarity.name.lowercase()}") }
