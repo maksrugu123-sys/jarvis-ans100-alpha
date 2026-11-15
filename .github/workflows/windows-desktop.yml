@@ -8,6 +8,7 @@ on:
       - ".github/workflows/windows-desktop.yml"
       - "packaging/windows/**"
       - "start_jarvis_windows_exe.bat"
+      - "start_jarvis_windows.bat"
       - "run_jarvis_core.bat"
       - "tools/jarvis_app/**"
       - "tools/neuron_runtime/**"
