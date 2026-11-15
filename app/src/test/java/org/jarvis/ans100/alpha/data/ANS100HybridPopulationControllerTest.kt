@@ -83,7 +83,8 @@ class ANS100HybridPopulationControllerTest {
         assertEquals(7, decision.activePopulationIds.size)
         assertEquals(3, decision.candidates.size)
         assertEquals("respond_to_original_request", decision.selectedCandidateId)
-        assertTrue(decision.candidates.all { it.activation == 0.0 })
+        assertTrue(decision.candidates.any { it.activation > 0.0 })
+        assertTrue(decision.candidates.all { it.activation in 0.0..1.0 })
         assertTrue(decision.responseConstraints.any { it.contains("отдельным спайкам readout") })
         decision.validateAgainst(bundle)
     }
