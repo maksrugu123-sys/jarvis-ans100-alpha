@@ -225,6 +225,62 @@ internal object LocalConversationCodec {
     }
 }
 
+/**
+ * Bounded measurements from the Android 10,000-node sparse dialogue network.
+ *
+ * This is evidence for the response model, not a claim that the network has
+ * independently understood the user's message. The four legacy output units
+ * are feedback targets and must not be interpreted as semantic decisions.
+ */
+data class DialogueNeuralAnalysis(
+    val networkNeuronCount: Int,
+    val activeFeatureCount: Int,
+    val processedEvents: Int,
+    val processedNeuronBatches: Int,
+    val outputSpikeCount: Int,
+    val pendingEvents: Int,
+    val classifierLabel: String?,
+    val classifierConfidenceMargin: Double?,
+    val classifierTrainedExamples: Int,
+    val statePersisted: Boolean,
+) {
+    init {
+        require(networkNeuronCount in 0..10_000)
+        require(activeFeatureCount in 0..128)
+        require(processedEvents in 0..100_000)
+        require(processedNeuronBatches in 0..100_000)
+        require(outputSpikeCount in 0..4)
+        require(pendingEvents in 0..100_000)
+        require(classifierLabel == null || classifierLabel in setOf("greeting", "question", "thanks", "farewell"))
+        require(classifierConfidenceMargin == null ||
+            (classifierConfidenceMargin.isFinite() && classifierConfidenceMargin in 0.0..100.0))
+        require(classifierTrainedExamples >= 0)
+        require(classifierLabel == null || classifierTrainedExamples > 0)
+    }
+
+    fun toModelContext(): String = buildString {
+        append("Android sparse LIF network: ")
+        append(networkNeuronCount).append(" nodes; active text-feature inputs=")
+        append(activeFeatureCount).append("; processed events=").append(processedEvents)
+        append("; neuron batches=").append(processedNeuronBatches)
+        append("; legacy output-unit spikes=").append(outputSpikeCount)
+        append("; pending events=").append(pendingEvents)
+        append("; persistent state committed=").append(statePersisted).append(". ")
+        if (classifierLabel != null) {
+            append("Separate explicitly trained feature classifier candidate=")
+            append(classifierLabel)
+            append("; score margin=")
+            append(String.format(Locale.ROOT, "%.3f", classifierConfidenceMargin ?: 0.0))
+            append("; confirmed training examples=").append(classifierTrainedExamples).append(". ")
+        } else {
+            append("No confident trained classifier label is available. ")
+        }
+        append("Treat these as bounded numeric/text-feature evidence only. ")
+        append("The four legacy output units are not semantic reasoning decisions; ")
+        append("check the original user message and Core plan before choosing answer content.")
+    }
+}
+
 interface LocalResponseEngine {
     val backendLabel: String
     /** True only when a local model artifact is installed; inference is not implied. */
@@ -250,6 +306,16 @@ interface LocalResponseEngine {
         signalContext: ConversationSignalContext?,
         understandingContext: LocalUnderstanding?,
     ): String = respond(prompt, recentHistory, memoryContext, signalContext)
+
+    /** Optional measured Android sparse-network evidence; legacy engines may ignore it. */
+    fun respond(
+        prompt: String,
+        recentHistory: List<LocalConversationMessage>,
+        memoryContext: List<LocalWorkspaceMemory>,
+        signalContext: ConversationSignalContext?,
+        understandingContext: LocalUnderstanding?,
+        dialogueNeuralAnalysis: DialogueNeuralAnalysis?,
+    ): String = respond(prompt, recentHistory, memoryContext, signalContext, understandingContext)
 }
 
 /** Deterministic command/greeting fallback; it deliberately is not an LLM. */
