@@ -38,6 +38,7 @@ from .visible_browser import (
 )
 from .workspace_files import WorkspaceFolderError, create_workspace_folder
 from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
+from tools.neuron_runtime.hybrid_ans100_runtime import HybridANS100Runtime
 from tools.neuron_runtime.hybrid_ans100 import (
     EXPECTED_CONNECTION_COUNT as DESKTOP_ANS100_CONNECTION_COUNT,
     NEURON_COUNT as DESKTOP_ANS100_NEURON_COUNT,
@@ -262,6 +263,7 @@ class LocalConsoleService:
             self.local_inference,
             ConversationSignalRuntime(self.ans100_state_path),
             dialog_neuron_service=self.dialog_neurons,
+            hybrid_ans100_runtime=HybridANS100Runtime() if self.platform == "desktop" else None,
         )
         self.visible_browser = VisibleBrowserResearchService(
             self.data_path.parent / "research-browser-profile"
@@ -571,6 +573,9 @@ class LocalConsoleService:
         return {"supported": True, **self.visible_browser.status()}
 
     def ans100_status(self) -> dict[str, object]:
+        core_status = self.jarvis_core.status()
+        runtime = core_status.get("ans100_network", {})
+        active = isinstance(runtime, dict) and runtime.get("active_in_chat") is True
         return {
             "platform": self.platform,
             "desktop_topology": {
@@ -588,12 +593,16 @@ class LocalConsoleService:
                     for population in DESKTOP_ANS100_POPULATIONS
                 ],
             },
-            "active_in_chat": False,
-            "runtime_state": "source_topology_only",
+            "active_in_chat": active,
+            "runtime_state": runtime.get("state", "unavailable") if isinstance(runtime, dict) else "unavailable",
+            "runtime": runtime,
             "notice": (
-                "The 10,000-neuron desktop topology is defined in source but is not "
-                "instantiated or connected to the live conversation path. The current "
-                "conversation signal preprocessor remains separate."
+                "The 10,000-neuron ANS-100 V4 graph is connected to each desktop chat turn "
+                "as an advisory structural-signal stage before language generation. "
+                "The legacy 10-neuron signal preprocessor remains as a separate fallback. "
+                "This is not independent semantic reasoning; learning and persistent graph state are disabled."
+                if active else
+                "The desktop ANS-100 V4 graph is not active in this runtime."
             ),
         }
 
