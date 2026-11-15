@@ -49,6 +49,13 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertNotIn('Authorization: "Bearer " + accessToken', popup)
         self.assertNotIn('jarvisAccessToken', popup)
         self.assertNotIn('id="token"', (ROOT / "tools/jarvis_app/browser_extension/popup.html").read_text(encoding="utf-8"))
+        self.assertIn('if (health.platform === "desktop")', app)
+        self.assertIn('$("#auth-panel").hidden = true;', app)
+        self.assertIn('В Windows вход выполняется автоматически. Токен не требуется.', app)
+        self.assertIn('jarvis-local-console-v21', (ROOT / "tools/jarvis_app/static/sw.js").read_text(encoding="utf-8"))
+        html = (ROOT / "tools/jarvis_app/static/index.html").read_text(encoding="utf-8")
+        self.assertIn('Эта форма предназначена только для Android', html)
+        self.assertNotIn('подключите расширение токеном из окна JARVIS Core', html)
 
     def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")

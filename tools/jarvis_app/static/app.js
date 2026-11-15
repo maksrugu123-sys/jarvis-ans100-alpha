@@ -3,6 +3,7 @@ const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selec
 
 let accessToken = sessionStorage.getItem("jarvis.console.access.v2") || "";
 let refreshTimer = null;
+let consolePlatform = null;
 
 function lockConsole(message) {
   accessToken = "";
@@ -11,8 +12,9 @@ function lockConsole(message) {
     window.clearInterval(refreshTimer);
     refreshTimer = null;
   }
-  document.body.classList.add("auth-required");
-  $("#auth-panel").hidden = false;
+  const androidNeedsToken = consolePlatform === "android";
+  document.body.classList.toggle("auth-required", androidNeedsToken);
+  $("#auth-panel").hidden = !androidNeedsToken;
   $("#logout").hidden = true;
   if (message) setNotice(message, "error");
 }
@@ -24,6 +26,7 @@ function unlockConsole() {
 }
 
 $("#logout").addEventListener("click", () => {
+  if (consolePlatform !== "android") return;
   lockConsole("Вы вышли из локальной консоли. Для входа нужен токен доступа.");
 });
 
@@ -2019,12 +2022,16 @@ async function enterConsole(token = "") {
       refresh().catch(error => setNotice(error.message, "error"));
     }, 5000);
   } catch (error) {
-    lockConsole(error.message || "Не удалось проверить токен доступа.");
+    lockConsole(error.message || "Не удалось подключиться к JARVIS.");
   }
 }
 
 $("#auth-form").addEventListener("submit", event => {
   event.preventDefault();
+  if (consolePlatform !== "android") {
+    setNotice("В Windows вход выполняется автоматически. Токен не требуется.", "error");
+    return;
+  }
   const value = $("#access-token").value.trim();
   if (!/^[A-Za-z0-9_-]{43}$/.test(value)) {
     setNotice("Токен должен состоять ровно из 43 символов Base64URL.", "error");
@@ -2035,23 +2042,35 @@ $("#auth-form").addEventListener("submit", event => {
 });
 
 async function boot() {
-  document.body.classList.add("auth-required");
-  $("#auth-panel").hidden = false;
+  // Never show a token prompt while the desktop server is being discovered.
+  document.body.classList.remove("auth-required");
+  $("#auth-panel").hidden = true;
+  $("#logout").hidden = true;
   try {
     const health = await api("/api/health");
     if (health.api_schema !== "jarvis.local-console" || health.api_version !== 2 ||
         health.workspace_api_version !== 1 || !["desktop", "android"].includes(health.platform)) {
       throw new Error("Сервер не поддерживает локальный API v2.");
     }
-    if (health.platform === "desktop" && health.auth_required === false && health.auth_scheme === "none") {
+    consolePlatform = health.platform;
+    if (health.platform === "desktop") {
+      if (health.auth_required !== false || health.auth_scheme !== "none") {
+        throw new Error("Эта Windows-сборка устарела: обновите JARVIS, токен для Windows не используется.");
+      }
       await enterConsole("");
     } else if (accessToken) {
       await enterConsole(accessToken);
     } else {
-      setNotice("Вставьте токен доступа, показанный при запуске консоли в Termux.", "info");
+      document.body.classList.add("auth-required");
+      $("#auth-panel").hidden = false;
+      setNotice("Android: введите локальный токен доступа.", "info");
     }
   } catch (error) {
-    lockConsole(error.message);
+    // A missing/offline server is not an invitation to enter a token.
+    document.body.classList.remove("auth-required");
+    $("#auth-panel").hidden = true;
+    $("#logout").hidden = true;
+    setNotice(error.message || "Не удалось подключиться к JARVIS. Запустите приложение и обновите страницу.", "error");
   }
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
