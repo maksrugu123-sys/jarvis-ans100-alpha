@@ -4963,3 +4963,25 @@ The rollout is staged: typed evidence contract; structured decision/Qwen handoff
 **Acceptance:** every population must receive typed evidence, propagate through documented sparse edges and affect a measurable readout under controlled ablation. The evaluation compares Core+Qwen, legacy ANS+Qwen and hybrid ANS+Qwen, including accuracy, abstention, calibration, latency, RAM, CPU, battery/thermal and prompt overhead. No reasoning improvement or Android performance claim is allowed without those measurements.
 
 **Verification:** source readback/static inspection only. This section and the linked contract are documentation/specification, not runtime implementation. No tests, benchmarks, builds, CI, GitHub Actions, APK/AAB or device measurements were run.
+
+
+### 3.82 Phase 1 — Typed Evidence Contract (implemented, not runtime-integrated)
+
+Added `app/src/main/java/org/jarvis/ans100/alpha/data/TypedEvidence.kt` and focused JVM test source `app/src/test/java/org/jarvis/ans100/alpha/data/TypedEvidenceTest.kt`.
+
+The new `JARVIS_TYPED_EVIDENCE_V1` contract provides:
+- stable, declared feature IDs (never IDs derived from arbitrary user text);
+- explicit source kinds, evidence status and typed values (text, boolean, integer, decimal, category, reference);
+- turn-scoped provenance and unique record IDs;
+- finite 0..1 activation hints, explicitly not calibrated probabilities;
+- a 64-record per-turn cap, bounded value/provenance lengths and a 2,048-character raw-message input cap;
+- deterministic conversion of raw-message structure and current Core understanding/plan fields;
+- explicit HEURISTIC labels for Core-derived intent, terms, entities, context hints and plan fields;
+- separate USER_PROVIDED and OBSERVED_STRUCTURE labels;
+- separate USER_APPROVED_REFERENCE and VERIFIED_TOOL_OUTPUT labels for memory/tool adapter inputs.
+
+The encoder intentionally treats question/exclamation marks and line breaks as message structure only. Core key terms/entities remain heuristic hints, not verified semantic facts. Approved memory is represented by a bounded reference and category, not copied private memory content. Tool summaries are accepted only through module-internal input wrappers intended for permission-gated adapters; this type system alone is not a cryptographic trust boundary.
+
+**Current limitation:** this phase adds the typed contract and deterministic Core adapter only. It does not yet feed the sparse neuron network, change the active Android reply path, serialize the contract into Qwen prompts, or implement memory/tool adapters. The old path remains unchanged.
+
+**Verification:** changed files were fetched back from the experiment branch and inspected statically. The test source was added but NOT executed. No Gradle build, APK/AAB, CI, GitHub Actions, benchmark or device run was performed. Do not report this phase as runtime-verified.
