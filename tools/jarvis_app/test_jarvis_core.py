@@ -14,6 +14,7 @@ class FakeLanguageEngine:
         self.prompt = ""
         self.history = []
         self.memory_context = []
+        self.ans100_context = None
 
     def respond(
         self, prompt, history, *, memory_context=(), signal_context=None,
