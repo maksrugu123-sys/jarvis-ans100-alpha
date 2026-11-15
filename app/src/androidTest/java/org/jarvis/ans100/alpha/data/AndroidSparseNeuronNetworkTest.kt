@@ -308,4 +308,120 @@ class AndroidSparseNeuronNetworkTest {
             assertEquals(10_000_000L, stats.currentTimeNs)
         }
     }
+
+    @Test
+    fun hybridCandidateFeedbackIsIsolatedBoundedAndPersisted() {
+        val slot = ANS100CandidateSlotContract.Slot.ANSWER
+        val association = ANS100CandidateSlotContract.associationLane(slot, ANS100CandidateSlotContract.Polarity.SUPPORT)
+        val working = ANS100CandidateSlotContract.workingLane(slot, ANS100CandidateSlotContract.Polarity.SUPPORT)
+        val edge = AndroidHybridTopologyV2.connections().first {
+            association.contains(it.sourceNeuronId) && working.contains(it.targetNeuronId)
+        }
+        val turnId = "hybrid-feedback-test"
+
+        AndroidSparseNeuronNetwork(context, databaseName).use { network ->
+            network.initializeHybridTopologyV2()
+            assertEquals(
+                1,
+                network.recordHybridCandidateEligibility(
+                    turnId,
+                    slot.candidateId,
+                    listOf(edge.connectionId),
+                    1.0,
+                ),
+            )
+            // A model-generated answer is not feedback and must not train the network.
+            assertEquals(
+                0,
+                network.applyHybridCandidateFeedback(
+                    turnId,
+                    slot.candidateId,
+                    -1.0,
+                    ANS100CandidateFeedbackLearner.FeedbackSource.MODEL_GENERATED,
+                ),
+            )
+            assertEquals(
+                1,
+                network.recordHybridCandidateEligibility(
+                    turnId,
+                    slot.candidateId,
+                    listOf(edge.connectionId),
+                    1.0,
+                ),
+            )
+            assertEquals(
+                1,
+                network.applyHybridCandidateFeedback(
+                    turnId,
+                    slot.candidateId,
+                    -1.0,
+                    ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+                ),
+            )
+        }
+
+        val db = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            val weight = db.rawQuery(
+                "SELECT weight FROM connections WHERE connection_id=?",
+                arrayOf(edge.connectionId),
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                cursor.getDouble(0)
+            }
+            assertEquals(0.99, weight, 0.000001)
+        } finally {
+            db.close()
+        }
+
+        AndroidSparseNeuronNetwork(context, databaseName).use { reopened ->
+            reopened.initializeHybridTopologyV2()
+        }
+        val persistedDb = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            val weight = persistedDb.rawQuery(
+                "SELECT weight FROM connections WHERE connection_id=?",
+                arrayOf(edge.connectionId),
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                cursor.getDouble(0)
+            }
+            assertEquals(0.99, weight, 0.000001)
+        } finally {
+            persistedDb.close()
+        }
+    }
+
+    @Test
+    fun hybridCandidateEligibilityRejectsSynapsesFromAnotherCandidateLane() {
+        val answer = ANS100CandidateSlotContract.Slot.ANSWER
+        val clarification = ANS100CandidateSlotContract.Slot.CLARIFICATION
+        val sourceLane = ANS100CandidateSlotContract.associationLane(
+            clarification,
+            ANS100CandidateSlotContract.Polarity.SUPPORT,
+        )
+        val targetLane = ANS100CandidateSlotContract.workingLane(
+            clarification,
+            ANS100CandidateSlotContract.Polarity.SUPPORT,
+        )
+        val foreignEdge = AndroidHybridTopologyV2.connections().first {
+            sourceLane.contains(it.sourceNeuronId) && targetLane.contains(it.targetNeuronId)
+        }
+
+        AndroidSparseNeuronNetwork(context, databaseName).use { network ->
+            network.initializeHybridTopologyV2()
+            var rejected = false
+            try {
+                network.recordHybridCandidateEligibility(
+                    "foreign-lane-test",
+                    answer.candidateId,
+                    listOf(foreignEdge.connectionId),
+                    1.0,
+                )
+            } catch (_: AndroidNeuronNetworkException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+        }
+    }
 }
