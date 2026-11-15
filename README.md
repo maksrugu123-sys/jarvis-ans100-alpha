@@ -589,7 +589,7 @@ LiteRT-LM 0.17.1 is pinned on both platforms. The short no-think model is a comp
 
 The desktop chat persists in `records.conversations` in the portable workspace. Android chat still uses app-private SharedPreferences and is **not yet copied into JWS/JWB**; histories do not sync automatically between PC and Android. A manual cross-platform conversation transfer step remains.
 
-No network fallback, model auto-download, tools, shell access or external action execution is enabled. Voice inference is not included.
+No network model fallback, model auto-download, arbitrary tool execution or shell access is enabled. The desktop UI supports only explicit, bounded browser navigation/search commands; form submission, messaging, purchases, downloads and account actions remain disabled. Voice inference is not included.
 
 
 - **Android app-private memory:** source-level local approved-memory store and Compose management panel are present without Termux. The versioned SharedPreferences codec is bounded (2,000 records, 700 content chars, 64 category chars) and publishes a new cache only after a successful commit. App-local notes are not yet synced to or exported into the PC JPVR workspace. Memory tests are AUTHORED, NOT RUN.
