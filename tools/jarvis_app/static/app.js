@@ -7,20 +7,17 @@ let consolePlatform = null;
 
 function lockConsole(message) {
   accessToken = "";
-  sessionStorage.removeItem("jarvis.console.access.v2");
   if (refreshTimer !== null) {
     window.clearInterval(refreshTimer);
     refreshTimer = null;
   }
   document.body.classList.remove("auth-required");
-  $("#auth-panel").hidden = true;
   $("#logout").hidden = true;
   if (message) setNotice(message, "error");
 }
 
 function unlockConsole() {
   document.body.classList.remove("auth-required");
-  $("#auth-panel").hidden = true;
   $("#logout").hidden = false;
 }
 
@@ -1991,7 +1988,7 @@ $("#reasoning-form").addEventListener("submit", async event => {
 });
 
 async function enterConsole(token = "") {
-  accessToken = token.trim();
+  accessToken = "";
   try {
     const health = await api("/api/health");
     if (health.api_schema !== "jarvis.local-console" || health.api_version !== 2 ||
@@ -2005,7 +2002,6 @@ async function enterConsole(token = "") {
     setNavHealth("Ядро: онлайн · " + health.platform, "Диалог: проверка", "ANS-100: проверка", true);
     await refresh();
     unlockConsole();
-    $("#auth-panel").hidden = true;
     $("#logout").hidden = true;
     setNotice("JARVIS подключён · локальный режим без токена", "success");
     if (refreshTimer !== null) window.clearInterval(refreshTimer);
@@ -2018,9 +2014,8 @@ async function enterConsole(token = "") {
 }
 
 async function boot() {
-  // Never show a token prompt while the desktop server is being discovered.
+  // Both installed app platforms connect automatically without a token.
   document.body.classList.remove("auth-required");
-  $("#auth-panel").hidden = true;
   $("#logout").hidden = true;
   try {
     const health = await api("/api/health");
@@ -2029,18 +2024,13 @@ async function boot() {
       throw new Error("Сервер не поддерживает локальный API v2.");
     }
     consolePlatform = health.platform;
-    if (health.platform === "desktop") {
-      if (health.auth_required !== false || health.auth_scheme !== "none") {
-        throw new Error("Эта Windows-сборка устарела: обновите JARVIS, токен для Windows не используется.");
-      }
-      await enterConsole("");
-    } else {
-      await enterConsole("");
+    if (health.auth_required !== false || health.auth_scheme !== "none") {
+      throw new Error("Обновите JARVIS: эта версия ещё требует ручную авторизацию.");
     }
+    await enterConsole("");
   } catch (error) {
     // A missing/offline server is not an invitation to enter a token.
     document.body.classList.remove("auth-required");
-    $("#auth-panel").hidden = true;
     $("#logout").hidden = true;
     setNotice(error.message || "Не удалось подключиться к JARVIS. Запустите приложение и обновите страницу.", "error");
   }
