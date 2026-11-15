@@ -197,6 +197,13 @@ class AndroidSparseNeuronNetwork(
     @Synchronized
     fun beginHybridTurn(batch: AndroidHybridEvidenceInputAdapter.ActivationBatch): Boolean {
         if (batch.events.isEmpty()) return false
+        if (batch.turnId.isBlank() ||
+            batch.events.size > AndroidHybridEvidenceInputAdapter.MAX_ACTIVE_INPUTS_PER_TURN ||
+            batch.events.size != batch.trace.size ||
+            batch.events.any { it.timeNs != batch.timestampNs || it.targetNeuronId !in 0 until 1_200 } ||
+            batch.events.map { it.eventId }.toSet().size != batch.events.size ||
+            batch.events.map { it.targetNeuronId } != batch.trace.map { it.neuronId }
+        ) throw AndroidNeuronNetworkException("hybrid evidence batch is malformed or outside the input population")
         if (!store.matchesTopology(
                 topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
                 topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
