@@ -1268,6 +1268,8 @@ async function refreshAns100Status() {
     const edges = Number(topology.declared_connection_count || 0).toLocaleString("ru-RU");
     const populations = Array.isArray(topology.populations) ? topology.populations.length : 0;
     const active = status.active_in_chat === true;
+    const statusTag = $("#ans100-status-tag");
+    if (statusTag) statusTag.textContent = active ? "АКТИВНА В ЧАТЕ" : "НЕ АКТИВНА";
     const runtimeMode = runtime.runtime_mode === "fresh_in_memory_graph_per_turn"
       ? "Новая сеть запускается для каждого сообщения."
       : "Режим runtime не подтверждён.";
