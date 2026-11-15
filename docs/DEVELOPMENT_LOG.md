@@ -2701,3 +2701,16 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - No cancellation control is included in this change; cancellation needs a separately verified lifecycle-safe path.
 - **Verification:** source edits only. No Gradle build, unit tests, APK, LiteRT-LM inference or phone test was run. Automatic Actions triggers remain disabled and no workflow was dispatched.
 - Branch boundary: `experiment/jarvis-integrated-prototype-v1`; `main` remains untouched.
+
+
+## 2026-11-15 — Add cancellable streaming and native LiteRT-LM measurements
+
+**Changed:**
+- Added a Stop control that calls LiteRT-LM `Conversation.cancelProcess()` from the UI thread while inference is active. The generation worker owns the conversation lifecycle; after cancellation the current conversation is closed in `finally` and is never reused. A fresh conversation is created for the next request.
+- Cancellation is handled separately from ordinary inference failures. The partial response is discarded and the UI reports that the incomplete answer was not saved. GPU fallback does not retry a user-cancelled generation.
+- Added time-to-first-text-chunk measurement and the native LiteRT-LM KV-cache token count after generation. The latter includes the effective context (history, request and response), not just output tokens.
+- Kept the existing output word count explicitly approximate; it is not presented as a tokenizer result or true tokens/second metric.
+
+**Verification:** read-only inspection of the LiteRT-LM Kotlin API and static GitHub read-back of the edited sources. No Gradle build, unit tests, APK, model inference or device test was run. Automatic Actions remain manual-only; no workflow was dispatched.
+
+**Limitations:** first text chunk is a UI-visible TTFT proxy, not an internal first-token timestamp. The KV-cache count is reported after a completed generation and is not yet used as a pre-generation context-budget gate. Actual cancellation latency and token metrics remain unverified on the phone. Branch: `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
