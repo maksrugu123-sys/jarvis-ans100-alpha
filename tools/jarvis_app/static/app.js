@@ -64,6 +64,75 @@ function node(tag, className, text) {
   return element;
 }
 
+function setNavHealth(message, modelMessage, networkMessage, ready = false) {
+  const core = $("#nav-core-state");
+  const model = $("#nav-model-state");
+  const network = $("#nav-network-state");
+  const dot = $(".nav-health-dot");
+  if (core) core.textContent = message;
+  if (model) model.textContent = modelMessage;
+  if (network) network.textContent = networkMessage;
+  if (dot) dot.classList.toggle("ready", ready);
+}
+
+function initWorkspaceNavigation() {
+  const links = $("[data-nav-target]");
+  if (!links.length) return;
+  const activate = id => {
+    for (const link of links) {
+      const active = link.dataset.navTarget === id;
+      link.classList.toggle("active", active);
+      if (active) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    }
+  };
+  for (const link of links) {
+    link.addEventListener("click", () => activate(link.dataset.navTarget));
+  }
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (visible) activate(visible.target.id);
+    }, {rootMargin: "-18% 0px -68% 0px", threshold: [0, .15, .35, .6]});
+    for (const link of links) {
+      const target = document.getElementById(link.dataset.navTarget);
+      if (target) observer.observe(target);
+    }
+  }
+}
+
+function initLocalUiPreferences() {
+  const compact = $("#compact-ui-toggle");
+  const motion = $("#motion-ui-toggle");
+  if (!compact || !motion) return;
+  let preferences = {};
+  try {
+    const stored = JSON.parse(localStorage.getItem("jarvis.ui.preferences.v1") || "{}");
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) preferences = stored;
+  } catch { /* Use safe defaults when local preferences are unavailable. */ }
+  compact.checked = preferences.compact === true;
+  motion.checked = preferences.reducedMotion === true;
+  document.body.classList.toggle("compact-ui", compact.checked);
+  document.body.classList.toggle("reduced-motion", motion.checked);
+  const save = () => {
+    const next = {compact: compact.checked, reducedMotion: motion.checked};
+    document.body.classList.toggle("compact-ui", next.compact);
+    document.body.classList.toggle("reduced-motion", next.reducedMotion);
+    try {
+      localStorage.setItem("jarvis.ui.preferences.v1", JSON.stringify(next));
+    } catch {
+      setNotice("Настройка применена только до закрытия окна: локальное хранилище недоступно.", "info");
+    }
+  };
+  compact.addEventListener("change", save);
+  motion.addEventListener("change", save);
+}
+
+initWorkspaceNavigation();
+initLocalUiPreferences();
+
 const STATUS_LABELS = {
   open: "Открыта", paused: "Пауза", closed: "Закрыта",
   queued: "В очереди", running: "В работе", waiting: "Ожидает",
@@ -1116,6 +1185,15 @@ function renderConversation(state) {
   currentConversation = state.conversation || null;
   conversationMode = state.chat_mode || "unavailable";
   $("#chat-backend").textContent = state.backend_label || "Локальная модель не настроена.";
+  const modelStatus = state.chat_available
+    ? "Диалог: " + (state.backend_label || state.chat_mode || "доступен")
+    : "Диалог: runtime модели недоступен";
+  setNavHealth(
+    $("#nav-core-state")?.textContent || "Ядро: подключено",
+    modelStatus,
+    $("#nav-network-state")?.textContent || "ANS-100: проверка",
+    true
+  );
   const button = $("#chat-send");
   conversationReady = Boolean(state.chat_available ?? (state.model_configured && state.runtime_available));
   button.disabled = !conversationReady;
@@ -1188,6 +1266,13 @@ async function refreshDialogNeurons() {
       "R-STDP: " + Number(rstdp.output_spiking_neurons || 0) + " выходных LIF-DT нейрона · " +
       Number(rstdp.input_feature_neurons || 0) + " признаковых синапсов на выход · обучений: " +
       (training || "пока нет") + ". Текст примеров не сохраняется.";
+    setNavHealth(
+      $("#nav-core-state")?.textContent || "Ядро: подключено",
+      $("#nav-model-state")?.textContent || "Диалог: проверка",
+      "R-STDP: " + Number(rstdp.output_spiking_neurons || 0) + " LIF-DT · " +
+        Number(rstdp.input_feature_neurons || 0) + " входов на нейрон",
+      true
+    );
     return rstdp;
   } catch (error) {
     root.textContent = "Состояние диалогового R-STDP недоступно: " + error.message;
@@ -1672,6 +1757,8 @@ async function enterConsole(token) {
       throw new Error("Версия локальной консоли не поддерживается.");
     }
     consolePlatform = health.platform;
+    $("#settings-platform").textContent = health.platform === "desktop" ? "Windows / PC (режим desktop)" : "Android";
+    setNavHealth("Ядро: онлайн · " + health.platform, "Диалог: проверка", "ANS-100: проверка", true);
     await refresh();
     sessionStorage.setItem("jarvis.console.access.v2", accessToken);
     unlockConsole();
