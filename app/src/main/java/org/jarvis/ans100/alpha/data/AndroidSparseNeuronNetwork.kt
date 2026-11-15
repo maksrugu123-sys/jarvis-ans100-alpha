@@ -269,6 +269,7 @@ class AndroidSparseNeuronNetwork(
         if (store.stats(hot.size, hotSetCapacity).pendingEvents != 0) {
             throw AndroidNeuronBackpressureException("previous hybrid turn must be drained before a new turn is queued")
         }
+        if (hybridTelemetryTurnId != batch.turnId) resetHybridTelemetry(batch.turnId)
         scheduleInputs(batch.events)
         return true
     }
