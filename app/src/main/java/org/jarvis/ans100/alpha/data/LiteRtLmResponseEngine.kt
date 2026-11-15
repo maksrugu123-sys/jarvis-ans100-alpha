@@ -12,6 +12,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.File
+import java.util.UUID
 
 data class LiteRtLmPerformanceSnapshot(
     val initializationMs: Long = 0L,
@@ -30,6 +31,8 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     private val fallback = LocalFallbackResponseEngine()
     private val backendPreferences = appContext.getSharedPreferences("jarvis_litert_backend_v1", Context.MODE_PRIVATE)
     @Volatile private var gpuRequested = backendPreferences.getBoolean("gpu_enabled", false)
+    @Volatile private var ans100DecisionHandoffRequested =
+        backendPreferences.getBoolean("ans100_decision_handoff_enabled", false)
     @Volatile private var activeBackend: String? = null
     @Volatile private var backendNotice: String? = null
     private var engine: Engine? = null
@@ -92,6 +95,17 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         backendNotice = null
     }
 
+    /** Experimental decision→Qwen handoff; opt-in and disabled by default. */
+    fun setAns100DecisionHandoffEnabled(enabled: Boolean) {
+        ans100DecisionHandoffRequested = enabled
+        backendPreferences.edit()
+            .putBoolean("ans100_decision_handoff_enabled", enabled)
+            .apply()
+    }
+
+    val ans100DecisionHandoffEnabled: Boolean
+        get() = ans100DecisionHandoffRequested
+
     override fun respond(prompt: String, recentHistory: List<LocalConversationMessage>): String =
         respond(prompt, recentHistory, emptyList(), null)
 
@@ -132,6 +146,34 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val file = modelStore.installedFile() ?: return fallback.respond(
             clean, recentHistory, memoryContext, signalContext, understanding,
         )
+        val decisionHandoff = if (
+            ans100DecisionHandoffRequested &&
+            clean.length <= TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS
+        ) {
+            runCatching {
+                val turnId = "turn-${UUID.randomUUID()}"
+                val evidence = TypedEvidenceEncoder().encode(
+                    TypedEvidenceInput(
+                        turnId = turnId,
+                        rawUserMessage = clean,
+                        understanding = understanding,
+                    ),
+                )
+                val decision = ANS100DecisionPolicy().decide(
+                    evidence = evidence,
+                    understanding = understanding,
+                    neuralAnalysis = dialogueNeuralAnalysis,
+                )
+                ANS100QwenHandoffBuilder().build(
+                    originalUserMessage = clean,
+                    understanding = understanding,
+                    evidence = evidence,
+                    decision = decision,
+                )
+            }.getOrNull()
+        } else {
+            null
+        }
         val contextBudget = PromptContextBudgeter.create(
             baseSystemInstruction = SYSTEM_PROMPT,
             prompt = clean,
@@ -140,6 +182,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
             signalContext = signalContext,
             understandingContext = understanding,
             dialogueNeuralAnalysis = dialogueNeuralAnalysis,
+            ans100Handoff = decisionHandoff,
         )
         val initial = contextBudget.history.map { item ->
             if (item.role == ConversationRole.USER) Message.user(item.text)
