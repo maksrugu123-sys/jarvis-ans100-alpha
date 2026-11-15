@@ -76,7 +76,7 @@ object AndroidHybridEvidenceInputAdapter {
         val turnToken = MessageDigest.getInstance("SHA-256")
             .digest(bundle.turnId.toByteArray(Charsets.UTF_8))
             .take(8)
-            .joinToString("") { byte -> "%02x".format(byte) }
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
         val events = ArrayList<AndroidNeuronEvent>(bundle.records.size)
         val trace = ArrayList<TraceEntry>(bundle.records.size)
         val usedNeuronIds = HashSet<Int>()
@@ -125,7 +125,7 @@ object AndroidHybridEvidenceInputAdapter {
         require(featureIndex >= 0) { "feature is not assigned to the hybrid V2 input population" }
 
         val ordinalText = record.recordId.substringAfterLast(':', missingDelimiterValue = "")
-        require(ordinalText.isNotEmpty() && ordinalText.all(Char::isDigit)) {
+        require(ordinalText.isNotEmpty() && ordinalText.all { it.isDigit() }) {
             "evidence record ID must end in its explicit numeric ordinal"
         }
         val ordinal = ordinalText.toIntOrNull()
