@@ -83,6 +83,11 @@ The normal-browser commands use the user-initiated `window.open` flow in the PWA
 
 These are UI-level deterministic command routes to the existing read-only browser API. They do not make ANS-100 a general command interpreter and do not authorize shell commands, arbitrary application control, downloads, logins, forms, messages or purchases. The browser's URL/DNS/request guards still apply. Search/open/read require the optional Playwright + Chromium installation described below.
 
+
+### Desktop ANS-100 V4 topology status
+
+The ANS-100 panel reports the source-defined desktop V4 topology contract: seven populations, 10,000 declared neuron IDs, and 25,500 expected directed connections. This status endpoint reads metadata only; it does not construct the network or allocate 10,000 runtime neurons. The topology is currently a source-level foundation and is **not connected to the live desktop conversation path**. The existing 10-neuron structural conversation signal preprocessor remains separate, as does the small four-output dialogue R-STDP experiment shown below it. Do not interpret the declared connection count as a measured runtime graph until the topology builder tests and integration/parity work have been run.
+
 ## Chrome / Edge browser extension
 
 The JARVIS panel includes a download link for a Manifest V3 companion extension. To install it on Windows 10:
