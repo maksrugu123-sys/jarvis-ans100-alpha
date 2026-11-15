@@ -112,3 +112,10 @@ All source-level implementation statements above are based on static inspection.
 - Qwen remains the language generator; ANS-100 does not modify Qwen's weights.
 - Do not run builds, tests, CI, or Android workflows unless explicitly approved by the project owner.
 - Do not modify `main`; all work stays on the target experiment branch until explicitly approved.
+
+
+## 2026-11-15 dialogue graph cutover
+
+The ordinary Android chat route now invokes only the seven-population hybrid graph for its neural preprocessing. The legacy three-layer 9,000-input/996-hidden/4-output graph and its learned classifier/readout are no longer invoked from the normal send path; startup no longer refreshes the legacy graph. The old implementation and its SQLite namespace have deliberately NOT been deleted or migrated, preserving existing state while the replacement is validated. The hybrid graph's bounded population telemetry is the only neural-network context currently passed toward Qwen.
+
+**Important limitation:** this is a runtime-route cutover, not completion of hybrid reasoning. The hybrid adapter still encodes typed feature presence, and `ANS100DecisionPolicy` remains `CORE_POLICY_V1`; the hybrid network does not yet produce the selected candidate or structured decision. Legacy diagnostic/reward methods and source files remain in the repository pending a separate UI/API cleanup. No build, test, CI, APK/AAB or device run was performed.
