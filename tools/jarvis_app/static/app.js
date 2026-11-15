@@ -1394,7 +1394,9 @@ function publicBrowserCommandUrl(rawTarget) {
   catch { throw new Error("Не удалось распознать публичный адрес сайта."); }
   const host = parsed.hostname.toLowerCase();
   const localHost = host === "localhost" || host.endsWith(".localhost") ||
-    host.endsWith(".local") || host.endsWith(".internal") ||
+    host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan") ||
+    host.endsWith(".home") || host.endsWith(".home.arpa") || host.endsWith(".localdomain") ||
+    host.endsWith(".corp") || host.endsWith(".private") || host === "localdomain" ||
     host === "0.0.0.0" || host === "[::1]" || host.endsWith(".test") || host.endsWith(".invalid");
   const ipv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(host);
   if (!["http:", "https:"].includes(parsed.protocol) || !host.includes(".") ||
