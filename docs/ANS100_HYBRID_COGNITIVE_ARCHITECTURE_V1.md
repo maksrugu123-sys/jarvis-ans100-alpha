@@ -260,3 +260,30 @@ The live controller now exposes three bounded alternatives — direct response, 
 **Architecture boundary:** the current graph's candidate, critic and decision populations are still connected by generic deterministic projections. They do not yet contain candidate-specific slots or semantic candidate identity, and telemetry is not attributable to a particular candidate. Thus this phase makes the decision layer compare multiple inspectable candidates, but does not yet prove that neurons themselves compare semantic hypotheses. Candidate generation/ranking still depends on heuristic Core evidence and explicit controller rules.
 
 The next architecture step is a versioned candidate-slot/readout mapping with dedicated bounded sparse routes, followed by tests that remove or perturb one candidate's evidence and demonstrate the expected candidate-specific neural/readout change. The current changes have source-level tests authored but NOT run; no build, CI, APK/AAB, benchmark or device validation was performed.
+
+
+## 20. 2026-11-15 candidate-specific sparse lanes — hybrid topology version 4
+
+The next revision replaces the generic candidate/critic/readout projections with six isolated support/conflict lanes. `ANS100CandidateSlotContract.kt` fixes the mapping:
+
+- Three candidate slots: direct answer, clarification, abstention.
+- Two polarity lanes per candidate: support and conflict.
+- Six reserved input neurons: IDs 1,056–1,061. Existing 22 evidence feature families remain mapped to IDs 0–1,055.
+- Each polarity has its own association, working-state, candidate and critic ranges.
+- Each candidate owns a 200-neuron readout slot split into 100 support and 100 conflict neurons.
+
+The seven population ranges and 10,000-neuron count remain unchanged. Version 4 contains 25,500 deterministic directed sparse edges (below the 100,000-edge cap). Generic typed evidence flows through a shared association/working lane; six candidate signals enter only their own lanes. Candidate and critic projections remain lane-local. The goal-planning population receives working-state activity but is intentionally not wired directly to candidate readouts, which prevents shared goal signals from activating every candidate's output lane. There is no direct evidence-input-to-decision edge.
+
+The active database is now `jarvis_ans100_hybrid_v4.db`, and the persisted topology version is 4. The topology ID remains `ans100-hybrid-v2` to preserve the existing initializer API; the new version and database filename distinguish the schema. The V3 database is not migrated, cleared, or reused.
+
+The six support/conflict labels are currently derived by `TypedEvidenceEncoder` from `LocalUnderstandingPipeline` fields and explicitly carry `CORE_REASONING_PLAN / HEURISTIC` provenance. They are not learned or independently inferred by the network. The graph propagates those typed signals as 1.0 pulses through lane-specific paths. `JarvisViewModel` accumulates the emitted neuron IDs across every bounded run pass. The controller counts spikes in each candidate's support and conflict readout halves, computes support-minus-conflict activity, and accepts a unique positive winner only if:
+- every one of the seven populations has spiking activity;
+- every candidate has exactly the expected support or conflict readout active;
+- no inactive polarity readout spikes;
+- the event queue is drained and the compute budget is not exhausted.
+
+Missing, unexpected or tied readout activity results in abstention. Readout counts are discrete spike counts, not probabilities, calibrated confidence or evidence truth. Qwen receives the bounded decision and remains a language realizer only.
+
+New source tests cover the three-candidate arbitration, clarification conflict, no-positive-winner tie, missing readout, missing population and event-budget paths. Android instrumentation tests cover deterministic edge count, six-lane isolation, one-candidate-to-one-readout propagation, and seven-population activity. All tests are authored but NOT run. No build, CI, APK/AAB, benchmark or Android device validation was performed.
+
+**Remaining scientific gap:** the Core still decides which typed support/conflict labels to send. To demonstrate independent neural reasoning, the next phase must replace these labels with independently extracted evidence features, train or otherwise learn the candidate/critic transformations, and show on held-out examples that perturbing evidence changes the correct readout while irrelevant perturbations do not. The current implementation is a candidate-specific neural routing/readout prototype, not a trained semantic reasoner.
