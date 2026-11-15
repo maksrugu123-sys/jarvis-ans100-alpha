@@ -76,7 +76,7 @@ function setNavHealth(message, modelMessage, networkMessage, ready = false) {
 }
 
 function initWorkspaceNavigation() {
-  const links = $("[data-nav-target]");
+  const links = $$("[data-nav-target]");
   if (!links.length) return;
   const activate = id => {
     for (const link of links) {
