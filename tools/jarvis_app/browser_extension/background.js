@@ -53,9 +53,14 @@ async function openOwnedTab(payload) {
   if (!Number.isInteger(tab.id) || !Number.isInteger(tab.windowId)) {
     throw new Error("Браузер не вернул идентификатор новой вкладки.");
   }
-  const registry = await readRegistry();
-  registry.tabs.push({id: tab.id, windowId: tab.windowId});
-  await writeRegistry(registry);
+  try {
+    const registry = await readRegistry();
+    registry.tabs.push({id: tab.id, windowId: tab.windowId});
+    await writeRegistry(registry);
+  } catch (error) {
+    try { await chrome.tabs.remove(tab.id); } catch { /* Roll back best-effort. */ }
+    throw error;
+  }
   return {opened: true, kind: "tab"};
 }
 
@@ -65,15 +70,20 @@ async function openOwnedWindow(payload) {
   if (!Number.isInteger(created.id)) {
     throw new Error("Браузер не вернул идентификатор нового окна.");
   }
-  const tabs = await chrome.tabs.query({windowId: created.id});
-  const registry = await readRegistry();
-  registry.windows.push({id: created.id});
-  for (const tab of tabs) {
-    if (Number.isInteger(tab.id) && Number.isInteger(tab.windowId)) {
-      registry.tabs.push({id: tab.id, windowId: tab.windowId});
+  try {
+    const tabs = await chrome.tabs.query({windowId: created.id});
+    const registry = await readRegistry();
+    registry.windows.push({id: created.id});
+    for (const tab of tabs) {
+      if (Number.isInteger(tab.id) && Number.isInteger(tab.windowId)) {
+        registry.tabs.push({id: tab.id, windowId: tab.windowId});
+      }
     }
+    await writeRegistry(registry);
+  } catch (error) {
+    try { await chrome.windows.remove(created.id); } catch { /* Roll back best-effort. */ }
+    throw error;
   }
-  await writeRegistry(registry);
   return {opened: true, kind: "window"};
 }
 
@@ -83,18 +93,24 @@ async function closeLastOwnedTab() {
     const tab = registry.tabs[registry.tabs.length - 1];
     try {
       await chrome.tabs.get(tab.id);
-      await chrome.tabs.remove(tab.id);
-      registry.tabs.pop();
-      const remainingInWindow = registry.tabs.some(item => item.windowId === tab.windowId);
-      if (!remainingInWindow) {
-        try { await chrome.windows.get(tab.windowId); }
-        catch { registry.windows = registry.windows.filter(item => item.id !== tab.windowId); }
-      }
-      await writeRegistry(registry);
-      return {closed: true, kind: "tab"};
     } catch {
       registry.tabs.pop();
+      continue;
     }
+    const windowTabs = await chrome.tabs.query({windowId: tab.windowId});
+    const isJarvisOwnedWindow = registry.windows.some(item => item.id === tab.windowId);
+    if (windowTabs.length <= 1 && !isJarvisOwnedWindow) {
+      throw new Error("Это последняя вкладка обычного окна. Чтобы случайно не закрыть всё окно, JARVIS отменил команду.");
+    }
+    await chrome.tabs.remove(tab.id);
+    registry.tabs.pop();
+    const remainingInWindow = registry.tabs.some(item => item.windowId === tab.windowId);
+    if (!remainingInWindow) {
+      try { await chrome.windows.get(tab.windowId); }
+      catch { registry.windows = registry.windows.filter(item => item.id !== tab.windowId); }
+    }
+    await writeRegistry(registry);
+    return {closed: true, kind: "tab"};
   }
   await writeRegistry(registry);
   throw new Error("Нет вкладок, которые JARVIS открыл своей командой.");
@@ -106,15 +122,23 @@ async function closeLastOwnedWindow() {
     const win = registry.windows[registry.windows.length - 1];
     try {
       await chrome.windows.get(win.id);
-      await chrome.windows.remove(win.id);
-      registry.windows.pop();
-      registry.tabs = registry.tabs.filter(item => item.windowId !== win.id);
-      await writeRegistry(registry);
-      return {closed: true, kind: "window"};
     } catch {
       registry.windows.pop();
       registry.tabs = registry.tabs.filter(item => item.windowId !== win.id);
+      continue;
     }
+    const windowTabs = await chrome.tabs.query({windowId: win.id});
+    const ownedTabIds = new Set(
+      registry.tabs.filter(item => item.windowId === win.id).map(item => item.id)
+    );
+    if (windowTabs.some(tab => !ownedTabIds.has(tab.id))) {
+      throw new Error("В этом окне есть вкладки, которые JARVIS не создавал. Окно оставлено открытым.");
+    }
+    await chrome.windows.remove(win.id);
+    registry.windows.pop();
+    registry.tabs = registry.tabs.filter(item => item.windowId !== win.id);
+    await writeRegistry(registry);
+    return {closed: true, kind: "window"};
   }
   await writeRegistry(registry);
   throw new Error("Нет окон, которые JARVIS открыл своей командой.");
