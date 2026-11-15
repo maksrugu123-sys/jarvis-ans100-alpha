@@ -249,6 +249,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
 
         with urlopen(self.base_url + "/app.js", timeout=3) as response:
             app_js = response.read().decode("utf-8")
+        self.assertIn('const links = $("[data-nav-target]");', app_js)
         self.assertIn("normalBrowserSearch", app_js)
         self.assertIn("publicBrowserCommandUrl", app_js)
         self.assertIn("Команда браузера", app_js)
