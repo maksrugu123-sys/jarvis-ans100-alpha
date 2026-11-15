@@ -51,8 +51,6 @@ button {
 }
 button.secondary { border-color:#3a5065; background:#1a2b3c; color:#dce9f5; }
 button:disabled { opacity:.45; cursor:not-allowed; }
-#connect { flex:1; }
-#forget { flex:1; }
 #open, #search { flex:1; }
 #ask { width:100%; margin-top:10px; }
 .hint { margin:9px 0 0; color:var(--muted); font-size:10px; }

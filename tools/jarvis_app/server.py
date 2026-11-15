@@ -1,7 +1,7 @@
 """Loopback-only local JARVIS task console.
 
-This is a thin UI for bounded Python reference APIs. It has bearer-token authentication
-but no tool executor, external credentials, shell access, or side-effecting capabilities.
+Windows desktop mode is tokenless and loopback-only. Android/PWA access retains
+bearer-token authentication. This API has no shell executor or external credentials.
 """
 from __future__ import annotations
 
@@ -325,19 +325,25 @@ class LocalConsoleService:
             self.storage.close()
             raise LocalConsoleError("cannot restore the shared JARVIS workspace") from exc
 
-        try:
-            self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
-        except LocalConsoleAuthError as exc:
-            self.workspace_storage.close()
-            self.storage.close()
-            raise LocalConsoleError("cannot initialize local-console authentication") from exc
-        self.bootstrap_token = self.auth.bootstrap_token
+        if self.platform == "desktop":
+            self.auth = None
+            self.bootstrap_token = None
+        else:
+            try:
+                self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
+            except LocalConsoleAuthError as exc:
+                self.workspace_storage.close()
+                self.storage.close()
+                raise LocalConsoleError("cannot initialize local-console authentication") from exc
+            self.bootstrap_token = self.auth.bootstrap_token
         self.dialog_rstdp = DialogRstdpLearningService(
             self.data_path.parent / "dialog-rstdp-v1"
         )
 
     def authenticate(self, token: str | None) -> bool:
-        return self.auth.verify(token)
+        if self.platform == "desktop":
+            return True
+        return self.auth is not None and self.auth.verify(token)
 
     def close(self) -> None:
         self.visible_browser.close()
@@ -1133,15 +1139,17 @@ def create_http_server(
                 path in _BROWSER_EXTENSION_API_PATHS
                 and _is_browser_extension_origin(origin)
             )
+            if service.platform == "desktop" and path in _BROWSER_EXTENSION_API_PATHS and not extension_request:
+                self._error(403, "Для Browser Bridge требуется доверенный источник расширения Chrome/Edge")
+                return False
             if origin is not None and origin != expected_origin and not extension_request:
                 self._error(403, "Запросы с другого источника запрещены")
                 return False
             return True
 
         def _require_auth(self) -> bool:
-            # The desktop console itself is tokenless; the extension's explicit
-            # current-page reading API remains token-protected.
-            if service.platform == "desktop" and urlsplit(self.path).path not in _BROWSER_EXTENSION_API_PATHS:
+            # Windows desktop APIs are local-only and do not provision or accept bearer tokens.
+            if service.platform == "desktop":
                 return True
             values = self.headers.get_all("Authorization", [])
             if len(values) != 1 or not values[0].startswith("Bearer "):
@@ -1555,12 +1563,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"JPVR task/session data: {service.data_path}")
     print(f"JPVR shared workspace: {service.workspace_path}")
     if service.platform == "desktop":
-        print("Desktop console: no manual token entry required.")
-        if service.bootstrap_token:
-            print("BROWSER BRIDGE TOKEN (only for the explicit current-page reading feature):")
-            print(service.bootstrap_token)
-        else:
-            print("Browser Bridge token already provisioned. Use --rotate-token if it was lost.")
+        print("Desktop mode: no access token is created or required.")
+        print("Browser Bridge: local extension-origin checks are enabled.")
     else:
         print(f"Access-token digest: {service.auth_path}")
         if service.bootstrap_token:

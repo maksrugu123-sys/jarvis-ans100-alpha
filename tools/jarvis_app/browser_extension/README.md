@@ -11,11 +11,10 @@ This is a Manifest V3 companion extension for the JARVIS local desktop console.
 5. Turn on **Developer mode**.
 6. Select **Load unpacked** and choose the extracted `jarvis-browser-extension` folder.
 7. Pin **JARVIS Browser Bridge** to the toolbar.
-8. Open the JARVIS Core terminal, copy the one-time 43-character access token and paste it into the extension popup. Press **Подключить**.
-9. If the extension was already installed, open the extensions page and press **Reload** for JARVIS Browser Bridge so Chrome/Edge loads version 1.1.1 and its background worker/content bridge.
-10. Refresh the JARVIS local-console page so the new content-script bridge is attached to that tab.
+8. If the extension was already installed, open the extensions page and press **Reload** so Chrome/Edge loads version 1.2.0 and its background worker/content bridge.
+9. Refresh the JARVIS local-console page so the new content-script bridge is attached to that tab.
 
-Opening and closing JARVIS-owned tabs/windows from chat works after the extension is installed and the JARVIS page is refreshed; it does not require the popup token. The token connection in the popup is needed for the separate, user-approved current-page reading feature.
+The extension connects automatically to the loopback-only Windows desktop server. No access token, account login or manual connection step is required.
 
 The extension does not install itself automatically and is not published in either browser's store.
 
@@ -26,7 +25,7 @@ The extension does not install itself automatically and is not published in eith
 - Close the most recently JARVIS-created tab or window after the JARVIS chat asks for confirmation. Only tab/window IDs recorded when JARVIS created them can be closed; the extension does not close arbitrary user tabs or windows.
 - On a deliberate button press in the extension popup, read up to 12,000 characters of visible text from the active tab and send it to the local JARVIS Core for a question/summary.
 - The active page is not read in the background. The extension uses the browser's temporary `activeTab` permission, granted after the user opens the extension, and injects a read-only extraction function only after pressing the send button.
-- The local API token is stored in `chrome.storage.local` on this browser profile. Use **Забыть токен** to remove it.
+- Desktop Browser Bridge requests are accepted only from a Chrome/Edge extension origin and the server's loopback listener; no bearer token is provisioned or transmitted.
 
 ## Boundaries
 

@@ -41,11 +41,14 @@ class WindowsPackagingContractTests(unittest.TestCase):
         app = (ROOT / "tools/jarvis_app/static/app.js").read_text(encoding="utf-8")
         popup = (ROOT / "tools/jarvis_app/browser_extension/popup.js").read_text(encoding="utf-8")
         self.assertIn('if platform not in ("desktop", "android"):', server)
-        self.assertIn('service.platform == "desktop" and urlsplit(self.path).path not in _BROWSER_EXTENSION_API_PATHS', server)
+        self.assertIn('if self.platform == "desktop":', server)
+        self.assertIn('if service.platform == "desktop":', server)
         self.assertIn('"auth_required": service.platform != "desktop"', server)
         self.assertIn('await enterConsole("")', app)
-        self.assertIn('const headers = {Authorization: "Bearer " + accessToken};', popup)
-        self.assertIn('jarvisAccessToken', popup)
+        self.assertIn('if service.platform == "desktop" and path in _BROWSER_EXTENSION_API_PATHS and not extension_request:', server)
+        self.assertNotIn('Authorization: "Bearer " + accessToken', popup)
+        self.assertNotIn('jarvisAccessToken', popup)
+        self.assertNotIn('id="token"', (ROOT / "tools/jarvis_app/browser_extension/popup.html").read_text(encoding="utf-8"))
 
     def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")

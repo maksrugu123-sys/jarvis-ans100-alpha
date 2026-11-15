@@ -92,19 +92,19 @@ class LocalConsoleServiceTests(unittest.TestCase):
     def test_access_token_persists_and_rotation_revokes_previous_token(self):
         auth_path = os.path.join(self.temp.name, "console.auth")
         auth_data_path = os.path.join(self.temp.name, "auth-test.jpvr")
-        first = LocalConsoleService(auth_data_path, auth_path)
+        first = LocalConsoleService(auth_data_path, auth_path, platform="android")
         first_token = first.bootstrap_token
         self.assertIsNotNone(first_token)
         self.assertTrue(first.authenticate(first_token))
         self.assertEqual(os.stat(auth_path).st_mode & 0o777, 0o600)
         first.close()
 
-        second = LocalConsoleService(auth_data_path, auth_path)
+        second = LocalConsoleService(auth_data_path, auth_path, platform="android")
         self.assertIsNone(second.bootstrap_token)
         self.assertTrue(second.authenticate(first_token))
         second.close()
 
-        rotated = LocalConsoleService(auth_data_path, auth_path, rotate_token=True)
+        rotated = LocalConsoleService(auth_data_path, auth_path, rotate_token=True, platform="android")
         self.assertIsNotNone(rotated.bootstrap_token)
         self.assertFalse(rotated.authenticate(first_token))
         self.assertTrue(rotated.authenticate(rotated.bootstrap_token))
@@ -197,7 +197,7 @@ class LocalConsoleServiceTests(unittest.TestCase):
 class LocalConsoleHttpTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.service = LocalConsoleService(os.path.join(self.temp.name, "http.jpvr"))
+        self.service = LocalConsoleService(os.path.join(self.temp.name, "http.jpvr"), platform="android")
         self.token = self.service.bootstrap_token
         self.server = create_http_server(self.service, port=0)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -514,7 +514,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertTrue(payload["auth_required"])
         self.assertEqual(payload["auth_scheme"], "Bearer")
         self.assertEqual(payload["workspace_api_version"], 1)
-        self.assertEqual(payload["platform"], "desktop")
+        self.assertEqual(payload["platform"], "android")
 
     def test_workspace_restore_replaces_all_records_with_revision_guard(self):
         initial = self.service.workspace_state()
