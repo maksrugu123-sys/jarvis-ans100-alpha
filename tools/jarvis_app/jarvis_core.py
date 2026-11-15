@@ -692,6 +692,18 @@ class JarvisCore:
                 ans100_network_context.get("selected_candidate")
                 if isinstance(ans100_network_context, Mapping) else None
             ),
+            "ans100_network_decision_status": (
+                ans100_network_context.get("decision_status")
+                if isinstance(ans100_network_context, Mapping) else None
+            ),
+            "ans100_network_readout_complete": (
+                ans100_network_context.get("readout_complete") is True
+                if isinstance(ans100_network_context, Mapping) else False
+            ),
+            "ans100_network_winner_margin": (
+                ans100_network_context.get("winner_margin", 0.0)
+                if isinstance(ans100_network_context, Mapping) else 0.0
+            ),
             "ans100_network_spike_count": (
                 ans100_network_context.get("spike_count", 0)
                 if isinstance(ans100_network_context, Mapping) else 0
