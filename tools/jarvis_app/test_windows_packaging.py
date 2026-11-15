@@ -9,14 +9,25 @@ ROOT = Path(__file__).resolve().parents[2]
 class WindowsPackagingContractTests(unittest.TestCase):
     def test_frozen_entrypoint_uses_desktop_server(self):
         source = (ROOT / "tools/jarvis_app/windows_entry.py").read_text(encoding="utf-8")
-        self.assertIn("from tools.jarvis_app.server import main", source)
+        self.assertIn("from tools.jarvis_app.windows_desktop import main", source)
+        self.assertIn("--server-only", source)
         self.assertIn("main()", source)
+
+    def test_windows_app_uses_embedded_webview_not_external_browser(self):
+        source = (ROOT / "tools/jarvis_app/windows_desktop.py").read_text(encoding="utf-8")
+        self.assertIn("webview.create_window(", source)
+        self.assertIn('webview.start(gui="edgechromium"', source)
+        self.assertIn("http://127.0.0.1:8765/", source)
+        self.assertNotIn("webbrowser.open", source)
+        self.assertNotIn("Start-Process", source)
 
     def test_spec_bundles_ui_and_browser_extension_assets_without_import_sweeps(self):
         source = (ROOT / "packaging/windows/JARVIS.spec").read_text(encoding="utf-8")
         self.assertIn("tools/jarvis_app/static", source)
         self.assertIn("tools/jarvis_app/browser_extension", source)
-        self.assertIn("hiddenimports = []", source)
+        self.assertIn('"webview.platforms.edgechromium"', source)
+        self.assertIn('"webview.platforms.winforms"', source)
+        self.assertIn('"clr_loader"', source)
         self.assertNotIn("from PyInstaller.utils.hooks import collect_submodules", source)
         self.assertNotIn("collect_submodules(package)", source)
         self.assertIn("console=True", source)
@@ -84,6 +95,8 @@ class WindowsPackagingContractTests(unittest.TestCase):
     def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
         self.assertIn("Smoke-test packaged server on Windows", source)
+        self.assertIn('"pywebview>=6.0,<7"', source)
+        self.assertIn('"--server-only"', source)
         self.assertIn("/api/health", source)
         self.assertIn('Copy-Item "start_jarvis_windows_exe.bat" "dist/Запустить JARVIS.bat"', source)
         self.assertNotIn('Copy-Item "run_jarvis_core.bat"', source)
