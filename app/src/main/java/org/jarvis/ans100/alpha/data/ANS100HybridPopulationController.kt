@@ -77,8 +77,14 @@ class ANS100HybridPopulationController {
         }?.value as? EvidenceValue.Category)?.value
         val ambiguousContext = understanding.refersToPreviousContext &&
             contextStatus in setOf("ambiguous", "unavailable")
-        val hasIntent = intentRecord != null && taskKindRecord != null
-        val hasGoal = goalRecord != null
+        val intentValue = (intentRecord?.value as? EvidenceValue.Category)?.value
+        val taskKindValue = (taskKindRecord?.value as? EvidenceValue.Category)?.value
+        val reliableHeuristicIntent = intentValue != null &&
+            intentValue != "statement_or_unknown" &&
+            taskKindValue != null &&
+            understanding.intentConfidence >= 0.4
+        val hasIntent = reliableHeuristicIntent
+        val hasGoal = goalRecord != null && reliableHeuristicIntent
         val questionMark = (evidence.records.singleOrNull {
             it.feature == EvidenceFeature.MESSAGE_HAS_QUESTION_MARK
         }?.value as? EvidenceValue.BooleanValue)?.value == true
