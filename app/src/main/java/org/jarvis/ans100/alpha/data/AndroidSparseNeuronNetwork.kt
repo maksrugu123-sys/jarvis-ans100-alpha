@@ -88,12 +88,18 @@ data class AndroidNeuronRunResult(
     val processedEvents: Int,
     val processedNeuronBatches: Int,
     val emittedSpikes: List<Pair<Int, Long>>,
+    /** Synapses whose propagated event reached a neuron that spiked in this run. */
+    val activatedConnectionIds: Set<String> = emptySet(),
     val pendingEvents: Int,
     val budgetExhausted: Boolean,
     val currentTimeNs: Long,
     /** Present only when this database matches the versioned seven-population hybrid topology. */
     val hybridTelemetry: AndroidHybridRunTelemetry? = null,
 )
+
+private fun connectionIdFromPropagatedEvent(eventId: String): String? =
+    Regex("^spike-\\d+-\\d+-(ans100-v4-[A-Za-z0-9._:-]+)$")
+        .matchEntire(eventId)?.groupValues?.get(1)
 
 open class AndroidNeuronNetworkException(message: String) : IllegalStateException(message)
 class AndroidNeuronBackpressureException(message: String) : AndroidNeuronNetworkException(message)
@@ -356,6 +362,7 @@ class AndroidSparseNeuronNetwork(
         var timestamps = 0
         var exhausted = false
         val spikes = mutableListOf<Pair<Int, Long>>()
+        val activatedConnectionIds = LinkedHashSet<String>()
         val isHybridTopology = store.matchesTopology(
             topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
             topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
@@ -405,6 +412,11 @@ class AndroidSparseNeuronNetwork(
                 val result = processNeuron(previous, timestamp, targetEvents.sumOf { it.strength })
                 changed[targetId] = result.first
                 if (result.second) {
+                    // These events were delivered to a target that spiked at this timestamp.
+                    // Simultaneous inputs share coarse eligibility; this is not causal attribution.
+                    targetEvents.forEach { event ->
+                        connectionIdFromPropagatedEvent(event.eventId)?.let(activatedConnectionIds::add)
+                    }
                     val spikeSequence = result.first.spikeSequence
                     spikes += targetId to spikeSequence
                     if (spikingNeuronIds != null && spikeCounts != null) {
@@ -467,6 +479,7 @@ class AndroidSparseNeuronNetwork(
             processedEvents = processedEvents,
             processedNeuronBatches = processedBatches,
             emittedSpikes = spikes,
+            activatedConnectionIds = activatedConnectionIds,
             pendingEvents = finalStats.pendingEvents,
             budgetExhausted = exhausted,
             currentTimeNs = finalStats.currentTimeNs,
