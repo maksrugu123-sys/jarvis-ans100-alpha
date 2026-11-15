@@ -93,6 +93,36 @@ class PromptContextBudgeterTest {
     }
 
     @Test
+    fun includesBoundedAndroidNeuralMeasurementsWhenTheyFit() {
+        val neural = DialogueNeuralAnalysis(
+            networkNeuronCount = 10_000,
+            activeFeatureCount = 18,
+            processedEvents = 22,
+            processedNeuronBatches = 20,
+            outputSpikeCount = 4,
+            pendingEvents = 0,
+            classifierLabel = null,
+            classifierConfidenceMargin = null,
+            classifierTrainedExamples = 0,
+            statePersisted = true,
+        )
+
+        val plan = PromptContextBudgeter.create(
+            baseSystemInstruction = "Базовые правила JARVIS.",
+            prompt = "Объясни принцип работы.",
+            recentHistory = emptyList(),
+            memoryContext = emptyList(),
+            signalContext = null,
+            understandingContext = null,
+            dialogueNeuralAnalysis = neural,
+        )
+
+        assertTrue(plan.systemInstruction.contains("10 000 nodes"))
+        assertTrue(plan.systemInstruction.contains("active text-feature inputs=18"))
+        assertTrue(plan.systemInstruction.contains("not semantic reasoning decisions"))
+    }
+
+    @Test
     fun reportsAnEstimateRatherThanPretendingToKnowExactTokenCount() {
         val plan = PromptContextBudgeter.create(
             baseSystemInstruction = "Короткие системные правила.",
