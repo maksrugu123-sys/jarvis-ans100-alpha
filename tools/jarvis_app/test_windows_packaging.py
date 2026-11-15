@@ -57,6 +57,18 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertNotIn('auth-panel', html)
         self.assertNotIn('подключите расширение токеном из окна JARVIS Core', html)
 
+
+    def test_windows_10_and_11_compatibility_matrix_is_required_before_release(self):
+        workflow = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
+        compatibility = workflow.split("  build-windows:", 1)[0]
+        self.assertIn("windows-2022", compatibility)
+        self.assertIn("windows-2025", compatibility)
+        self.assertIn("needs: windows-compatibility", workflow)
+        docs = (ROOT / "docs/JARVIS_WINDOWS_COMPATIBILITY.md").read_text(encoding="utf-8")
+        self.assertIn("Windows 10 version 22H2", docs)
+        self.assertIn("Windows 11 versions 23H2 and 24H2", docs)
+        self.assertIn("Windows on ARM is not yet verified", docs)
+
     def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
         self.assertIn("Smoke-test packaged server on Windows", source)
