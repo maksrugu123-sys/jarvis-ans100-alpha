@@ -1196,10 +1196,10 @@ function renderConversation(state) {
   );
   const button = $("#chat-send");
   conversationReady = Boolean(state.chat_available ?? (state.model_configured && state.runtime_available));
-  button.disabled = !conversationReady;
-  button.textContent = conversationMode === "fallback"
-    ? "Отправить JARVIS"
-    : "Отправить локальной модели";
+  button.disabled = false;
+  button.textContent = conversationReady
+    ? (conversationMode === "fallback" ? "Отправить JARVIS" : "Отправить локальной модели")
+    : "Команда браузера";
   const root = $("#chat-messages");
   root.replaceChildren();
   const messages = currentConversation?.messages || [];
@@ -1207,8 +1207,8 @@ function renderConversation(state) {
   if (!messages.length) {
     if (conversationMode === "fallback") {
       root.textContent = "Базовый офлайн-режим активен. Попробуйте /help или /status. Для свободного диалога можно подключить локальную модель.";
-    } else if (button.disabled) {
-      root.textContent = "Модель указана, но runtime LiteRT-LM недоступен. Установите litert-lm-api==0.17.1 и проверьте файл модели.";
+    } else if (!conversationReady) {
+      root.textContent = "Runtime LiteRT-LM недоступен. Команды браузера всё ещё можно отправлять через поле ниже; для свободного диалога установите litert-lm-api==0.17.1 и проверьте файл модели.";
     } else {
       root.textContent = "История локального диалога пока пуста.";
     }
@@ -1354,6 +1354,9 @@ $("#chat-form").addEventListener("submit", async event => {
       input.value = "";
       return;
     }
+    if (!conversationReady) {
+      throw new Error("Локальная модель сейчас недоступна. Команды браузера работают отдельно; для обычного диалога настройте LiteRT-LM и файл модели.");
+    }
     const before = await api("/api/conversation");
     const result = await api("/api/conversation", {text, expected_revision: before.revision});
     input.value = "";
@@ -1366,10 +1369,10 @@ $("#chat-form").addEventListener("submit", async event => {
       try { await refreshConversation(); } catch { /* Preserve the revision conflict. */ }
     }
   } finally {
-    button.disabled = !conversationReady;
-    button.textContent = conversationMode === "fallback"
-      ? "Отправить JARVIS"
-      : "Отправить локальной модели";
+    button.disabled = false;
+    button.textContent = conversationReady
+      ? (conversationMode === "fallback" ? "Отправить JARVIS" : "Отправить локальной модели")
+      : "Команда браузера";
   }
 });
 let browserState = null;
