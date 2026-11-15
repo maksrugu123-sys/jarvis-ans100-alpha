@@ -954,15 +954,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         maxEvents = MAX_DIALOGUE_EVENTS_PER_TURN,
                         maxTimestamps = MAX_DIALOGUE_TIMESTAMPS_PER_TURN,
                     )
-                    val hiddenSpikes = result.emittedSpikes.asSequence()
+                    val activeHiddenSpikes = result.emittedSpikes.asSequence()
                         .map { it.first }
                         .filter {
                             it in AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until
                                 AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
                         }
                         .distinct()
-                        .take(AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN)
                         .toList()
+                    // Keep feedback/readout work bounded even if a large feature
+                    // batch activates a substantial part of the hidden population.
+                    val hiddenSpikes = activeHiddenSpikes
+                        .take(AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN)
                     val outputSpikes = result.emittedSpikes.asSequence()
                         .map { it.first }
                         .filter {
@@ -1004,7 +1007,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val analysis = DialogueNeuralAnalysis(
                         networkNeuronCount = stats.neuronCount,
                         activeFeatureCount = boundedIds.size,
-                        activeHiddenNeuronCount = hiddenSpikes.size,
+                        activeHiddenNeuronCount = activeHiddenSpikes.size,
                         processedEvents = result.processedEvents,
                         processedNeuronBatches = result.processedNeuronBatches,
                         outputSpikeCount = outputSpikes.size,
@@ -1024,7 +1027,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 nativeNetworkStats = stats,
                                 nativeNetworkError = null,
                                 nativeNetworkMessage =
-                                    "ANS-100: входных признаков ${featureEvents.size}, активных скрытых нейронов ${hiddenSpikes.size}, " +
+                                    "ANS-100: входных признаков ${featureEvents.size}, активных скрытых нейронов ${activeHiddenSpikes.size}, " +
                                         "выходных импульсов ${outputSpikes.size}, обработано событий ${result.processedEvents}, " +
                                         "eligibility-связей ${eligibilityCount}. " +
                                         "Числовой результат передан языковой модели как ограниченный контекст; это ещё не самостоятельное мышление.",
