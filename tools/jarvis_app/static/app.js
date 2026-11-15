@@ -1993,13 +1993,14 @@ $("#reasoning-form").addEventListener("submit", async event => {
   }
 });
 
-async function enterConsole(token) {
+async function enterConsole(token = "") {
   accessToken = token.trim();
   try {
     const health = await api("/api/health");
-    if (health.api_schema !== "jarvis.local-console" ||
-        health.api_version !== 2 || health.auth_required !== true ||
-        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1 ||
+    const desktopNoToken = health.platform === "desktop" && health.auth_required === false && health.auth_scheme === "none";
+    const bearerMode = health.auth_required === true && health.auth_scheme === "Bearer";
+    if (health.api_schema !== "jarvis.local-console" || health.api_version !== 2 ||
+        (!desktopNoToken && !bearerMode) || health.workspace_api_version !== 1 ||
         !["desktop", "android"].includes(health.platform)) {
       throw new Error("Версия локальной консоли не поддерживается.");
     }
@@ -2007,9 +2008,12 @@ async function enterConsole(token) {
     $("#settings-platform").textContent = health.platform === "desktop" ? "Windows / PC (режим desktop)" : "Android";
     setNavHealth("Ядро: онлайн · " + health.platform, "Диалог: проверка", "ANS-100: проверка", true);
     await refresh();
-    sessionStorage.setItem("jarvis.console.access.v2", accessToken);
+    if (accessToken) sessionStorage.setItem("jarvis.console.access.v2", accessToken);
+    else sessionStorage.removeItem("jarvis.console.access.v2");
     unlockConsole();
-    setNotice("Ядро подключено · " + health.storage.toUpperCase() + " · защищённый локальный режим", "success");
+    $("#auth-panel").hidden = true;
+    $("#logout").hidden = health.platform === "desktop";
+    setNotice(health.platform === "desktop" ? "JARVIS подключён · локальный режим без ручного токена" : "Ядро подключено · " + health.storage.toUpperCase() + " · защищённый локальный режим", "success");
     if (refreshTimer !== null) window.clearInterval(refreshTimer);
     refreshTimer = window.setInterval(() => {
       refresh().catch(error => setNotice(error.message, "error"));
@@ -2035,13 +2039,13 @@ async function boot() {
   $("#auth-panel").hidden = false;
   try {
     const health = await api("/api/health");
-    if (health.api_schema !== "jarvis.local-console" ||
-        health.api_version !== 2 || health.auth_required !== true ||
-        health.auth_scheme !== "Bearer" || health.workspace_api_version !== 1 ||
-        !["desktop", "android"].includes(health.platform)) {
-      throw new Error("Сервер не поддерживает защищённый API v2.");
+    if (health.api_schema !== "jarvis.local-console" || health.api_version !== 2 ||
+        health.workspace_api_version !== 1 || !["desktop", "android"].includes(health.platform)) {
+      throw new Error("Сервер не поддерживает локальный API v2.");
     }
-    if (accessToken) {
+    if (health.platform === "desktop" && health.auth_required === false && health.auth_scheme === "none") {
+      await enterConsole("");
+    } else if (accessToken) {
       await enterConsole(accessToken);
     } else {
       setNotice("Вставьте токен доступа, показанный при запуске консоли в Termux.", "info");

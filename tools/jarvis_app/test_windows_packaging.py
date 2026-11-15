@@ -37,6 +37,17 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn('if os.name == "nt":', source)
         self.assertIn("requires POSIX file-locking", source)
 
+    def test_windows_desktop_mode_does_not_require_manual_tokens(self):
+        server = (ROOT / "tools/jarvis_app/server.py").read_text(encoding="utf-8")
+        app = (ROOT / "tools/jarvis_app/static/app.js").read_text(encoding="utf-8")
+        popup = (ROOT / "tools/jarvis_app/browser_extension/popup.js").read_text(encoding="utf-8")
+        self.assertIn('if self.platform == "desktop":', server)
+        self.assertIn('if service.platform == "desktop":', server)
+        self.assertIn('"auth_required": service.platform != "desktop"', server)
+        self.assertIn('await enterConsole("")', app)
+        self.assertIn('const headers = {};', popup)
+        self.assertNotIn('jarvisAccessToken', popup)
+
     def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
         self.assertIn("Smoke-test packaged server on Windows", source)

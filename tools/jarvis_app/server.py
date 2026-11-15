@@ -325,19 +325,27 @@ class LocalConsoleService:
             self.storage.close()
             raise LocalConsoleError("cannot restore the shared JARVIS workspace") from exc
 
-        try:
-            self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
-        except LocalConsoleAuthError as exc:
-            self.workspace_storage.close()
-            self.storage.close()
-            raise LocalConsoleError("cannot initialize local-console authentication") from exc
-        self.bootstrap_token = self.auth.bootstrap_token
+        # Desktop is loopback-only and validates Host/Origin on every API request.
+        # Android keeps explicit bearer-token authentication.
+        if self.platform == "desktop":
+            self.auth = None
+            self.bootstrap_token = None
+        else:
+            try:
+                self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
+            except LocalConsoleAuthError as exc:
+                self.workspace_storage.close()
+                self.storage.close()
+                raise LocalConsoleError("cannot initialize local-console authentication") from exc
+            self.bootstrap_token = self.auth.bootstrap_token
         self.dialog_rstdp = DialogRstdpLearningService(
             self.data_path.parent / "dialog-rstdp-v1"
         )
 
     def authenticate(self, token: str | None) -> bool:
-        return self.auth.verify(token)
+        if self.platform == "desktop":
+            return True
+        return self.auth is not None and self.auth.verify(token)
 
     def close(self) -> None:
         self.visible_browser.close()
@@ -1139,6 +1147,8 @@ def create_http_server(
             return True
 
         def _require_auth(self) -> bool:
+            if service.platform == "desktop":
+                return True
             values = self.headers.get_all("Authorization", [])
             if len(values) != 1 or not values[0].startswith("Bearer "):
                 self._error(401, "Требуется токен доступа JARVIS")
@@ -1211,7 +1221,7 @@ def create_http_server(
                 return
             path = urlsplit(self.path).path
             if path == "/api/health":
-                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "workspace_api_version": 1, "platform": service.platform, "auth_required": True, "auth_scheme": "Bearer"})
+                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "workspace_api_version": 1, "platform": service.platform, "auth_required": service.platform != "desktop", "auth_scheme": "Bearer" if service.platform != "desktop" else "none"})
                 return
             if path == "/api/state":
                 if not self._require_auth():
@@ -1550,12 +1560,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"JARVIS Local Console: http://127.0.0.1:{server.server_port}/")
     print(f"JPVR task/session data: {service.data_path}")
     print(f"JPVR shared workspace: {service.workspace_path}")
-    print(f"Access-token digest: {service.auth_path}")
-    if service.bootstrap_token:
-        print("ANDROID / PWA ACCESS TOKEN (shown only once; save it in the client):")
-        print(service.bootstrap_token)
+    if service.platform == "desktop":
+        print("Desktop mode: no manual access token required (loopback-only API).")
     else:
-        print("Access token already provisioned. Use --rotate-token to issue a replacement if it was lost.")
+        print(f"Access-token digest: {service.auth_path}")
+        if service.bootstrap_token:
+            print("ANDROID / PWA ACCESS TOKEN (shown only once; save it in the client):")
+            print(service.bootstrap_token)
+        else:
+            print("Access token already provisioned. Use --rotate-token to issue a replacement if it was lost.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
