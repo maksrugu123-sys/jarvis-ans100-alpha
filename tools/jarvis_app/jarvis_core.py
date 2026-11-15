@@ -47,10 +47,12 @@ class JarvisCore:
         signal_runtime: ConversationSignalRuntime | None = None,
         reasoning_engine: ReasoningEngineV01 | None = None,
         dialog_neuron_service: Any | None = None,
+        hybrid_ans100_runtime: Any | None = None,
     ) -> None:
         self._language_engine = language_engine
         self._signal_runtime = signal_runtime or ConversationSignalRuntime()
         self._dialog_neuron_service = dialog_neuron_service
+        self._hybrid_ans100_runtime = hybrid_ans100_runtime
         self._reasoning_engine = reasoning_engine or ReasoningEngineV01(
             max_subtasks=MAX_REASONING_SUBTASKS,
             max_hypotheses=MAX_REASONING_HYPOTHESES,
@@ -62,6 +64,10 @@ class JarvisCore:
 
     def close(self) -> None:
         self._signal_runtime.close()
+        if self._hybrid_ans100_runtime is not None:
+            close = getattr(self._hybrid_ans100_runtime, "close", None)
+            if callable(close):
+                close()
 
     @staticmethod
     def _tokens(value: str) -> set[str]:
@@ -431,6 +437,27 @@ class JarvisCore:
             if configured else "Модель не настроена"
         )
         memory_count = len(memories) if isinstance(memories, (list, tuple)) else 0
+        if self._hybrid_ans100_runtime is not None:
+            runtime_status = self._hybrid_ans100_runtime.status()
+            ans100_status = {
+                "state": "ten_thousand_neuron_sparse_network_integrated",
+                **runtime_status,
+                "legacy_signal_neuron_count": self._signal_runtime.neuron_count,
+                "signal_preprocessing_integrated_into_chat": True,
+                "decision_signal_pipeline_integrated": True,
+                "full_cognitive_loop_integrated": False,
+            }
+        else:
+            ans100_status = {
+                "state": "ten_neuron_signal_preprocessor_only",
+                "runtime_version": "JARVIS_ANS100_CONVERSATION_SIGNAL_V2",
+                "neuron_count": self._signal_runtime.neuron_count,
+                "signal_preprocessing_integrated_into_chat": True,
+                "full_cognitive_loop_integrated": False,
+                "learning_enabled": False,
+                "adaptive_threshold_enabled": True,
+                "persistent_state": self._signal_runtime.persistent_state_enabled,
+            }
         return {
             "core_version": self.VERSION,
             "orchestration": "active",
@@ -468,16 +495,7 @@ class JarvisCore:
                 "plan_persistence": False,
                 "execution_enabled": False,
             },
-            "ans100_network": {
-                "state": "ten_neuron_signal_preprocessor_only",
-                "runtime_version": "JARVIS_ANS100_CONVERSATION_SIGNAL_V2",
-                "neuron_count": self._signal_runtime.neuron_count,
-                "signal_preprocessing_integrated_into_chat": True,
-                "full_cognitive_loop_integrated": False,
-                "learning_enabled": False,
-                "adaptive_threshold_enabled": True,
-                "persistent_state": self._signal_runtime.persistent_state_enabled,
-            },
+            "ans100_network": ans100_status,
             "dialogue_neurons": (
                 self._dialog_neuron_service.status()
                 if self._dialog_neuron_service is not None
@@ -569,12 +587,27 @@ class JarvisCore:
                 "text": clean_text,
                 "scope": "untrusted_external_web_page",
             }
+        ans100_network_context = None
+        ans100_network_error = False
+        if self._hybrid_ans100_runtime is not None:
+            try:
+                ans100_network_context = self._hybrid_ans100_runtime.analyze(
+                    prompt,
+                    understanding_context,
+                    reasoning_context=reasoning_context,
+                    external_context=safe_external_context,
+                )
+            except Exception:
+                # A failed large graph pass must not block the legacy-safe chat path.
+                ans100_network_error = True
+
         engine_arguments = {
             "memory_context": recalled,
             "understanding_context": understanding_context,
             "signal_context": signal_context,
             "reasoning_context": reasoning_context,
             "dialog_neuron_context": dialog_neuron_context,
+            "ans100_context": ans100_network_context,
         }
         # Preserve compatibility with older test/adaptor engines on ordinary chat.
         if safe_external_context is not None:
@@ -650,6 +683,20 @@ class JarvisCore:
             "external_context_source": (
                 {"title": safe_external_context["title"], "url": safe_external_context["url"]}
                 if safe_external_context is not None else None
+            ),
+            "ans100_network_invoked": ans100_network_context is not None,
+            "ans100_network_error": ans100_network_error,
+            "ans100_network_decision": (
+                ans100_network_context.get("selected_candidate")
+                if isinstance(ans100_network_context, Mapping) else None
+            ),
+            "ans100_network_spike_count": (
+                ans100_network_context.get("spike_count", 0)
+                if isinstance(ans100_network_context, Mapping) else 0
+            ),
+            "ans100_network_processed_events": (
+                ans100_network_context.get("processed_events", 0)
+                if isinstance(ans100_network_context, Mapping) else 0
             ),
             "ans100_full_cognition_invoked": False,
             "external_actions_invoked": False,
