@@ -2,6 +2,9 @@
 
 const REGISTRY_KEY = "jarvisOwnedBrowserResources";
 const MAX_OWNED_ITEMS = 40;
+// Serialize browser mutations so simultaneous chat commands cannot overwrite the
+// same chrome.storage registry snapshot or close a stale "last" resource.
+let commandQueue = Promise.resolve();
 
 function validatePublicUrl(value) {
   if (typeof value !== "string" || value.length > 2048) {
@@ -179,8 +182,11 @@ async function handleCommand(message, sender) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.type !== "JARVIS_BRIDGE_COMMAND") return false;
-  handleCommand(message, sender)
-    .then(result => sendResponse({ok: true, result}))
+  const execute = () => handleCommand(message, sender);
+  const result = commandQueue.then(execute, execute);
+  commandQueue = result.then(() => undefined, () => undefined);
+  result
+    .then(value => sendResponse({ok: true, result: value}))
     .catch(error => sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : "Команда браузера не выполнена.",
