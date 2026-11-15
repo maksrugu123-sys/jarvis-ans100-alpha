@@ -2589,6 +2589,15 @@ private fun SettingsPanel(
                             if (conversation.contextTokenCount > 0) {
                                 Text("Токенов в KV-кэше после ответа: ${conversation.contextTokenCount}")
                             }
+                            if (conversation.estimatedInputTokens > 0) {
+                                Text("Оценка входного контекста: примерно ${conversation.estimatedInputTokens} / 1 056 токенов")
+                            }
+                            if (conversation.omittedHistoryMessages > 0) {
+                                Text("Сокращено старых сообщений истории: ${conversation.omittedHistoryMessages}")
+                            }
+                            if (conversation.includedMemoryItems > 0 || conversation.omittedMemoryItems > 0) {
+                                Text("Заметки JPVR в контексте: ${conversation.includedMemoryItems} добавлено, ${conversation.omittedMemoryItems} пропущено")
+                            }
                             Text("Весь ход диалога: ${conversation.lastTurnDurationMs} мс")
                             Text("Оценка количества слов: ${conversation.responseTokenEstimate}")
                             if (conversation.responseGenerationMs > 0L) {
@@ -2607,7 +2616,7 @@ private fun SettingsPanel(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "KV-токены — фактический размер контекста в кэше LiteRT-LM (включает историю, запрос и ответ). Время до первого фрагмента измеряется по первому текстовому чанку, а не по внутреннему первому токену.",
+                            "KV-токены — фактический размер контекста в кэше LiteRT-LM после ответа. Оценка входного контекста — только консервативная оценка по длине текста, не результат токенизатора и не гарантия точного размера. Время до первого фрагмента измеряется по первому текстовому чанку, а не по внутреннему первому токену.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
