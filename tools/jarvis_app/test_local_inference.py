@@ -129,7 +129,7 @@ class LiteRtLmLocalEngineTests(unittest.TestCase):
                 "selected_candidate": "answer",
                 "selected_candidate_id": "respond_to_original_request",
                 "decision_status": "needs_clarification",
-                "winner_candidate_id": "request_clarification",
+                "winner_candidate_id": "respond_to_original_request",
                 "winner_margin": 10 ** 10_000,
                 "candidate_signal_scores": {
                     "answer": 10 ** 10_000,
@@ -142,6 +142,7 @@ class LiteRtLmLocalEngineTests(unittest.TestCase):
         payload = json.loads(system_message.rsplit("Данные:", 1)[1].strip())
         self.assertEqual(payload["decision_status"], "needs_clarification")
         self.assertEqual(payload["selected_candidate"], "clarification")
+        self.assertIsNone(payload["winner_candidate_id"])
         self.assertIsNone(payload["selected_candidate_id"])
         self.assertEqual(payload["winner_margin"], 0.0)
         self.assertEqual(payload["candidate_signal_scores"]["answer"], 0.0)
