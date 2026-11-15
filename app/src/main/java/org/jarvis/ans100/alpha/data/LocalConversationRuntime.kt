@@ -229,8 +229,8 @@ internal object LocalConversationCodec {
  * Bounded measurements from the Android 10,000-node sparse dialogue network.
  *
  * This is evidence for the response model, not a claim that the network has
- * independently understood the user's message. The four legacy output units
- * are feedback targets and must not be interpreted as semantic decisions.
+ * independently understood the user's message. The four output units are a tiny feedback-trained readout and must not be
+ * interpreted as general semantic reasoning.
  */
 data class DialogueNeuralAnalysis(
     val networkNeuronCount: Int,
@@ -268,7 +268,7 @@ data class DialogueNeuralAnalysis(
         append(activeFeatureCount).append("; active hidden neurons=").append(activeHiddenNeuronCount)
         append("; events=").append(processedEvents)
         append("; neuron batches=").append(processedNeuronBatches)
-        append("; legacy output-unit spikes=").append(outputSpikeCount)
+        append("; output neuron spikes=").append(outputSpikeCount)
         append("; pending events=").append(pendingEvents)
         append("; state committed=").append(statePersisted).append(". ")
         if (classifierLabel != null) {
