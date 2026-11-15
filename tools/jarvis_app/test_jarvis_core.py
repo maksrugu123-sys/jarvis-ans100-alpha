@@ -68,12 +68,12 @@ class JarvisCoreTests(unittest.TestCase):
         self.assertIsNotNone(self.engine.signal_context)
         self.assertEqual(
             self.engine.signal_context["runtime_version"],
-            "JARVIS_ANS100_CONVERSATION_SIGNAL_V1",
+            "JARVIS_ANS100_CONVERSATION_SIGNAL_V2",
         )
         self.assertFalse(trace["ans100_full_cognition_invoked"])
         self.assertFalse(trace["external_actions_invoked"])
 
-    def test_status_does_not_claim_ans100_or_reasoning_are_in_chat_loop(self):
+    def test_status_reports_bounded_signal_and_structured_reasoning_capabilities(self):
         status = self.core.status([
             {"id": "memory-1", "content": "A saved memory", "category": "test"}
         ])
@@ -81,8 +81,8 @@ class JarvisCoreTests(unittest.TestCase):
         self.assertTrue(status["language_engine"]["runtime_available"])
         self.assertEqual(status["long_term_memory"]["retrieval"], "bounded_lexical_overlap_v1")
         self.assertTrue(status["reasoning_engine"]["integrated_into_chat"])
-        self.assertEqual(status["reasoning_engine"]["invocation_mode"], "explicit_structured_request_only")
-        self.assertFalse(status["reasoning_engine"]["natural_language_decomposition"])
+        self.assertEqual(status["reasoning_engine"]["invocation_mode"], "explicit_or_core_generated_candidate")
+        self.assertTrue(status["reasoning_engine"]["natural_language_decomposition"])
         self.assertFalse(status["reasoning_engine"]["execution_enabled"])
         self.assertTrue(status["ans100_network"]["signal_preprocessing_integrated_into_chat"])
         self.assertEqual(status["ans100_network"]["runtime_version"], "JARVIS_ANS100_CONVERSATION_SIGNAL_V2")
