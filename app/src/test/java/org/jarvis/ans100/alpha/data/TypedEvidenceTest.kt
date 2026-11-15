@@ -89,6 +89,19 @@ class TypedEvidenceTest {
         assertTrue(bundle.records.all { it.turnId == "turn-5" })
     }
 
+    @Test
+    fun preservesRawMessagesUpToTheDeclaredTwoThousandFortyEightCharacterLimit() {
+        val raw = "x".repeat(1_500)
+        val bundle = TypedEvidenceEncoder().encode(
+            TypedEvidenceInput("turn-long-message", raw, understanding),
+        )
+        assertEquals(
+            raw,
+            (bundle.records.single { it.feature == EvidenceFeature.USER_MESSAGE_TEXT }.value
+                as EvidenceValue.Text).value,
+        )
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsOversizedRawMessageInsteadOfSilentlyTruncating() {
         TypedEvidenceEncoder().encode(
