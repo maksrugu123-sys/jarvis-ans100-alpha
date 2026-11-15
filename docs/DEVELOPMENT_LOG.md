@@ -2859,3 +2859,13 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** GitHub source read-back only. Android instrumentation tests and prompt-packing unit tests were authored/updated but NOT RUN. No Gradle build, APK, model inference, CI/GitHub Actions, or device test was run. Automatic Actions remain manual-only; no workflow was dispatched.
 
 **Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
+
+
+## Correction — Android dialogue topology migration details — 2026-11-15
+
+- Clarification to the preceding three-stage topology entry: the in-place migration does not simply preserve weights from the 996 old feature IDs that become hidden IDs. It reads old direct feature-to-output weights and projects each old feature's four readout weights across the eight deterministic hidden targets assigned to that feature. Each new hidden-to-output weight is initialized from the mean of the old weights projected onto that hidden/output pair; pairs with no old evidence use the configured initial weight.
+- This mapping preserves an approximate learned readout tendency while changing the graph structure. It is not an exact function-preserving conversion, and the projected weights require evaluation before any accuracy claim.
+- Added an Android instrumentation test that synthesizes a v1 direct readout graph, runs the migration, and checks that a known old feature weight is projected onto its expected hidden target.
+- Updated JARVIS_10K_NEURON_SCALING_V1.md, JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md, and ANS100_DIALOGUE_REASONING_V2_ROADMAP.md so the architecture documentation reflects the 9,000-input / 996-hidden / 4-output source topology and distinguishes it from the still-unimplemented broader semantic reasoning design.
+- Verification remains GitHub source read-back only. The migration instrumentation test and all other tests remain NOT RUN; no build, APK, inference, CI, workflow, or device test was performed.
+- Branch: experiment/jarvis-integrated-prototype-v1; main untouched.
