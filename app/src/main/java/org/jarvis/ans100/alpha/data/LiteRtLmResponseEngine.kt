@@ -162,7 +162,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
             generate(activeEngine, config, clean)
         } catch (error: Exception) {
             if (cancellationRequested || error is CancellationException) {
-                throw CancellationException("Генерация остановлена пользователем.", error)
+                throw CancellationException("Генерация остановлена пользователем.")
             }
             if (!gpuRequested || activeBackend != "GPU") throw error
             disableGpuAfterFailure(file)
