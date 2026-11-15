@@ -339,7 +339,7 @@ class LocalUnderstandingPipeline {
         private val EXPLANATION_MARKERS = listOf("объясни", "расскажи", "что означает", "что такое", "explain", "describe")
         private val ACTION_MARKERS = listOf("сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь", "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь", "можешь ли", "сделать", "implement", "build", "fix", "find", "create")
         private val CORRECTION_MARKERS = listOf("я имел в виду", "не так", "исправление", "точнее", "я ошибся", "i meant", "correction")
-        private val CONTEXT_REFERENCES = listOf("это", "этот", "эта", "эти", "там", "тогда", "продолжай", "дальше", "предыдущ", "it", "that", "those", "continue", "previous")
+        private val CONTEXT_REFERENCES = listOf("это", "там", "тогда", "продолжай", "дальше", "предыдущ", "it", "that", "those", "continue", "previous")
         private val COMMON_ENTITY_STOPWORDS = setOf(
             "привет", "здравствуй", "здравствуйте", "добрый", "спасибо", "благодарю",
             "пока", "можешь", "сделай", "создай", "найди", "исправь", "проверь",
