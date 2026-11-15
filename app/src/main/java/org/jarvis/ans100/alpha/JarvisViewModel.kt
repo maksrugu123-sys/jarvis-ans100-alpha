@@ -50,6 +50,8 @@ import org.jarvis.ans100.alpha.data.AndroidHybridTopologyV2
 import org.jarvis.ans100.alpha.data.AndroidHybridEvidenceInputAdapter
 import org.jarvis.ans100.alpha.data.TypedEvidenceEncoder
 import org.jarvis.ans100.alpha.data.TypedEvidenceInput
+import org.jarvis.ans100.alpha.data.ANS100HybridPopulationController
+import org.jarvis.ans100.alpha.data.ANS100QwenHandoffBuilder
 import org.jarvis.ans100.alpha.data.LocalUnderstandingPipeline
 import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
@@ -677,10 +679,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 // classifier/readout is intentionally excluded from this turn.
                 val dialogPredictionResult: Pair<DialogFeaturePrediction?, String?> = null to null
                 val nativeFeedbackContext: NativeDialogueFeedbackContext? = null
-                val hybridTelemetrySummary = if (!clean.startsWith("/")) {
-                    runHybridDialoguePass(clean)
+                val hybridDialogueAnalysis = if (!clean.startsWith("/")) {
+                    runHybridDialoguePass(clean, before.conversation.messages)
                 } else null
-                val neuralAnalysisForModel = DialogueNeuralAnalysis(
+                val neuralAnalysisForModel = hybridDialogueAnalysis ?: DialogueNeuralAnalysis(
                     networkNeuronCount = 0,
                     activeFeatureCount = 0,
                     processedEvents = 0,
@@ -691,7 +693,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     classifierConfidenceMargin = null,
                     classifierTrainedExamples = 0,
                     statePersisted = false,
-                    hybridTelemetrySummary = hybridTelemetrySummary,
                 )
                 val runtimeState = mutableState.value.runtime
                 val signalContext = if (!clean.startsWith("/")) {
@@ -909,14 +910,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Runs the isolated seven-population network as a bounded dialogue sidecar.
-     * The report is descriptive telemetry passed to the response engine; it is
-     * not used as a truth score, action permission, or semantic decision.
+     * Runs the seven-population graph, applies a conservative population gate,
+     * and prepares the evidence-bound decision package consumed by Qwen.
+     * Core still proposes the candidate; neural activity can only validate a
+     * complete bounded path or force abstention, not claim semantic certainty.
      */
-    private fun runHybridDialoguePass(message: String): String? {
+    private fun runHybridDialoguePass(
+        message: String,
+        recentHistory: List<LocalConversationMessage>,
+    ): DialogueNeuralAnalysis? {
         if (message.isBlank() || message.length > TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS) return null
         return try {
-            nativeNetworkExecutor.submit<String?> {
+            nativeNetworkExecutor.submit<DialogueNeuralAnalysis?> {
                 try {
                     hybridNeuronNetwork.initializeHybridTopologyV2()
                     val prior = hybridNeuronNetwork.stats()
@@ -924,7 +929,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         return@submit null
                     }
                     val turnId = "hybrid-" + UUID.randomUUID()
-                    val understanding = LocalUnderstandingPipeline().analyze(message)
+                    val understanding = LocalUnderstandingPipeline().analyze(
+                        message,
+                        recentHistory.takeLast(8),
+                    )
                     val evidence = TypedEvidenceEncoder().encode(
                         TypedEvidenceInput(
                             turnId = turnId,
@@ -951,10 +959,25 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         passes++
                     }
                     val telemetry = result.hybridTelemetry ?: return@submit null
-                    buildString {
+                    val decision = ANS100HybridPopulationController().decide(
+                        evidence = evidence,
+                        understanding = understanding,
+                        telemetry = telemetry,
+                        processedEventCount = result.processedEvents,
+                        pendingEvents = result.pendingEvents,
+                        budgetExhausted = result.budgetExhausted,
+                    )
+                    val handoff = ANS100QwenHandoffBuilder().build(
+                        originalUserMessage = message,
+                        understanding = understanding,
+                        evidence = evidence,
+                        decision = decision,
+                    )
+                    val telemetrySummary = buildString {
                         append("topology=").append(telemetry.topologyId)
                         append(" v").append(telemetry.topologyVersion)
-                        append("; events=").append(telemetry.populations.sumOf { it.receivedEventCount })
+                        append("; neurons=").append(AndroidHybridTopologyV2.NEURON_COUNT)
+                        append("; events=").append(result.processedEvents)
                         append("; passes=").append(passes)
                         append("; pending=").append(result.pendingEvents)
                         append("; budgetExhausted=").append(result.budgetExhausted)
@@ -966,7 +989,25 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 ",spikes=" + activity.spikeCount +
                                 ",out=" + activity.outgoingEventCount
                         })
+                        append("; decision=").append(decision.status)
+                        append("; producer=").append(decision.decisionProducer)
                     }
+                    DialogueNeuralAnalysis(
+                        // Legacy four-output fields deliberately remain zero: this
+                        // object describes the hybrid graph, not the retired graph.
+                        networkNeuronCount = 0,
+                        activeFeatureCount = 0,
+                        processedEvents = 0,
+                        processedNeuronBatches = 0,
+                        outputSpikeCount = 0,
+                        pendingEvents = 0,
+                        classifierLabel = null,
+                        classifierConfidenceMargin = null,
+                        classifierTrainedExamples = 0,
+                        statePersisted = false,
+                        hybridTelemetrySummary = telemetrySummary,
+                        hybridQwenHandoff = handoff,
+                    )
                 } catch (_: Exception) {
                     null
                 }
