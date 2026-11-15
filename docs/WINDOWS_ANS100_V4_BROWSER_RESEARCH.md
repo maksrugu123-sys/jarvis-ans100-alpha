@@ -71,7 +71,7 @@ Do not attach to a user's personal browser through remote-debugging flags or cop
 
 ## Verification record
 
-- `tools/neuron_runtime/test_hybrid_ans100.py`, `tools/neuron_runtime/test_hybrid_ans100_runtime.py`, `tools/jarvis_app/test_jarvis_core.py`, `tools/jarvis_app/test_workspace_files.py` and `tools/jarvis_app/test_server.py`: authored/updated, **NOT RUN**.
+- `tools/neuron_runtime/test_hybrid_ans100.py`, `tools/neuron_runtime/test_hybrid_ans100_runtime.py`, `tools/jarvis_app/test_jarvis_core.py`, `tools/jarvis_app/test_local_inference.py`, `tools/jarvis_app/test_local_fallback.py`, `tools/jarvis_app/test_workspace_files.py` and `tools/jarvis_app/test_server.py`: authored/updated, **NOT RUN**.
 - The live desktop Core now invokes the 10,000-neuron graph adapter on each chat turn and passes its allowlisted readout to the language engine. This is source-level integration only; actual graph execution is **NOT VERIFIED**.
 - No Python tests, Windows launch, browser extension installation, Playwright launch, model inference, Gradle build, CI, or GitHub Actions workflow was run.
 - Browser Bridge 1.1.0 and its chat command route remain source changes only; Chrome/Edge behavior is **NOT VERIFIED**.
