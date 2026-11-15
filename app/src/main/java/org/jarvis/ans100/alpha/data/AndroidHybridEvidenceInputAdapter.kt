@@ -121,8 +121,42 @@ object AndroidHybridEvidenceInputAdapter {
     /** Stable, explicit feature/ordinal mapping into the first 1,056 input IDs. */
     fun neuronIdFor(record: TypedEvidenceRecord): Int {
         validateSourceAndStatus(record)
+        val candidateInputId = when (record.feature) {
+            EvidenceFeature.CANDIDATE_ANSWER_SUPPORT ->
+                ANS100CandidateSlotContract.inputNeuronId(
+                    ANS100CandidateSlotContract.Slot.ANSWER,
+                    ANS100CandidateSlotContract.Polarity.SUPPORT,
+                )
+            EvidenceFeature.CANDIDATE_ANSWER_CONFLICT ->
+                ANS100CandidateSlotContract.inputNeuronId(
+                    ANS100CandidateSlotContract.Slot.ANSWER,
+                    ANS100CandidateSlotContract.Polarity.CONFLICT,
+                )
+            EvidenceFeature.CANDIDATE_CLARIFICATION_SUPPORT ->
+                ANS100CandidateSlotContract.inputNeuronId(
+                    ANS100CandidateSlotContract.Slot.CLARIFICATION,
+                    ANS100CandidateSlotContract.Polarity.SUPPORT,
+                )
+            EvidenceFeature.CANDIDATE_CLARIFICATION_CONFLICT ->
+                ANS100CandidateSlotContract.inputNeuronId(
+                    ANS100CandidateSlotContract.Slot.CLARIFICATION,
+                    ANS100CandidateSlotContract.Polarity.CONFLICT,
+                )
+            EvidenceFeature.CANDIDATE_ABSTAIN_SUPPORT ->
+                ANS100CandidateSlotContract.inputNeuronId(
+                    ANS100CandidateSlotContract.Slot.ABSTAIN,
+                    ANS100CandidateSlotContract.Polarity.SUPPORT,
+                )
+            EvidenceFeature.CANDIDATE_ABSTAIN_CONFLICT ->
+                ANS100CandidateSlotContract.inputNeuronId(
+                    ANS100CandidateSlotContract.Slot.ABSTAIN,
+                    ANS100CandidateSlotContract.Polarity.CONFLICT,
+                )
+            else -> null
+        }
+        if (candidateInputId != null) return candidateInputId
         val featureIndex = featureOrder.indexOf(record.feature)
-        require(featureIndex >= 0) { "feature is not assigned to the hybrid V2 input population" }
+        require(featureIndex >= 0) { "feature is not assigned to the hybrid input population" }
 
         val ordinalText = record.recordId.substringAfterLast(':', missingDelimiterValue = "")
         require(ordinalText.isNotEmpty() && ordinalText.all { it.isDigit() }) {
@@ -155,7 +189,13 @@ object AndroidHybridEvidenceInputAdapter {
             EvidenceFeature.CORE_PLAN_GOAL_HINT,
             EvidenceFeature.CORE_PLAN_STEP_HINT,
             EvidenceFeature.CORE_REQUIRES_CLARIFICATION_HINT,
-            EvidenceFeature.CORE_CLARIFICATION_QUESTION_HINT ->
+            EvidenceFeature.CORE_CLARIFICATION_QUESTION_HINT,
+            EvidenceFeature.CANDIDATE_ANSWER_SUPPORT,
+            EvidenceFeature.CANDIDATE_ANSWER_CONFLICT,
+            EvidenceFeature.CANDIDATE_CLARIFICATION_SUPPORT,
+            EvidenceFeature.CANDIDATE_CLARIFICATION_CONFLICT,
+            EvidenceFeature.CANDIDATE_ABSTAIN_SUPPORT,
+            EvidenceFeature.CANDIDATE_ABSTAIN_CONFLICT ->
                 record.source == EvidenceSourceKind.CORE_REASONING_PLAN &&
                     record.status == EvidenceStatus.HEURISTIC
             EvidenceFeature.CORE_LANGUAGE_HINT,
