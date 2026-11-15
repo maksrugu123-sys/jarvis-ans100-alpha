@@ -566,7 +566,7 @@ class LocalConsoleService:
                 "id": DESKTOP_ANS100_TOPOLOGY_ID,
                 "version": DESKTOP_ANS100_TOPOLOGY_VERSION,
                 "neuron_count": DESKTOP_ANS100_NEURON_COUNT,
-                "connection_count": DESKTOP_ANS100_CONNECTION_COUNT,
+                "declared_connection_count": DESKTOP_ANS100_CONNECTION_COUNT,
                 "populations": [
                     {
                         "id": population.id,
