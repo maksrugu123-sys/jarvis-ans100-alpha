@@ -8,6 +8,7 @@ them and reports advisory readouts. It is not a semantic model or learned policy
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import math
 import uuid
 
 from .hybrid_ans100 import (
@@ -84,8 +85,11 @@ _CANDIDATES = ("answer", "clarification", "abstain")
 def _bounded_confidence(value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0.0
-    result = float(value)
-    return result if 0.0 <= result <= 1.0 else 0.0
+    try:
+        result = float(value)
+    except (OverflowError, ValueError):
+        return 0.0
+    return result if math.isfinite(result) and 0.0 <= result <= 1.0 else 0.0
 
 
 def _text(value: object, maximum: int = 2_048) -> str:
@@ -346,16 +350,23 @@ def _neuron_id_for(record: Mapping[str, object]) -> int:
     if not isinstance(feature, str):
         raise ValueError("typed evidence feature must be a string")
     _validate_source_status(feature, record.get("source"), record.get("status"))
+    record_id = record.get("record_id")
+    if not isinstance(record_id, str) or not record_id.startswith(feature + ":"):
+        raise ValueError("evidence record ID must be bound to its declared feature")
+    ordinal_text = record_id[len(feature) + 1:]
+    if not ordinal_text.isdigit():
+        raise ValueError("evidence record ordinal is invalid")
+    ordinal = int(ordinal_text)
+    if not 0 <= ordinal < _MAX_ORDINAL_PER_FEATURE:
+        raise ValueError("evidence feature ordinal exceeds its reserved input slots")
     for (_candidate, _polarity), (candidate_feature, neuron_id) in _CANDIDATE_INPUTS.items():
         if feature == candidate_feature:
+            if ordinal != 0:
+                raise ValueError("candidate evidence must use its reserved ordinal-zero input slot")
             return neuron_id
     feature_index = _FEATURE_INDEX.get(feature)
     if feature_index is None:
         raise ValueError("feature is not assigned to the hybrid input population")
-    record_id = record.get("record_id")
-    if not isinstance(record_id, str) or ":" not in record_id:
-        raise ValueError("evidence record ID must end in its explicit numeric ordinal")
-    ordinal_text = record_id.rsplit(":", 1)[1]
     if not ordinal_text.isdigit():
         raise ValueError("evidence record ordinal is invalid")
     ordinal = int(ordinal_text)
