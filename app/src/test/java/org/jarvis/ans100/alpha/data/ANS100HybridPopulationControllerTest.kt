@@ -97,10 +97,9 @@ class ANS100HybridPopulationControllerTest {
             budgetExhausted = false,
         )
 
-        if (understanding.reasoningPlan.requiresClarification) {
-            assertEquals(ANS100DecisionStatus.NEEDS_CLARIFICATION, decision.status)
-            assertTrue(!decision.abstentionReason.isNullOrBlank())
-            assertEquals(null, decision.selectedCandidateId)
-        }
+        assertTrue(understanding.reasoningPlan.requiresClarification)
+        assertEquals(ANS100DecisionStatus.NEEDS_CLARIFICATION, decision.status)
+        assertTrue(!decision.abstentionReason.isNullOrBlank())
+        assertEquals(null, decision.selectedCandidateId)
     }
 }
