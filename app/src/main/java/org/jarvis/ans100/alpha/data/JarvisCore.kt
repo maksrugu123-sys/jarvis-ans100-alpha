@@ -416,6 +416,7 @@ class JarvisCore(
     fun send(
         prompt: String,
         signalContext: ConversationSignalContext? = null,
+        dialogueNeuralAnalysis: DialogueNeuralAnalysis? = null,
     ): List<LocalConversationMessage> {
         val clean = prompt.trim()
         if (clean.isEmpty() || clean.length > LocalConversationRepository.MAX_MESSAGE_CHARS ||
@@ -444,7 +445,9 @@ class JarvisCore(
                 }
                 lastRetrievedMemoryCount = memories.size
                 LocalDialogueFastPaths.assistantIdentityReply(clean, fullHistory)
-                    ?: languageEngine.respond(clean, context, memories, signalContext, understanding)
+                    ?: languageEngine.respond(
+                        clean, context, memories, signalContext, understanding, dialogueNeuralAnalysis,
+                    )
             }
         }
         if (response.isBlank() ||
@@ -538,7 +541,8 @@ class JarvisCore(
         const val HELP_MESSAGE =
             "Я — JARVIS. JARVIS Core управляет ходом диалога, а языковая модель формирует текст ответа. " +
             "Подтверждённые воспоминания JPVR могут передаваться как контекст. ANS-100 выполняет только " +
-            "ограниченную числовую обработку входного сигнала сетью из 10 нейронов; обучение на диалоге пока выключено. " +
+            "10-нейронный анализ формы запроса и экспериментальную разреженную Android-сеть на 10 000 узлов. " +
+            "Измерения большой сети могут передаваться языковой модели как ограниченные признаки; это пока не самостоятельное семантическое мышление. " +
             "Команды: /help — справка, /status — состояние компонентов."
     }
 }
@@ -557,7 +561,8 @@ class LocalConversationCoordinator(
     fun send(
         prompt: String,
         signalContext: ConversationSignalContext? = null,
-    ): List<LocalConversationMessage> = core.send(prompt, signalContext)
+        dialogueNeuralAnalysis: DialogueNeuralAnalysis? = null,
+    ): List<LocalConversationMessage> = core.send(prompt, signalContext, dialogueNeuralAnalysis)
     fun sendWithExternalResult(
         prompt: String,
         assistantResponse: String,
