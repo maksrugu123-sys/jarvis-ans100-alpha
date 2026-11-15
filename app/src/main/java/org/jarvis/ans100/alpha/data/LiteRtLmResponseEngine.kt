@@ -3,6 +3,8 @@ import android.app.ActivityManager
 import android.content.Context
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Conversation
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
 import com.google.ai.edge.litertlm.Contents
@@ -18,6 +20,8 @@ data class LiteRtLmPerformanceSnapshot(
     val initializationMs: Long = 0L,
     val generationMs: Long = 0L,
     val outputTokenEstimate: Int = 0,
+    val timeToFirstTextMs: Long = 0L,
+    val contextTokenCount: Int = 0,
 )
 
 class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmModelStore) : LocalResponseEngine, AutoCloseable {
@@ -29,21 +33,29 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     @Volatile private var backendNotice: String? = null
     private var engine: Engine? = null
     private var loadedPath: String? = null
+    @Volatile private var activeConversation: Conversation? = null
     @Volatile var onPartialResponse: ((String) -> Unit)? = null
+    @Volatile var onGenerationStateChanged: ((Boolean) -> Unit)? = null
     @Volatile private var lastInitializationMs: Long = 0L
     @Volatile private var lastGenerationMs: Long = 0L
     @Volatile private var lastOutputTokenEstimate: Int = 0
+    @Volatile private var lastTimeToFirstTextMs: Long = 0L
+    @Volatile private var lastContextTokenCount: Int = 0
 
     /** Clear per-turn generation metrics without losing the last engine initialization measurement. */
     fun resetTurnMetrics() {
         lastGenerationMs = 0L
         lastOutputTokenEstimate = 0
+        lastTimeToFirstTextMs = 0L
+        lastContextTokenCount = 0
     }
 
     fun performanceSnapshot(): LiteRtLmPerformanceSnapshot = LiteRtLmPerformanceSnapshot(
         initializationMs = lastInitializationMs,
         generationMs = lastGenerationMs,
         outputTokenEstimate = lastOutputTokenEstimate,
+        timeToFirstTextMs = lastTimeToFirstTextMs,
+        contextTokenCount = lastContextTokenCount,
     )
 
     override val languageModelConfigured: Boolean
@@ -147,6 +159,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val rawAnswer = try {
             generate(activeEngine, config, clean)
         } catch (error: Exception) {
+            if (error is CancellationException) throw error
             if (!gpuRequested || activeBackend != "GPU") throw error
             disableGpuAfterFailure(file)
             generate(getEngine(file), config, clean)
@@ -213,28 +226,46 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
 
     private fun generate(activeEngine: Engine, config: ConversationConfig, prompt: String): String {
         val conversation = activeEngine.createConversation(config)
+        activeConversation = conversation
+        runCatching { onGenerationStateChanged?.invoke(true) }
         try {
             val startedAtNs = System.nanoTime()
             return try {
                 val output = StringBuilder()
+                var firstTextAtNs = 0L
                 runBlocking {
                     conversation.sendMessageAsync(prompt).collect { message ->
                         val chunk = message.contents.contents
                             .filterIsInstance<Content.Text>()
                             .joinToString(separator = "") { it.text }
                         if (chunk.isNotEmpty()) {
+                            if (firstTextAtNs == 0L) firstTextAtNs = System.nanoTime()
                             output.append(chunk)
                             runCatching { onPartialResponse?.invoke(output.toString()) }
                         }
                     }
                 }
+                lastTimeToFirstTextMs = if (firstTextAtNs == 0L) 0L
+                    else ((firstTextAtNs - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
+                lastContextTokenCount = runCatching { conversation.getTokenCount() }.getOrDefault(0)
                 output.toString()
             } finally {
                 lastGenerationMs = ((System.nanoTime() - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
             }
         } finally {
-            conversation.close()
+            if (activeConversation === conversation) activeConversation = null
+            runCatching { conversation.close() }
+            runCatching { onGenerationStateChanged?.invoke(false) }
         }
+    }
+
+    /** Safe to call from the UI thread; the cancelled Conversation is closed in generate()'s finally block. */
+    fun cancelGeneration(): Boolean {
+        val conversation = activeConversation ?: return false
+        return runCatching {
+            conversation.cancelProcess()
+            true
+        }.getOrDefault(false)
     }
 
     private fun disableGpuAfterFailure(file: File) {
