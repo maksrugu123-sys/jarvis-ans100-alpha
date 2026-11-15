@@ -247,12 +247,6 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 icon = { Text("☷") },
                                 label = { Text("Задачи") },
                             )
-                            NavigationBarItem(
-                                selected = selectedTab == 3,
-                                onClick = { selectedTab = 3 },
-                                icon = { Text("⚙") },
-                                label = { Text("Настройки") },
-                            )
                         }
                     }
                 },
@@ -264,7 +258,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (selectedTab != 0) Header(isBusy = ui.conversation.isBusy)
+                    if (selectedTab != 0) Header(
+                        isBusy = ui.conversation.isBusy,
+                        isSettingsOpen = selectedTab == 3,
+                        onSettingsClick = { selectedTab = if (selectedTab == 3) 0 else 3 },
+                    )
                     when (selectedTab) {
                         0 -> {
                             ChatTitleBar(
@@ -543,6 +541,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 glowEnabled = glowEnabled,
                                 onGlowChange = { glowEnabled = it; uiPreferences.edit().putBoolean("flowing_glow", it).apply() },
                                 conversation = ui.conversation,
+                                gpuEnabled = ui.conversation.gpuEnabled,
+                                onGpuChange = viewModel::setGpuEnabled,
                                 onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
                                 onDownloadModel = viewModel::downloadConversationModel,
                                 onCancelDownload = viewModel::cancelConversationModelDownload,
@@ -1180,13 +1180,20 @@ private fun WorkspaceMemoryPanel(
 }
 
 @Composable
-private fun Header(isBusy: Boolean) {
+private fun Header(
+    isBusy: Boolean,
+    isSettingsOpen: Boolean,
+    onSettingsClick: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        IconButton(onClick = onSettingsClick) {
+            Text(if (isSettingsOpen) "←" else "⚙", style = MaterialTheme.typography.titleLarge)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 "JARVIS",
                 style = MaterialTheme.typography.headlineLarge,
@@ -2296,18 +2303,20 @@ private fun ChatTitleBar(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().then(rememberGlowBorder(glowEnabled, 18.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        IconButton(onClick = onOpenSettings) {
+            Text("⚙", style = MaterialTheme.typography.titleLarge)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("JARVIS", style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text("$backendLabel · ${if (isBusy) "формирует ответ" else "локально"}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
-        TextButton(onClick = onOpenSettings) { Text("⚙") }
     }
 }
 
@@ -2442,6 +2451,8 @@ private fun SettingsPanel(
     glowEnabled: Boolean,
     onGlowChange: (Boolean) -> Unit,
     conversation: LocalConversationUiState,
+    gpuEnabled: Boolean,
+    onGpuChange: (Boolean) -> Unit,
     onSelectModel: () -> Unit,
     onDownloadModel: () -> Unit,
     onCancelDownload: () -> Unit,
@@ -2504,10 +2515,29 @@ private fun SettingsPanel(
             "model" -> {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        SectionHeading("Локальная языковая модель", "Qwen3 · LiteRT-LM · CPU")
+                        SectionHeading("Локальная языковая модель", "Qwen3 · LiteRT-LM · CPU / GPU")
                         Text(conversation.modelStatus, style = MaterialTheme.typography.bodyMedium)
                         Text(conversation.backendLabel, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Использовать GPU", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Экспериментально. При несовместимости JARVIS автоматически вернётся на CPU.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Checkbox(
+                                checked = gpuEnabled,
+                                onCheckedChange = onGpuChange,
+                                enabled = !conversation.isBusy,
+                            )
+                        }
                         if (!conversation.modelInstalled) {
                             Button(onClick = onDownloadModel, enabled = !conversation.isBusy, modifier = Modifier.fillMaxWidth()) {
                                 Text(if (conversation.modelDownloadStatus != null) "Продолжить загрузку" else "Скачать модель · около 331 МиБ")

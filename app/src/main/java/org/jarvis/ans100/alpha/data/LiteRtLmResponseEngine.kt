@@ -20,6 +20,10 @@ data class LiteRtLmPerformanceSnapshot(
 class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmModelStore) : LocalResponseEngine, AutoCloseable {
     private val appContext = context.applicationContext
     private val fallback = LocalFallbackResponseEngine()
+    private val backendPreferences = appContext.getSharedPreferences("jarvis_litert_backend_v1", Context.MODE_PRIVATE)
+    @Volatile private var gpuRequested = backendPreferences.getBoolean("gpu_enabled", false)
+    @Volatile private var activeBackend: String? = null
+    @Volatile private var backendNotice: String? = null
     private var engine: Engine? = null
     private var loadedPath: String? = null
     @Volatile private var lastInitializationMs: Long = 0L
@@ -41,8 +45,25 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     override val languageModelConfigured: Boolean
         get() = modelStore.installedFile() != null
 
+    val gpuEnabled: Boolean
+        get() = gpuRequested
+
     override val backendLabel: String
-        get() = if (languageModelConfigured) "LiteRT-LM · Qwen3-0.6B INT4 · CPU · offline" else fallback.backendLabel
+        get() {
+            if (!languageModelConfigured) return fallback.backendLabel
+            val backend = activeBackend ?: if (gpuRequested) "GPU (ожидает запуска)" else "CPU"
+            val notice = backendNotice?.let { " · $it" }.orEmpty()
+            return "LiteRT-LM · Qwen3-0.6B INT4 · $backend · offline$notice"
+        }
+
+    fun setGpuEnabled(enabled: Boolean) {
+        if (gpuRequested == enabled) return
+        closeEngine()
+        gpuRequested = enabled
+        backendPreferences.edit().putBoolean("gpu_enabled", enabled).apply()
+        activeBackend = null
+        backendNotice = null
+    }
 
     override fun respond(prompt: String, recentHistory: List<LocalConversationMessage>): String =
         respond(prompt, recentHistory, emptyList(), null)
@@ -119,25 +140,17 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
             channels = emptyList(),
             maxOutputToken = MAX_OUTPUT_TOKENS,
         )
-        val conversation = activeEngine.createConversation(config)
-        try {
-            val generationStartedAtNs = System.nanoTime()
-            val rawAnswer = try {
-                conversation.sendMessage(clean, maxOutputToken = MAX_OUTPUT_TOKENS).toString()
-            } finally {
-                lastGenerationMs = ((System.nanoTime() - generationStartedAtNs) / 1_000_000L).coerceAtLeast(0L)
-            }
-            val answer = rawAnswer.trim()
-            if (answer.isEmpty()) throw LocalConversationException("Модель вернула пустой ответ.")
-            lastOutputTokenEstimate = answer.split(Regex("\\s+")).count { it.isNotBlank() }
-            return answer.take(LocalConversationRepository.MAX_MESSAGE_CHARS)
-        } catch (error: LocalConversationException) {
-            throw error
-        } catch (_: Exception) {
-            throw LocalConversationException("Локальная модель не смогла ответить. Проверьте файл модели и доступную память.")
-        } finally {
-            conversation.close()
+        val rawAnswer = try {
+            generate(activeEngine, config, clean)
+        } catch (error: Exception) {
+            if (!gpuRequested || activeBackend != "GPU") throw error
+            disableGpuAfterFailure(file)
+            generate(getEngine(file), config, clean)
         }
+        val answer = rawAnswer.trim()
+        if (answer.isEmpty()) throw LocalConversationException("Модель вернула пустой ответ.")
+        lastOutputTokenEstimate = answer.split(Regex("\\s+")).count { it.isNotBlank() }
+        return answer.take(LocalConversationRepository.MAX_MESSAGE_CHARS)
     }
 
     private fun checkMemory() {
@@ -156,17 +169,65 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         if (existing != null && loadedPath == path) return existing
         if (existing != null) closeEngine()
         checkMemory()
-        val candidate = Engine(EngineConfig(modelPath = path, backend = Backend.CPU(), maxNumTokens = 1280, cacheDir = appContext.cacheDir.absolutePath))
-        // Do not close an Engine if initialize throws; the runtime marks it uninitialized.
-        val initializationStartedAtNs = System.nanoTime()
+        if (gpuRequested) {
+            try {
+                val gpu = initializeEngine(file, Backend.GPU())
+                engine = gpu
+                loadedPath = path
+                activeBackend = "GPU"
+                backendNotice = null
+                return gpu
+            } catch (_: Exception) {
+                gpuRequested = false
+                backendPreferences.edit().putBoolean("gpu_enabled", false).apply()
+                backendNotice = "GPU недоступен, выбран CPU"
+            }
+        }
+        val cpu = initializeEngine(file, Backend.CPU())
+        engine = cpu
+        loadedPath = path
+        activeBackend = "CPU"
+        return cpu
+    }
+
+    private fun initializeEngine(file: File, backend: Backend): Engine {
+        val candidate = Engine(EngineConfig(
+            modelPath = file.absolutePath,
+            backend = backend,
+            maxNumTokens = 1280,
+            cacheDir = appContext.cacheDir.absolutePath,
+        ))
+        // Preserve LiteRT-LM lifecycle handling for failed initialization candidates.
+        val startedAtNs = System.nanoTime()
         try {
             candidate.initialize()
         } finally {
-            lastInitializationMs = ((System.nanoTime() - initializationStartedAtNs) / 1_000_000L).coerceAtLeast(0L)
+            lastInitializationMs = ((System.nanoTime() - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
         }
-        engine = candidate
-        loadedPath = path
         return candidate
+    }
+
+    private fun generate(activeEngine: Engine, config: ConversationConfig, prompt: String): String {
+        val conversation = activeEngine.createConversation(config)
+        try {
+            val startedAtNs = System.nanoTime()
+            return try {
+                conversation.sendMessage(prompt, maxOutputToken = MAX_OUTPUT_TOKENS).toString()
+            } finally {
+                lastGenerationMs = ((System.nanoTime() - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
+            }
+        } finally {
+            conversation.close()
+        }
+    }
+
+    private fun disableGpuAfterFailure(file: File) {
+        closeEngine()
+        gpuRequested = false
+        backendPreferences.edit().putBoolean("gpu_enabled", false).apply()
+        backendNotice = "GPU завершился ошибкой, автоматически выбран CPU"
+        activeBackend = null
+        getEngine(file)
     }
 
     private fun closeEngine() {

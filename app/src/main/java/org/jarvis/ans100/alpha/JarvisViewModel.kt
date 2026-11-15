@@ -57,6 +57,7 @@ data class LocalConversationUiState(
     val error: String? = null,
     val backendLabel: String = "Локальный базовый ответчик · без LLM",
     val modelInstalled: Boolean = false,
+    val gpuEnabled: Boolean = false,
     val modelStatus: String = "Модель не установлена.",
     val modelDownloadProgress: Float? = null,
     val modelDownloadStatus: String? = null,
@@ -214,6 +215,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 records = localMemorySnapshot.records,
                 isLoaded = localMemorySnapshot.loaded,
                 error = localMemorySnapshot.error,
+            ),
+            conversation = mutableState.value.conversation.copy(
+                gpuEnabled = conversationResponseEngine.gpuEnabled,
+                backendLabel = conversationCoordinator.backendLabel,
             ),
         )
         val extensionInstalled = isTermuxInstalled()
@@ -392,6 +397,27 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun setGpuEnabled(enabled: Boolean) {
+        val current = mutableState.value
+        if (current.conversation.isBusy) return
+        try {
+            conversationResponseEngine.setGpuEnabled(enabled)
+            mutableState.value = current.copy(
+                conversation = current.conversation.copy(
+                    gpuEnabled = conversationResponseEngine.gpuEnabled,
+                    backendLabel = conversationResponseEngine.backendLabel,
+                    error = null,
+                ),
+            )
+        } catch (error: Exception) {
+            mutableState.value = current.copy(
+                conversation = current.conversation.copy(
+                    error = error.message ?: "Не удалось изменить режим GPU.",
+                ),
+            )
+        }
+    }
+
     fun reloadConversation() {
         try {
             val messages = conversationCoordinator.history()
@@ -441,7 +467,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val current = mutableState.value
                     mutableState.value = current.copy(conversation = current.conversation.copy(
                         isBusy = false,
-                        backendLabel = conversationCoordinator.backendLabel,
+                        backendLabel = conversationResponseEngine.backendLabel,
+                        gpuEnabled = conversationResponseEngine.gpuEnabled,
                         modelInstalled = modelStore.installedFile() != null,
                         modelStatus = modelStore.statusMessage(),
                         modelDownloadProgress = null,
@@ -675,6 +702,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             messages = messages,
                             isBusy = false,
                             error = null,
+                            backendLabel = conversationResponseEngine.backendLabel,
+                            gpuEnabled = conversationResponseEngine.gpuEnabled,
                             dialogFeaturePrediction = dialogPredictionResult.first,
                             dialogFeatureError = dialogPredictionResult.second,
                             lastRewardedAssistantMessageId = null,
@@ -700,6 +729,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     mutableState.value = current.copy(
                         conversation = current.conversation.copy(
                             isBusy = false,
+                            backendLabel = conversationResponseEngine.backendLabel,
+                            gpuEnabled = conversationResponseEngine.gpuEnabled,
                             error = error.message ?: "Локальный ответ не сохранён.",
                         ),
                     )

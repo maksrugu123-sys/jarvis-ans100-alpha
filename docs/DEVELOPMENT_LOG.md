@@ -2675,3 +2675,19 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Android Actions run #12 compiled the Kotlin sources and executed 107 unit tests; two new fact-recall tests failed because the project-name regex treated the dot in RAZLOM.NET as sentence punctuation.
 - Changed the sentence boundary to stop only on sentence punctuation followed by whitespace or on the final punctuation at end-of-input. Dots inside domain-style project names remain part of the extracted name.
 - Re-run the complete Android unit-test suite and APK packaging on the next Actions run. The run #12 APK step was skipped after the two test failures.
+
+
+## 2026-11-15 — Move settings to the top-left and add experimental LiteRT-LM GPU selection
+
+**Changed:**
+- Removed Settings from the bottom navigation. A single top-left gear control now opens the unified settings destination from chat and the other main sections; the same control becomes a back-to-chat arrow while Settings is open.
+- Added a persisted GPU preference for the Qwen3 LiteRT-LM engine. GPU is opt-in; CPU remains the default.
+- Added LiteRT-LM's optional Android native-library declarations for `libvndksupport.so` and `libOpenCL.so`.
+- Added initialization-time GPU-to-CPU fallback and one same-turn CPU retry if GPU inference fails after initialization. A failed GPU attempt disables the preference to avoid repeating a known-bad backend on every message.
+- Exposed the GPU preference in model settings and refresh the active backend label after generation.
+
+**Compatibility basis:** Google LiteRT-LM Android documentation describes `Backend.GPU()` and the two optional native-library declarations. Actual compatibility with this device and the installed Qwen3 model remains unverified.
+
+**Verification:** source edits only. No Gradle build, unit tests, APK, GPU inference, device profiling, latency comparison, thermal test or battery test was run. Automatic Actions triggers remain disabled; the Android workflow is manual-only.
+
+**Limitations / next:** verify OpenCL availability and real Qwen3 GPU inference on the phone. If GPU initialization or inference fails, the same chat turn should retry on CPU. CPU remains the default until a successful device test demonstrates a benefit.
