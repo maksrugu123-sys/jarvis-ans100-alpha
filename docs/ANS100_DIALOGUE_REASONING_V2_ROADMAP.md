@@ -122,4 +122,4 @@ A new `ANS100HybridPopulationController` now checks whether all seven population
 
 The resulting evidence-bound `ANS100QwenHandoff` is carried in `DialogueNeuralAnalysis` and preferred by `LiteRtLmResponseEngine` even when the older optional Core-policy handoff setting is off. Prompt packing now prioritizes this handoff over optional telemetry. Qwen is instructed to preserve abstention/clarification and not execute tools or actions.
 
-Legacy manual diagnostic/reward APIs remain for cleanup. The implementation is source-only: no Gradle build, tests, CI, APK/AAB, benchmark or device run was performed.
+Legacy manual diagnostic/reward APIs remain for cleanup. A JVM test file now covers complete-population selection, missing-population abstention, pending-queue/budget abstention and clarification preservation; these tests are authored but NOT run. The implementation is source-only: no Gradle build, tests, CI, APK/AAB, benchmark or device run was performed.
