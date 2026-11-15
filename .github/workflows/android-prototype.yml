@@ -1,15 +1,6 @@
 name: Android first prototype
 
 on:
-  push:
-    branches:
-      - experiment/jarvis-integrated-prototype-v1
-    paths:
-      - "app/**"
-      - "build.gradle.kts"
-      - "settings.gradle.kts"
-      - "gradle.properties"
-      - ".github/workflows/android-prototype.yml"
   workflow_dispatch:
 
 permissions:
