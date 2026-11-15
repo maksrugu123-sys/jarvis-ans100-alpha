@@ -412,6 +412,13 @@ class LiteRtLmLocalEngine:
                         "needs_clarification": "clarification",
                         "abstained": "abstain",
                     }[raw_status]
+                    expected_winner_id = {
+                        "selected": "respond_to_original_request",
+                        "needs_clarification": "request_clarification",
+                        "abstained": "abstain_without_supported_candidate",
+                    }[raw_status]
+                    if winner_id != expected_winner_id:
+                        winner_id = None
                     selected_id = (
                         "respond_to_original_request" if raw_status == "selected" else None
                     )
