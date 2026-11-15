@@ -31,7 +31,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "'' | Out-File -FilePath $err -Encoding utf8;" ^
   "$p=Start-Process -FilePath $exe -ArgumentList @('--port','8765','--platform','desktop') -PassThru -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $err;" ^
   "$ready=$false;" ^
-  "for($i=0;$i -lt 45;$i++) { if($p.HasExited){break}; try{$h=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 2; if($h.status -eq 'ok' -and $h.platform -eq 'desktop'){$ready=$true;break}}catch{}; Start-Sleep -Seconds 1 };" ^
+  "for($i=0;$i -lt 45;$i++) { if($p.HasExited){break}; try{$h=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 2; if($h.status -eq 'ok' -and $h.platform -eq 'desktop' -and $h.auth_required -eq $false -and $h.auth_scheme -eq 'none'){$ready=$true;break}}catch{}; Start-Sleep -Seconds 1 };" ^
   "if(-not $ready) { Write-Host '[ОШИБКА] JARVIS не запустился.' -ForegroundColor Red; if(Test-Path $log){Get-Content $log -Tail 30}; if(Test-Path $err){Get-Content $err -Tail 30}; if(-not $p.HasExited){Stop-Process -Id $p.Id -Force}; Read-Host 'Нажмите Enter для закрытия'; exit 1 };" ^
   "Write-Host '[ГОТОВО] JARVIS запущен. Это единственное окно управления.' -ForegroundColor Green;" ^
   "$pf86=[Environment]::GetFolderPath('ProgramFilesX86'); $pf=[Environment]::GetFolderPath('ProgramFiles'); $local=$env:LOCALAPPDATA;" ^
