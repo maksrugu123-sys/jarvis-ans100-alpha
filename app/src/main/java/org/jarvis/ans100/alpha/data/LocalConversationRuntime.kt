@@ -243,6 +243,7 @@ data class DialogueNeuralAnalysis(
     val classifierConfidenceMargin: Double?,
     val classifierTrainedExamples: Int,
     val statePersisted: Boolean,
+    val networkOutputScores: Map<String, Double> = emptyMap(),
 ) {
     init {
         require(networkNeuronCount in 0..10_000)
@@ -256,6 +257,8 @@ data class DialogueNeuralAnalysis(
             (classifierConfidenceMargin.isFinite() && classifierConfidenceMargin in 0.0..100.0))
         require(classifierTrainedExamples >= 0)
         require(classifierLabel == null || classifierTrainedExamples > 0)
+        require(networkOutputScores.keys.all { it in setOf("greeting", "question", "thanks", "farewell") })
+        require(networkOutputScores.values.all { it.isFinite() && it in 0.0..1.0 })
     }
 
     fun toModelContext(): String = buildString {
@@ -272,7 +275,14 @@ data class DialogueNeuralAnalysis(
         } else {
             append("No confident trained classifier label. ")
         }
-        append("Numeric feature evidence only; four legacy output units are feedback targets, not semantic decisions. ")
+        if (networkOutputScores.isNotEmpty()) {
+            append("Learned synaptic output preferences (mean weights, not probabilities): ")
+            append(networkOutputScores.toSortedMap().entries.joinToString(", ") { (label, score) ->
+                "$label=${String.format(Locale.ROOT, "%.3f", score)}"
+            })
+            append(". ")
+        }
+        append("Numeric feature evidence only; four output units are feedback-trained readout targets, not general semantic reasoning. ")
         append("Check the user's message and Core plan before choosing answer content.")
     }
 }
