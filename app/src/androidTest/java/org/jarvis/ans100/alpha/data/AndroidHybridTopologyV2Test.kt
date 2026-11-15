@@ -53,9 +53,9 @@ class AndroidHybridTopologyV2Test {
                 AndroidHybridTopologyV2.populations.any { it.contains(edge.targetNeuronId) }
         })
         assertTrue(first.all { it.sourceNeuronId != it.targetNeuronId && it.delayNs > 0L })
-        assertTrue(first.filter { it.connectionId.contains("recurrent") }
+        assertTrue(first.filter { it.connectionId.contains("recurrent") || it.connectionId.contains("critic-candidate") }
             .all { it.weight == AndroidHybridTopologyV2.RECURRENT_WEIGHT })
-        assertTrue(first.filterNot { it.connectionId.contains("recurrent") }
+        assertTrue(first.filterNot { it.connectionId.contains("recurrent") || it.connectionId.contains("critic-candidate") }
             .all { it.weight == AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT })
         assertEquals(1.0, AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT, 0.0)
         assertTrue(AndroidHybridTopologyV2.RECURRENT_WEIGHT < 1.0)
