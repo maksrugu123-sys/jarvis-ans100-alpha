@@ -1,0 +1,59 @@
+name: Windows desktop package
+
+on:
+  push:
+    branches:
+      - experiment/jarvis-integrated-prototype-v1
+    paths:
+      - ".github/workflows/windows-desktop.yml"
+      - "packaging/windows/**"
+      - "start_jarvis_windows_exe.bat"
+      - "tools/jarvis_app/**"
+      - "tools/neuron_runtime/**"
+      - "tools/jpvr_reference/**"
+      - "tools/reasoning_engine/**"
+      - "tools/numerical_oracle/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-windows-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out selected branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install packager
+        run: python -m pip install --upgrade pip "pyinstaller>=6.10,<7"
+
+      - name: Build portable Windows application
+        run: python -m PyInstaller --noconfirm --clean packaging/windows/JARVIS.spec
+
+      - name: Assemble portable archive
+        shell: pwsh
+        run: |
+          Copy-Item "start_jarvis_windows_exe.bat" "dist/start_jarvis_windows_exe.bat"
+          Compress-Archive -Path "dist/JARVIS", "dist/start_jarvis_windows_exe.bat" -DestinationPath "dist/jarvis-windows-portable.zip" -CompressionLevel Optimal
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-windows-portable
+          path: dist/jarvis-windows-portable.zip
+          if-no-files-found: error
+          retention-days: 7
