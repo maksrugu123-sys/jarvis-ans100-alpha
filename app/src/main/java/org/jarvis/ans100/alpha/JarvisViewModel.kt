@@ -70,7 +70,7 @@ data class LocalConversationUiState(
     val nativeNetworkError: String? = null,
     val nativeNetworkMessage: String? = null,
     val nativeDialogueContextId: String? = null,
-    val nativeDialogueFeatureIds: List<Int> = emptyList(),
+    val nativeDialogueRewardNeuronIds: List<Int> = emptyList(),
     val modelInitializationMs: Long = 0L,
     val responseGenerationMs: Long = 0L,
     val lastTurnDurationMs: Long = 0L,
@@ -620,7 +620,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 error = null,
                 streamingResponse = "",
                 nativeDialogueContextId = null,
-                nativeDialogueFeatureIds = emptyList(),
+                nativeDialogueRewardNeuronIds = emptyList(),
             ),
         )
         if (searchIntent != null) {
@@ -640,7 +640,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 dialogFeatureError = null,
                                 lastRewardedAssistantMessageId = null,
                                 nativeDialogueContextId = null,
-                                nativeDialogueFeatureIds = emptyList(),
+                                nativeDialogueRewardNeuronIds = emptyList(),
                             ),
                         )
                     }
@@ -755,7 +755,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             dialogFeatureError = dialogPredictionResult.second,
                             lastRewardedAssistantMessageId = null,
                             nativeDialogueContextId = nativeFeedbackContext?.contextId,
-                            nativeDialogueFeatureIds = nativeFeedbackContext?.rewardNeuronIds.orEmpty(),
+                            nativeDialogueRewardNeuronIds = nativeFeedbackContext?.rewardNeuronIds.orEmpty(),
                             modelInitializationMs = modelMetrics.initializationMs,
                             responseGenerationMs = modelMetrics.generationMs,
                             lastTurnDurationMs = elapsedMs,
@@ -807,9 +807,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val prediction = dialogFeatureClassifier.learn(latestUserMessage.text, expectedLabel)
                 val nativeContextId = before.conversation.nativeDialogueContextId
-                val nativeFeatures = before.conversation.nativeDialogueFeatureIds
-                if (nativeContextId != null && nativeFeatures.isNotEmpty()) {
-                    enqueueNativeDialogueLabelReward(nativeContextId, nativeFeatures, expectedLabel)
+                val nativeRewardNeurons = before.conversation.nativeDialogueRewardNeuronIds
+                if (nativeContextId != null && nativeRewardNeurons.isNotEmpty()) {
+                    enqueueNativeDialogueLabelReward(nativeContextId, nativeRewardNeurons, expectedLabel)
                 }
                 mainHandler.post {
                     val current = mutableState.value
@@ -855,12 +855,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val prediction = dialogFeatureClassifier.applyReward(userMessage.text, reward)
                 val nativeContextId = before.conversation.nativeDialogueContextId
-                val nativeFeatures = before.conversation.nativeDialogueFeatureIds
+                val nativeRewardNeurons = before.conversation.nativeDialogueRewardNeuronIds
                 val predictedLabel = before.conversation.dialogFeaturePrediction?.predictedLabel
-                if (nativeContextId != null && nativeFeatures.isNotEmpty() && predictedLabel != null) {
+                if (nativeContextId != null && nativeRewardNeurons.isNotEmpty() && predictedLabel != null) {
                     enqueueNativeDialogueReward(
                         nativeContextId,
-                        nativeFeatures,
+                        nativeRewardNeurons,
                         mapOf(dialogueOutputNeuronId(predictedLabel) to reward),
                     )
                 }
@@ -1067,7 +1067,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     /** Explicit class selection rewards the selected output and weakens alternatives. */
     private fun enqueueNativeDialogueLabelReward(
         contextId: String,
-        featureIds: List<Int>,
+        rewardNeuronIds: List<Int>,
         expectedLabel: String,
     ) {
         val selected = dialogueOutputNeuronId(expectedLabel)
@@ -1075,18 +1075,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val outputId = AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + index
             outputId to if (outputId == selected) 1.0 else -1.0 / 3.0
         }
-        enqueueNativeDialogueReward(contextId, featureIds, rewards)
+        enqueueNativeDialogueReward(contextId, rewardNeuronIds, rewards)
     }
 
     /** User feedback is attached to the latest assistant response and its pending spike trace. */
     private fun enqueueNativeDialogueReward(
         contextId: String,
-        featureIds: List<Int>,
+        rewardNeuronIds: List<Int>,
         rewards: Map<Int, Double>,
     ) {
         nativeNetworkExecutor.execute {
             try {
-                val result = nativeNeuronNetwork.applyDialogueReward(contextId, featureIds, rewards)
+                val result = nativeNeuronNetwork.applyDialogueReward(contextId, rewardNeuronIds, rewards)
                 val stats = nativeNeuronNetwork.stats()
                 mainHandler.post {
                     val current = mutableState.value
@@ -1113,8 +1113,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         },
                         nativeDialogueContextId = if (ownsFeedbackContext) null
                             else current.conversation.nativeDialogueContextId,
-                        nativeDialogueFeatureIds = if (ownsFeedbackContext) emptyList()
-                            else current.conversation.nativeDialogueFeatureIds,
+                        nativeDialogueRewardNeuronIds = if (ownsFeedbackContext) emptyList()
+                            else current.conversation.nativeDialogueRewardNeuronIds,
                     )
                     mutableState.value = current.copy(conversation = nextConversation)
                 }
@@ -1132,8 +1132,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             },
                             nativeDialogueContextId = if (ownsFeedbackContext) null
                                 else current.conversation.nativeDialogueContextId,
-                            nativeDialogueFeatureIds = if (ownsFeedbackContext) emptyList()
-                                else current.conversation.nativeDialogueFeatureIds,
+                            nativeDialogueRewardNeuronIds = if (ownsFeedbackContext) emptyList()
+                                else current.conversation.nativeDialogueRewardNeuronIds,
                         ),
                     )
                 }
