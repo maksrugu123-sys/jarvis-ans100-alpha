@@ -228,16 +228,25 @@ class HybridANS100Runtime:
             candidate: readout_counts[candidate]["support"] - readout_counts[candidate]["conflict"]
             for candidate in _CANDIDATES
         }
+        readout_spike_total = sum(
+            counts["support"] + counts["conflict"]
+            for counts in readout_counts.values()
+        )
+        readout_complete = readout_spike_total > 0 and not run.budget_exhausted
         best_score = max(scores.values(), default=0)
         leaders = [candidate for candidate, score in scores.items() if score == best_score and score > 0]
-        if run.budget_exhausted or not leaders:
+        if not readout_complete or not leaders:
             selected = "abstain"
+            decision_reason = "readout_incomplete_or_no_positive_lane"
         elif len(leaders) == 1:
             selected = leaders[0]
+            decision_reason = "highest_positive_readout_score"
         elif "clarification" in leaders:
             selected = "clarification"
+            decision_reason = "tie_resolved_toward_clarification"
         else:
             selected = "abstain"
+            decision_reason = "unresolved_candidate_tie"
 
         return {
             "runtime_version": self.VERSION,
@@ -256,9 +265,13 @@ class HybridANS100Runtime:
                 for (candidate, polarity), enabled in hints.items()
             },
             "readout_spike_counts": readout_counts,
+            "readout_spike_total": readout_spike_total,
+            "readout_complete": readout_complete,
             "candidate_signal_scores": scores,
             "selected_candidate": selected,
+            "decision_reason": decision_reason,
             "pending_events_at_budget_boundary": run.pending_events,
+            "turn_boundary_events_discarded": run.pending_events > 0,
             "event_budget_exhausted": run.budget_exhausted,
             "population_spike_counts": population_counts,
             "learning_enabled": False,
