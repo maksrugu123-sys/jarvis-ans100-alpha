@@ -1,6 +1,7 @@
 """Tests authored for the LiteRT-LM adapter; this suite was not run in this change."""
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -119,6 +120,33 @@ class LiteRtLmLocalEngineTests(unittest.TestCase):
         self.assertIn('"selected_candidate":"clarification"', system_message)
         self.assertIn("advisory-сигнал", system_message)
         self.assertIn("не самостоятельное понимание", system_message)
+
+    def test_ans100_status_overrides_conflicting_candidate_and_bounds_extreme_numbers(self) -> None:
+        self.adapter.respond(
+            "Проверь решение",
+            [],
+            ans100_context={
+                "selected_candidate": "answer",
+                "selected_candidate_id": "respond_to_original_request",
+                "decision_status": "needs_clarification",
+                "winner_candidate_id": "request_clarification",
+                "winner_margin": 10 ** 10_000,
+                "candidate_signal_scores": {
+                    "answer": 10 ** 10_000,
+                    "clarification": 0.75,
+                    "abstain": float("nan"),
+                },
+            },
+        )
+        system_message = self.fake_engine.options["system_message"]
+        payload = json.loads(system_message.rsplit("Данные:\\n", 1)[1])
+        self.assertEqual(payload["decision_status"], "needs_clarification")
+        self.assertEqual(payload["selected_candidate"], "clarification")
+        self.assertIsNone(payload["selected_candidate_id"])
+        self.assertEqual(payload["winner_margin"], 0.0)
+        self.assertEqual(payload["candidate_signal_scores"]["answer"], 0.0)
+        self.assertEqual(payload["candidate_signal_scores"]["clarification"], 0.75)
+        self.assertEqual(payload["candidate_signal_scores"]["abstain"], 0.0)
 
     def test_external_page_context_is_marked_untrusted_and_not_executable(self) -> None:
         self.adapter.respond(
