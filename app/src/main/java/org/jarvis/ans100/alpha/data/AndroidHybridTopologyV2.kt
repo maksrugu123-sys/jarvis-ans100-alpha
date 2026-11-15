@@ -91,7 +91,7 @@ object AndroidHybridTopologyV2 {
                     Population("candidate_input", input, input + 1),
                     ANS100CandidateSlotContract.associationLane(slot, polarity),
                     fanOut = 3,
-                    salt = 17 + slot.index * 7 + polarity.index,
+                    salt = 17,
                 )
             }
         }
@@ -109,38 +109,38 @@ object AndroidHybridTopologyV2 {
 
                 addProjection(
                     "association-${slot.name.lowercase()}-${polarity.name.lowercase()}-recurrent",
-                    associationLane, associationLane, 1, 31 + slot.index * 11 + polarity.index,
+                    associationLane, associationLane, 1, 29,
                     recurrent = true,
                 )
                 addProjection(
                     "association-working-${slot.name.lowercase()}-${polarity.name.lowercase()}",
-                    associationLane, workingLane, 2, 43 + slot.index * 11 + polarity.index,
+                    associationLane, workingLane, 2, 43,
                 )
                 addProjection(
                     "working-${slot.name.lowercase()}-${polarity.name.lowercase()}-recurrent",
-                    workingLane, workingLane, 1, 61 + slot.index * 11 + polarity.index,
+                    workingLane, workingLane, 1, 61,
                     recurrent = true,
                 )
                 addProjection(
                     "working-candidate-${slot.name.lowercase()}-${polarity.name.lowercase()}",
-                    workingLane, candidateLane, 2, 79 + slot.index * 11 + polarity.index,
+                    workingLane, candidateLane, 2, 79,
                 )
                 addProjection(
                     "candidate-critic-${slot.name.lowercase()}-${polarity.name.lowercase()}",
-                    candidateLane, criticLane, 2, 113 + slot.index * 11 + polarity.index,
+                    candidateLane, criticLane, 2, 113,
                 )
                 addProjection(
                     "critic-candidate-${slot.name.lowercase()}-${polarity.name.lowercase()}",
-                    criticLane, candidateLane, 1, 131 + slot.index * 11 + polarity.index,
+                    criticLane, candidateLane, 1, 131,
                     recurrent = true,
                 )
                 addProjection(
                     "candidate-readout-${slot.name.lowercase()}-${polarity.name.lowercase()}",
-                    candidateLane, readoutLane, 1, 149 + slot.index * 11 + polarity.index,
+                    candidateLane, readoutLane, 1, 149,
                 )
                 addProjection(
                     "critic-readout-${slot.name.lowercase()}-${polarity.name.lowercase()}",
-                    criticLane, readoutLane, 1, 167 + slot.index * 11 + polarity.index,
+                    criticLane, readoutLane, 1, 167,
                 )
             }
         }
