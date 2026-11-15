@@ -950,12 +950,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         maxEvents = MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS,
                         maxTimestamps = MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS,
                     )
+                    var totalProcessedEvents = result.processedEvents
                     var passes = 1
                     while (result.pendingEvents > 0 && passes < MAX_HYBRID_DIALOGUE_MAX_PASSES) {
                         result = hybridNeuronNetwork.run(
                             maxEvents = MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS,
                             maxTimestamps = MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS,
                         )
+                        totalProcessedEvents += result.processedEvents
                         passes++
                     }
                     val telemetry = result.hybridTelemetry ?: return@submit null
@@ -963,7 +965,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         evidence = evidence,
                         understanding = understanding,
                         telemetry = telemetry,
-                        processedEventCount = result.processedEvents,
+                        processedEventCount = totalProcessedEvents,
                         pendingEvents = result.pendingEvents,
                         budgetExhausted = result.budgetExhausted,
                     )
@@ -977,7 +979,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         append("topology=").append(telemetry.topologyId)
                         append(" v").append(telemetry.topologyVersion)
                         append("; neurons=").append(AndroidHybridTopologyV2.NEURON_COUNT)
-                        append("; events=").append(result.processedEvents)
+                        append("; events=").append(totalProcessedEvents)
                         append("; passes=").append(passes)
                         append("; pending=").append(result.pendingEvents)
                         append("; budgetExhausted=").append(result.budgetExhausted)
