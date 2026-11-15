@@ -108,7 +108,8 @@ internal object PromptContextBudgeter {
         }
 
         var includedMemories = 0
-        val approvedMemories = memoryContext.filter { it.userApproved }.take(MAX_MEMORY_ITEMS)
+        val allApprovedMemories = memoryContext.filter { it.userApproved }
+        val approvedMemories = allApprovedMemories.take(MAX_MEMORY_ITEMS)
         if (approvedMemories.isNotEmpty()) {
             val lines = approvedMemories.map { memory ->
                 val category = memory.category.replace('\n', ' ').replace('\r', ' ').take(40)
@@ -142,7 +143,7 @@ internal object PromptContextBudgeter {
             estimatedInputTokens = finalEstimate,
             omittedHistoryMessages = (recentHistory.size - selectedHistory.size).coerceAtLeast(0),
             includedMemoryItems = includedMemories,
-            omittedMemoryItems = (approvedMemories.size - includedMemories).coerceAtLeast(0),
+            omittedMemoryItems = (allApprovedMemories.size - includedMemories).coerceAtLeast(0),
         )
     }
 
