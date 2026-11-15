@@ -259,25 +259,21 @@ data class DialogueNeuralAnalysis(
     }
 
     fun toModelContext(): String = buildString {
-        append("Android sparse LIF network: ")
-        append(networkNeuronCount).append(" nodes; active text-feature inputs=")
-        append(activeFeatureCount).append("; processed events=").append(processedEvents)
+        append("Android sparse LIF: ").append(networkNeuronCount).append(" nodes; active text-feature inputs=")
+        append(activeFeatureCount).append("; events=").append(processedEvents)
         append("; neuron batches=").append(processedNeuronBatches)
         append("; legacy output-unit spikes=").append(outputSpikeCount)
         append("; pending events=").append(pendingEvents)
-        append("; persistent state committed=").append(statePersisted).append(". ")
+        append("; state committed=").append(statePersisted).append(". ")
         if (classifierLabel != null) {
-            append("Separate explicitly trained feature classifier candidate=")
-            append(classifierLabel)
-            append("; score margin=")
-            append(String.format(Locale.ROOT, "%.3f", classifierConfidenceMargin ?: 0.0))
-            append("; confirmed training examples=").append(classifierTrainedExamples).append(". ")
+            append("Explicitly trained feature-classifier candidate=").append(classifierLabel)
+            append("; score margin=").append(String.format(Locale.ROOT, "%.3f", classifierConfidenceMargin ?: 0.0))
+            append("; confirmed examples=").append(classifierTrainedExamples).append(". ")
         } else {
-            append("No confident trained classifier label is available. ")
+            append("No confident trained classifier label. ")
         }
-        append("Treat these as bounded numeric/text-feature evidence only. ")
-        append("The four legacy output units are not semantic reasoning decisions; ")
-        append("check the original user message and Core plan before choosing answer content.")
+        append("Numeric feature evidence only; four legacy output units are feedback targets, not semantic decisions. ")
+        append("Check the user's message and Core plan before choosing answer content.")
     }
 }
 
