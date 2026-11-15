@@ -8,6 +8,7 @@ them and reports advisory readouts. It is not a semantic model or learned policy
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import uuid
 
 from .hybrid_ans100 import (
     EXPECTED_CONNECTION_COUNT,
@@ -130,6 +131,7 @@ def _candidate_hints(understanding: Mapping[str, object]) -> dict[tuple[str, str
 def _typed_evidence_records(
     prompt: str,
     understanding: Mapping[str, object],
+    turn_id: str,
     approved_memories: Sequence[Mapping[str, object]] = (),
 ) -> tuple[dict[str, object], ...]:
     """Port the bounded Android TypedEvidenceEncoder contract to Python."""
@@ -161,6 +163,7 @@ def _typed_evidence_records(
             raise ValueError("evidence feature ordinal exceeds its reserved input slots")
         records.append({
             "record_id": f"{feature}:{ordinal}",
+            "turn_id": turn_id,
             "feature": feature,
             "source": source,
             "status": status,
@@ -170,7 +173,7 @@ def _typed_evidence_records(
         })
 
     message = prompt
-    turn_marker = "turn:desktop:current"
+    turn_marker = f"turn:{turn_id}"
     add(
         "user.message.text", "USER_MESSAGE", "USER_PROVIDED", message,
         f"{turn_marker}:user_message", activation=1.0,
@@ -417,7 +420,8 @@ class HybridANS100Runtime:
         if not isinstance(approved_memories, (list, tuple)):
             raise ValueError("approved_memories must be a list or tuple")
 
-        records = _typed_evidence_records(prompt, understanding_context, approved_memories)
+        turn_id = uuid.uuid4().hex
+        records = _typed_evidence_records(prompt, understanding_context, turn_id, approved_memories)
         if not records or len(records) > _MAX_RECORDS_PER_TURN:
             raise ValueError("typed evidence record budget exceeded")
 
@@ -529,7 +533,7 @@ class HybridANS100Runtime:
         uncertainty = ["uncalibrated_model_output"]
         if missing_populations or readout_mismatch_slots:
             uncertainty.append("missing_evidence")
-        if hints[("answer", "conflict")] or hints[("clarification", "support")]:
+        if hints[("clarification", "support")]:
             uncertainty.append("ambiguous_request")
         if exhausted:
             uncertainty.append("budget_exhausted")
