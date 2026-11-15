@@ -203,7 +203,7 @@ class AndroidHybridTopologyV2Test {
 
             network.run(maxEvents = 64, maxTimestamps = 16)
             assertEquals(0, network.stats().pendingEvents)
-            assertTrue(network.scheduleHybridEvidence(batch("turn-b", 20_000_000L)))
+            assertTrue(network.beginHybridTurn(batch("turn-b", 20_000_000L)))
             assertEquals(1, network.stats().pendingEvents)
         }
     }
