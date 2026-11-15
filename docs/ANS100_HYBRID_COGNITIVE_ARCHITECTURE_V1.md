@@ -241,3 +241,10 @@ The first static review found that version-2 feed-forward weights (0.35) were be
 - adds an instrumentation fixture that sends one typed input and checks that all seven populations emit at least one spike, the event queue drains, and the event budget is not exhausted.
 
 This is a source-level design and test fixture only. The instrumentation test has NOT been run. The hybrid scheduler is still not called by the live conversation coordinator. The beginHybridTurn() state-isolation and cumulative-telemetry paths have instrumentation fixtures, but those fixtures have NOT been run. The hybrid scheduler is still not called by the live conversation coordinator. No build, test, CI, APK/AAB, benchmark or device execution was performed.
+
+
+## 18. 2026-11-15 dialogue graph cutover status
+
+`JarvisViewModel.sendConversationMessage()` now excludes the legacy three-layer dialogue graph/classifier from ordinary message processing and runs the seven-population hybrid graph as the sole neural preprocessing path. Startup no longer refreshes the legacy graph. Legacy code and its separate SQLite data are retained, not deleted, so the cutover does not destroy old state.
+
+This does **not** mean the hybrid graph is already the decision-maker: its current output is population telemetry; `ANS100DecisionPolicy` remains Core-policy based and no hybrid-selected candidate is yet passed to Qwen. Legacy manual diagnostic/reward entry points still need cleanup. No builds/tests/device validation were performed.
