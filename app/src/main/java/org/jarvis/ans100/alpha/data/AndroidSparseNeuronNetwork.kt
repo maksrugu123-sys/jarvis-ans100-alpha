@@ -152,16 +152,17 @@ class AndroidSparseNeuronNetwork(
     }
 
     /**
-     * Initializes a bounded feed-forward dialogue topology: feature neurons
-     * fan out to four output neurons, which have no outgoing edges. Unlike the
-     * generic chain fixture, a chat turn cannot cascade through all 10k nodes.
+     * Ensures a bounded three-stage dialogue topology: 9,000 hashed text inputs,
+     * 996 LIF hidden neurons, and four reward-trained readout neurons. Each input
+     * fans out to eight deterministic hidden targets; hidden units connect to all
+     * four readouts. Existing v1 hidden-to-output weights are preserved on upgrade.
      */
     @Synchronized
     fun initializeSparseDialogueNetwork(
         neuronCount: Int = MAX_NEURONS,
         featureNeuronCount: Int = DIALOGUE_INPUT_NEURONS,
         delayNs: Long = DEFAULT_CONNECTION_DELAY_NS,
-        weight: Double = DEFAULT_CONNECTION_WEIGHT,
+        weight: Double = DEFAULT_DIALOGUE_OUTPUT_WEIGHT,
         inputToHiddenWeight: Double = DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
     ) {
         require(neuronCount == MAX_NEURONS)
@@ -428,7 +429,7 @@ class AndroidSparseNeuronNetwork(
         const val DIALOGUE_FEATURE_NEURONS = DIALOGUE_INPUT_NEURONS
         const val DIALOGUE_INPUT_FAN_OUT = 8
         const val DIALOGUE_TOPOLOGY_VERSION = 2
-        const val MAX_DIALOGUE_FEATURES_PER_TURN = 128
+        const val MAX_DIALOGUE_FEATURES_PER_TURN = 256
         const val MAX_DIALOGUE_PAIR_DELAY_NS = 10_000_000L
         const val DEFAULT_HOT_SET_CAPACITY = 128
         const val MAX_EVENTS_PER_TIMESTAMP = 10_000
@@ -438,7 +439,8 @@ class AndroidSparseNeuronNetwork(
         const val DEFAULT_MAX_TIMESTAMPS_PER_RUN = 128
         const val DEFAULT_DATABASE_NAME = "jarvis_android_dialogue_jnvm_v2.db"
         const val DEFAULT_CONNECTION_DELAY_NS = 1_000_000L
-        const val DEFAULT_CONNECTION_WEIGHT = 0.15
+        const val DEFAULT_CONNECTION_WEIGHT = 0.75
+        const val DEFAULT_DIALOGUE_OUTPUT_WEIGHT = 0.15
         const val DEFAULT_INPUT_TO_HIDDEN_WEIGHT = 0.75
         private const val POTENTIAL_MIN = -2.0
         private const val POTENTIAL_MAX = 2.0
