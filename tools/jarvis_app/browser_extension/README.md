@@ -13,6 +13,9 @@ This is a Manifest V3 companion extension for the JARVIS local desktop console.
 7. Pin **JARVIS Browser Bridge** to the toolbar.
 8. Open the JARVIS Core terminal, copy the one-time 43-character access token and paste it into the extension popup. Press **Подключить**.
 9. If the extension was already installed, open the extensions page and press **Reload** for JARVIS Browser Bridge so Chrome/Edge loads version 1.1.0 and its background worker/content bridge.
+10. Refresh the JARVIS local-console page so the new content-script bridge is attached to that tab.
+
+Opening and closing JARVIS-owned tabs/windows from chat works after the extension is installed and the JARVIS page is refreshed; it does not require the popup token. The token connection in the popup is needed for the separate, user-approved current-page reading feature.
 
 The extension does not install itself automatically and is not published in either browser's store.
 
