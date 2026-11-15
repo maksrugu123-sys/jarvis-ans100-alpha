@@ -44,6 +44,11 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn("LAUNCHER ERROR:", source)
         self.assertIn("[ОШИБКА ЗАПУСКА JARVIS]", source)
         self.assertIn("startup-error.log", source)
+        self.assertIn("$p.WaitForExit()", source)
+        self.assertNotIn("msedge.exe", source.lower())
+        self.assertNotIn("chrome.exe", source.lower())
+        self.assertNotIn("--app=http://", source)
+        self.assertNotIn("Start-Process 'http://127.0.0.1:8765/'", source)
         self.assertNotIn("run_jarvis_core.bat", source)
 
     def test_posix_only_policy_registry_does_not_break_windows_imports(self):
