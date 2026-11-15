@@ -1007,7 +1007,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 nativeNetworkError = null,
                                 nativeNetworkMessage =
                                     "ANS-100: признаков ${featureEvents.size}, обработано событий ${result.processedEvents}, " +
-                                        "выходных импульсов ${outputSpikes.size}, eligibility-связей ${eligibilityCount}. " +
+                                        "импульсов 4 legacy output-узлов ${outputSpikes.size}, eligibility-связей ${eligibilityCount}. " +
                                         "Числовой результат передан языковой модели как ограниченный контекст; это ещё не самостоятельное мышление.",
                             ),
                         )
