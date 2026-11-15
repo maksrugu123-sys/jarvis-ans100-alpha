@@ -98,9 +98,8 @@ jobs:
       - name: Assemble portable archive
         shell: pwsh
         run: |
-          Copy-Item "start_jarvis_windows_exe.bat" "dist/start_jarvis_windows_exe.bat"
-          Copy-Item "run_jarvis_core.bat" "dist/run_jarvis_core.bat"
-          Compress-Archive -Path "dist/JARVIS", "dist/start_jarvis_windows_exe.bat", "dist/run_jarvis_core.bat" -DestinationPath "dist/jarvis-windows-portable.zip" -CompressionLevel Optimal
+          Copy-Item "start_jarvis_windows_exe.bat" "dist/Запустить JARVIS.bat"
+          Compress-Archive -Path "dist/JARVIS", "dist/Запустить JARVIS.bat" -DestinationPath "dist/jarvis-windows-portable.zip" -CompressionLevel Optimal
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4

@@ -21,15 +21,14 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertNotIn("collect_submodules(package)", source)
         self.assertIn("console=True", source)
 
-    def test_packaged_launcher_targets_the_bundled_executable_and_keeps_diagnostics(self):
+    def test_packaged_launcher_has_one_clear_entrypoint_and_persistent_diagnostics(self):
         source = (ROOT / "start_jarvis_windows_exe.bat").read_text(encoding="utf-8")
-        helper = (ROOT / "run_jarvis_core.bat").read_text(encoding="utf-8")
         self.assertIn(r"JARVIS\JARVIS.exe", source)
-        self.assertIn("run_jarvis_core.bat", source)
-        self.assertIn("--platform desktop", helper)
-        self.assertIn("Tee-Object", helper)
-        self.assertIn("startup.log", helper)
-        self.assertIn("--app=%JARVIS_URL%", source)
+        self.assertIn("Start-Process", source)
+        self.assertIn("/api/health", source)
+        self.assertIn("startup.log", source)
+        self.assertIn("Press Enter", source)
+        self.assertNotIn("run_jarvis_core.bat", source)
 
     def test_posix_only_policy_registry_does_not_break_windows_imports(self):
         source = (ROOT / "tools/neuron_runtime/policy_registry.py").read_text(encoding="utf-8")
@@ -41,7 +40,7 @@ class WindowsPackagingContractTests(unittest.TestCase):
         server = (ROOT / "tools/jarvis_app/server.py").read_text(encoding="utf-8")
         app = (ROOT / "tools/jarvis_app/static/app.js").read_text(encoding="utf-8")
         popup = (ROOT / "tools/jarvis_app/browser_extension/popup.js").read_text(encoding="utf-8")
-        self.assertIn('if self.platform not in ("desktop", "android"):', server)
+        self.assertIn('if platform not in ("desktop", "android"):', server)
         self.assertIn('service.platform == "desktop" and urlsplit(self.path).path not in _BROWSER_EXTENSION_API_PATHS', server)
         self.assertIn('"auth_required": service.platform != "desktop"', server)
         self.assertIn('await enterConsole("")', app)
@@ -52,7 +51,8 @@ class WindowsPackagingContractTests(unittest.TestCase):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
         self.assertIn("Smoke-test packaged server on Windows", source)
         self.assertIn("/api/health", source)
-        self.assertIn("run_jarvis_core.bat", source)
+        self.assertIn('Copy-Item "start_jarvis_windows_exe.bat" "dist/Запустить JARVIS.bat"', source)
+        self.assertNotIn('Copy-Item "run_jarvis_core.bat"', source)
 
 
 if __name__ == "__main__":
