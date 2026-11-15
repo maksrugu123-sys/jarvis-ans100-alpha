@@ -57,6 +57,31 @@ class AndroidHybridEvidenceInputAdapterTest {
         assertTrue(ids.all { it in 0 until 1_200 })
     }
 
+
+    @Test
+    fun mapsSixCandidateSupportConflictFeaturesToReservedInputIds() {
+        ANS100CandidateSlotContract.Slot.values().forEach { slot ->
+            ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
+                val feature = ANS100CandidateSlotContract.evidenceFeature(slot, polarity)
+                val actual = AndroidHybridEvidenceInputAdapter.neuronIdFor(
+                    record(
+                        feature,
+                        source = EvidenceSourceKind.CORE_REASONING_PLAN,
+                        status = EvidenceStatus.HEURISTIC,
+                        value = EvidenceValue.BooleanValue(true),
+                        activation = 1.0,
+                    ),
+                )
+                assertEquals(
+                    ANS100CandidateSlotContract.inputNeuronId(slot, polarity),
+                    actual,
+                )
+                assertTrue(actual in ANS100CandidateSlotContract.INPUT_START until
+                    ANS100CandidateSlotContract.INPUT_START + ANS100CandidateSlotContract.INPUT_SIGNAL_COUNT)
+            }
+        }
+    }
+
     @Test
     fun booleanValuesUseSeparateStableFalseAndTrueSlots() {
         val falseRecord = record(
