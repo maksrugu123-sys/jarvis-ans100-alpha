@@ -183,7 +183,7 @@ Static readback only. Tests were added but not run; no build, CI, workflow, APK/
 
 The versioned `ANS100Decision` contract supports up to eight candidates, same-turn supporting/conflicting evidence references, selected/clarification/abstention outcomes, explicit uncertainty and missing-evidence fields, response goals/constraints, active-population metadata, processed-event counts and compute-budget exhaustion. It rejects invalid status combinations, unknown/cross-turn evidence references and any V1 claim of calibrated confidence.
 
-`ANS100QwenHandoffBuilder` preserves the exact original user message and validates it against the typed evidence bundle. It packages bounded Core heuristic context, decision context, approved-memory references only, and provenance-labeled verified-tool summaries in a 3,200-character maximum context. Qwen is explicitly the natural-language realizer, not an action executor or source of invented evidence.
+`ANS100QwenHandoffBuilder` preserves the exact original user message and validates it against the typed evidence bundle. It packages bounded Core heuristic context, decision context, approved-memory references only, and provenance-labeled verified-tool summaries in a 4,096-character maximum context. Qwen is explicitly the natural-language realizer, not an action executor or source of invented evidence.
 
 **Not yet done:** no call site in `LiteRtLmResponseEngine`/conversation coordinator, no neural population producer, no memory/tool adapter, and no rollout flag. Existing runtime behavior is unchanged. The next phase must integrate behind a disabled-by-default flag, preserve fallback, and collect measured evidence before enabling the hybrid path.
 
