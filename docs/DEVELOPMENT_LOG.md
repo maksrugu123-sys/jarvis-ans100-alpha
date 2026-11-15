@@ -2779,3 +2779,11 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Confirmed the GPU runtime-failure path retries generation on CPU and replaces the streaming preview with the CPU attempt's accumulated output.
 - Fixed a resource-lifecycle defect in `initializeEngine`: if native engine initialization throws, the partially initialized candidate is now closed best-effort before the exception is propagated and any CPU fallback begins.
 - Static inspection only. No Gradle build, unit tests, APK, inference, CI, or GitHub Actions were run. Device behavior remains unverified.
+
+## Conversation recovery and model lifecycle audit — 2026-11-15
+
+- Rechecked the LiteRT-LM engine close/reset paths, serialized conversation executor, model download cancellation, and Compose/ViewModel state handling.
+- Confirmed model downloads are cancellable through the active HTTP connection and retain partial data for a later range-resume; model import/delete and inference share the single conversation executor, preventing concurrent engine/file operations from those UI paths.
+- Found that the chat composer cleared a submitted prompt immediately, while the repository commits a user/assistant pair only after a complete response. On generation/search failure the prompt was therefore absent from history and had already been erased from the composer.
+- Updated the chat UI to retain the submitted text until a new matching user/assistant pair is observed in persisted conversation state. On failure, the draft remains available for correction or retry; a later successful response clears it only if the composer still contains that same text.
+- Static inspection only. No Gradle build, unit tests, APK, inference, CI, GitHub Actions, or device lifecycle tests were run. Process-kill and real-device recovery behavior remain unverified.
