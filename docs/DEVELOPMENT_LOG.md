@@ -2668,3 +2668,10 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Added JVM tests for alternate same-message identity wording, long-history name recall, explicit project recall (including dotted names), safe fact summaries, and the no-invention path.
 - Verification is delegated to Android Actions after this commit. No local Android build or test run is claimed.
 - Branch boundary: experiment/jarvis-integrated-prototype-v1; main remains untouched.
+
+
+## 2026-11-15 — Fix project-name sentence boundary exposed by Android tests
+
+- Android Actions run #12 compiled the Kotlin sources and executed 107 unit tests; two new fact-recall tests failed because the project-name regex treated the dot in RAZLOM.NET as sentence punctuation.
+- Changed the sentence boundary to stop only on sentence punctuation followed by whitespace or on the final punctuation at end-of-input. Dots inside domain-style project names remain part of the extracted name.
+- Re-run the complete Android unit-test suite and APK packaging on the next Actions run. The run #12 APK step was skipped after the two test failures.

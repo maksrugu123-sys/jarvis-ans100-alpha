@@ -222,7 +222,7 @@ internal object LocalDialogueFastPaths {
             // The look-ahead allows dots inside names such as RAZLOM.NET while
             // stopping at the final sentence punctuation.
             val match = Regex(
-                "(?:мой проект(?: называется)?|проект называется|разрабатываю(?: проект)?|создаю проект|работаю над проектом)\\s+([^\\n!?;]{2,80}?)(?=\\s*[.!?;]|$)",
+                "(?:мой проект(?: называется)?|проект называется|разрабатываю(?: проект)?|создаю проект|работаю над проектом)\\s+([^\\n!?;]{2,80}?)(?=\\s+[.!?;]|[!?;]|\\.$|$)",
                 RegexOption.IGNORE_CASE,
             ).find(value) ?: return null
             val project = match.groupValues.getOrNull(1)
