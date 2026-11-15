@@ -108,6 +108,7 @@ internal interface AndroidNeuronStateStore : Closeable {
         outputRewards: Map<Int, Double>,
     ): AndroidDialogueRewardResult
     fun dialogueSynapseWeight(featureNeuronId: Int, outputNeuronId: Int): Double
+    fun dialogueOutputScores(featureNeuronIds: List<Int>): Map<Int, Double>
     fun commitTimestamp(
         timestampNs: Long,
         consumed: List<AndroidNeuronEvent>,
@@ -328,6 +329,18 @@ class AndroidSparseNeuronNetwork(
         require(featureNeuronId in 0 until DIALOGUE_FEATURE_NEURONS)
         require(outputNeuronId in DIALOGUE_FEATURE_NEURONS until MAX_NEURONS)
         return store.dialogueSynapseWeight(featureNeuronId, outputNeuronId)
+    }
+
+    /**
+     * Read the learned four-way synaptic preference for the active feature set.
+     * Values are mean connection weights, not calibrated probabilities.
+     */
+    @Synchronized
+    fun dialogueOutputScores(featureNeuronIds: List<Int>): Map<Int, Double> {
+        val features = featureNeuronIds.distinct()
+        require(features.isNotEmpty() && features.size <= MAX_DIALOGUE_FEATURES_PER_TURN)
+        require(features.all { it in 0 until DIALOGUE_FEATURE_NEURONS })
+        return store.dialogueOutputScores(features)
     }
 
     private fun validateDialogueContext(contextId: String) {
@@ -767,6 +780,31 @@ private class AndroidNeuronSqliteStore(
             if (!cursor.moveToFirst()) throw AndroidNeuronNetworkException("dialogue synapse is not initialized")
             cursor.getDouble(0)
         }
+    }
+
+    override fun dialogueOutputScores(featureNeuronIds: List<Int>): Map<Int, Double> {
+        if (featureNeuronIds.isEmpty() ||
+            featureNeuronIds.size > AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN
+        ) throw AndroidNeuronNetworkException("dialogue readout feature batch is outside its bound")
+        val placeholders = List(featureNeuronIds.size) { "?" }.joinToString(",")
+        val args = featureNeuronIds.map(Int::toString).toTypedArray()
+        val scores = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).associate { index ->
+            AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index to 0.0
+        }.toMutableMap()
+        readableDatabase.rawQuery(
+            "SELECT target_id, AVG(weight) FROM connections WHERE source_id IN ($placeholders) GROUP BY target_id",
+            args,
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val outputId = cursor.getInt(0)
+                val score = cursor.getDouble(1)
+                if (outputId !in scores || !score.isFinite() || score !in 0.0..1.0) {
+                    throw AndroidNeuronNetworkException("dialogue readout contains an invalid output score")
+                }
+                scores[outputId] = score
+            }
+        }
+        return scores.toMap()
     }
 
     private data class DialogueEligibilityRow(
