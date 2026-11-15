@@ -98,7 +98,7 @@ class LiteRtLmLocalEngineTests(unittest.TestCase):
                 "selected_candidate_id": None,
                 "decision_status": "needs_clarification",
                 "winner_margin": 0.08,
-                "active_population_ids": ["evidence_input", "association", "working_state", "candidate", "critic", "goal", "decision_readout"],
+                "active_population_ids": ["evidence_input", "association", "working_state", "candidate", "critic_uncertainty", "goal_planning", "decision_readout"],
                 "missing_populations": [],
                 "readout_mismatch_slots": [],
                 "uncertainty": ["uncalibrated_model_output"],
