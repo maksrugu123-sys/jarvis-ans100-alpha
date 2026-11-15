@@ -30,6 +30,12 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn("startup.log", helper)
         self.assertIn("--app=%JARVIS_URL%", source)
 
+    def test_posix_only_policy_registry_does_not_break_windows_imports(self):
+        source = (ROOT / "tools/neuron_runtime/policy_registry.py").read_text(encoding="utf-8")
+        self.assertNotRegex(source, r"(?m)^import fcntl$")
+        self.assertIn('if os.name == "nt":', source)
+        self.assertIn("requires POSIX file-locking", source)
+
     def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
         self.assertIn("Smoke-test packaged server on Windows", source)

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-import fcntl
 import hashlib
 import json
 import os
@@ -162,6 +161,13 @@ class PersistentSafetyPolicyRegistry:
     """
 
     def __init__(self, path: str | os.PathLike[str]) -> None:
+        # The registry currently relies on POSIX flock, ownership checks and
+        # directory fsync semantics. Do not silently weaken this security
+        # boundary on Windows; importing the module must still remain portable.
+        if os.name == "nt":
+            raise SafetyPolicyRegistryError(
+                "PersistentSafetyPolicyRegistry currently requires POSIX file-locking and permission semantics"
+            )
         self.path = Path(path)
         self.lock_path = self.path.with_name(self.path.name + ".lock")
         try:
@@ -195,6 +201,8 @@ class PersistentSafetyPolicyRegistry:
             if hasattr(os, "geteuid") and metadata.st_uid != os.geteuid():
                 raise SafetyPolicyRegistryError("policy-registry lock has an unexpected owner")
             os.fchmod(descriptor, 0o600)
+            import fcntl
+
             fcntl.flock(descriptor, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
             yield
         except OSError as exc:
