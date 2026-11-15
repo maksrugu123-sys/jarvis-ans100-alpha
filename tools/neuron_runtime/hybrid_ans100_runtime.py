@@ -394,7 +394,7 @@ class HybridANS100Runtime:
             "population_count": len(POPULATIONS),
             "active_in_chat": True,
             "runtime_mode": "fresh_in_memory_graph_per_turn",
-            "input_contract": "ANDROID_TYPED_EVIDENCE_V1",
+            "input_contract": "JARVIS_TYPED_EVIDENCE_V1",
             "learning_enabled": False,
             "persistent_state": False,
             "decision_authority": "advisory_only",
