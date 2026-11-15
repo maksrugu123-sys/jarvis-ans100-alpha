@@ -76,6 +76,22 @@ class AndroidHybridTopologyV2Test {
     }
 
     @Test
+    fun refusesToOverwriteAnExistingDifferentOrIncompleteDatabase() {
+        AndroidSparseNeuronNetwork(context, databaseName).use { existing ->
+            existing.initializeSparseChain(neuronCount = 100)
+            var rejected = false
+            try {
+                existing.initializeHybridTopologyV2()
+            } catch (_: AndroidNeuronNetworkException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+            assertEquals(100, existing.stats().neuronCount)
+            assertEquals(99, existing.stats().connectionCount)
+        }
+    }
+
+    @Test
     fun hybridV2UsesItsOwnDatabaseAndDoesNotReplaceLegacyTopology() {
         val legacyName = "ans100-legacy-isolation-${System.nanoTime()}.db"
         try {
