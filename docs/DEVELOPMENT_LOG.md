@@ -2821,3 +2821,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Verification:** GitHub source read-back only. The new prompt-packing test was authored but not run. No Gradle build, unit tests, APK, model inference, CI/GitHub Actions, or device test was run. Automatic Actions remain manual-only; no workflow was dispatched.
 
 **Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
+
+
+## Learned Android ANS-100 readout follow-up — 2026-11-15
+
+- Follow-up work removed the artificial direct-drive events previously sent to all four output neurons. Only hashed text-feature nodes now receive external input; output activation must result from propagation through the learned feature-to-output synapses.
+- Added a bounded four-way readout of mean learned synaptic weights for greeting, question, thanks and farewell. These values are explicitly labelled as weights, not calibrated probabilities, and are included in the `DialogueNeuralAnalysis` prompt context passed to LiteRT-LM.
+- The existing explicit-feedback R-STDP path remains the only way ordinary chat-associated synaptic weights are changed; the language model's weights are not trained by this mechanism.
+- Updated the neural prompt-packing test to assert that the learned scores are present and not presented as probabilities.
+- Scope remains limited to a learned four-way dialogue readout. It is not yet broad semantic reasoning, multi-step neural planning, or independent answer generation.
+- Verification remains source read-back only. No tests, Gradle build, APK, inference, CI or device measurement was run.
+- Branch: `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
