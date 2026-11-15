@@ -576,6 +576,21 @@ private class AndroidNeuronSqliteStore(
                 }
                 db.delete("connections", null, null)
                 db.delete("events", null, null)
+                db.delete("dialogue_eligibility", null, null)
+                val resetHidden = ContentValues().apply {
+                    put("potential", 0.0)
+                    put("adaptation", 0.0)
+                    put("refractory_until_ns", 0L)
+                }
+                db.update(
+                    "neurons",
+                    resetHidden,
+                    "neuron_id>=? AND neuron_id<?",
+                    arrayOf(
+                        AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START.toString(),
+                        outputStart.toString(),
+                    ),
+                )
             }
 
             for (inputId in 0 until featureNeuronCount) {
