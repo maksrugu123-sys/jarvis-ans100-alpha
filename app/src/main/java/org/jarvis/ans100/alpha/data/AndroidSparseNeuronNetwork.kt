@@ -130,8 +130,6 @@ internal interface AndroidNeuronStateStore : Closeable {
     ): AndroidDialogueRewardResult
     fun recordHybridCandidateEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
     fun applyHybridCandidateFeedback(turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
-    fun recordHybridCandidateEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
-    fun applyHybridCandidateFeedback(turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double
     fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double>
     fun commitTimestamp(
