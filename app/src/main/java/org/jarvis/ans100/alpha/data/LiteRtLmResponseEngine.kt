@@ -3,8 +3,6 @@ import android.app.ActivityManager
 import android.content.Context
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
-import com.google.ai.edge.litertlm.Conversation
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
 import com.google.ai.edge.litertlm.Contents
@@ -33,10 +31,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     @Volatile private var backendNotice: String? = null
     private var engine: Engine? = null
     private var loadedPath: String? = null
-    @Volatile private var activeConversation: Conversation? = null
-    @Volatile private var cancellationRequested: Boolean = false
     @Volatile var onPartialResponse: ((String) -> Unit)? = null
-    @Volatile var onGenerationStateChanged: ((Boolean) -> Unit)? = null
     @Volatile private var lastInitializationMs: Long = 0L
     @Volatile private var lastGenerationMs: Long = 0L
     @Volatile private var lastOutputTokenEstimate: Int = 0
@@ -106,7 +101,6 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         understandingContext: LocalUnderstanding?,
     ): String {
         val clean = prompt.trim()
-        cancellationRequested = false
         if (clean.length > MAX_PROMPT_CHARS) throw LocalConversationException("Ограничение компактной модели — " + MAX_PROMPT_CHARS + " символов на запрос.")
         val understanding = understandingContext ?: LocalUnderstandingPipeline().analyze(clean)
         val file = modelStore.installedFile() ?: return fallback.respond(
@@ -161,9 +155,6 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val rawAnswer = try {
             generate(activeEngine, config, clean)
         } catch (error: Exception) {
-            if (cancellationRequested || error is CancellationException) {
-                throw CancellationException("Генерация остановлена пользователем.")
-            }
             if (!gpuRequested || activeBackend != "GPU") throw error
             disableGpuAfterFailure(file)
             generate(getEngine(file), config, clean)
@@ -230,8 +221,6 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
 
     private fun generate(activeEngine: Engine, config: ConversationConfig, prompt: String): String {
         val conversation = activeEngine.createConversation(config)
-        activeConversation = conversation
-        runCatching { onGenerationStateChanged?.invoke(true) }
         try {
             val startedAtNs = System.nanoTime()
             return try {
@@ -251,29 +240,13 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
                 }
                 lastTimeToFirstTextMs = if (firstTextAtNs == 0L) 0L
                     else ((firstTextAtNs - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
-                if (cancellationRequested) throw CancellationException("Генерация остановлена пользователем.")
                 lastContextTokenCount = runCatching { conversation.getTokenCount() }.getOrDefault(0)
                 output.toString()
             } finally {
                 lastGenerationMs = ((System.nanoTime() - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
             }
         } finally {
-            if (activeConversation === conversation) activeConversation = null
-            runCatching { conversation.close() }
-            runCatching { onGenerationStateChanged?.invoke(false) }
-        }
-    }
-
-    /** Safe to call from the UI thread; the cancelled Conversation is closed in generate()'s finally block. */
-    fun cancelGeneration(): Boolean {
-        val conversation = activeConversation ?: return false
-        cancellationRequested = true
-        return runCatching {
-            conversation.cancelProcess()
-            true
-        }.getOrElse {
-            cancellationRequested = false
-            false
+            conversation.close()
         }
     }
 
