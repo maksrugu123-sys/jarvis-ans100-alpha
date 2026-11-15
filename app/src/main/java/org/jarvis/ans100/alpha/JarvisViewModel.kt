@@ -976,10 +976,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         nativeNeuronNetwork.dialogueOutputScores(hiddenSpikes)
                     }
                     val networkOutputScores = mapOf(
-                        "greeting" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS] ?: 0.0),
-                        "question" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 1] ?: 0.0),
-                        "thanks" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 2] ?: 0.0),
-                        "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 3] ?: 0.0),
+                        "greeting" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START] ?: 0.0),
+                        "question" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 1] ?: 0.0),
+                        "thanks" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 2] ?: 0.0),
+                        "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 3] ?: 0.0),
                     )
                     val hiddenSpikeTimeNs = nextTime + AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS
                     val eligibilityCount = if (hiddenSpikes.isEmpty() || outputSpikes.isEmpty()) {
@@ -2442,9 +2442,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val TERMUX_PACKAGE_NAME = "com.termux"
         private const val MAX_DIALOGUE_FEATURE_EVENTS = 128
-        private const val MAX_DIALOGUE_EVENTS_PER_TURN =
-            MAX_DIALOGUE_FEATURE_EVENTS * (AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS + 1) +
-                AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS
+        private const val MAX_DIALOGUE_EVENTS_PER_TURN = 4_096
         private const val MAX_DIALOGUE_TIMESTAMPS_PER_TURN = 4
         private const val DIALOGUE_INPUT_STEP_NS = 10_000_000L
         private const val DIALOGUE_INITIAL_SYNAPSE_WEIGHT = 0.15
