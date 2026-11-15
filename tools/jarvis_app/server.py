@@ -36,6 +36,7 @@ from .visible_browser import (
     VisibleBrowserResearchService,
     validate_external_url,
 )
+from .workspace_files import WorkspaceFolderError, create_workspace_folder
 from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
 from tools.neuron_runtime.hybrid_ans100 import (
     EXPECTED_CONNECTION_COUNT as DESKTOP_ANS100_CONNECTION_COUNT,
@@ -221,6 +222,7 @@ class LocalConsoleService:
             Path(workspace_path).expanduser() if workspace_path is not None
             else self.data_path.with_name("workspace.jpvr")
         )
+        self.workspace_files_root = self.data_path.parent / "workspace-files"
         self.ans100_state_path = (
             Path(ans100_state_path).expanduser() if ans100_state_path is not None
             else self.data_path.with_name("ans100-conversation.jpvr")
@@ -387,6 +389,15 @@ class LocalConsoleService:
             self.workspace_store.save(candidate, expected_revision=expected_revision)
             self.workspace_snapshot, self.workspace_revision, _ = self.workspace_store.load()
             return self.workspace_state()
+
+    def create_workspace_folder(self, name: object) -> dict[str, object]:
+        """Create one new folder inside JARVIS's dedicated workspace-files root."""
+        if self.platform != "desktop":
+            raise LocalConsoleError("Создание папок доступно только в Windows/desktop версии.")
+        try:
+            return create_workspace_folder(self.workspace_files_root, name)
+        except WorkspaceFolderError as exc:
+            raise LocalConsoleError(str(exc)) from exc
 
     def conversation_state(self) -> dict[str, object]:
         with self._lock:
@@ -659,6 +670,10 @@ class LocalConsoleService:
     def browser_read(self) -> dict[str, object]:
         self._require_desktop_browser()
         return {"supported": True, **self.visible_browser.read()}
+
+    def browser_close_tab(self) -> dict[str, object]:
+        self._require_desktop_browser()
+        return {"supported": True, **self.visible_browser.close_tab()}
 
     def browser_control(self, paused: object) -> dict[str, object]:
         self._require_desktop_browser()
@@ -1304,6 +1319,16 @@ def create_http_server(
                     if payload:
                         raise LocalConsoleError("чтение страницы не принимает параметры")
                     self._send(200, service.browser_read())
+                    return
+                if path == "/api/browser/close-tab":
+                    if payload:
+                        raise LocalConsoleError("закрытие вкладки не принимает параметры")
+                    self._send(200, service.browser_close_tab())
+                    return
+                if path == "/api/folders":
+                    if set(payload) != {"name"}:
+                        raise LocalConsoleError("ожидалось поле name")
+                    self._send(201, service.create_workspace_folder(payload["name"]))
                     return
                 if path == "/api/browser/control":
                     if set(payload) != {"paused"}:
