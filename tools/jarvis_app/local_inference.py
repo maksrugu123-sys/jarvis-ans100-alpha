@@ -365,8 +365,8 @@ class LiteRtLmLocalEngine:
                             raw_lane = raw_readouts.get(candidate)
                             if isinstance(raw_lane, Mapping):
                                 safe_readouts[candidate] = {
-                                    "support": bounded_count(raw_lane.get("support")),
-                                    "conflict": bounded_count(raw_lane.get("conflict")),
+                                    "support": bounded_count(raw_lane.get("support"), 100),
+                                    "conflict": bounded_count(raw_lane.get("conflict"), 100),
                                 }
                     raw_scores = ans100_context.get("candidate_signal_scores")
                     safe_scores = {}
@@ -406,11 +406,13 @@ class LiteRtLmLocalEngine:
                     safe_ans100 = {
                         "runtime_version": "JARVIS_ANS100_HYBRID_V4",
                         "topology_id": "ans100-hybrid-v2",
+                        "topology_version": 4,
+                        "evidence_schema": "JARVIS_TYPED_EVIDENCE_V1",
                         "neuron_count": 10_000,
                         "connection_count": 25_500,
                         "processed_events": bounded_count(ans100_context.get("processed_events")),
                         "spike_count": bounded_count(ans100_context.get("spike_count")),
-                        "input_neuron_count": bounded_count(ans100_context.get("input_neuron_count"), 128),
+                        "input_neuron_count": bounded_count(ans100_context.get("input_neuron_count"), 64),
                         "selected_candidate": selected,
                         "readout_spike_counts": safe_readouts,
                         "candidate_signal_scores": safe_scores,
