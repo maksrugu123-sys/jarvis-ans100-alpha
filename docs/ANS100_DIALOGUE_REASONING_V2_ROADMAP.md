@@ -167,3 +167,9 @@ TypedEvidenceEncoder emits six Boolean candidate signals from the existing Core 
 This is a real candidate-specific signal-routing/readout path, but it is NOT learned semantic reasoning: Core creates the support/conflict labels using heuristics, the topology is deterministic and untrained, and readout spike counts are not calibrated confidence. The controller abstains if any candidate readout is missing, any required population is inactive, or the queue/budget is incomplete.
 
 Source-level tests were added for isolated candidate routes, readout-range separation, one-candidate propagation and symmetry across all six lanes. Tests are authored but NOT run. No build, CI, APK/AAB, benchmark or Android-device validation was performed.
+
+## 2026-11-15 explicit-feedback learning kernel — source implementation
+
+Added `ANS100CandidateFeedbackLearner.kt`, a pure bounded update rule for future candidate-path synapse integration. It accepts eligibility traces only when both turn ID and candidate ID match the feedback, rejects malformed/duplicate traces, clips each update to at most 0.01 by default, and keeps weights within 0.05..1.0. Feedback from model-generated text or implicit behavior is ignored; only explicit user feedback or a verified external outcome is accepted.
+
+This is currently a **learning kernel, not end-to-end online learning**. It does not yet create eligibility traces from actual hybrid spikes, write weights to SQLite, or change the live topology. The existing legacy `recordDialogueEligibility/applyDialogueReward` methods remain restricted to the legacy dialogue connection-ID scheme and must not be called for ANS-100 v4. The next integration stage must add a separate v4 eligibility table and connection-ID validation, then connect a genuine explicit-feedback UI/runtime event to that store. Tests were authored but NOT run. No build, tests, CI or Android workflow was executed.
