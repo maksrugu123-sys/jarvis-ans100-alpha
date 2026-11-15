@@ -1,4 +1,4 @@
-"""Tests for the deterministic no-model JARVIS response engine."""
+"""Tests for the deterministic no-model JARVIS response engine. NOT RUN."""
 from __future__ import annotations
 
 import unittest
