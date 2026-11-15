@@ -28,7 +28,8 @@ class ANS100HybridPopulationController {
         require(processedEventCount >= 0)
         require(pendingEvents >= 0)
         require(evidence.turnId.isNotBlank())
-        require(emittedSpikeNeuronIds.size <= 10_000)
+        require(emittedSpikeNeuronIds.size <= AndroidHybridTopologyV2.NEURON_COUNT)
+        require(emittedSpikeNeuronIds.all { it in 0 until AndroidHybridTopologyV2.NEURON_COUNT })
 
         require(telemetry.topologyId == AndroidHybridTopologyV2.TOPOLOGY_ID) {
             "decision requires the ANS-100 hybrid topology"
@@ -38,6 +39,10 @@ class ANS100HybridPopulationController {
         }
 
         val requiredPopulationIds = AndroidHybridTopologyV2.populations.map { it.id }
+        require(telemetry.populations.size == requiredPopulationIds.size)
+        require(telemetry.populations.map { it.populationId }.toSet() == requiredPopulationIds.toSet()) {
+            "hybrid telemetry must contain each population exactly once"
+        }
         val activityById = telemetry.populations.associateBy { it.populationId }
         val activePopulationIds = requiredPopulationIds.filter { populationId ->
             (activityById[populationId]?.uniqueSpikingNeurons ?: 0) > 0
