@@ -93,7 +93,7 @@ data class LocalConversationUiState(
 
 private data class NativeDialogueFeedbackContext(
     val contextId: String,
-    val featureNeuronIds: List<Int>,
+    val rewardNeuronIds: List<Int>,
     val analysis: DialogueNeuralAnalysis,
 )
 
@@ -755,7 +755,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             dialogFeatureError = dialogPredictionResult.second,
                             lastRewardedAssistantMessageId = null,
                             nativeDialogueContextId = nativeFeedbackContext?.contextId,
-                            nativeDialogueFeatureIds = nativeFeedbackContext?.featureNeuronIds.orEmpty(),
+                            nativeDialogueFeatureIds = nativeFeedbackContext?.rewardNeuronIds.orEmpty(),
                             modelInitializationMs = modelMetrics.initializationMs,
                             responseGenerationMs = modelMetrics.generationMs,
                             lastTurnDurationMs = elapsedMs,
@@ -902,7 +902,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         classifierPrediction: DialogFeaturePrediction?,
     ): NativeDialogueFeedbackContext? {
         val boundedIds = featureIds.asSequence()
-            .map { it % AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS }
+            .map { it % AndroidSparseNeuronNetwork.DIALOGUE_INPUT_NEURONS }
             .distinct()
             .take(MAX_DIALOGUE_FEATURE_EVENTS)
             .toList()
@@ -928,6 +928,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         nativeNeuronNetwork.initializeSparseDialogueNetwork(
                             neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
                             weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
+                            inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
                         )
                         prior = nativeNeuronNetwork.stats()
                     }
@@ -955,29 +956,43 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         maxEvents = MAX_DIALOGUE_EVENTS_PER_TURN,
                         maxTimestamps = MAX_DIALOGUE_TIMESTAMPS_PER_TURN,
                     )
+                    val hiddenSpikes = result.emittedSpikes.asSequence()
+                        .map { it.first }
+                        .filter {
+                            it in AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until
+                                AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
+                        }
+                        .distinct()
+                        .take(AndroidSparseNeuronNetwork.MAX_DIALOGUE_FEATURES_PER_TURN)
+                        .toList()
                     val outputSpikes = result.emittedSpikes.asSequence()
                         .map { it.first }
                         .filter {
-                            it in AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS until
+                            it in AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START until
                                 AndroidSparseNeuronNetwork.MAX_NEURONS
                         }
                         .distinct()
                         .toList()
-                    val rawReadout = nativeNeuronNetwork.dialogueOutputScores(boundedIds)
+                    val rawReadout = if (hiddenSpikes.isEmpty()) {
+                        emptyMap()
+                    } else {
+                        nativeNeuronNetwork.dialogueOutputScores(hiddenSpikes)
+                    }
                     val networkOutputScores = mapOf(
                         "greeting" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS] ?: 0.0),
                         "question" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 1] ?: 0.0),
                         "thanks" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 2] ?: 0.0),
                         "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 3] ?: 0.0),
                     )
-                    val eligibilityCount = if (outputSpikes.isEmpty()) {
+                    val hiddenSpikeTimeNs = nextTime + AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS
+                    val eligibilityCount = if (hiddenSpikes.isEmpty() || outputSpikes.isEmpty()) {
                         0
                     } else {
                         nativeNeuronNetwork.recordDialogueEligibility(
                             contextId = contextId,
-                            featureNeuronIds = boundedIds,
+                            sourceNeuronIds = hiddenSpikes,
                             outputNeuronIds = outputSpikes,
-                            preTimeNs = nextTime,
+                            preTimeNs = hiddenSpikeTimeNs,
                             postTimeNs = result.currentTimeNs,
                         )
                     }
@@ -987,6 +1002,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val analysis = DialogueNeuralAnalysis(
                         networkNeuronCount = stats.neuronCount,
                         activeFeatureCount = boundedIds.size,
+                        activeHiddenNeuronCount = hiddenSpikes.size,
                         processedEvents = result.processedEvents,
                         processedNeuronBatches = result.processedNeuronBatches,
                         outputSpikeCount = outputSpikes.size,
@@ -1012,7 +1028,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             ),
                         )
                     }
-                    NativeDialogueFeedbackContext(contextId, boundedIds, analysis)
+                    NativeDialogueFeedbackContext(contextId, hiddenSpikes, analysis)
                 } catch (error: Exception) {
                     mainHandler.post {
                         val current = mutableState.value
@@ -1164,6 +1180,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 nativeNeuronNetwork.initializeSparseDialogueNetwork(
                     neuronCount = AndroidSparseNeuronNetwork.MAX_NEURONS,
                     weight = DIALOGUE_INITIAL_SYNAPSE_WEIGHT,
+                    inputToHiddenWeight = AndroidSparseNeuronNetwork.DEFAULT_INPUT_TO_HIDDEN_WEIGHT,
                 )
                 val stats = nativeNeuronNetwork.stats()
                 mainHandler.post {
