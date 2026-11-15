@@ -2832,3 +2832,30 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Scope remains limited to a learned four-way dialogue readout. It is not yet broad semantic reasoning, multi-step neural planning, or independent answer generation.
 - Verification remains source read-back only. No tests, Gradle build, APK, inference, CI or device measurement was run.
 - Branch: `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
+
+
+## Android ANS-100 three-stage dialogue network — 2026-11-15
+
+**Architecture update:**
+- Reworked the Android dialogue topology from the former 9,996-input-to-four-output graph into three explicit populations within the same 10,000-node JNVM:
+  - 9,000 hashed text-feature input neurons;
+  - 996 LIF-DT hidden neurons;
+  - 4 feedback-trained readout neurons for greeting, question, thanks, and farewell.
+- Each input neuron has eight deterministic sparse connections to the hidden population. Every hidden neuron connects to the four readout neurons. The topology contains 72,000 input-to-hidden plus 3,984 hidden-to-output connections: 75,984 total, below the 100,000 connection cap.
+- Input-to-hidden weights start at 0.75 and hidden-to-output weights at 0.15. The input and hidden populations integrate actual event batches through the existing LIF-DT runtime; output units receive only propagated hidden spikes. Removed the former direct output-drive events, which had artificially activated the four outputs regardless of input.
+- The four output scores passed to the language model are now mean hidden-to-output synaptic weights for the hidden neurons active in this turn. They are explicitly labelled as weak routing hints, not probabilities, facts, or semantic decisions. The separate explicitly trained four-class feature classifier is included only when it has a confident candidate supported by training examples.
+- Explicit user feedback records eligibility for hidden neurons that actually spiked and the readout neurons that actually spiked. R-STDP reward therefore updates only the active hidden-to-output synapses for that turn. Ordinary chat does not update weights.
+- Added topology version metadata and an in-place upgrade path from the earlier direct feature-to-output topology. The migration retains existing weights on the 996 nodes reassigned as hidden-to-output sources, creates the new input-to-hidden projection, clears stale queued events and eligibility traces, and resets the repurposed hidden-neuron membrane/adaptation/refractory state. It does not delete the 10,000 neuron records or reset the model clock.
+- Bounded per-turn processing at 4,096 events, four timestamps, at most 128 text-feature inputs, and at most 256 hidden neurons retained for readout/reward. SQLite/JNVM remains authoritative; the LRU resident-state cache remains bounded.
+- Updated Android instrumentation tests to cover the 75,984-edge topology, actual input → hidden → output propagation, feedback changes to only recorded hidden-to-output synapses, persistence, invalid reward rejection, and idempotent topology initialization. Updated prompt-packing coverage for active hidden counts and learned output preferences.
+
+**Limitations / interpretation:**
+- The input representation is still hashed words and adjacent word pairs, not a semantic embedding. The 996 hidden neurons provide real temporal/spiking integration, but the network is not yet a general-purpose reasoning engine.
+- The four outputs represent only basic dialogue routing classes. They cannot independently plan explanations, verify facts, compare evidence, or understand arbitrary language.
+- Qwen still receives the original user message and JARVIS Core's heuristic understanding/plan. ANS-100 contributes bounded numerical and explicitly trained routing evidence; it does not yet decide the full answer content.
+- First-time topology creation and in-place migration write up to 75,984 synapses in one SQLite transaction. Startup latency, memory, battery, thermal impact, and real-device behavior are unmeasured. The first chat after an upgrade may take longer.
+- Migration preserves old hidden-to-output weights where they map to the new hidden population; old direct input-to-output weights are not retained because those edges no longer exist in the new topology.
+
+**Verification:** GitHub source read-back only. Android instrumentation tests and prompt-packing unit tests were authored/updated but NOT RUN. No Gradle build, APK, model inference, CI/GitHub Actions, or device test was run. Automatic Actions remain manual-only; no workflow was dispatched.
+
+**Branch:** experiment/jarvis-integrated-prototype-v1; main untouched.
