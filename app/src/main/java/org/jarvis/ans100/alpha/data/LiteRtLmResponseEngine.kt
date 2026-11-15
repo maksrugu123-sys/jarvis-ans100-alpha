@@ -150,9 +150,20 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val rawAnswer = try {
             generate(activeEngine, config, clean)
         } catch (error: Exception) {
-            if (!gpuRequested || activeBackend != "GPU") throw error
-            disableGpuAfterFailure(file)
-            generate(getEngine(file), config, clean)
+            if (!gpuRequested || activeBackend != "GPU") {
+                // A failed CPU conversation may leave native engine state uncertain.
+                // Retire it so the next user turn starts from a fresh engine instance.
+                runCatching { closeEngine() }
+                throw error
+            }
+            try {
+                disableGpuAfterFailure(file)
+                generate(getEngine(file), config, clean)
+            } catch (fallbackError: Exception) {
+                // Do not reuse a CPU engine whose fallback generation also failed.
+                runCatching { closeEngine() }
+                throw fallbackError
+            }
         }
         val answer = rawAnswer.trim()
         if (answer.isEmpty()) throw LocalConversationException("Модель вернула пустой ответ.")
