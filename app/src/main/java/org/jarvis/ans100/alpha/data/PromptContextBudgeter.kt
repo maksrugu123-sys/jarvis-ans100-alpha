@@ -86,6 +86,17 @@ internal object PromptContextBudgeter {
             }
         }
 
+        val handoffText = ans100Handoff
+            ?.takeIf { it.turnId.isNotBlank() && it.promptContext.length <= ANS100QwenHandoff.MAX_CONTEXT_CHARS }
+            ?.promptContext
+        if (handoffText != null) {
+            val section = "Структурированная передача ANS-100 для языковой реализации (контракт, не доказательство):\n$handoffText"
+            val candidateSections = sections + section
+            if (estimate(renderSystem(candidateSections), selectedHistory) <= INPUT_ESTIMATE_LIMIT) {
+                sections += section
+            }
+        }
+
         val understandingText = understandingContext?.toModelContext()
             ?.take(MAX_UNDERSTANDING_CHARS)
             ?.takeIf { it.isNotBlank() }
@@ -113,17 +124,6 @@ internal object PromptContextBudgeter {
             ?.takeIf { it.isNotBlank() }
         if (neuralText != null) {
             val section = "Измерения Android-сети ANS-100 (ограниченные признаки, не самостоятельное понимание):\n$neuralText"
-            val candidateSections = sections + section
-            if (estimate(renderSystem(candidateSections), selectedHistory) <= INPUT_ESTIMATE_LIMIT) {
-                sections += section
-            }
-        }
-
-        val handoffText = ans100Handoff
-            ?.takeIf { it.turnId.isNotBlank() && it.promptContext.length <= ANS100QwenHandoff.MAX_CONTEXT_CHARS }
-            ?.promptContext
-        if (handoffText != null) {
-            val section = "Структурированная передача ANS-100 для языковой реализации (контракт, не доказательство):\n$handoffText"
             val candidateSections = sections + section
             if (estimate(renderSystem(candidateSections), selectedHistory) <= INPUT_ESTIMATE_LIMIT) {
                 sections += section
