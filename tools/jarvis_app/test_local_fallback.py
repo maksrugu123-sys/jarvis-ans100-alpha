@@ -23,9 +23,11 @@ class LocalFallbackResponseEngineTests(unittest.TestCase):
             memory_context=[{"id": "m1", "category": "device", "content": "Android"}],
             signal_context={"processed_events": 3, "spike_count": 1, "neuron_count": 10},
             dialog_neuron_context={"neuron_count": 10_000, "trained_examples": 2},
+            ans100_context={"selected_candidate": "clarification"},
         )
         self.assertIn("событий 3", status)
         self.assertIn("10 000", status)
+        self.assertIn("кандидат сигнала — clarification", status)
 
     def test_unknown_question_does_not_fake_an_answer(self):
         answer = self.engine.respond("Как устроен квантовый компьютер?", [])
