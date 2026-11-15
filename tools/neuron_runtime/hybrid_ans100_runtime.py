@@ -9,12 +9,12 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Mapping
-from typing import Any
-
 from .hybrid_ans100 import (
+    EXPECTED_CONNECTION_COUNT,
     MAX_EVENTS_PER_RUN,
-    NEURON_COUNT,
+    NEURON_COUNT as V4_NEURON_COUNT,
     POPULATIONS,
+    TOPOLOGY_ID as V4_TOPOLOGY_ID,
     build_network,
     validate_input_ids,
 )
@@ -132,9 +132,9 @@ class HybridANS100Runtime:
     """Build and run a fresh bounded V4 graph for each desktop chat turn."""
 
     VERSION = "JARVIS_ANS100_HYBRID_V4"
-    TOPOLOGY_ID = "ans100-hybrid-v2"
-    NEURON_COUNT = NEURON_COUNT
-    CONNECTION_COUNT = 25_500
+    TOPOLOGY_ID = V4_TOPOLOGY_ID
+    NEURON_COUNT = V4_NEURON_COUNT
+    CONNECTION_COUNT = EXPECTED_CONNECTION_COUNT
 
     def __init__(
         self,
