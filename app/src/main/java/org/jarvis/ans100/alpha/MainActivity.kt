@@ -100,6 +100,8 @@ class MainActivity : ComponentActivity() {
 private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     val ui by viewModel.state.collectAsState()
     var conversationInput by rememberSaveable { mutableStateOf("") }
+    var pendingConversationSubmission by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingConversationBaselineLastId by rememberSaveable { mutableStateOf<String?>(null) }
     var sessionTitle by rememberSaveable { mutableStateOf("") }
     var taskTitle by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf("") }
@@ -194,6 +196,24 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     }
     val selectedTask = ui.data.tasks.firstOrNull { it.id == selectedTaskId }
 
+    // Keep the submitted draft until its complete user/assistant exchange is persisted.
+    LaunchedEffect(ui.conversation.isBusy, ui.conversation.messages.lastOrNull()?.id) {
+        val submitted = pendingConversationSubmission ?: return@LaunchedEffect
+        if (ui.conversation.isBusy) return@LaunchedEffect
+        val latestPair = ui.conversation.messages.takeLast(2)
+        val baselineId = pendingConversationBaselineLastId
+        val committed = latestPair.size == 2 &&
+            latestPair[0].role == ConversationRole.USER &&
+            latestPair[0].text == submitted &&
+            latestPair[1].role == ConversationRole.ASSISTANT &&
+            latestPair[1].id != baselineId
+        if (committed) {
+            if (conversationInput.trim() == submitted) conversationInput = ""
+            pendingConversationSubmission = null
+            pendingConversationBaselineLastId = null
+        }
+    }
+
     val selectedAccentColor = when (accentChoice) { "violet" -> Color(0xFFB18CFF); "mint" -> Color(0xFF52D6B4); else -> Color(0xFF4DA3FF) }
     val jarvisColors = darkColorScheme(
         primary = selectedAccentColor,
@@ -222,8 +242,10 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 input = conversationInput,
                                 onInputChange = { conversationInput = it.take(4_000) },
                                 onSend = { message ->
+                                    pendingConversationSubmission = message.trim()
+                                    pendingConversationBaselineLastId =
+                                        ui.conversation.messages.lastOrNull()?.id
                                     viewModel.sendConversationMessage(message)
-                                    conversationInput = ""
                                 },
                                 isBusy = ui.conversation.isBusy,
                                 glowEnabled = glowEnabled,
