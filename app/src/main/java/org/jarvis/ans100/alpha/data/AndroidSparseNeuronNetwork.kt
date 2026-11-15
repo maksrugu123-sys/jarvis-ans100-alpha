@@ -155,7 +155,8 @@ class AndroidSparseNeuronNetwork(
      * Ensures a bounded three-stage dialogue topology: 9,000 hashed text inputs,
      * 996 LIF hidden neurons, and four reward-trained readout neurons. Each input
      * fans out to eight deterministic hidden targets; hidden units connect to all
-     * four readouts. Existing v1 hidden-to-output weights are preserved on upgrade.
+     * four readouts. Existing v1 feature-to-output weights are projected through
+     * the new input-to-hidden mapping during upgrade.
      */
     @Synchronized
     fun initializeSparseDialogueNetwork(
