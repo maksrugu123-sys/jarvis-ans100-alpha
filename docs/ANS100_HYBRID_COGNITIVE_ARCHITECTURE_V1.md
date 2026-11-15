@@ -190,7 +190,7 @@ The versioned `ANS100Decision` contract supports up to eight candidates, same-tu
 Tests were added but not executed. No Gradle build, APK/AAB, CI, GitHub Actions, benchmark or device run was performed.
 
 
-## 14. Phase 3 implementation status — gated legacy bridge
+## 14. Phase 2 integration status — gated legacy bridge
 
 Added `ANS100DecisionPolicy` and wired its output through `LiteRtLmResponseEngine` and `PromptContextBudgeter` behind the persisted `ans100_decision_handoff_enabled` flag, whose default is false. The adapter is explicitly marked `CORE_POLICY_V1` / `LEGACY_DIALOGUE_READOUT_V1`: it uses Core's current clarification heuristic and original user-message evidence. Existing neural readout measurements contribute event telemetry only; neural labels/scores are not promoted to semantic decisions or probabilities.
 
