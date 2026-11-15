@@ -213,8 +213,9 @@ class ANS100QwenHandoffBuilder {
             "Verified tool evidence summaries (source labels do not make content infallible):\n" +
                 toolEvidence.joinToString("\n") { (it.value as EvidenceValue.Text).value }.take(MAX_TOOL_CHARS),
             "QWEN ROLE: realize a natural-language response from the original user message and this bounded decision. " +
-                "Do not invent missing evidence, do not claim ANS-100 certainty, do not execute tools or actions, " +
-                "and ask the single clarification question when the decision requests clarification. " +
+                "Do not invent missing evidence, do not claim ANS-100 certainty, do not execute tools or actions. " +
+                "If status is ABSTAINED, explain the limitation without presenting a selected answer; " +
+                "if status is NEEDS_CLARIFICATION, ask the single clarification question. " +
                 "Memory/tool references are not permission to access anything."
         )
 
