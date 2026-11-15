@@ -2869,3 +2869,26 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Updated JARVIS_10K_NEURON_SCALING_V1.md, JARVIS_ANDROID_SPARSE_NETWORK_JNVM_V1.md, and ANS100_DIALOGUE_REASONING_V2_ROADMAP.md so the architecture documentation reflects the 9,000-input / 996-hidden / 4-output source topology and distinguishes it from the still-unimplemented broader semantic reasoning design.
 - Verification remains GitHub source read-back only. The migration instrumentation test and all other tests remain NOT RUN; no build, APK, inference, CI, workflow, or device test was performed.
 - Branch: experiment/jarvis-integrated-prototype-v1; main untouched.
+
+
+## Windows 10 Chrome / Edge Browser Bridge — 2026-11-15
+
+**Implemented on `experiment/jarvis-integrated-prototype-v1`:**
+- Added a Manifest V3 companion extension under `tools/jarvis_app/browser_extension/` with a dark JARVIS popup for opening HTTP(S) URLs, searching in a new Bing tab, and asking JARVIS about the active page.
+- Uses only `activeTab`, `scripting`, and `storage` permissions plus the single local host `http://127.0.0.1:8765/*`. The active tab is read only after the user opens the extension and presses its explicit send button; page text is capped at 12,000 characters.
+- Added an authenticated desktop-only extension API. The local server accepts the extension origin only on `/api/extension/state` and `/api/extension/ask`, permits only matching CORS preflights, and still requires the existing 43-character Bearer token.
+- Page handoff validates HTTP(S) URL syntax, rejects localhost/private/reserved literal IPs, resolves the hostname and rejects any private/reserved DNS result, bounds title/question/text lengths, and passes page text to JARVIS Core as untrusted external context. It does not authorize external actions.
+- Added a runtime-generated ZIP download at `/downloads/jarvis-browser-extension.zip`, a download link in the PWA browser panel, unpacked developer-mode installation instructions for Chrome/Edge, popup privacy messaging, and a PWA service-worker cache bump to v13.
+- Windows 10 startup remains through the existing `start_jarvis_windows.bat` launcher; the extension is a companion to the local PC console, not a native Windows executable or signed CRX.
+
+**Tests authored, not run:**
+- ZIP download content-type/disposition and manifest permission assertions.
+- Extension CORS preflight, allowed origin response, rejected foreign origin, authenticated state endpoint, unauthorized ask endpoint, and rejection of a loopback source page.
+- No browser extension was installed; no Windows 10, Chrome, Edge, Python runtime, local Qwen inference, build, test suite, CI or GitHub Actions workflow was executed.
+
+**Known limitations:**
+- The extension opens/searches tabs and sends the current tab to JARVIS; it does not yet let the JARVIS chat issue commands directly into an already-installed browser extension.
+- The current local PC model runtime must be installed and available for page Q&A. The no-model fallback is not a general-purpose page reader.
+- Installation is manual via browser Developer mode. No signed store package or native desktop installer exists yet.
+
+**Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
