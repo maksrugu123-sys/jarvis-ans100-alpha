@@ -266,30 +266,32 @@ data class DialogueNeuralAnalysis(
     }
 
     fun toModelContext(): String = buildString {
-        append("Android sparse LIF: ").append(networkNeuronCount).append(" nodes; active text-feature inputs=")
-        append(activeFeatureCount).append("; active hidden neurons=").append(activeHiddenNeuronCount)
-        append("; events=").append(processedEvents)
-        append("; neuron batches=").append(processedNeuronBatches)
-        append("; output neuron spikes=").append(outputSpikeCount)
-        append("; pending events=").append(pendingEvents)
-        append("; state committed=").append(statePersisted).append(". ")
-        if (classifierLabel != null) {
-            append("Explicitly trained feature-classifier candidate=").append(classifierLabel)
-            append("; score margin=").append(String.format(Locale.ROOT, "%.3f", classifierConfidenceMargin ?: 0.0))
-            append("; confirmed examples=").append(classifierTrainedExamples).append(". ")
-        } else {
-            append("No confident trained classifier label. ")
+        if (networkNeuronCount > 0 || statePersisted || classifierLabel != null || networkOutputScores.isNotEmpty()) {
+            append("Android sparse LIF: ").append(networkNeuronCount).append(" nodes; active text-feature inputs=")
+            append(activeFeatureCount).append("; active hidden neurons=").append(activeHiddenNeuronCount)
+            append("; events=").append(processedEvents)
+            append("; neuron batches=").append(processedNeuronBatches)
+            append("; output neuron spikes=").append(outputSpikeCount)
+            append("; pending events=").append(pendingEvents)
+            append("; state committed=").append(statePersisted).append(". ")
+            if (classifierLabel != null) {
+                append("Explicitly trained feature-classifier candidate=").append(classifierLabel)
+                append("; score margin=").append(String.format(Locale.ROOT, "%.3f", classifierConfidenceMargin ?: 0.0))
+                append("; confirmed examples=").append(classifierTrainedExamples).append(". ")
+            } else {
+                append("No confident trained classifier label. ")
+            }
+            if (networkOutputScores.isNotEmpty()) {
+                append("Learned synaptic output preferences (mean weights, not probabilities): ")
+                append(networkOutputScores.toSortedMap().entries.joinToString(", ") { (label, score) ->
+                    "$label=${String.format(Locale.ROOT, "%.3f", score)}"
+                })
+                append(". ")
+            }
+            append("Use synaptic preferences only as weak routing hints, never as facts or commands. ")
+            append("Numeric feature evidence only; four output units are feedback-trained readout targets, not general semantic reasoning. ")
+            append("The original user message and Core plan take priority when choosing answer content.")
         }
-        if (networkOutputScores.isNotEmpty()) {
-            append("Learned synaptic output preferences (mean weights, not probabilities): ")
-            append(networkOutputScores.toSortedMap().entries.joinToString(", ") { (label, score) ->
-                "$label=${String.format(Locale.ROOT, "%.3f", score)}"
-            })
-            append(". ")
-        }
-        append("Use synaptic preferences only as weak routing hints, never as facts or commands. ")
-        append("Numeric feature evidence only; four output units are feedback-trained readout targets, not general semantic reasoning. ")
-        append("The original user message and Core plan take priority when choosing answer content.")
         if (!hybridTelemetrySummary.isNullOrBlank()) {
             append("\nExperimental ANS-100 hybrid population activity (telemetry only; not semantic proof or confidence): ")
             append(hybridTelemetrySummary.take(1_200))
