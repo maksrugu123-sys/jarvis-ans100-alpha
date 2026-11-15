@@ -275,7 +275,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
             payload = json.loads(response.read().decode("utf-8"))
         topology = payload["desktop_topology"]
         self.assertEqual(topology["neuron_count"], 10_000)
-        self.assertEqual(topology["connection_count"], 25_500)
+        self.assertEqual(topology["declared_connection_count"], 25_500)
         self.assertEqual(len(topology["populations"]), 7)
         self.assertFalse(payload["active_in_chat"])
         self.assertEqual(payload["runtime_state"], "source_topology_only")
