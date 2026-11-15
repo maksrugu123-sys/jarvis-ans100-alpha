@@ -68,6 +68,22 @@ data class AndroidDialogueRewardResult(
     val expiredSynapses: Int,
 )
 
+data class AndroidNeuronPopulationActivity(
+    val populationId: String,
+    val receivedEventCount: Int,
+    val uniqueNeuronsProcessed: Int,
+    val uniqueSpikingNeurons: Int,
+    val spikeCount: Int,
+    val outgoingEventCount: Int,
+)
+
+data class AndroidHybridRunTelemetry(
+    val topologyId: String,
+    val topologyVersion: Int,
+    /** Counters cover this run() invocation only, not earlier or later partial runs. */
+    val populations: List<AndroidNeuronPopulationActivity>,
+)
+
 data class AndroidNeuronRunResult(
     val processedEvents: Int,
     val processedNeuronBatches: Int,
@@ -75,6 +91,8 @@ data class AndroidNeuronRunResult(
     val pendingEvents: Int,
     val budgetExhausted: Boolean,
     val currentTimeNs: Long,
+    /** Present only when this database matches the versioned seven-population hybrid topology. */
+    val hybridTelemetry: AndroidHybridRunTelemetry? = null,
 )
 
 open class AndroidNeuronNetworkException(message: String) : IllegalStateException(message)
@@ -279,6 +297,21 @@ class AndroidSparseNeuronNetwork(
         var timestamps = 0
         var exhausted = false
         val spikes = mutableListOf<Pair<Int, Long>>()
+        val isHybridTopology = store.matchesTopology(
+            topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
+            topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
+            neuronCount = AndroidHybridTopologyV2.NEURON_COUNT,
+            connectionCount = AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT,
+        )
+        val hybridPopulations = if (isHybridTopology) AndroidHybridTopologyV2.populations else emptyList()
+        val receivedEvents = if (isHybridTopology) IntArray(hybridPopulations.size) else null
+        val processedNeuronIds = if (isHybridTopology) Array(hybridPopulations.size) { HashSet<Int>() } else null
+        val spikingNeuronIds = if (isHybridTopology) Array(hybridPopulations.size) { HashSet<Int>() } else null
+        val spikeCounts = if (isHybridTopology) IntArray(hybridPopulations.size) else null
+        val outgoingEventCounts = if (isHybridTopology) IntArray(hybridPopulations.size) else null
+        fun populationIndex(neuronId: Int): Int =
+            hybridPopulations.indexOfFirst { it.contains(neuronId) }
+
         var clock = store.stats(hot.size, hotSetCapacity).currentTimeNs
 
         while (timestamps < maxTimestamps) {
@@ -293,6 +326,16 @@ class AndroidSparseNeuronNetwork(
             }
 
             val byTarget = group.groupBy { it.targetNeuronId }
+            if (receivedEvents != null && processedNeuronIds != null) {
+                group.forEach { event ->
+                    val index = populationIndex(event.targetNeuronId)
+                    if (index >= 0) receivedEvents[index]++
+                }
+                byTarget.keys.forEach { neuronId ->
+                    val index = populationIndex(neuronId)
+                    if (index >= 0) processedNeuronIds[index].add(neuronId)
+                }
+            }
             val changed = LinkedHashMap<Int, AndroidNeuronState>()
             val generated = mutableListOf<AndroidNeuronEvent>()
 
@@ -305,7 +348,19 @@ class AndroidSparseNeuronNetwork(
                 if (result.second) {
                     val spikeSequence = result.first.spikeSequence
                     spikes += targetId to spikeSequence
-                    for (connection in store.outgoing(targetId)) {
+                    if (spikingNeuronIds != null && spikeCounts != null) {
+                        val index = populationIndex(targetId)
+                        if (index >= 0) {
+                            spikingNeuronIds[index].add(targetId)
+                            spikeCounts[index]++
+                        }
+                    }
+                    val outgoingConnections = store.outgoing(targetId)
+                    if (outgoingEventCounts != null) {
+                        val index = populationIndex(targetId)
+                        if (index >= 0) outgoingEventCounts[index] += outgoingConnections.size
+                    }
+                    for (connection in outgoingConnections) {
                         if (timestamp > Long.MAX_VALUE - connection.delayNs) {
                             throw AndroidNeuronNetworkException("propagated model timestamp overflows signed 64-bit time")
                         }
@@ -330,6 +385,25 @@ class AndroidSparseNeuronNetwork(
         }
 
         val finalStats = store.stats(hot.size, hotSetCapacity)
+        val hybridTelemetry = if (
+            receivedEvents != null && processedNeuronIds != null &&
+            spikingNeuronIds != null && spikeCounts != null && outgoingEventCounts != null
+        ) {
+            AndroidHybridRunTelemetry(
+                topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
+                topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
+                populations = hybridPopulations.mapIndexed { index, population ->
+                    AndroidNeuronPopulationActivity(
+                        populationId = population.id,
+                        receivedEventCount = receivedEvents[index],
+                        uniqueNeuronsProcessed = processedNeuronIds[index].size,
+                        uniqueSpikingNeurons = spikingNeuronIds[index].size,
+                        spikeCount = spikeCounts[index],
+                        outgoingEventCount = outgoingEventCounts[index],
+                    )
+                },
+            )
+        } else null
         return AndroidNeuronRunResult(
             processedEvents = processedEvents,
             processedNeuronBatches = processedBatches,
@@ -337,6 +411,7 @@ class AndroidSparseNeuronNetwork(
             pendingEvents = finalStats.pendingEvents,
             budgetExhausted = exhausted,
             currentTimeNs = finalStats.currentTimeNs,
+            hybridTelemetry = hybridTelemetry,
         )
     }
 
