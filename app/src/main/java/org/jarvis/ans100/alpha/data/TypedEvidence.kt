@@ -58,6 +58,12 @@ enum class EvidenceFeature(val stableId: String) {
     CORE_EVIDENCE_NOTE_HINT("core.evidence_note_hint"),
     APPROVED_MEMORY_REFERENCE("memory.approved_reference"),
     VERIFIED_TOOL_RESULT("tool.verified_result"),
+    CANDIDATE_ANSWER_SUPPORT("ans100.candidate.answer.support"),
+    CANDIDATE_ANSWER_CONFLICT("ans100.candidate.answer.conflict"),
+    CANDIDATE_CLARIFICATION_SUPPORT("ans100.candidate.clarification.support"),
+    CANDIDATE_CLARIFICATION_CONFLICT("ans100.candidate.clarification.conflict"),
+    CANDIDATE_ABSTAIN_SUPPORT("ans100.candidate.abstain.support"),
+    CANDIDATE_ABSTAIN_CONFLICT("ans100.candidate.abstain.conflict"),
 }
 
 sealed class EvidenceValue {
@@ -335,6 +341,36 @@ class TypedEvidenceEncoder {
                 EvidenceFeature.CORE_EVIDENCE_NOTE_HINT, EvidenceSourceKind.CORE_UNDERSTANDING,
                 EvidenceStatus.HEURISTIC, EvidenceValue.Text(note.take(TypedEvidenceRecord.MAX_VALUE_CHARS)),
                 "turn:${input.turnId}:core.evidence[$index]", ordinal = index,
+            )
+        }
+
+        // These six typed signals form the candidate-slot input contract. Their
+        // labels are derived from Core heuristics, not learned by ANS-100.
+        val usableIntent = core.intent.isNotBlank() &&
+            core.intent != "statement_or_unknown" &&
+            core.taskKind.isNotBlank() &&
+            core.intentConfidence >= 0.4
+        val hasGoal = usableIntent && core.reasoningPlan.goal.isNotBlank()
+        val ambiguousContext = core.refersToPreviousContext &&
+            (core.contextReference.status == "ambiguous" ||
+                core.contextReference.status == "unavailable")
+        val needsClarification = core.reasoningPlan.requiresClarification || ambiguousContext
+        val candidateSignals = listOf(
+            EvidenceFeature.CANDIDATE_ANSWER_SUPPORT to (hasGoal && !needsClarification),
+            EvidenceFeature.CANDIDATE_ANSWER_CONFLICT to (!hasGoal || needsClarification),
+            EvidenceFeature.CANDIDATE_CLARIFICATION_SUPPORT to needsClarification,
+            EvidenceFeature.CANDIDATE_CLARIFICATION_CONFLICT to !needsClarification,
+            EvidenceFeature.CANDIDATE_ABSTAIN_SUPPORT to (!hasGoal && !needsClarification),
+            EvidenceFeature.CANDIDATE_ABSTAIN_CONFLICT to (hasGoal && !needsClarification),
+        )
+        candidateSignals.forEach { (feature, active) ->
+            add(
+                feature,
+                EvidenceSourceKind.CORE_REASONING_PLAN,
+                EvidenceStatus.HEURISTIC,
+                EvidenceValue.BooleanValue(active),
+                "turn:${input.turnId}:candidate_signal:${feature.stableId}",
+                activation = if (active) 1.0 else 0.0,
             )
         }
 
