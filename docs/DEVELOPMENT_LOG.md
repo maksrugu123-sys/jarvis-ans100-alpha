@@ -2703,14 +2703,16 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Branch boundary: `experiment/jarvis-integrated-prototype-v1`; `main` remains untouched.
 
 
-## 2026-11-15 — Add cancellable streaming and native LiteRT-LM measurements
+## 2026-11-15 — Add native LiteRT-LM response measurements
 
 **Changed:**
-- Added a Stop control that calls LiteRT-LM `Conversation.cancelProcess()` from the UI thread while inference is active. The generation worker owns the conversation lifecycle; after cancellation the current conversation is closed in `finally` and is never reused. A fresh conversation is created for the next request.
-- Cancellation is handled separately from ordinary inference failures. The partial response is discarded and the UI reports that the incomplete answer was not saved. GPU fallback does not retry a user-cancelled generation.
-- Added time-to-first-text-chunk measurement and the native LiteRT-LM KV-cache token count after generation. The latter includes the effective context (history, request and response), not just output tokens.
-- Kept the existing output word count explicitly approximate; it is not presented as a tokenizer result or true tokens/second metric.
+- Added time-to-first-visible-text measurement for the first streamed text chunk.
+- Added the LiteRT-LM conversation KV-cache token count after generation, when the runtime can provide it. The UI labels it as the KV-cache count, not as a count of output tokens.
+- Exposed both values in the response-speed panel. The existing output word count remains explicitly approximate; it is not presented as a tokenizer result or true tokens/second metric.
+- Kept streaming and all Engine/Conversation lifecycle operations on the serialized conversation worker.
 
-**Verification:** read-only inspection of the LiteRT-LM Kotlin API and static GitHub read-back of the edited sources. No Gradle build, unit tests, APK, model inference or device test was run. Automatic Actions remain manual-only; no workflow was dispatched.
+**Cancellation decision:** an interactive Stop button was prototyped, then removed before delivery. The current coordinator and response-engine contract are synchronous and block the serialized worker while collecting the Flow. Calling `cancelProcess()` directly from the UI thread would violate the single-owner threading rule in the Android LiteRT-LM guidance. A correct Stop feature requires a coroutine/suspending refactor through the coordinator so both collection and cancellation can run on the same single-thread dispatcher. Do not reintroduce cross-thread cancellation as a shortcut.
 
-**Limitations:** first text chunk is a UI-visible TTFT proxy, not an internal first-token timestamp. The KV-cache count is reported after a completed generation and is not yet used as a pre-generation context-budget gate. Actual cancellation latency and token metrics remain unverified on the phone. Branch: `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
+**Verification:** static source read-back and API documentation review only. No Gradle build, unit tests, APK, model inference or device test was run. TTFT is a UI-visible first-text-chunk proxy, not a hardware-level first-token timestamp. KV-cache count is post-generation and is not yet used as a pre-generation context-budget gate. Automatic Actions remain manual-only; no workflow was dispatched.
+
+**Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
