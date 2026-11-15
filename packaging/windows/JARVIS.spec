@@ -15,6 +15,9 @@ hiddenimports = [
     "webview",
     "webview.platforms.edgechromium",
     "webview.platforms.winforms",
+    "webview.platforms.webview2core",
+    "webview.platforms.win32",
+    "webview._pythonnet",
     "clr",
     "clr_loader",
 ]
