@@ -5,6 +5,7 @@ import unittest
 
 from tools.neuron_runtime.hybrid_ans100_runtime import (
     HybridANS100Runtime,
+    _candidate_competition,
     _candidate_hints,
     _neuron_id_for,
     _typed_evidence_records,
@@ -124,6 +125,35 @@ class HybridANS100RuntimeInputTests(unittest.TestCase):
         second_user = next(record for record in second if record["feature"] == "user.message.text")
         self.assertEqual(_neuron_id_for(first_user), 0)
         self.assertEqual(_neuron_id_for(second_user), 0)
+
+    def test_android_candidate_competition_selects_only_a_clear_supported_winner(self):
+        activations, winner, margin = _candidate_competition({
+            "answer": {"support": 10, "conflict": 0},
+            "clarification": {"support": 0, "conflict": 10},
+            "abstain": {"support": 0, "conflict": 10},
+        })
+        self.assertEqual(winner, "answer")
+        self.assertAlmostEqual(activations["answer"], 0.1)
+        self.assertAlmostEqual(margin, 0.1)
+
+        _tie_activations, tie_winner, tie_margin = _candidate_competition({
+            "answer": {"support": 10, "conflict": 0},
+            "clarification": {"support": 10, "conflict": 0},
+            "abstain": {"support": 0, "conflict": 10},
+        })
+        self.assertIsNone(tie_winner)
+        self.assertAlmostEqual(tie_margin, 0.0)
+
+    def test_typed_evidence_rejects_wrong_provenance(self):
+        records = _typed_evidence_records(
+            "Привет",
+            {"reasoning_plan": {"goal": "", "requires_clarification": False}},
+            "turn-provenance",
+        )
+        user_record = next(record for record in records if record["feature"] == "user.message.text")
+        invalid = dict(user_record, source="CORE_UNDERSTANDING")
+        with self.assertRaises(ValueError):
+            _neuron_id_for(invalid)
 
     def test_runtime_status_matches_android_hybrid_topology_contract(self):
         runtime = HybridANS100Runtime()
