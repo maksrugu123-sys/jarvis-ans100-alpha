@@ -1068,7 +1068,9 @@ class LocalConsoleService:
 def create_http_server(
     service: LocalConsoleService,
     *,
+    host: str = "127.0.0.1",
     port: int = 8765,
+    tls_context: ssl.SSLContext | None = None,
 ) -> ThreadingHTTPServer:
     """Create a loopback-only HTTP server; tests may request port=0."""
     if not isinstance(service, LocalConsoleService):
