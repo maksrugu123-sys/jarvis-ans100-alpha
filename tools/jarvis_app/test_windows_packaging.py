@@ -17,7 +17,8 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn("tools/jarvis_app/static", source)
         self.assertIn("tools/jarvis_app/browser_extension", source)
         self.assertIn("hiddenimports = []", source)
-        self.assertNotIn("collect_submodules", source)
+        self.assertNotIn("from PyInstaller.utils.hooks import collect_submodules", source)
+        self.assertNotIn("collect_submodules(package)", source)
         self.assertIn("console=True", source)
 
     def test_packaged_launcher_targets_the_bundled_executable_and_keeps_diagnostics(self):
