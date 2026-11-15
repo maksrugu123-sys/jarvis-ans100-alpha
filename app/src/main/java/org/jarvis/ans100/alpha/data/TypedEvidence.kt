@@ -118,7 +118,7 @@ data class TypedEvidenceRecord(
 
     companion object {
         const val MAX_ID_CHARS = 96
-        const val MAX_PROVENANCE_CHARS = 160
+        const val MAX_PROVENANCE_CHARS = 320
         const val MAX_VALUE_CHARS = 1_024
         const val MAX_CATEGORY_CHARS = 80
     }
@@ -214,7 +214,7 @@ class TypedEvidenceEncoder {
         ) {
             if (records.size >= TypedEvidenceBundle.MAX_RECORDS_PER_TURN) return
             records += TypedEvidenceRecord(
-                recordId = "${input.turnId}:${feature.stableId}:$ordinal",
+                recordId = "${feature.stableId}:$ordinal",
                 turnId = input.turnId,
                 feature = feature,
                 source = source,
