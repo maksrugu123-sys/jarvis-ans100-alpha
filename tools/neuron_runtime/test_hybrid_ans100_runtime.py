@@ -5,6 +5,7 @@ import unittest
 
 from tools.neuron_runtime.hybrid_ans100_runtime import (
     HybridANS100Runtime,
+    _bounded_confidence,
     _candidate_competition,
     _candidate_hints,
     _neuron_id_for,
@@ -143,6 +144,29 @@ class HybridANS100RuntimeInputTests(unittest.TestCase):
         })
         self.assertIsNone(tie_winner)
         self.assertAlmostEqual(tie_margin, 0.0)
+
+    def test_confidence_bounds_reject_non_finite_and_unrepresentable_numbers(self):
+        self.assertEqual(_bounded_confidence(10 ** 10_000), 0.0)
+        self.assertEqual(_bounded_confidence(float("inf")), 0.0)
+        self.assertEqual(_bounded_confidence(float("nan")), 0.0)
+        self.assertEqual(_bounded_confidence(0.75), 0.75)
+
+    def test_typed_evidence_record_id_must_match_feature_and_candidate_slot(self):
+        records = _typed_evidence_records(
+            "Привет",
+            {"reasoning_plan": {"goal": "", "requires_clarification": False}},
+            "turn-record-id",
+        )
+        user_record = next(record for record in records if record["feature"] == "user.message.text")
+        with self.assertRaisesRegex(ValueError, "bound to its declared feature"):
+            _neuron_id_for(dict(user_record, record_id="core.intent_hint:0"))
+
+        candidate_record = next(
+            record for record in records
+            if record["feature"] == "ans100.candidate.answer.support"
+        )
+        with self.assertRaisesRegex(ValueError, "ordinal-zero"):
+            _neuron_id_for(dict(candidate_record, record_id=candidate_record["feature"] + ":1"))
 
     def test_typed_evidence_rejects_wrong_provenance(self):
         records = _typed_evidence_records(
