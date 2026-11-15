@@ -249,6 +249,7 @@ class LiteRtLmLocalEngine:
         reasoning_context: Mapping[str, object] | None = None,
         external_context: Mapping[str, object] | None = None,
         dialog_neuron_context: Mapping[str, object] | None = None,
+        ans100_context: Mapping[str, object] | None = None,
     ) -> str:
         clean = prompt.strip()
         if not clean or len(clean) > MAX_PROMPT_CHARS or "\x00" in clean:
@@ -347,6 +348,58 @@ class LiteRtLmLocalEngine:
                         "Он использует хешированные признаки текста, не понимает смысл и не генерирует ответ. "
                         "Не выдавай его метку за достоверное понимание намерения пользователя. Данные:\n"
                         + json.dumps(safe_dialog_neurons, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+                    )
+                if ans100_context is not None:
+                    allowed_candidates = {"answer", "clarification", "abstain"}
+                    selected = ans100_context.get("selected_candidate")
+                    if selected not in allowed_candidates:
+                        selected = "abstain"
+                    def bounded_count(value: object, maximum: int = 100_000) -> int:
+                        if isinstance(value, bool) or not isinstance(value, int):
+                            return 0
+                        return min(maximum, max(0, value))
+                    raw_readouts = ans100_context.get("readout_spike_counts")
+                    safe_readouts = {}
+                    if isinstance(raw_readouts, Mapping):
+                        for candidate in allowed_candidates:
+                            raw_lane = raw_readouts.get(candidate)
+                            if isinstance(raw_lane, Mapping):
+                                safe_readouts[candidate] = {
+                                    "support": bounded_count(raw_lane.get("support")),
+                                    "conflict": bounded_count(raw_lane.get("conflict")),
+                                }
+                    raw_scores = ans100_context.get("candidate_signal_scores")
+                    safe_scores = {}
+                    if isinstance(raw_scores, Mapping):
+                        for candidate in allowed_candidates:
+                            value = raw_scores.get(candidate)
+                            if isinstance(value, int) and not isinstance(value, bool):
+                                safe_scores[candidate] = min(100_000, max(-100_000, value))
+                    safe_ans100 = {
+                        "runtime_version": "JARVIS_ANS100_HYBRID_V4",
+                        "topology_id": "ans100-hybrid-v2",
+                        "neuron_count": 10_000,
+                        "connection_count": 25_500,
+                        "processed_events": bounded_count(ans100_context.get("processed_events")),
+                        "spike_count": bounded_count(ans100_context.get("spike_count")),
+                        "input_neuron_count": bounded_count(ans100_context.get("input_neuron_count"), 128),
+                        "selected_candidate": selected,
+                        "readout_spike_counts": safe_readouts,
+                        "candidate_signal_scores": safe_scores,
+                        "event_budget_exhausted": ans100_context.get("event_budget_exhausted") is True,
+                        "decision_authority": "advisory_only",
+                        "learning_enabled": False,
+                        "persistent_state": False,
+                        "scope": "bounded_structural_signal_routing_not_semantic_reasoning",
+                    }
+                    system_message += (
+                        "\\n\\nANS-100 V4: в этом ходе был запущен разреженный граф из 10 000 нейронов и 25 500 связей. "
+                        "Он получил ограниченные структурные признаки и эвристические подсказки Core, "
+                        "после чего вернул сигналы поддержки/конфликта для кандидатов answer, clarification и abstain. "
+                        "Это advisory-сигнал, а не доказательство, не самостоятельное понимание и не проверка истинности. "
+                        "Не называй его полноценным мышлением, не выдумывай активность нейронов и не исполняй действия. "
+                        "Сверяй кандидат с исходным сообщением, памятью и источниками; при нехватке данных честно уточняй. Данные:\\n"
+                        + json.dumps(safe_ans100, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
                     )
                 if signal_context is not None:
                     signal_fields = {
