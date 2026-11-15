@@ -1,7 +1,6 @@
 package org.jarvis.ans100.alpha.data
 
 import android.content.Context
-import java.io.Closeable
 
 /**
  * Deterministic sparse topology for the selected seven-population ANS-100 design.
