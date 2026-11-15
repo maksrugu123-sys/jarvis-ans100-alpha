@@ -105,6 +105,19 @@ No claim of improved reasoning is accepted without the ablation results. Android
 
 All source-level implementation statements above are based on static inspection. No Gradle build, unit test, CI workflow, APK/AAB, benchmark or device run was performed.
 
+## 2026-11-15 candidate competition stage
+
+A bounded deterministic candidate competition engine has been added in `ANS100CandidateCompetition.kt` and connected to the hybrid population controller.
+
+- Each candidate's raw evidence is its actual support/conflict readout spike count, normalized by that lane's capacity.
+- The net activity is support ratio minus conflict ratio.
+- The strongest competing candidate applies bounded lateral inhibition.
+- A winner is accepted only when its activation is positive enough and its margin over the runner-up meets a fixed threshold; ties and weak margins abstain.
+- The resulting bounded activation is exposed on each `ANS100Candidate`, explicitly marked as uncalibrated and not a probability.
+- Unit fixtures cover winner selection, exact ties, conflict suppression, normalization and duplicate-ID rejection.
+
+This stage adds competitive arbitration, **not synaptic learning**. Candidate support/conflict input labels still originate in heuristic Core evidence, and hybrid topology connection weights are not yet updated by feedback. The next stage must add turn-bound eligibility traces and explicit-feedback-only, bounded, persistent reward updates for candidate-related synapses. It must not reuse the legacy dialogue reward API against the hybrid topology. No build or test execution has been performed.
+
 ## Non-goals and safeguards
 
 - This work does not create consciousness or human-like thought.
