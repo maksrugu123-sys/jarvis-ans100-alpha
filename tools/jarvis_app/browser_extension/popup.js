@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const BASE_URL = "http://127.0.0.1:8765";
-let connected = false;
+let accessToken = "";
 
 function show(message, kind = "info") {
   $("result").textContent = message;
@@ -13,7 +13,8 @@ function setStatus(message, ready = false) {
 }
 
 async function request(path, {method = "GET", body} = {}) {
-  const headers = {};
+  if (!accessToken) throw new Error("Сначала подключите JARVIS и сохраните токен.");
+  const headers = {Authorization: "Bearer " + accessToken};
   const options = {method, headers, cache: "no-store"};
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -30,8 +31,10 @@ async function request(path, {method = "GET", body} = {}) {
   catch { throw new Error("JARVIS вернул некорректный ответ."); }
   if (!response.ok) {
     if (response.status === 401) {
-      connected = false;
-      setStatus("JARVIS отклонил подключение. Перезапустите локальное ядро.");
+      await chrome.storage.local.remove("jarvisAccessToken");
+      accessToken = "";
+      $("token").value = "";
+      setStatus("Токен отклонён — подключитесь заново.");
     }
     throw new Error(payload.error || "Запрос не выполнен.");
   }
@@ -60,24 +63,32 @@ async function activeTab() {
 }
 
 async function connect() {
+  const token = $("token").value.trim();
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    throw new Error("Токен должен содержать 43 символа Base64URL.");
+  }
+  accessToken = token;
   const state = await request("/api/extension/state");
-  connected = true;
+  await chrome.storage.local.set({jarvisAccessToken: token});
   setStatus("Подключено · " + (state.backend_label || state.chat_mode), true);
   $("ask").disabled = !state.chat_available;
-  show("Связь с локальным JARVIS установлена без токена.", "success");
+  show("Связь с локальным JARVIS установлена.", "success");
 }
 
 async function refreshConnection() {
+  const stored = await chrome.storage.local.get("jarvisAccessToken");
+  accessToken = typeof stored.jarvisAccessToken === "string" ? stored.jarvisAccessToken : "";
+  if (!accessToken) {
+    setStatus("Требуется подключение к JARVIS.");
+    $("ask").disabled = true;
+    return;
+  }
   try {
-    const response = await fetch(BASE_URL + "/api/health", {cache: "no-store"});
-    const health = await response.json();
-    if (!response.ok || health.platform !== "desktop" || health.auth_required !== false) {
-      throw new Error("Требуется Windows-версия JARVIS без ручного токена.");
-    }
-    await connect();
+    const state = await request("/api/extension/state");
+    setStatus("Подключено · " + (state.backend_label || state.chat_mode), true);
+    $("ask").disabled = !state.chat_available;
   } catch (error) {
-    connected = false;
-    setStatus(error.message || "Запустите локальное ядро JARVIS на этом ПК.");
+    setStatus(error.message);
     $("ask").disabled = true;
   }
 }
@@ -89,10 +100,12 @@ $("connect").addEventListener("click", async () => {
   finally { $("connect").disabled = false; }
 });
 
-$("forget").addEventListener("click", () => {
-  connected = false;
+$("forget").addEventListener("click", async () => {
+  await chrome.storage.local.remove("jarvisAccessToken");
+  accessToken = "";
+  $("token").value = "";
   $("ask").disabled = true;
-  setStatus("Подключение сброшено.");
+  setStatus("Токен удалён из хранилища расширения.");
   show("Расширение отключено.", "success");
 });
 

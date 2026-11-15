@@ -45,8 +45,8 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn('if service.platform == "desktop":', server)
         self.assertIn('"auth_required": service.platform != "desktop"', server)
         self.assertIn('await enterConsole("")', app)
-        self.assertIn('const headers = {};', popup)
-        self.assertNotIn('jarvisAccessToken', popup)
+        self.assertIn('const headers = {Authorization: "Bearer " + accessToken};', popup)
+        self.assertIn('jarvisAccessToken', popup)
 
     def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
         source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
