@@ -225,10 +225,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                     viewModel.sendConversationMessage(message)
                                     conversationInput = ""
                                 },
-                                onCancelGeneration = { viewModel.cancelConversationGeneration() },
                                 isBusy = ui.conversation.isBusy,
-                                canCancelGeneration = ui.conversation.canCancelGeneration,
-                                isStoppingGeneration = ui.conversation.isStoppingGeneration,
                                 glowEnabled = glowEnabled,
                             )
                         }
@@ -2266,10 +2263,7 @@ private fun ConversationComposer(
     input: String,
     onInputChange: (String) -> Unit,
     onSend: (String) -> Unit,
-    onCancelGeneration: () -> Unit,
     isBusy: Boolean,
-    canCancelGeneration: Boolean,
-    isStoppingGeneration: Boolean,
     glowEnabled: Boolean = true,
 ) {
     Surface(
@@ -2296,15 +2290,6 @@ private fun ConversationComposer(
                 modifier = Modifier.heightIn(min = 56.dp),
             ) {
                 Text("Отправить")
-            }
-            if (canCancelGeneration) {
-                OutlinedButton(
-                    onClick = onCancelGeneration,
-                    enabled = !isStoppingGeneration,
-                    modifier = Modifier.heightIn(min = 56.dp),
-                ) {
-                    Text(if (isStoppingGeneration) "Остановка…" else "Стоп")
-                }
             }
         }
     }
