@@ -119,7 +119,7 @@ data class TypedEvidenceRecord(
     companion object {
         const val MAX_ID_CHARS = 96
         const val MAX_PROVENANCE_CHARS = 320
-        const val MAX_VALUE_CHARS = 1_024
+        const val MAX_VALUE_CHARS = 2_048
         const val MAX_CATEGORY_CHARS = 80
     }
 }
