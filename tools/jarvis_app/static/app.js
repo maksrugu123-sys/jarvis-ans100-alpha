@@ -1250,6 +1250,35 @@ function renderDialogTurnTrace(trace) {
   root.textContent = classifier + ". " + signal + ". Классификация признаков не является пониманием смысла.";
 }
 
+async function refreshAns100Status() {
+  const root = $("#ans100-desktop-status");
+  try {
+    const status = await api("/api/ans100");
+    const topology = status.desktop_topology || {};
+    const count = Number(topology.neuron_count || 0).toLocaleString("ru-RU");
+    const edges = Number(topology.connection_count || 0).toLocaleString("ru-RU");
+    const populations = Array.isArray(topology.populations) ? topology.populations.length : 0;
+    const active = status.active_in_chat === true;
+    root.textContent =
+      count + " нейронов · " + edges + " связей · " + populations +
+      " популяций · версия " + String(topology.version || "—") + ". " +
+      (active
+        ? "Топология подключена к активному диалогу."
+        : "Топология описана в исходном коде, но пока не запущена и не подключена к диалогу.") +
+      " Текущий диалоговый сигнальный путь остаётся отдельным.";
+    setNavHealth(
+      $("#nav-core-state")?.textContent || "Ядро: подключено",
+      $("#nav-model-state")?.textContent || "Диалог: проверка",
+      "ANS-100 V4: " + count + " · не активна в чате",
+      true
+    );
+    return status;
+  } catch (error) {
+    root.textContent = "Состояние desktop ANS-100 недоступно: " + error.message;
+    return null;
+  }
+}
+
 async function refreshDialogNeurons() {
   const root = $("#dialog-neuron-status");
   try {
@@ -1662,6 +1691,7 @@ async function refresh() {
   await refreshWorkspace();
   await refreshConversation();
   await refreshDialogNeurons();
+  await refreshAns100Status();
   await refreshBrowserState();
   return state;
 }
