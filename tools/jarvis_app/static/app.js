@@ -1256,11 +1256,11 @@ async function refreshAns100Status() {
     const status = await api("/api/ans100");
     const topology = status.desktop_topology || {};
     const count = Number(topology.neuron_count || 0).toLocaleString("ru-RU");
-    const edges = Number(topology.connection_count || 0).toLocaleString("ru-RU");
+    const edges = Number(topology.declared_connection_count || 0).toLocaleString("ru-RU");
     const populations = Array.isArray(topology.populations) ? topology.populations.length : 0;
     const active = status.active_in_chat === true;
     root.textContent =
-      count + " нейронов · " + edges + " связей · " + populations +
+      count + " нейронов · " + edges + " заявленных связей · " + populations +
       " популяций · версия " + String(topology.version || "—") + ". " +
       (active
         ? "Топология подключена к активному диалогу."
