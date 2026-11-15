@@ -12,8 +12,8 @@ function validatePublicUrl(value) {
   catch { throw new Error("Не удалось распознать адрес сайта."); }
   const host = url.hostname.toLowerCase();
   const localHost = host === "localhost" || host === "0.0.0.0" || host === "[::1]" ||
-    /\\.(localhost|local|internal|lan|home|home\\.arpa|test|invalid|private|corp)$/u.test(host);
-  const ipv4 = /^\\d{1,3}(?:\\.\\d{1,3}){3}$/u.test(host);
+    /\.(localhost|local|internal|lan|home|home\.arpa|test|invalid|private|corp)$/u.test(host);
+  const ipv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(host);
   if (!["http:", "https:"].includes(url.protocol) || !host.includes(".") ||
       url.username || url.password || localHost || ipv4) {
     throw new Error("Разрешены только публичные HTTP/HTTPS адреса.");
