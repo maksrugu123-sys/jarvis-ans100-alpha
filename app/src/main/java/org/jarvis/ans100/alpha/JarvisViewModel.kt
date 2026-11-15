@@ -270,7 +270,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
         reload()
         reloadConversation()
-        refreshNativeNeuronNetwork()
+        // The legacy three-layer dialogue graph is no longer initialized or refreshed on startup.
         if (extensionInstalled && mutableState.value.runtime.hasAccessToken) {
             // Only attempt optional bridge discovery when the companion app is installed.
             connectRuntime()
@@ -672,37 +672,30 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val turnStartedAtNs = System.nanoTime()
             conversationResponseEngine.resetTurnMetrics()
             try {
-                // The sparse intent classifier is an optional side channel; it never blocks chat.
-                val dialogPredictionResult = try {
-                    dialogFeatureClassifier.analyze(clean) to null
-                } catch (error: Exception) {
-                    null to (error.message ?: "Диалоговые признаки временно недоступны.")
-                }
-                val activeFeatureIds = dialogPredictionResult.first?.activeFeatureIds.orEmpty()
-                val nativeFeedbackContext = if (!clean.startsWith("/") && activeFeatureIds.isNotEmpty()) {
-                    enqueueNativeDialogueFeatures(
-                        activeFeatureIds, dialogueGeneration, dialogPredictionResult.first,
-                    )
-                } else null
-                // Experimental seven-population sidecar runs before generation. Its
-                // bounded activity report is passed to Qwen as advisory context only.
+                // The seven-population ANS-100 graph is now the only neural graph
+                // used in the ordinary dialogue route. The legacy three-layer
+                // classifier/readout is intentionally excluded from this turn.
+                val dialogPredictionResult: Pair<DialogFeaturePrediction?, String?> = null to null
+                val nativeFeedbackContext: NativeDialogueFeedbackContext? = null
                 val hybridTelemetrySummary = if (!clean.startsWith("/")) {
                     runHybridDialoguePass(clean)
                 } else null
-                val neuralAnalysisForModel = (
-                    nativeFeedbackContext?.analysis ?: DialogueNeuralAnalysis(
-                        networkNeuronCount = 0,
-                        activeFeatureCount = 0,
-                        processedEvents = 0,
-                        processedNeuronBatches = 0,
-                        outputSpikeCount = 0,
-                        pendingEvents = 0,
-                        classifierLabel = null,
-                        classifierConfidenceMargin = null,
-                        classifierTrainedExamples = 0,
-                        statePersisted = false,
-                    )
-                ).copy(hybridTelemetrySummary = hybridTelemetrySummary)
+                val hybridTelemetrySummary = if (!clean.startsWith("/")) {
+                    runHybridDialoguePass(clean)
+                } else null
+                val neuralAnalysisForModel = DialogueNeuralAnalysis(
+                    networkNeuronCount = 0,
+                    activeFeatureCount = 0,
+                    processedEvents = 0,
+                    processedNeuronBatches = 0,
+                    outputSpikeCount = 0,
+                    pendingEvents = 0,
+                    classifierLabel = null,
+                    classifierConfidenceMargin = null,
+                    classifierTrainedExamples = 0,
+                    statePersisted = false,
+                    hybridTelemetrySummary = hybridTelemetrySummary,
+                )
                 val runtimeState = mutableState.value.runtime
                 val signalContext = if (!clean.startsWith("/")) {
                     val useTermuxSignal = shouldUseTermuxSignal(
