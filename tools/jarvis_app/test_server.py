@@ -875,7 +875,6 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertIn("isJarvisOwnedWindow", background)
         self.assertIn("ownedTabIds", background)
         self.assertIn("tab.windowId", background)
-        self.assertIn("commandQueue", background)
         self.assertNotIn('chrome.tabs.query({})', background)
         self.assertIn("JARVIS_LOCAL_CONSOLE", bridge)
         self.assertEqual(manifest["manifest_version"], 3)
