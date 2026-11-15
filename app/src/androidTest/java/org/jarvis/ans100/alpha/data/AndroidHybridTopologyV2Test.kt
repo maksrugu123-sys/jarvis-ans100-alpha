@@ -53,6 +53,50 @@ class AndroidHybridTopologyV2Test {
                 AndroidHybridTopologyV2.populations.any { it.contains(edge.targetNeuronId) }
         })
         assertTrue(first.all { it.sourceNeuronId != it.targetNeuronId && it.delayNs > 0L })
+        assertTrue(first.filter { it.connectionId.contains("recurrent") }
+            .all { it.weight == AndroidHybridTopologyV2.RECURRENT_WEIGHT })
+        assertTrue(first.filterNot { it.connectionId.contains("recurrent") }
+            .all { it.weight == AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT })
+        assertEquals(1.0, AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT, 0.0)
+        assertTrue(AndroidHybridTopologyV2.RECURRENT_WEIGHT < 1.0)
+    }
+
+    @Test
+    fun oneTypedInputPropagatesThroughAllSevenPopulationsWithoutSelfSustainingFeedback() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            val turnId = "seven-population-propagation"
+            val record = TypedEvidenceRecord(
+                recordId = "user.message.text:0",
+                turnId = turnId,
+                feature = EvidenceFeature.USER_MESSAGE_TEXT,
+                source = EvidenceSourceKind.USER_MESSAGE,
+                status = EvidenceStatus.USER_PROVIDED,
+                value = EvidenceValue.Text("hello"),
+                activation = 1.0,
+                provenanceRef = "turn:$turnId:user_message",
+            )
+            val batch = AndroidHybridEvidenceInputAdapter.createBatch(
+                TypedEvidenceBundle(turnId = turnId, records = listOf(record)),
+                timestampNs = 1L,
+            )
+
+            assertTrue(network.scheduleHybridEvidence(batch))
+            val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
+            assertEquals(0, result.pendingEvents)
+            assertTrue(result.emittedSpikes.isNotEmpty())
+
+            val spikedIds = result.emittedSpikes.map { it.first }.toSet()
+            AndroidHybridTopologyV2.populations.forEach { population ->
+                assertTrue(
+                    "no spike observed in population " + population.id,
+                    spikedIds.any(population::contains),
+                )
+            }
+            // A drained queue and bounded event count guard against an accidental
+            // candidate<->critic or recurrent self-sustaining spike cycle.
+            assertTrue(result.processedEvents < 4_096)
+            assertFalse(result.budgetExhausted)
+        }
     }
 
     @Test
