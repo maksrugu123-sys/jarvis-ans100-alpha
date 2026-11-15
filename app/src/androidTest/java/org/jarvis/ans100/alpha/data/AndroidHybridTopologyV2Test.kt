@@ -211,6 +211,44 @@ class AndroidHybridTopologyV2Test {
         }
     }
 
+
+    @Test
+    fun candidateLaneReadoutCountsAreSymmetricAcrossAllSixRoutes() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            val observedCounts = mutableListOf<Int>()
+            ANS100CandidateSlotContract.Slot.values().forEach { slot ->
+                ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
+                    val turnId = "lane-symmetry-${slot.index}-${polarity.index}"
+                    val feature = ANS100CandidateSlotContract.evidenceFeature(slot, polarity)
+                    val record = TypedEvidenceRecord(
+                        recordId = feature.stableId + ":0",
+                        turnId = turnId,
+                        feature = feature,
+                        source = EvidenceSourceKind.CORE_REASONING_PLAN,
+                        status = EvidenceStatus.HEURISTIC,
+                        value = EvidenceValue.BooleanValue(true),
+                        activation = 1.0,
+                        provenanceRef = "turn:$turnId:${feature.stableId}",
+                    )
+                    val timestamp = network.stats().currentTimeNs + 10_000_000L
+                    val batch = AndroidHybridEvidenceInputAdapter.createBatch(
+                        TypedEvidenceBundle(turnId = turnId, records = listOf(record)),
+                        timestamp,
+                    )
+                    assertTrue(network.beginHybridTurn(batch))
+                    val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
+                    assertEquals(0, result.pendingEvents)
+                    val spiked = result.emittedSpikes.map { it.first }.toSet()
+                    val expectedLane = ANS100CandidateSlotContract.readoutLane(slot, polarity)
+                    val count = spiked.count(expectedLane::contains)
+                    assertTrue("candidate lane did not reach readout: ${slot.name}/${polarity.name}", count > 0)
+                    observedCounts += count
+                }
+            }
+            assertEquals(1, observedCounts.distinct().size)
+        }
+    }
+
     @Test
     fun opensSeparateV2DatabaseAndInitializationIsIdempotent() {
         assertNotEquals(
