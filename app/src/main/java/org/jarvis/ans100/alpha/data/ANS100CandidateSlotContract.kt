@@ -68,6 +68,7 @@ object ANS100CandidateSlotContract {
         Slot.CLARIFICATION to Polarity.CONFLICT -> EvidenceFeature.CANDIDATE_CLARIFICATION_CONFLICT
         Slot.ABSTAIN to Polarity.SUPPORT -> EvidenceFeature.CANDIDATE_ABSTAIN_SUPPORT
         Slot.ABSTAIN to Polarity.CONFLICT -> EvidenceFeature.CANDIDATE_ABSTAIN_CONFLICT
+        else -> throw IllegalArgumentException("unknown candidate slot/polarity pair")
     }
 
     fun slotForCandidateId(candidateId: String): Slot? =
