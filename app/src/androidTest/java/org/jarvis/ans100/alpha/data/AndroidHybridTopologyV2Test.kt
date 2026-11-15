@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -84,6 +85,26 @@ class AndroidHybridTopologyV2Test {
             val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
             assertEquals(0, result.pendingEvents)
             assertTrue(result.emittedSpikes.isNotEmpty())
+
+            val telemetry = result.hybridTelemetry
+                ?: throw AssertionError("hybrid topology run must expose population telemetry")
+            assertEquals(AndroidHybridTopologyV2.TOPOLOGY_ID, telemetry.topologyId)
+            assertEquals(AndroidHybridTopologyV2.TOPOLOGY_VERSION, telemetry.topologyVersion)
+            assertEquals(7, telemetry.populations.size)
+            assertEquals(result.processedEvents, telemetry.populations.sumOf { it.receivedEventCount })
+            telemetry.populations.forEach { activity ->
+                assertTrue("no processed neuron in " + activity.populationId, activity.uniqueNeuronsProcessed > 0)
+                assertTrue("no spiking neuron in " + activity.populationId, activity.uniqueSpikingNeurons > 0)
+                assertTrue("no spike count in " + activity.populationId, activity.spikeCount > 0)
+                assertTrue(
+                    "spike count smaller than unique spiking count in " + activity.populationId,
+                    activity.spikeCount >= activity.uniqueSpikingNeurons,
+                )
+            }
+            assertEquals(
+                0,
+                telemetry.populations.last().outgoingEventCount,
+            )
 
             val spikedIds = result.emittedSpikes.map { it.first }.toSet()
             AndroidHybridTopologyV2.populations.forEach { population ->
