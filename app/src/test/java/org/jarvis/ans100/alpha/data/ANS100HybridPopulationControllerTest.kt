@@ -87,7 +87,7 @@ class ANS100HybridPopulationControllerTest {
 
     @Test
     fun preservesCoreClarificationInsteadOfSelectingAnAnswer() {
-        val (evidence, understanding) = evidence("Продолжи тот план", "hybrid-gate-4")
+        val (evidence, understanding) = evidence("Что это?", "hybrid-gate-4")
         val decision = ANS100HybridPopulationController().decide(
             evidence = evidence,
             understanding = understanding,
