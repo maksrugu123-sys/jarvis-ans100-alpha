@@ -45,6 +45,7 @@ import org.jarvis.ans100.alpha.data.AndroidHybridEvidenceInputAdapter
 import org.jarvis.ans100.alpha.data.TypedEvidenceEncoder
 import org.jarvis.ans100.alpha.data.TypedEvidenceInput
 import org.jarvis.ans100.alpha.data.ANS100HybridPopulationController
+import org.jarvis.ans100.alpha.data.ANS100CandidateSlotContract
 import org.jarvis.ans100.alpha.data.ANS100QwenHandoffBuilder
 import org.jarvis.ans100.alpha.data.LocalUnderstandingPipeline
 import java.util.UUID
@@ -64,6 +65,8 @@ data class LocalConversationUiState(
     val modelDownloadProgress: Float? = null,
     val modelDownloadStatus: String? = null,
     val hybridNetworkSummary: String? = null,
+    val hybridFeedbackAvailable: Boolean = false,
+    val hybridFeedbackMessage: String? = null,
     val modelInitializationMs: Long = 0L,
     val responseGenerationMs: Long = 0L,
     val lastTurnDurationMs: Long = 0L,
@@ -177,6 +180,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         AndroidHybridTopologyV2.open(application.applicationContext)
     }
     private val hybridNeuronNetwork by hybridNeuronNetworkDelegate
+    @Volatile private var latestHybridFeedback: Pair<String, String>? = null
     @Volatile private var conversationGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
@@ -602,11 +606,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val searchIntent = AndroidWebSearchIntent.extract(clean)
         val dialogueGeneration = conversationGeneration + 1L
         conversationGeneration = dialogueGeneration
+        latestHybridFeedback = null
         mutableState.value = before.copy(
             conversation = before.conversation.copy(
                 isBusy = true,
                 error = null,
                 streamingResponse = "",
+                hybridFeedbackAvailable = false,
+                hybridFeedbackMessage = null,
             ),
         )
         if (searchIntent != null) {
@@ -742,6 +749,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 hybridDialogueAnalysis?.hybridTelemetrySummary
                                     ?: "Гибридный проход не завершён; ответ продолжен без решения ANS-100."
                             },
+                            hybridFeedbackAvailable = latestHybridFeedback != null,
+                            hybridFeedbackMessage = null,
                             modelInitializationMs = modelMetrics.initializationMs,
                             responseGenerationMs = modelMetrics.generationMs,
                             lastTurnDurationMs = elapsedMs,
@@ -785,6 +794,41 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
      * Core still proposes the candidate; neural activity can only validate a
      * complete bounded path or force abstention, not claim semantic certainty.
      */
+    /**
+     * Applies one explicit rating to the latest eligible ANS-100 answer trace.
+     * A rating is consumed once; model text and implicit behavior never reward it.
+     */
+    fun rateLatestHybridAnswer(positive: Boolean) {
+        val trace = latestHybridFeedback ?: return
+        latestHybridFeedback = null
+        val before = mutableState.value
+        mutableState.value = before.copy(conversation = before.conversation.copy(
+            hybridFeedbackAvailable = false,
+            hybridFeedbackMessage = "Сохраняю оценку…",
+        ))
+        hybridNetworkExecutor.execute {
+            val updated = runCatching {
+                hybridNeuronNetwork.applyHybridCandidateFeedback(
+                    turnId = trace.first,
+                    candidateId = trace.second,
+                    reward = if (positive) 1.0 else -1.0,
+                    source = org.jarvis.ans100.alpha.data.ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+                )
+            }.getOrDefault(0)
+            mainHandler.post {
+                val current = mutableState.value
+                mutableState.value = current.copy(conversation = current.conversation.copy(
+                    hybridFeedbackAvailable = false,
+                    hybridFeedbackMessage = if (updated > 0) {
+                        "Оценка сохранена: обновлено синапсов — $updated."
+                    } else {
+                        "Оценка принята, но подходящих следов для обновления не осталось."
+                    },
+                ))
+            }
+        }
+    }
+
     private fun runHybridDialoguePass(
         message: String,
         recentHistory: List<LocalConversationMessage>,
@@ -836,6 +880,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val emittedSpikeNeuronIds = LinkedHashSet<Int>().apply {
                         addAll(result.emittedSpikes.map { it.first })
                     }
+                    val activatedConnectionIds = LinkedHashSet<String>().apply {
+                        addAll(result.activatedConnectionIds)
+                    }
                     var passes = 1
                     while (result.pendingEvents > 0 && passes < MAX_HYBRID_DIALOGUE_MAX_PASSES) {
                         result = hybridNeuronNetwork.run(
@@ -844,6 +891,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         )
                         totalProcessedEvents += result.processedEvents
                         emittedSpikeNeuronIds.addAll(result.emittedSpikes.map { it.first })
+                        activatedConnectionIds.addAll(result.activatedConnectionIds)
                         passes++
                     }
                     val telemetry = result.hybridTelemetry ?: return@submit null
@@ -856,6 +904,26 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         pendingEvents = result.pendingEvents,
                         budgetExhausted = result.budgetExhausted,
                     )
+                    // Persist eligibility only for the selected candidate and observed
+                    // propagated events delivered to a target that itself spiked.
+                    val selectedCandidateId = decision.selectedCandidateId
+                    if (selectedCandidateId != null) {
+                        val slot = ANS100CandidateSlotContract.slotForCandidateId(selectedCandidateId)
+                        val laneMarker = slot?.name?.lowercase()?.let { "-$it-" }
+                        val candidateConnections = if (laneMarker == null) emptyList() else {
+                            activatedConnectionIds.filter { it.contains(laneMarker) &&
+                                !it.startsWith("ans100-v4-candidate-input-") }
+                        }
+                        if (candidateConnections.isNotEmpty()) {
+                            val saved = hybridNeuronNetwork.recordHybridCandidateEligibility(
+                                turnId = turnId,
+                                candidateId = selectedCandidateId,
+                                connectionIds = candidateConnections,
+                                eligibility = 1.0,
+                            )
+                            if (saved > 0) latestHybridFeedback = turnId to selectedCandidateId
+                        }
+                    }
                     val handoff = ANS100QwenHandoffBuilder().build(
                         originalUserMessage = message,
                         understanding = understanding,
@@ -910,6 +978,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun clearConversation() {
+        latestHybridFeedback = null
         val before = mutableState.value
         if (before.conversation.isBusy || before.conversation.messages.isEmpty()) return
         mutableState.value = before.copy(
