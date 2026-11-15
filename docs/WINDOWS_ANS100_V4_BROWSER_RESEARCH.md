@@ -20,7 +20,7 @@
 
 The topology uses the Android V4 deterministic projection salts, fan-outs, candidate/support/conflict lane ranges, 1 ms edge delay, feed-forward weight 1.0 and recurrent weight 0.18. The six candidate lanes are isolated and the graph is bounded at 25,500 directed connections. `build_network()` constructs all 10,000 Python `NeuronRuntime` instances and the bounded `NetworkRuntime`; it is not a ten-node placeholder.
 
-The external evidence input contract accepts at most 128 unique neuron IDs from the first 1,200 input neurons. Candidate labels and support/conflict hints still have to come from explicitly typed Core evidence; the network does not independently infer their semantic truth.
+The Android-compatible typed evidence contract accepts at most 64 evidence records/active input pulses from the first 1,200 input neurons. Feature IDs use stable feature-order and ordinal slots; user text is not hashed into neuron IDs. Candidate labels and support/conflict hints still come from explicitly typed Core heuristics; the network does not independently infer their semantic truth.
 
 ### Live chat integration
 
