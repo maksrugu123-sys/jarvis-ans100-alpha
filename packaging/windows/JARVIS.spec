@@ -1,21 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller onedir package for the Windows JARVIS desktop console."""
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_submodules
 
 ROOT = Path(SPECPATH).resolve().parents[1]
 STATIC = ROOT / "tools" / "jarvis_app" / "static"
 EXTENSION = ROOT / "tools" / "jarvis_app" / "browser_extension"
 
-hidden = []
-for package in (
-    "tools.neuron_runtime",
-    "tools.jpvr_reference",
-    "tools.reasoning_engine",
-    "tools.numerical_oracle",
-    "tools.jarvis_app",
-):
-    hidden += collect_submodules(package)
+# Keep this list explicit. collect_submodules() imports every discovered module,
+# including platform-specific test helpers; that caused Windows analysis to try
+# importing POSIX-only fcntl. The production server uses normal static imports,
+# which PyInstaller follows recursively from windows_entry.py.
+hiddenimports = []
 
 a = Analysis(
     [str(ROOT / "tools" / "jarvis_app" / "windows_entry.py")],
@@ -25,11 +20,11 @@ a = Analysis(
         (str(STATIC), "tools/jarvis_app/static"),
         (str(EXTENSION), "tools/jarvis_app/browser_extension"),
     ],
-    hiddenimports=hidden,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "pytest"],
+    excludes=["tkinter", "pytest", "unittest"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

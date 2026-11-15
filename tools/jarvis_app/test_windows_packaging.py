@@ -1,7 +1,4 @@
-"""Source-level regression checks for the Windows desktop package.
-
-These checks are intentionally not run as part of authoring the package.
-"""
+"""Source-level regression checks for the Windows desktop package."""
 from pathlib import Path
 import unittest
 
@@ -13,19 +10,31 @@ class WindowsPackagingContractTests(unittest.TestCase):
     def test_frozen_entrypoint_uses_desktop_server(self):
         source = (ROOT / "tools/jarvis_app/windows_entry.py").read_text(encoding="utf-8")
         self.assertIn("from tools.jarvis_app.server import main", source)
-        self.assertIn('main()', source)
+        self.assertIn("main()", source)
 
-    def test_spec_bundles_ui_and_browser_extension_assets(self):
+    def test_spec_bundles_ui_and_browser_extension_assets_without_import_sweeps(self):
         source = (ROOT / "packaging/windows/JARVIS.spec").read_text(encoding="utf-8")
         self.assertIn("tools/jarvis_app/static", source)
         self.assertIn("tools/jarvis_app/browser_extension", source)
-        self.assertIn('console=True', source)
+        self.assertIn("hiddenimports = []", source)
+        self.assertNotIn("collect_submodules", source)
+        self.assertIn("console=True", source)
 
-    def test_packaged_launcher_targets_the_bundled_executable(self):
+    def test_packaged_launcher_targets_the_bundled_executable_and_keeps_diagnostics(self):
         source = (ROOT / "start_jarvis_windows_exe.bat").read_text(encoding="utf-8")
+        helper = (ROOT / "run_jarvis_core.bat").read_text(encoding="utf-8")
         self.assertIn(r"JARVIS\JARVIS.exe", source)
-        self.assertIn("--platform desktop", source)
+        self.assertIn("run_jarvis_core.bat", source)
+        self.assertIn("--platform desktop", helper)
+        self.assertIn("Tee-Object", helper)
+        self.assertIn("startup.log", helper)
         self.assertIn("--app=%JARVIS_URL%", source)
+
+    def test_workflow_runs_a_real_windows_runtime_smoke_test_before_release(self):
+        source = (ROOT / ".github/workflows/windows-desktop.yml").read_text(encoding="utf-8")
+        self.assertIn("Smoke-test packaged server on Windows", source)
+        self.assertIn("/api/health", source)
+        self.assertIn("run_jarvis_core.bat", source)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ on:
       - ".github/workflows/windows-desktop.yml"
       - "packaging/windows/**"
       - "start_jarvis_windows_exe.bat"
+      - "run_jarvis_core.bat"
       - "tools/jarvis_app/**"
       - "tools/neuron_runtime/**"
       - "tools/jpvr_reference/**"
@@ -40,14 +41,66 @@ jobs:
       - name: Install packager
         run: python -m pip install --upgrade pip "pyinstaller>=6.10,<7"
 
+      - name: Check Windows packaging contract
+        run: python -m unittest tools.jarvis_app.test_windows_packaging -v
+
       - name: Build portable Windows application
         run: python -m PyInstaller --noconfirm --clean packaging/windows/JARVIS.spec
+
+      - name: Smoke-test packaged server on Windows
+        shell: pwsh
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "jarvis-windows-smoke"
+          New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
+          $data = Join-Path $smokeRoot "local-console.jpvr"
+          $workspace = Join-Path $smokeRoot "workspace.jpvr"
+          $auth = Join-Path $smokeRoot "auth-token"
+          $stdout = Join-Path $smokeRoot "stdout.log"
+          $stderr = Join-Path $smokeRoot "stderr.log"
+          $exe = (Resolve-Path "dist/JARVIS/JARVIS.exe").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList @(
+            "--port", "18765",
+            "--platform", "desktop",
+            "--data", $data,
+            "--workspace-file", $workspace,
+            "--auth-file", $auth
+          ) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 45; $i++) {
+              if ($proc.HasExited) {
+                $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "JARVIS exited before health check (code $($proc.ExitCode)). STDOUT: $out STDERR: $err"
+              }
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:18765/api/health" -TimeoutSec 2
+                if ($health.status -eq "ok" -and $health.platform -eq "desktop") {
+                  $ready = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) {
+              $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+              $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+              throw "JARVIS did not become healthy within 45 seconds. STDOUT: $out STDERR: $err"
+            }
+            Write-Host "Packaged JARVIS server health check passed on Windows."
+          } finally {
+            if (-not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force
+              $proc.WaitForExit()
+            }
+          }
 
       - name: Assemble portable archive
         shell: pwsh
         run: |
           Copy-Item "start_jarvis_windows_exe.bat" "dist/start_jarvis_windows_exe.bat"
-          Compress-Archive -Path "dist/JARVIS", "dist/start_jarvis_windows_exe.bat" -DestinationPath "dist/jarvis-windows-portable.zip" -CompressionLevel Optimal
+          Copy-Item "run_jarvis_core.bat" "dist/run_jarvis_core.bat"
+          Compress-Archive -Path "dist/JARVIS", "dist/start_jarvis_windows_exe.bat", "dist/run_jarvis_core.bat" -DestinationPath "dist/jarvis-windows-portable.zip" -CompressionLevel Optimal
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
@@ -75,5 +128,5 @@ jobs:
             Коммит: `${{ github.sha }}`
 
             Это переносимая папка приложения в ZIP, не установщик.
-            Работа на Windows 10 и взаимодействие с Chrome/Edge должны быть проверены отдельно.
+            Успешный Windows smoke-test подтверждает запуск локального API на runner; Windows 10 и интеграция с Chrome/Edge требуют отдельной проверки.
           files: dist/jarvis-windows-portable.zip
