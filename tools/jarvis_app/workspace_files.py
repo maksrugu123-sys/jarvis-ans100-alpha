@@ -16,7 +16,7 @@ _RESERVED_WINDOWS_NAMES = frozenset({
     *(f"COM{index}" for index in range(1, 10)),
     *(f"LPT{index}" for index in range(1, 10)),
 })
-_CONTROL = re.compile(r"[\\x00-\\x1f\\x7f]")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class WorkspaceFolderError(ValueError):
