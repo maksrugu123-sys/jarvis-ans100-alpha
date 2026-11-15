@@ -305,7 +305,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         with self.assertRaises(HTTPError):
             self._post("/api/folders", {"name": "Projects"})
 
-    def test_desktop_ans100_status_is_authenticated_and_not_claimed_active(self):
+    def test_desktop_ans100_status_is_authenticated_and_reports_live_chat_integration(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/ans100", timeout=3)
         self.assertEqual(missing_auth.exception.code, 401)
@@ -320,8 +320,14 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(topology["neuron_count"], 10_000)
         self.assertEqual(topology["declared_connection_count"], 25_500)
         self.assertEqual(len(topology["populations"]), 7)
-        self.assertFalse(payload["active_in_chat"])
-        self.assertEqual(payload["runtime_state"], "source_topology_only")
+        self.assertTrue(payload["active_in_chat"])
+        self.assertEqual(payload["runtime_state"], "ten_thousand_neuron_sparse_network_integrated")
+        self.assertEqual(payload["runtime"]["runtime_version"], "JARVIS_ANS100_HYBRID_V4")
+        self.assertEqual(payload["runtime"]["neuron_count"], 10_000)
+        self.assertEqual(payload["runtime"]["connection_count"], 25_500)
+        self.assertFalse(payload["runtime"]["learning_enabled"])
+        self.assertFalse(payload["runtime"]["persistent_state"])
+        self.assertEqual(payload["runtime"]["decision_authority"], "advisory_only")
 
     def test_visible_browser_status_is_authenticated_and_desktop_only(self):
         with self.assertRaises(HTTPError) as missing_auth:
