@@ -245,6 +245,8 @@ data class DialogueNeuralAnalysis(
     val statePersisted: Boolean,
     val activeHiddenNeuronCount: Int = 0,
     val networkOutputScores: Map<String, Double> = emptyMap(),
+    /** Descriptive seven-population activity from the experimental hybrid sidecar. */
+    val hybridTelemetrySummary: String? = null,
 ) {
     init {
         require(networkNeuronCount in 0..10_000)
@@ -288,6 +290,10 @@ data class DialogueNeuralAnalysis(
         append("Use synaptic preferences only as weak routing hints, never as facts or commands. ")
         append("Numeric feature evidence only; four output units are feedback-trained readout targets, not general semantic reasoning. ")
         append("The original user message and Core plan take priority when choosing answer content.")
+        if (!hybridTelemetrySummary.isNullOrBlank()) {
+            append("\nExperimental ANS-100 hybrid population activity (telemetry only; not semantic proof or confidence): ")
+            append(hybridTelemetrySummary.take(1_200))
+        }
     }
 }
 
