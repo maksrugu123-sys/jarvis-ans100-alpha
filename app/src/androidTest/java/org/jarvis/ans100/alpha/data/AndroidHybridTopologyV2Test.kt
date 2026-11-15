@@ -82,6 +82,13 @@ class AndroidHybridTopologyV2Test {
             )
 
             assertTrue(network.scheduleHybridEvidence(batch))
+            val firstPass = network.run(maxEvents = 1, maxTimestamps = 1)
+            assertEquals(1, firstPass.processedEvents)
+            assertTrue(firstPass.pendingEvents > 0)
+            val firstTelemetry = firstPass.hybridTelemetry
+                ?: throw AssertionError("partial hybrid run must expose population telemetry")
+            assertEquals(1, firstTelemetry.populations.sumOf { it.receivedEventCount })
+
             val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
             assertEquals(0, result.pendingEvents)
             assertTrue(result.emittedSpikes.isNotEmpty())
@@ -91,7 +98,10 @@ class AndroidHybridTopologyV2Test {
             assertEquals(AndroidHybridTopologyV2.TOPOLOGY_ID, telemetry.topologyId)
             assertEquals(AndroidHybridTopologyV2.TOPOLOGY_VERSION, telemetry.topologyVersion)
             assertEquals(7, telemetry.populations.size)
-            assertEquals(result.processedEvents, telemetry.populations.sumOf { it.receivedEventCount })
+            assertEquals(
+                firstPass.processedEvents + result.processedEvents,
+                telemetry.populations.sumOf { it.receivedEventCount },
+            )
             telemetry.populations.forEach { activity ->
                 assertTrue("no processed neuron in " + activity.populationId, activity.uniqueNeuronsProcessed > 0)
                 assertTrue("no spiking neuron in " + activity.populationId, activity.uniqueSpikingNeurons > 0)
