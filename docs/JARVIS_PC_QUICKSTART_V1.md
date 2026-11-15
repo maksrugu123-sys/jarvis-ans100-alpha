@@ -69,6 +69,23 @@ After signing in, the chat accepts a deliberately small explicit command set:
 
 These are UI-level deterministic command routes to the existing read-only browser API. They do not make ANS-100 a general command interpreter and do not authorize shell commands, arbitrary application control, downloads, logins, forms, messages or purchases. The browser's URL/DNS/request guards still apply. Search/open/read require the optional Playwright + Chromium installation described below.
 
+## Chrome / Edge browser extension
+
+The JARVIS panel includes a download link for a Manifest V3 companion extension. To install it on Windows 10:
+
+1. Click **Скачать расширение для Chrome / Edge** in the Браузер JARVIS panel.
+2. Extract the ZIP to a permanent folder.
+3. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.
+4. Enable **Developer mode**, click **Load unpacked / Загрузить распакованное**, and select the extracted `jarvis-browser-extension` folder.
+5. Pin **JARVIS Browser Bridge** to the browser toolbar.
+6. Open the JARVIS Core terminal, copy the one-time access token and paste it into the extension popup. Press **Подключить**.
+
+The extension opens a public web address in a new tab or starts a Bing search. It can also read up to 12,000 characters of the active tab and send the text to the local JARVIS model, but only after the user opens the extension and presses **Передать страницу и спросить**. It requests temporary access to the active tab and does not run a background page collector. The token is stored in the extension's local browser-profile storage; **Забыть токен** removes it.
+
+Only `http://127.0.0.1:8765` is used for the local API. The server allows CORS only from a valid Chrome/Edge extension origin and only for the two extension bridge endpoints. The API still requires the JARVIS Bearer token. The server rejects localhost, private and reserved source-page URLs before accepting their text. The extension does not read cookies, passwords, browser history or all tabs and cannot submit forms, click page controls, download/upload files, log into accounts or run shell commands.
+
+This is an unpacked developer-mode extension, not a signed CRX and not a store-published extension. It has not yet been installed or tested on a real Chrome or Edge profile.
+
 ## Optional visible research browser
 
 The PC PWA includes a source-level visible browser panel. The browser opens a separate foreground Chromium window with a dedicated JARVIS profile; it is not a headless scraper and does not reuse your everyday browser profile.
