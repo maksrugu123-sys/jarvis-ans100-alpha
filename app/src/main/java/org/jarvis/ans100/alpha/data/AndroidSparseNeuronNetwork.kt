@@ -188,7 +188,7 @@ class AndroidSparseNeuronNetwork(
                 topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
                 topologyVersion = AndroidHybridTopologyV2.TOPOLOGY_VERSION,
                 neuronCount = AndroidHybridTopologyV2.NEURON_COUNT,
-                connectionCount = AndroidHybridTopologyV2.connections().size,
+                connectionCount = AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT,
             )
         ) throw AndroidNeuronNetworkException("network is not the initialized ANS-100 hybrid V2 topology")
 
