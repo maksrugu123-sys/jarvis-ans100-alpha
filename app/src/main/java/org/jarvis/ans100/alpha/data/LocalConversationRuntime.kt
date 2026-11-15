@@ -235,7 +235,6 @@ internal object LocalConversationCodec {
 data class DialogueNeuralAnalysis(
     val networkNeuronCount: Int,
     val activeFeatureCount: Int,
-    val activeHiddenNeuronCount: Int = 0,
     val processedEvents: Int,
     val processedNeuronBatches: Int,
     val outputSpikeCount: Int,
@@ -244,6 +243,7 @@ data class DialogueNeuralAnalysis(
     val classifierConfidenceMargin: Double?,
     val classifierTrainedExamples: Int,
     val statePersisted: Boolean,
+    val activeHiddenNeuronCount: Int = 0,
     val networkOutputScores: Map<String, Double> = emptyMap(),
 ) {
     init {
