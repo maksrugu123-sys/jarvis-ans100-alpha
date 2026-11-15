@@ -8,17 +8,17 @@ Target branch: `experiment/jarvis-integrated-prototype-v1`
 
 Make ANS-100 a measurable analysis and decision-support stage before the language model. Qwen remains responsible for fluent natural-language realization. ANS-100 must contribute structured, inspectable evidence that changes the prompt in a useful way; it must not be represented as independently understanding arbitrary language until controlled evaluations demonstrate that capability.
 
-## Verified baseline
+## Current source-level implementation (not runtime-verified)
 
-The Android conversation path currently:
-- obtains up to 128 active feature-neuron IDs from the dialogue feature classifier;
-- schedules external events only for those feature neurons;
-- runs a persistent 10,000-node sparse LIF-DT network;
-- reads four legacy output units (greeting, question, thanks, farewell);
-- records eligibility traces and applies feedback-driven R-STDP rewards;
-- serializes a numeric network summary into the context passed to the response engine.
+The Android conversation path now has the following source-level behavior:
+- obtains up to 128 active hashed word/bigram feature IDs from the separate dialogue feature classifier;
+- maps them into 9,000 input neurons in a persistent 10,000-node SQLite/JNVM network;
+- propagates events through 996 LIF-DT hidden neurons, then into four output/readout neurons (greeting, question, thanks, farewell), using 75,984 sparse directed connections;
+- computes mean learned hidden-to-output synaptic weights for active hidden neurons and passes those values, active counts, event metrics, and any confident explicitly trained classifier candidate to LiteRT-LM as advisory context alongside the original request and Core plan;
+- records eligibility only for hidden neurons and output neurons that actually spiked; explicit user feedback can apply bounded R-STDP reward to the matching hidden-to-output synapses;
+- upgrades the former direct feature-to-output topology in place by projecting old readout weights through the deterministic input-to-hidden mapping, clearing stale events/eligibility and resetting repurposed hidden states.
 
-The current 10,000-node layout is 9,996 text-feature input nodes plus four output/readout nodes. The four outputs are not a general reasoning network. The feature IDs are an encoded representation, not semantic understanding. The separate four-class classifier and the sparse network are distinct components and their outputs must remain separately labelled.
+The four readout scores are mean synaptic weights, not probabilities or semantic decisions. Hashed tokens/bigrams are a structural feature encoding, not a semantic embedding. The separate four-class feature classifier and the spiking network remain distinct components and their outputs must remain separately labelled. The source changes and tests are not runtime-verified yet.
 
 ## V2 architecture
 
@@ -97,9 +97,9 @@ No claim of improved reasoning is accepted without the ablation results. Android
 1. **V2 contract and baseline audit** — this document; no runtime behavior change.
 2. **Typed evidence model and encoder** — derive features from existing Core/understanding outputs; keep the legacy network as a side channel.
 3. **Decision object and prompt handoff** — add a versioned, bounded, provenance-preserving object; preserve fallback behavior.
-4. **Network topology V2** — only after tests and a migration design; introduce populations and bounded recurrent paths.
-5. **Learning/trace audit** — prove reward attribution and persistence across turns.
-6. **Offline evaluation and Android profiling** — enable by default only after measurable gains and acceptable resource use.
+4. **Three-stage topology V2 source implementation** — implemented as a bounded feed-forward input/hidden/readout graph with an in-place weight-projection migration; instrumentation tests are authored but not run. Bounded recurrent, critic, working-state, and candidate populations remain future work.
+5. **Typed evidence and structured decision object** — still required: provenance-bearing evidence, candidate response goals, supporting/conflicting evidence, uncertainty, suggested answer structure, and explicit abstention.
+6. **Learning/trace audit and offline evaluation** — prove reward attribution, add held-out ablations against Core+Qwen, and measure latency/RAM/energy on the target Android device before claiming a reasoning improvement.
 
 ## Non-goals and safeguards
 
