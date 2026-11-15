@@ -1,10 +1,10 @@
 package org.jarvis.ans100.alpha.data
 
 /**
- * Conservative V1 policy adapter.
- *
- * This is orchestration around existing Core heuristics, not a learned hybrid
- * population controller. The legacy neural readout contributes telemetry only.
+ * Compatibility policy adapter for callers that do not have a completed
+ * hybrid-population turn. The live Android dialogue route uses
+ * ANS100HybridPopulationController and its evidence-bound Qwen handoff instead.
+ * This policy remains Core-heuristic orchestration, not a learned neural model.
  */
 class ANS100DecisionPolicy {
     fun decide(
