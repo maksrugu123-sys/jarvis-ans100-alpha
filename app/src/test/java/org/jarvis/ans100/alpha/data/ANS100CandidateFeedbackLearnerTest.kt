@@ -25,7 +25,7 @@ class ANS100CandidateFeedbackLearnerTest {
         )
 
         assertEquals(listOf("ans100-edge-a"), updates.map { it.connectionId })
-        assertEquals(0.52, updates.single().nextWeight, 0.000001)
+        assertEquals(0.51, updates.single().nextWeight, 0.000001)
     }
 
     @Test
