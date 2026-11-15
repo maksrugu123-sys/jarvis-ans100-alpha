@@ -74,6 +74,7 @@ data class LocalConversationUiState(
     val responseGenerationMs: Long = 0L,
     val lastTurnDurationMs: Long = 0L,
     val responseTokenEstimate: Int = 0,
+    val streamingResponse: String = "",
     val ans100ProcessedEvents: Int = 0,
     val ans100SpikeCount: Int = 0,
     val ans100ActiveNeuronCount: Int = 0,
@@ -609,6 +610,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             conversation = before.conversation.copy(
                 isBusy = true,
                 error = null,
+                streamingResponse = "",
                 nativeDialogueContextId = null,
                 nativeDialogueFeatureIds = emptyList(),
             ),
@@ -711,7 +713,21 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 // Neural preprocessing is optional: the normal turn is committed even
                 // when both the Termux endpoint and the in-process checkpoint are unavailable.
-                val messages = conversationCoordinator.send(clean, signalContext)
+                conversationResponseEngine.onPartialResponse = { partial ->
+                    mainHandler.post {
+                        if (nativeDialogueGeneration == dialogueGeneration) {
+                            val current = mutableState.value
+                            mutableState.value = current.copy(
+                                conversation = current.conversation.copy(streamingResponse = partial),
+                            )
+                        }
+                    }
+                }
+                val messages = try {
+                    conversationCoordinator.send(clean, signalContext)
+                } finally {
+                    conversationResponseEngine.onPartialResponse = null
+                }
                 val elapsedMs = ((System.nanoTime() - turnStartedAtNs) / 1_000_000L).coerceAtLeast(0L)
                 val modelMetrics = conversationResponseEngine.performanceSnapshot()
                 val coreStatus = conversationCoordinator.status()
@@ -721,6 +737,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         conversation = current.conversation.copy(
                             messages = messages,
                             isBusy = false,
+                            streamingResponse = "",
                             error = null,
                             backendLabel = conversationResponseEngine.backendLabel,
                             gpuEnabled = conversationResponseEngine.gpuEnabled,
@@ -749,6 +766,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     mutableState.value = current.copy(
                         conversation = current.conversation.copy(
                             isBusy = false,
+                            streamingResponse = "",
                             backendLabel = conversationResponseEngine.backendLabel,
                             gpuEnabled = conversationResponseEngine.gpuEnabled,
                             error = error.message ?: "Локальный ответ не сохранён.",
