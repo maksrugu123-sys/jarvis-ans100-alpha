@@ -78,6 +78,35 @@ class TypedEvidenceTest {
         assertEquals(first.records.size, first.records.map { it.recordId }.distinct().size)
     }
 
+
+    @Test
+    fun emitsOneHeuristicSupportOrConflictSignalForEachCandidateSlot() {
+        val message = "Объясни, как работает сеть"
+        val core = LocalUnderstandingPipeline().analyze(message)
+        val bundle = TypedEvidenceEncoder().encode(
+            TypedEvidenceInput("turn-candidate-signals", message, core),
+        )
+        ANS100CandidateSlotContract.Slot.values().forEach { slot ->
+            val support = bundle.records.single {
+                it.feature == ANS100CandidateSlotContract.evidenceFeature(
+                    slot, ANS100CandidateSlotContract.Polarity.SUPPORT,
+                )
+            }
+            val conflict = bundle.records.single {
+                it.feature == ANS100CandidateSlotContract.evidenceFeature(
+                    slot, ANS100CandidateSlotContract.Polarity.CONFLICT,
+                )
+            }
+            val supportValue = (support.value as EvidenceValue.BooleanValue).value
+            val conflictValue = (conflict.value as EvidenceValue.BooleanValue).value
+            assertTrue(supportValue xor conflictValue)
+            assertEquals(EvidenceStatus.HEURISTIC, support.status)
+            assertEquals(EvidenceStatus.HEURISTIC, conflict.status)
+            assertEquals(supportValue, support.activation > 0.0)
+            assertEquals(conflictValue, conflict.activation > 0.0)
+        }
+    }
+
     @Test
     fun boundsCoreHintsAndTotalEvidence() {
         val longText = "термин ".repeat(250)
