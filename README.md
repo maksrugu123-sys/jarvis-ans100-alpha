@@ -601,3 +601,10 @@ No network fallback, model auto-download, tools, shell access or external action
 ## Current autonomous-core milestone
 
 The current implementation sequence and release gates are tracked in [JARVIS Autonomous Core Milestone V1](docs/JARVIS_AUTONOMOUS_CORE_MILESTONE_V1.md). This is a plan/status record, not a claim that the runtime work or verification gates are complete.
+
+
+## Windows 10 / Chrome / Edge desktop entry
+
+A source-level Windows launcher is available as `start_jarvis_windows.bat`. It starts the existing Python PC console and opens its PWA in an Edge app-mode window; this is not yet a native Windows installer or executable. The PC console also provides a downloadable Manifest V3 Browser Bridge for Chrome/Edge. The extension can open public URLs/searches and send the active page's text to local JARVIS only after an explicit user click. Follow `docs/JARVIS_PC_QUICKSTART_V1.md` and `tools/jarvis_app/browser_extension/README.md` for setup.
+
+Windows 10, Edge/Chrome extension installation, browser integration, and local model inference remain unverified on a real PC. No Windows build, package, or runtime tests were performed for this milestone.
