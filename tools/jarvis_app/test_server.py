@@ -246,6 +246,21 @@ class LocalConsoleHttpTests(unittest.TestCase):
             self.assertIn(expected, html)
         self.assertEqual(html.count('id="events"'), 1)
 
+        with urlopen(self.base_url + "/app.js", timeout=3) as response:
+            app_js = response.read().decode("utf-8")
+        self.assertIn("normalBrowserSearch", app_js)
+        self.assertIn("publicBrowserCommandUrl", app_js)
+        self.assertIn('window.open("https://www.bing.com/search?q="', app_js)
+
+        with urlopen(self.base_url + "/styles.css", timeout=3) as response:
+            styles = response.read().decode("utf-8")
+        self.assertIn(".desktop-workspace", styles)
+        self.assertIn("body.reduced-motion", styles)
+
+        with urlopen(self.base_url + "/sw.js", timeout=3) as response:
+            worker = response.read().decode("utf-8")
+        self.assertIn('jarvis-local-console-v14', worker)
+
     def test_visible_browser_status_is_authenticated_and_desktop_only(self):
         with self.assertRaises(HTTPError) as missing_auth:
             urlopen(self.base_url + "/api/browser", timeout=3)
