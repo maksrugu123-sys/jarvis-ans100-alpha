@@ -28,6 +28,7 @@ internal object PromptContextBudgeter {
     private const val MAX_MEMORY_CHARS = 120
     private const val MAX_UNDERSTANDING_CHARS = 480
     private const val MAX_SIGNAL_CHARS = 360
+    private const val MAX_NEURAL_ANALYSIS_CHARS = 320
 
     fun create(
         baseSystemInstruction: String,
@@ -36,6 +37,7 @@ internal object PromptContextBudgeter {
         memoryContext: List<LocalWorkspaceMemory>,
         signalContext: ConversationSignalContext?,
         understandingContext: LocalUnderstanding?,
+        dialogueNeuralAnalysis: DialogueNeuralAnalysis? = null,
     ): PromptContextBudget {
         val cleanPrompt = prompt.trim()
         val base = baseSystemInstruction.trim()
@@ -99,6 +101,17 @@ internal object PromptContextBudgeter {
             ?.takeIf { it.isNotBlank() }
         if (signalText != null) {
             val section = "Краткая сводка ANS-100 (числовые признаки, не семантическое понимание):\n$signalText"
+            val candidateSections = sections + section
+            if (estimate(renderSystem(candidateSections), selectedHistory) <= INPUT_ESTIMATE_LIMIT) {
+                sections += section
+            }
+        }
+
+        val neuralText = dialogueNeuralAnalysis?.toModelContext()
+            ?.take(MAX_NEURAL_ANALYSIS_CHARS)
+            ?.takeIf { it.isNotBlank() }
+        if (neuralText != null) {
+            val section = "Измерения Android-сети ANS-100 (ограниченные признаки, не самостоятельное понимание):\n$neuralText"
             val candidateSections = sections + section
             if (estimate(renderSystem(candidateSections), selectedHistory) <= INPUT_ESTIMATE_LIMIT) {
                 sections += section
