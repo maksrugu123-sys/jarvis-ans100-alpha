@@ -608,3 +608,7 @@ The current implementation sequence and release gates are tracked in [JARVIS Aut
 A source-level Windows launcher is available as `start_jarvis_windows.bat`. It starts the existing Python PC console and opens its PWA in an Edge app-mode window; this is not yet a native Windows installer or executable. The PC console also provides a downloadable Manifest V3 Browser Bridge for Chrome/Edge. The extension can open public URLs/searches and send the active page's text to local JARVIS only after an explicit user click. Follow `docs/JARVIS_PC_QUICKSTART_V1.md` and `tools/jarvis_app/browser_extension/README.md` for setup.
 
 Windows 10, Edge/Chrome extension installation, browser integration, and local model inference remain unverified on a real PC. No Windows build, package, or runtime tests were performed for this milestone.
+
+## Windows desktop workspace UI V1
+
+The local PC console now has a responsive navigation rail, section anchors, live backend/R-STDP status labels, and local compact/reduced-motion preferences. The Windows launcher checks common Edge and Chrome locations before falling back to the default browser and sets UTF-8/unbuffered Python output. The navigation/settings HTTP regression test is authored but NOT RUN; no Windows or real browser runtime was executed. See `docs/JARVIS_PC_QUICKSTART_V1.md`.
