@@ -105,6 +105,12 @@ class PromptContextBudgeterTest {
             classifierConfidenceMargin = null,
             classifierTrainedExamples = 0,
             statePersisted = true,
+            networkOutputScores = mapOf(
+                "greeting" to 0.75,
+                "question" to 0.55,
+                "thanks" to 0.20,
+                "farewell" to 0.10,
+            ),
         )
 
         val plan = PromptContextBudgeter.create(
@@ -120,6 +126,8 @@ class PromptContextBudgeterTest {
         assertTrue(plan.systemInstruction.contains("10000 nodes"))
         assertTrue(plan.systemInstruction.contains("active text-feature inputs=18"))
         assertTrue(plan.systemInstruction.contains("not semantic decisions"))
+        assertTrue(plan.systemInstruction.contains("greeting=0.750"))
+        assertTrue(plan.systemInstruction.contains("not probabilities"))
     }
 
     @Test
