@@ -989,6 +989,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START + 3] ?: 0.0),
                         )
                     }
+                    val readoutSummary = if (networkOutputScores.isEmpty()) {
+                        "нет активного readout"
+                    } else {
+                        networkOutputScores.toSortedMap().entries.joinToString(", ") { (label, score) ->
+                            "$label=${String.format(java.util.Locale.ROOT, "%.2f", score)}"
+                        }
+                    }
                     val hiddenSpikeTimeNs = nextTime + AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS
                     val eligibilityCount = if (hiddenSpikes.isEmpty() || outputSpikes.isEmpty()) {
                         0
@@ -1029,8 +1036,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 nativeNetworkMessage =
                                     "ANS-100: входных признаков ${featureEvents.size}, активных скрытых нейронов ${activeHiddenSpikes.size}, " +
                                         "выходных импульсов ${outputSpikes.size}, обработано событий ${result.processedEvents}, " +
-                                        "eligibility-связей ${eligibilityCount}. " +
-                                        "Числовой результат передан языковой модели как ограниченный контекст; это ещё не самостоятельное мышление.",
+                                        "eligibility-связей ${eligibilityCount}; readout-веса: $readoutSummary. " +
+                                        "Это слабые подсказки для языковой модели, не вероятности и не самостоятельное мышление.",
                             ),
                         )
                     }
