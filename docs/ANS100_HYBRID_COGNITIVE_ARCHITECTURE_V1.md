@@ -199,3 +199,17 @@ The handoff is built only for messages within the typed-evidence input limit and
 This is an integration bridge, **not** the selected 10,000-neuron hybrid cognitive architecture. No new populations, recurrent semantic association, candidate/critic network, learning update, or hybrid decision controller has been implemented. The hybrid controller must replace this conservative policy only after its population topology, event budgets, evidence attribution and ablation evaluation are implemented.
 
 Tests were added for policy labeling and optional prompt inclusion but were not executed. No build, CI, workflow, APK/AAB, benchmark or device run was performed.
+
+## 15. Phase 3 implementation status — isolated hybrid V2 topology
+
+Added:
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidHybridTopologyV2.kt`
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidHybridTopologyV2Test.kt`
+
+The builder defines the seven contiguous stable ID ranges from the allocation table and creates 27,000 deterministic sparse directed connections under the 100,000-edge limit. The graph includes evidence→association, association recurrence and association→working, working recurrence and working→candidate/goal, candidate→critic, critic→candidate feedback, and candidate/critic/goal→decision paths. There is no direct evidence→decision shortcut. Feed-forward and recurrent weights are explicit starting values, not calibrated parameters.
+
+The V2 initializer uses the separate `jarvis_ans100_hybrid_v2.db` SQLite database. Neuron rows, edges and topology identity/version metadata are created in one SQLite transaction. Reopening the same initialized topology is idempotent; a different or incomplete pre-existing database is rejected rather than cleared or migrated. The legacy dialogue database and its learned state are not used by this initializer.
+
+**Important boundary:** this phase creates and stores a topology only. It does not yet activate the seven populations from typed dialogue evidence, implement the six controller roles, establish useful learning, or connect V2 readouts to `ANS100Decision`/Qwen. The factory is not called by normal app startup, so the default app path remains unchanged.
+
+**Verification:** instrumentation tests were authored for stable population ranges, deterministic edge generation, sparse bounds, idempotent initialization and legacy-database isolation. Tests have NOT been run. No Gradle build, APK/AAB, CI, workflow, benchmark or device run was performed.
