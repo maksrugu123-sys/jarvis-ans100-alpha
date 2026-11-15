@@ -325,7 +325,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertEqual(payload["runtime"]["runtime_version"], "JARVIS_ANS100_HYBRID_V4")
         self.assertEqual(payload["runtime"]["neuron_count"], 10_000)
         self.assertEqual(payload["runtime"]["connection_count"], 25_500)
-        self.assertEqual(payload["runtime"]["input_contract"], "ANDROID_TYPED_EVIDENCE_V1")
+        self.assertEqual(payload["runtime"]["input_contract"], "JARVIS_TYPED_EVIDENCE_V1")
         self.assertFalse(payload["runtime"]["learning_enabled"])
         self.assertFalse(payload["runtime"]["persistent_state"])
         self.assertEqual(payload["runtime"]["decision_authority"], "advisory_only")
