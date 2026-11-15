@@ -269,7 +269,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
 
         with urlopen(self.base_url + "/sw.js", timeout=3) as response:
             worker = response.read().decode("utf-8")
-        self.assertIn('jarvis-local-console-v15', worker)
+        self.assertIn('jarvis-local-console-v20', worker)
 
     def test_browser_close_tab_endpoint_dispatches_without_launching_a_browser(self):
         original = self.service.browser_close_tab
