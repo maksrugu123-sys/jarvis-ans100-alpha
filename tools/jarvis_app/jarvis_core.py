@@ -39,7 +39,7 @@ _STOP_WORDS = frozenset({
 class JarvisCore:
     """Single owner of a conversational turn; never executes external actions."""
 
-    VERSION = "1.2"
+    VERSION = "1.3"
 
     def __init__(
         self,
@@ -607,9 +607,10 @@ class JarvisCore:
             "signal_context": signal_context,
             "reasoning_context": reasoning_context,
             "dialog_neuron_context": dialog_neuron_context,
-            "ans100_context": ans100_network_context,
         }
-        # Preserve compatibility with older test/adaptor engines on ordinary chat.
+        if ans100_network_context is not None:
+            engine_arguments["ans100_context"] = ans100_network_context
+        # Preserve compatibility with older test/adaptor engines when ANS-100 V4 is disabled.
         if safe_external_context is not None:
             engine_arguments["external_context"] = safe_external_context
         answer = engine.respond(prompt, history, **engine_arguments)
