@@ -244,3 +244,10 @@ textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(109,214,1
   border-radius:10px; background:#0d1824; color:#c2d6e8;
   font-size:12px; line-height:1.55; overflow-wrap:anywhere;
 }
+
+.browser-extension-download {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  text-decoration:none;
+}
