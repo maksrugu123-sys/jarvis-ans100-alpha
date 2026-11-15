@@ -50,9 +50,14 @@ def create_workspace_folder(root: str | Path, value: object) -> dict[str, object
     root_path = Path(root).expanduser()
     try:
         root_path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if root_path.is_symlink():
+            raise WorkspaceFolderError("Каталог workspace-files не может быть символической ссылкой.")
         resolved_root = root_path.resolve(strict=True)
         if not resolved_root.is_dir():
             raise WorkspaceFolderError("Папка рабочих файлов JARVIS недоступна.")
+        expected_root = root_path.parent.resolve(strict=True) / root_path.name
+        if resolved_root != expected_root:
+            raise WorkspaceFolderError("Каталог workspace-files должен находиться внутри данных JARVIS.")
         target = resolved_root / name
         # The name validator forbids separators; this is a second confinement check.
         if target.parent != resolved_root:
