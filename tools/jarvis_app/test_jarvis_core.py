@@ -18,6 +18,7 @@ class FakeLanguageEngine:
     def respond(
         self, prompt, history, *, memory_context=(), signal_context=None,
         reasoning_context=None, dialog_neuron_context=None, external_context=None,
+        ans100_context=None,
     ):
         self.prompt = prompt
         self.history = history
@@ -26,6 +27,7 @@ class FakeLanguageEngine:
         self.reasoning_context = reasoning_context
         self.dialog_neuron_context = dialog_neuron_context
         self.external_context = external_context
+        self.ans100_context = ans100_context
         return "Сформированный языковым модулем ответ."
 
 
@@ -87,6 +89,67 @@ class JarvisCoreTests(unittest.TestCase):
         self.assertFalse(status["ans100_network"]["full_cognitive_loop_integrated"])
         self.assertFalse(status["ans100_network"]["learning_enabled"])
         self.assertFalse(status["external_actions"]["enabled"])
+
+    def test_hybrid_ans100_runtime_is_invoked_and_passed_to_language_engine(self):
+        class FakeHybridANS100:
+            def __init__(self):
+                self.calls = 0
+
+            def analyze(self, prompt, understanding_context, reasoning_context=None, external_context=None):
+                self.calls += 1
+                self.prompt = prompt
+                return {
+                    "runtime_version": "JARVIS_ANS100_HYBRID_V4",
+                    "neuron_count": 10_000,
+                    "connection_count": 25_500,
+                    "selected_candidate": "clarification",
+                    "readout_spike_counts": {
+                        "answer": {"support": 0, "conflict": 2},
+                        "clarification": {"support": 4, "conflict": 0},
+                        "abstain": {"support": 0, "conflict": 0},
+                    },
+                    "scope": "bounded_structural_signal_routing_not_semantic_reasoning",
+                }
+
+            def status(self):
+                return {
+                    "runtime_version": "JARVIS_ANS100_HYBRID_V4",
+                    "neuron_count": 10_000,
+                    "connection_count": 25_500,
+                    "active_in_chat": True,
+                }
+
+            def close(self):
+                return None
+
+        hybrid = FakeHybridANS100()
+        core = JarvisCore(self.engine, hybrid_ans100_runtime=hybrid)
+        answer, trace = core.respond("Помоги разобраться с задачей", [])
+        self.assertTrue(answer)
+        self.assertEqual(hybrid.calls, 1)
+        self.assertEqual(hybrid.prompt, "Помоги разобраться с задачей")
+        self.assertEqual(self.engine.ans100_context["neuron_count"], 10_000)
+        self.assertEqual(self.engine.ans100_context["selected_candidate"], "clarification")
+        self.assertTrue(trace["ans100_network_invoked"])
+        self.assertEqual(trace["ans100_network_decision"], "clarification")
+        self.assertFalse(trace["ans100_full_cognition_invoked"])
+        self.assertTrue(core.status()["ans100_network"]["active_in_chat"])
+
+    def test_hybrid_ans100_failure_preserves_legacy_chat_fallback(self):
+        class BrokenHybridANS100:
+            def analyze(self, *args, **kwargs):
+                raise RuntimeError("bounded graph unavailable")
+
+            def status(self):
+                return {"active_in_chat": True, "neuron_count": 10_000}
+
+        core = JarvisCore(self.engine, hybrid_ans100_runtime=BrokenHybridANS100())
+        answer, trace = core.respond("Привет", [])
+        self.assertTrue(answer)
+        self.assertTrue(trace["ans100_network_error"])
+        self.assertFalse(trace["ans100_network_invoked"])
+        self.assertIsNone(self.engine.ans100_context)
+        self.assertTrue(trace["ans100_signal_invoked"])
 
     def test_dialogue_neuron_signal_is_passed_into_the_language_engine(self):
         class FakeDialogNeurons:
