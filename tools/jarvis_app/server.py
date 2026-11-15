@@ -37,6 +37,13 @@ from .visible_browser import (
     validate_external_url,
 )
 from tools.neuron_runtime.conversation_signal import ConversationSignalRuntime
+from tools.neuron_runtime.hybrid_ans100 import (
+    EXPECTED_CONNECTION_COUNT as DESKTOP_ANS100_CONNECTION_COUNT,
+    NEURON_COUNT as DESKTOP_ANS100_NEURON_COUNT,
+    POPULATIONS as DESKTOP_ANS100_POPULATIONS,
+    TOPOLOGY_ID as DESKTOP_ANS100_TOPOLOGY_ID,
+    TOPOLOGY_VERSION as DESKTOP_ANS100_TOPOLOGY_VERSION,
+)
 
 from tools.jpvr_reference.storage import JPVRStorage
 from tools.neuron_runtime.reasoning_engine import (
@@ -551,6 +558,33 @@ class LocalConsoleService:
                 "scope": "desktop_only_visible_browser",
             }
         return {"supported": True, **self.visible_browser.status()}
+
+    def ans100_status(self) -> dict[str, object]:
+        return {
+            "platform": self.platform,
+            "desktop_topology": {
+                "id": DESKTOP_ANS100_TOPOLOGY_ID,
+                "version": DESKTOP_ANS100_TOPOLOGY_VERSION,
+                "neuron_count": DESKTOP_ANS100_NEURON_COUNT,
+                "connection_count": DESKTOP_ANS100_CONNECTION_COUNT,
+                "populations": [
+                    {
+                        "id": population.id,
+                        "start": population.start,
+                        "end": population.end,
+                        "size": population.size,
+                    }
+                    for population in DESKTOP_ANS100_POPULATIONS
+                ],
+            },
+            "active_in_chat": False,
+            "runtime_state": "source_topology_only",
+            "notice": (
+                "The 10,000-neuron desktop topology is defined in source but is not "
+                "instantiated or connected to the live conversation path. The current "
+                "conversation signal preprocessor remains separate."
+            ),
+        }
 
     def browser_extension_state(self) -> dict[str, object]:
         if self.platform != "desktop":
@@ -1182,6 +1216,11 @@ def create_http_server(
                 if not self._require_auth():
                     return
                 self._send(200, service.dialog_rstdp.status())
+                return
+            if path == "/api/ans100":
+                if not self._require_auth():
+                    return
+                self._send(200, service.ans100_status())
                 return
             if path == "/api/browser":
                 if not self._require_auth():
