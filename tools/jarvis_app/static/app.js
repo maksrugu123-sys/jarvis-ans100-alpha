@@ -1374,8 +1374,8 @@ function publicBrowserCommandUrl(rawTarget) {
 
 async function routeBrowserCommand(rawText) {
   const command = rawText.trim();
-  const normalBrowserSearch = command.match(/^(?:найди|поищи)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?(?:chrome|edge|браузере)\s+(.+)$/iu);
-  const normalBrowserOpen = command.match(/^(?:открой|перейди)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?(?:chrome|edge|браузере)\s+(.+)$/iu);
+  const normalBrowserSearch = command.match(/^(?:найди|поищи)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?браузере\s+(.+)$/iu);
+  const normalBrowserOpen = command.match(/^(?:открой|перейди)\s+(?:в\s+)?(?:моём\s+)?(?:обычном\s+)?браузере\s+(.+)$/iu);
   if (normalBrowserSearch) {
     const query = normalBrowserSearch[1].trim();
     if (!query || query.length > 500) throw new Error("Поисковый запрос должен содержать не более 500 символов.");
