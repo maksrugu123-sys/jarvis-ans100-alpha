@@ -73,8 +73,13 @@ Open a terminal in the repository directory:
 After signing in, the chat accepts a deliberately small explicit command set:
 - `Открой браузер` — open the visible Chromium research window.
 - `Найди в интернете <запрос>` or `Открой браузер и найди <запрос>` — search in the visible browser and show source links in the JARVIS panel.
-- `Открой сайт <домен>` or `Открой <URL>` — navigate to a public page.
-- `Прочитай страницу` — extract bounded text from the currently open page.
+- `Открой сайт <домен>` or `Открой <URL>` — navigate to a public page in the dedicated Chromium research window.
+- `Прочитай страницу` — extract bounded text from the currently open Chromium research page.
+- `Открой в обычном браузере <домен>` — open a new tab/window in the same browser that is currently hosting the JARVIS PWA (for example, Edge if the launcher opened JARVIS in Edge).
+- `Найди в браузере <запрос>` — open a Bing search in that same browser. These two commands do not choose or switch the browser brand; to use Chrome instead of Edge, open the JARVIS PWA in Chrome first.
+
+
+The normal-browser commands use the user-initiated `window.open` flow in the PWA; they do not communicate with the extension's background process. The current extension still performs its open/search/page-handoff actions from its own toolbar popup. A chat-to-extension command relay is not implemented. The normal-browser URL helper accepts HTTP/HTTPS domain URLs, rejects literal IP addresses, credentials and common local hostnames, but it is not a DNS/network security boundary.
 
 These are UI-level deterministic command routes to the existing read-only browser API. They do not make ANS-100 a general command interpreter and do not authorize shell commands, arbitrary application control, downloads, logins, forms, messages or purchases. The browser's URL/DNS/request guards still apply. Search/open/read require the optional Playwright + Chromium installation described below.
 
