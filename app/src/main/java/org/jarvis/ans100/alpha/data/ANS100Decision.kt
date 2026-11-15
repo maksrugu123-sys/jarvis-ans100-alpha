@@ -167,7 +167,7 @@ data class ANS100QwenHandoff(
 
     companion object {
         const val SCHEMA_V1 = "ANS100_QWEN_HANDOFF_V1"
-        const val MAX_CONTEXT_CHARS = 3_200
+        const val MAX_CONTEXT_CHARS = 4_096
     }
 }
 
@@ -202,7 +202,7 @@ class ANS100QwenHandoffBuilder {
             "Core heuristic analysis (advisory only):\n${understanding.toModelContext().take(MAX_CORE_CHARS)}",
             decision.toModelContext().take(MAX_DECISION_CHARS),
             "Approved memory references only (retrieve only through approved adapter): " +
-                memoryRefs.joinToString(",") { (it.value as EvidenceValue.Reference).value },
+                memoryRefs.joinToString(",") { (it.value as EvidenceValue.Reference).value }.take(MAX_MEMORY_REF_CHARS),
             "Verified tool evidence summaries (source labels do not make content infallible):\n" +
                 toolEvidence.joinToString("\n") { (it.value as EvidenceValue.Text).value }.take(MAX_TOOL_CHARS),
             "QWEN ROLE: realize a natural-language response from the original user message and this bounded decision. " +
@@ -231,7 +231,8 @@ class ANS100QwenHandoffBuilder {
     companion object {
         private const val MAX_CORE_CHARS = 1_000
         private const val MAX_DECISION_CHARS = 900
-        private const val MAX_TOOL_CHARS = 480
+        private const val MAX_TOOL_CHARS = 300
+        private const val MAX_MEMORY_REF_CHARS = 240
         private const val SCHEMA = ANS100QwenHandoff.SCHEMA_V1
     }
 }
