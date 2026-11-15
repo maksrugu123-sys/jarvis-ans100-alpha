@@ -41,6 +41,13 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn('if os.name == "nt":', source)
         self.assertIn("requires POSIX file-locking", source)
 
+    def test_legacy_windows_launcher_does_not_request_tokens_or_accept_old_servers(self):
+        source = (ROOT / "start_jarvis_windows.bat").read_text(encoding="utf-8")
+        self.assertIn("auth_required -eq $false", source)
+        self.assertIn("auth_scheme -eq 'none'", source)
+        self.assertIn("no token is needed", source.lower())
+        self.assertNotIn("Enter the one-time access token", source)
+
     def test_windows_desktop_mode_does_not_require_manual_tokens(self):
         server = (ROOT / "tools/jarvis_app/server.py").read_text(encoding="utf-8")
         app = (ROOT / "tools/jarvis_app/static/app.js").read_text(encoding="utf-8")
