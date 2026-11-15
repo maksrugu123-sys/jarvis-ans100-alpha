@@ -133,6 +133,45 @@ class PromptContextBudgeterTest {
     }
 
     @Test
+    fun optionalAns100HandoffIsIncludedOnlyWhenSuppliedAndWithinBudget() {
+        val message = "Объясни принцип работы."
+        val understanding = LocalUnderstandingPipeline().analyze(message)
+        val evidence = TypedEvidenceEncoder().encode(
+            TypedEvidenceInput("budget-handoff-turn", message, understanding),
+        )
+        val decision = ANS100DecisionPolicy().decide(evidence, understanding, null)
+        val handoff = ANS100QwenHandoffBuilder().build(
+            originalUserMessage = message,
+            understanding = understanding,
+            evidence = evidence,
+            decision = decision,
+        )
+
+        val withoutHandoff = PromptContextBudgeter.create(
+            baseSystemInstruction = "Базовые правила JARVIS.",
+            prompt = message,
+            recentHistory = emptyList(),
+            memoryContext = emptyList(),
+            signalContext = null,
+            understandingContext = null,
+        )
+        val withHandoff = PromptContextBudgeter.create(
+            baseSystemInstruction = "Базовые правила JARVIS.",
+            prompt = message,
+            recentHistory = emptyList(),
+            memoryContext = emptyList(),
+            signalContext = null,
+            understandingContext = null,
+            ans100Handoff = handoff,
+        )
+
+        assertFalse(withoutHandoff.systemInstruction.contains("ANS100_QWEN_HANDOFF_V1"))
+        assertTrue(withHandoff.systemInstruction.contains("ANS100_QWEN_HANDOFF_V1"))
+        assertTrue(withHandoff.systemInstruction.contains("CORE_POLICY_V1"))
+        assertTrue(withHandoff.estimatedInputTokens <= 1_056)
+    }
+
+    @Test
     fun reportsAnEstimateRatherThanPretendingToKnowExactTokenCount() {
         val plan = PromptContextBudgeter.create(
             baseSystemInstruction = "Короткие системные правила.",
