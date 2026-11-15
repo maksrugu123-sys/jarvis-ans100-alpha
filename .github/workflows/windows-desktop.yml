@@ -24,6 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate release publication on both supported Windows runtime generations.
   windows-compatibility:
     name: Windows compatibility (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
