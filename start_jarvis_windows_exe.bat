@@ -33,15 +33,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ready=$false;" ^
   "for($i=0;$i -lt 45;$i++) { if($p.HasExited){break}; try{$h=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 2; if($h.status -eq 'ok' -and $h.platform -eq 'desktop' -and $h.auth_required -eq $false -and $h.auth_scheme -eq 'none'){$ready=$true;break}}catch{}; Start-Sleep -Seconds 1 };" ^
   "if(-not $ready) { Write-Host '[ОШИБКА] JARVIS не запустился.' -ForegroundColor Red; if(Test-Path $log){Get-Content $log -Tail 30}; if(Test-Path $err){Get-Content $err -Tail 30}; if(-not $p.HasExited){Stop-Process -Id $p.Id -Force}; Read-Host 'Нажмите Enter для закрытия'; exit 1 };" ^
-  "Write-Host '[ГОТОВО] JARVIS запущен. Это единственное окно управления.' -ForegroundColor Green;" ^
-  "$pf86=[Environment]::GetFolderPath('ProgramFilesX86'); $pf=[Environment]::GetFolderPath('ProgramFiles'); $local=$env:LOCALAPPDATA;" ^
-  "$candidates=@((Join-Path $pf86 'Microsoft\Edge\Application\msedge.exe'),(Join-Path $pf 'Microsoft\Edge\Application\msedge.exe'),(Join-Path $local 'Microsoft\Edge\Application\msedge.exe'),(Join-Path $pf 'Google\Chrome\Application\chrome.exe'),(Join-Path $pf86 'Google\Chrome\Application\chrome.exe'),(Join-Path $local 'Google\Chrome\Application\chrome.exe'));" ^
-  "$browser=$candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1;" ^
-  "if($browser){Start-Process -FilePath $browser -ArgumentList @('--app=http://127.0.0.1:8765/')}else{Start-Process 'http://127.0.0.1:8765/'};" ^
-  "Write-Host 'Интерфейс открыт в браузере. Для остановки JARVIS нажмите Enter здесь.';" ^
-  "Read-Host 'JARVIS работает';" ^
-  "if(-not $p.HasExited){Stop-Process -Id $p.Id -Force};" ^
-  "Write-Host 'JARVIS остановлен.';" ^
+  "Write-Host '[ГОТОВО] Окно приложения JARVIS открыто.' -ForegroundColor Green;" ^
+  "$p.WaitForExit();" ^
+  "Write-Host 'Приложение JARVIS закрыто.';" ^
   "} catch {" ^
   "  $message = $_.Exception.ToString();" ^
   "  Write-Host ''; Write-Host '[ОШИБКА ЗАПУСКА JARVIS]' -ForegroundColor Red;" ^
