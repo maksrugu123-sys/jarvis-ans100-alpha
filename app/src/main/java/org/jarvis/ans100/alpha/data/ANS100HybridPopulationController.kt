@@ -214,9 +214,12 @@ class ANS100HybridPopulationController {
             )
         }
         val competition = ANS100CandidateCompetition().evaluate(rawReadouts)
+        val scoredCandidates = candidates.map { candidate ->
+            candidate.copy(activation = competition.activations.getValue(candidate.candidateId))
+        }
         val readouts = rawReadouts.mapIndexed { index, input ->
             CandidateReadout(
-                candidate = candidates[index],
+                candidate = scoredCandidates[index],
                 supportSpikes = input.supportSpikes,
                 conflictSpikes = input.conflictSpikes,
                 activation = competition.activations.getValue(input.candidateId),
@@ -275,7 +278,7 @@ class ANS100HybridPopulationController {
             topologyVersion = ANS100TopologyVersion.HYBRID_SPARSE_POPULATIONS_V1,
             decisionProducer = ANS100DecisionProducer.HYBRID_POPULATION_CONTROLLER_V1,
             status = status,
-            candidates = candidates,
+            candidates = scoredCandidates,
             selectedCandidateId = if (status == ANS100DecisionStatus.SELECTED) selectedId else null,
             abstentionReason = abstentionReason,
             uncertainty = uncertainty,
@@ -293,7 +296,7 @@ class ANS100HybridPopulationController {
             },
             responseConstraints = listOf(
                 "Исходное сообщение пользователя — главный источник запроса",
-                "Кандидаты конкурируют по нормированной активности поддержки и конфликта с латеральным подавлением; activation не является вероятностью",
+                "Результат основан на отдельных спайках readout; кандидаты конкурируют по нормированной активности поддержки и конфликта с латеральным подавлением; activation не является вероятностью",
                 "Победитель принимается только при положительной активации и достаточном отрыве от второго кандидата",
                 "Сигналы поддержки и конфликта сформированы Core-эвристиками; сеть пока не выводит их смысл самостоятельно и не обучена",
                 "Сравнение readout: $readoutSummary",
