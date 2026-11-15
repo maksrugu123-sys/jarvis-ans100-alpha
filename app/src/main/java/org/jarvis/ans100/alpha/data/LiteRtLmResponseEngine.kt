@@ -2,6 +2,9 @@ package org.jarvis.ans100.alpha.data
 import android.app.ActivityManager
 import android.content.Context
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.runBlocking
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
@@ -26,6 +29,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     @Volatile private var backendNotice: String? = null
     private var engine: Engine? = null
     private var loadedPath: String? = null
+    @Volatile var onPartialResponse: ((String) -> Unit)? = null
     @Volatile private var lastInitializationMs: Long = 0L
     @Volatile private var lastGenerationMs: Long = 0L
     @Volatile private var lastOutputTokenEstimate: Int = 0
@@ -212,7 +216,19 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         try {
             val startedAtNs = System.nanoTime()
             return try {
-                conversation.sendMessage(prompt, maxOutputToken = MAX_OUTPUT_TOKENS).toString()
+                val output = StringBuilder()
+                runBlocking {
+                    conversation.sendMessageAsync(prompt).collect { message ->
+                        val chunk = message.contents.contents
+                            .filterIsInstance<Content.Text>()
+                            .joinToString(separator = "") { it.text }
+                        if (chunk.isNotEmpty()) {
+                            output.append(chunk)
+                            runCatching { onPartialResponse?.invoke(output.toString()) }
+                        }
+                    }
+                }
+                output.toString()
             } finally {
                 lastGenerationMs = ((System.nanoTime() - startedAtNs) / 1_000_000L).coerceAtLeast(0L)
             }
@@ -241,7 +257,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
 
     companion object {
         private const val MAX_OUTPUT_TOKENS = 96
-        private const val MAX_PROMPT_CHARS = 750
+        private const val MAX_PROMPT_CHARS = 4000
         private const val MAX_HISTORY = 8
         private const val MAX_HISTORY_CHARS = 256
         private const val MAX_MEMORY_CONTEXT_ITEMS = 2
