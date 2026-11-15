@@ -12,7 +12,6 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.File
-import java.util.Locale
 
 data class LiteRtLmPerformanceSnapshot(
     val initializationMs: Long = 0L,
@@ -122,7 +121,6 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         val file = modelStore.installedFile() ?: return fallback.respond(
             clean, recentHistory, memoryContext, signalContext, understanding,
         )
-        val activeEngine = getEngine(file)
         val contextBudget = PromptContextBudgeter.create(
             baseSystemInstruction = SYSTEM_PROMPT,
             prompt = clean,
@@ -140,6 +138,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         lastOmittedHistoryMessages = contextBudget.omittedHistoryMessages
         lastIncludedMemoryItems = contextBudget.includedMemoryItems
         lastOmittedMemoryItems = contextBudget.omittedMemoryItems
+        val activeEngine = getEngine(file)
         val config = ConversationConfig(
             systemInstruction = Contents.of(systemInstruction),
             initialMessages = initial,
