@@ -948,17 +948,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             strength = 1.0,
                         )
                     }
-                    // These four legacy output units are retained for the existing
-                    // explicit-feedback eligibility trace; they are not semantic labels.
-                    val outputDriveEvents = (0 until AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_NEURONS).map { index ->
-                        AndroidNeuronEvent(
-                            eventId = "chat-$contextId-drive-$index",
-                            timeNs = nextTime,
-                            targetNeuronId = AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + index,
-                            strength = DIALOGUE_OUTPUT_BIAS,
-                        )
-                    }
-                    nativeNeuronNetwork.scheduleInputs(featureEvents + outputDriveEvents)
+                    // Only text-feature neurons receive external input. Output units
+                    // must activate through learned synaptic propagation, never a direct bias event.
+                    nativeNeuronNetwork.scheduleInputs(featureEvents)
                     val result = nativeNeuronNetwork.run(
                         maxEvents = MAX_DIALOGUE_EVENTS_PER_TURN,
                         maxTimestamps = MAX_DIALOGUE_TIMESTAMPS_PER_TURN,
@@ -971,6 +963,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         .distinct()
                         .toList()
+                    val rawReadout = nativeNeuronNetwork.dialogueOutputScores(boundedIds)
+                    val networkOutputScores = mapOf(
+                        "greeting" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS] ?: 0.0),
+                        "question" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 1] ?: 0.0),
+                        "thanks" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 2] ?: 0.0),
+                        "farewell" to (rawReadout[AndroidSparseNeuronNetwork.DIALOGUE_FEATURE_NEURONS + 3] ?: 0.0),
+                    )
                     val eligibilityCount = if (outputSpikes.isEmpty()) {
                         0
                     } else {
@@ -998,6 +997,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         } else null,
                         classifierTrainedExamples = classifierPrediction?.trainedExamples ?: 0,
                         statePersisted = true,
+                        networkOutputScores = networkOutputScores,
                     )
                     mainHandler.post {
                         val current = mutableState.value
