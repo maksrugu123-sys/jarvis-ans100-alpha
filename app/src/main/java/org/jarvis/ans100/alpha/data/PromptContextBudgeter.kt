@@ -28,7 +28,7 @@ internal object PromptContextBudgeter {
     private const val MAX_MEMORY_CHARS = 120
     private const val MAX_UNDERSTANDING_CHARS = 480
     private const val MAX_SIGNAL_CHARS = 360
-    private const val MAX_NEURAL_ANALYSIS_CHARS = 320
+    private const val MAX_NEURAL_ANALYSIS_CHARS = 420
 
     fun create(
         baseSystemInstruction: String,
