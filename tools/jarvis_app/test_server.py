@@ -243,6 +243,8 @@ class LocalConsoleHttpTests(unittest.TestCase):
             'id="motion-ui-toggle"',
             'id="settings-platform"',
             'id="ans100-desktop-status"',
+            "Создай папку Проекты",
+            "Закрой вкладку",
         ):
             self.assertIn(expected, html)
         self.assertEqual(html.count('id="events"'), 1)
@@ -254,7 +256,11 @@ class LocalConsoleHttpTests(unittest.TestCase):
         self.assertIn("publicBrowserCommandUrl", app_js)
         self.assertIn("Команда браузера", app_js)
         self.assertIn("Команды браузера работают отдельно", app_js)
-        self.assertIn('window.open("https://www.bing.com/search?q="', app_js)
+        self.assertIn('window.open("about:blank"', app_js)
+        self.assertIn('browserExtensionCommand("close-last-tab")', app_js)
+        self.assertIn('browserExtensionCommand("close-last-window")', app_js)
+        self.assertIn('api("/api/folders"', app_js)
+        self.assertIn('api("/api/browser/close-tab"', app_js)
 
         with urlopen(self.base_url + "/styles.css", timeout=3) as response:
             styles = response.read().decode("utf-8")
@@ -263,7 +269,7 @@ class LocalConsoleHttpTests(unittest.TestCase):
 
         with urlopen(self.base_url + "/sw.js", timeout=3) as response:
             worker = response.read().decode("utf-8")
-        self.assertIn('jarvis-local-console-v14', worker)
+        self.assertIn('jarvis-local-console-v15', worker)
 
     def test_folder_creation_endpoint_is_authenticated_and_confined(self):
         with self.assertRaises(HTTPError) as missing_auth:
@@ -834,6 +840,8 @@ class LocalConsoleHttpTests(unittest.TestCase):
             self.assertIn("jarvis-browser-extension/bridge.js", names)
             manifest = json.loads(archive.read("jarvis-browser-extension/manifest.json"))
         self.assertEqual(manifest["manifest_version"], 3)
+        self.assertEqual(manifest["version"], "1.1.0")
+        self.assertEqual(manifest["background"]["service_worker"], "background.js")
         self.assertEqual(manifest["version"], "1.1.0")
         self.assertEqual(manifest["background"]["service_worker"], "background.js")
         self.assertIn("activeTab", manifest["permissions"])
