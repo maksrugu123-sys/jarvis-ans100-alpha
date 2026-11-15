@@ -879,6 +879,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 ",out=" + activity.outgoingEventCount
                         })
                         append("; decision=").append(decision.status)
+                        decision.responseConstraints.firstOrNull { it.startsWith("Сравнение readout:") }?.let {
+                            append("; ").append(it)
+                        }
                         append("; producer=").append(decision.decisionProducer)
                     }
                     DialogueNeuralAnalysis(
