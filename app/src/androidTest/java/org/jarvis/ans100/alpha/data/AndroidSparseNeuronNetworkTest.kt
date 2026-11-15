@@ -83,22 +83,40 @@ class AndroidSparseNeuronNetworkTest {
     @Test
     fun explicitDialogueRewardChangesOnlyRecordedHiddenToOutputSynapsesAndPersists() {
         val contextId = "dialog-feedback-test"
-        val hiddenIds = (AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until
-            AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START + 3).toList()
         val firstOutput = AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
         val selectedOutput = firstOutput + 1
         val initialWeight = 0.15
+        val startTime = 10_000_000L
+        val unrelatedHidden = AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START + 500
 
         AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 4).use { network ->
             network.initializeSparseDialogueNetwork(weight = initialWeight)
-            val startTime = 10_000_000L
-            // Test the hidden-to-output eligibility/reward contract directly.
+            // Two colliding input feature slots activate eight real hidden neurons,
+            // which then propagate to the four output neurons.
+            network.scheduleInputs(
+                listOf(
+                    AndroidNeuronEvent("feedback-input-a", startTime, 0, 1.0),
+                    AndroidNeuronEvent("feedback-input-b", startTime, 996, 1.0),
+                ),
+            )
+            val run = network.run(maxEvents = 64, maxTimestamps = 4)
+            val hiddenIds = run.emittedSpikes.map { it.first }.filter {
+                it in AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START until
+                    AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START
+            }
+            val outputIds = run.emittedSpikes.map { it.first }.filter {
+                it in AndroidSparseNeuronNetwork.DIALOGUE_OUTPUT_START until
+                    AndroidSparseNeuronNetwork.MAX_NEURONS
+            }
+            assertEquals(8, hiddenIds.size)
+            assertEquals(4, outputIds.size)
+
             val recorded = network.recordDialogueEligibility(
                 contextId = contextId,
                 sourceNeuronIds = hiddenIds,
-                outputNeuronIds = (0 until 4).map { firstOutput + it },
-                preTimeNs = startTime,
-                postTimeNs = startTime + 1_000_000L,
+                outputNeuronIds = outputIds,
+                preTimeNs = startTime + AndroidSparseNeuronNetwork.DEFAULT_CONNECTION_DELAY_NS,
+                postTimeNs = run.currentTimeNs,
             )
             assertEquals(hiddenIds.size * 4, recorded)
 
@@ -121,7 +139,7 @@ class AndroidSparseNeuronNetworkTest {
                     )
                 }
             }
-            assertEquals(initialWeight, network.dialogueSynapseWeight(hiddenIds.last() + 1, selectedOutput), 0.000001)
+            assertEquals(initialWeight, network.dialogueSynapseWeight(unrelatedHidden, selectedOutput), 0.000001)
             val afterFirstReward = network.dialogueSynapseWeight(hiddenIds.first(), selectedOutput)
             val duplicate = network.applyDialogueReward(contextId, hiddenIds, rewards)
             assertEquals(0, duplicate.updatedSynapses)
@@ -129,12 +147,21 @@ class AndroidSparseNeuronNetworkTest {
 
             val scores = network.dialogueOutputScores(hiddenIds)
             assertTrue(scores.getValue(selectedOutput) > scores.getValue(firstOutput))
+            // Ensuring an already-current topology is idempotent must not erase learning.
+            network.initializeSparseDialogueNetwork(weight = initialWeight)
+            assertEquals(afterFirstReward, network.dialogueSynapseWeight(hiddenIds.first(), selectedOutput), 0.000001)
         }
 
         AndroidSparseNeuronNetwork(context, databaseName, hotSetCapacity = 1).use { reopened ->
-            assertTrue(reopened.dialogueSynapseWeight(hiddenIds.first(), selectedOutput) > initialWeight)
-            assertTrue(reopened.dialogueSynapseWeight(hiddenIds.first(), firstOutput) < initialWeight)
-            assertEquals(initialWeight, reopened.dialogueSynapseWeight(hiddenIds.last() + 1, selectedOutput), 0.000001)
+            assertTrue(reopened.dialogueSynapseWeight(
+                AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START,
+                selectedOutput,
+            ) > initialWeight)
+            assertTrue(reopened.dialogueSynapseWeight(
+                AndroidSparseNeuronNetwork.DIALOGUE_HIDDEN_START,
+                firstOutput,
+            ) < initialWeight)
+            assertEquals(initialWeight, reopened.dialogueSynapseWeight(unrelatedHidden, selectedOutput), 0.000001)
         }
     }
 
