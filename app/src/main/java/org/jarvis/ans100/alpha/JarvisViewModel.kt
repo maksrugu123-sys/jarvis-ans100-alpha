@@ -924,7 +924,19 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             nativeNetworkExecutor.submit<DialogueNeuralAnalysis?> {
                 try {
                     hybridNeuronNetwork.initializeHybridTopologyV2()
-                    val prior = hybridNeuronNetwork.stats()
+                    var prior = hybridNeuronNetwork.stats()
+                    // A previous budget-limited turn must be drained before state
+                    // isolation; otherwise beginHybridTurn would reject every later turn.
+                    var drainPasses = 0
+                    while (prior.pendingEvents > 0 && drainPasses < MAX_HYBRID_DIALOGUE_MAX_PASSES) {
+                        hybridNeuronNetwork.run(
+                            maxEvents = MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS,
+                            maxTimestamps = MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS,
+                        )
+                        prior = hybridNeuronNetwork.stats()
+                        drainPasses++
+                    }
+                    if (prior.pendingEvents > 0) return@submit null
                     if (prior.currentTimeNs > Long.MAX_VALUE - HYBRID_DIALOGUE_INPUT_STEP_NS) {
                         return@submit null
                     }
