@@ -1,7 +1,7 @@
 """Loopback-only local JARVIS task console.
 
-Windows desktop mode is tokenless and loopback-only. Android/PWA access retains
-bearer-token authentication. This API has no shell executor or external credentials.
+Desktop and installed Android app modes connect without manual bearer tokens.
+The API remains loopback-only and validates Host and Origin headers.
 """
 from __future__ import annotations
 
@@ -23,7 +23,6 @@ import time
 import uuid
 from urllib.parse import urlsplit
 
-from .auth import LocalConsoleAuth, LocalConsoleAuthError
 from .local_inference import LiteRtLmLocalEngine, LocalInferenceError
 from .local_fallback import LocalFallbackResponseEngine
 from .dialog_neurons import DialogNeuronService
@@ -215,10 +214,8 @@ class LocalConsoleService:
         self.data_path = (
             Path(data_path).expanduser() if data_path is not None else default_path
         )
-        self.auth_path = (
-            Path(auth_path).expanduser() if auth_path is not None
-            else self.data_path.with_name(self.data_path.name + ".access-token")
-        )
+        # Deprecated compatibility argument; local app mode no longer uses token files.
+        self.auth_path = None
         self.workspace_path = (
             Path(workspace_path).expanduser() if workspace_path is not None
             else self.data_path.with_name("workspace.jpvr")
@@ -241,9 +238,7 @@ class LocalConsoleService:
             self.data_path.parent / "dialog-neurons-v1.json"
         )
         self._conversation_lock = threading.Lock()
-        paths = (
-            self.data_path, self.auth_path, self.workspace_path, self.ans100_state_path,
-        )
+        paths = (self.data_path, self.workspace_path, self.ans100_state_path)
         try:
             resolved = [path.resolve(strict=False) for path in paths]
             for index, path in enumerate(paths):
@@ -325,25 +320,15 @@ class LocalConsoleService:
             self.storage.close()
             raise LocalConsoleError("cannot restore the shared JARVIS workspace") from exc
 
-        if self.platform == "desktop":
-            self.auth = None
-            self.bootstrap_token = None
-        else:
-            try:
-                self.auth = LocalConsoleAuth(self.auth_path, rotate=rotate_token)
-            except LocalConsoleAuthError as exc:
-                self.workspace_storage.close()
-                self.storage.close()
-                raise LocalConsoleError("cannot initialize local-console authentication") from exc
-            self.bootstrap_token = self.auth.bootstrap_token
+        self.auth = None
+        self.bootstrap_token = None
         self.dialog_rstdp = DialogRstdpLearningService(
             self.data_path.parent / "dialog-rstdp-v1"
         )
 
-    def authenticate(self, token: str | None) -> bool:
-        if self.platform == "desktop":
-            return True
-        return self.auth is not None and self.auth.verify(token)
+    def authenticate(self, token: str | None = None) -> bool:
+        """Legacy compatibility hook; local app API no longer uses bearer tokens."""
+        return True
 
     def close(self) -> None:
         self.visible_browser.close()
@@ -1148,17 +1133,7 @@ def create_http_server(
             return True
 
         def _require_auth(self) -> bool:
-            # Windows desktop APIs are local-only and do not provision or accept bearer tokens.
-            if service.platform == "desktop":
-                return True
-            values = self.headers.get_all("Authorization", [])
-            if len(values) != 1 or not values[0].startswith("Bearer "):
-                self._error(401, "Требуется токен доступа JARVIS")
-                return False
-            token = values[0][7:]
-            if not service.authenticate(token):
-                self._error(401, "Токен доступа недействителен")
-                return False
+            # Loopback binding plus strict Host/Origin checks protect the local app API.
             return True
 
         def _read_json(self, *, max_bytes: int = MAX_REQUEST_BYTES) -> dict[str, object] | None:
@@ -1223,7 +1198,7 @@ def create_http_server(
                 return
             path = urlsplit(self.path).path
             if path == "/api/health":
-                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "workspace_api_version": 1, "platform": service.platform, "auth_required": service.platform != "desktop", "auth_scheme": "Bearer" if service.platform != "desktop" else "none"})
+                self._send(200, {"status": "ok", "storage": "jpvr", "api_schema": "jarvis.local-console", "api_version": 2, "workspace_api_version": 1, "platform": service.platform, "auth_required": False, "auth_scheme": "none"})
                 return
             if path == "/api/state":
                 if not self._require_auth():
@@ -1562,16 +1537,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"JARVIS Local Console: http://127.0.0.1:{server.server_port}/")
     print(f"JPVR task/session data: {service.data_path}")
     print(f"JPVR shared workspace: {service.workspace_path}")
+    print("Local app mode: no access token is created or required.")
     if service.platform == "desktop":
-        print("Desktop mode: no access token is created or required.")
         print("Browser Bridge: local extension-origin checks are enabled.")
-    else:
-        print(f"Access-token digest: {service.auth_path}")
-        if service.bootstrap_token:
-            print("ANDROID / PWA ACCESS TOKEN (shown only once; save it in the client):")
-            print(service.bootstrap_token)
-        else:
-            print("Access token already provisioned. Use --rotate-token to issue a replacement if it was lost.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
