@@ -253,6 +253,33 @@ class VisibleBrowserResearchService:
     def read(self) -> dict[str, object]:
         return self._call(self._read)
 
+    def close_tab(self) -> dict[str, object]:
+        """Close only the currently selected tab in JARVIS's isolated Chromium."""
+        return self._call(self._close_tab)
+
+    def _close_tab(self) -> dict[str, object]:
+        if self._context is None or self._page is None:
+            raise VisibleBrowserResearchError("Сначала откройте видимый браузер JARVIS.")
+        if self._paused:
+            raise VisibleBrowserResearchError("Сначала верните управление браузером JARVIS.")
+        pages = list(self._context.pages)
+        current = self._page
+        remaining = [page for page in pages if page is not current]
+        try:
+            current.close()
+            # Keep the isolated window usable even when its last tab was closed.
+            self._page = remaining[-1] if remaining else self._context.new_page()
+            self._page.set_default_navigation_timeout(_NAVIGATION_TIMEOUT_MS)
+        except Exception as exc:
+            raise VisibleBrowserResearchError("Не удалось закрыть текущую вкладку JARVIS.") from exc
+        return {
+            "browser_open": True,
+            "paused": False,
+            "closed_tab": True,
+            "remaining_tabs": len(self._context.pages),
+            "page": self._page_state(),
+        }
+
     def _read(self) -> dict[str, object]:
         if self._page is None or self._context is None:
             raise VisibleBrowserResearchError("Сначала откройте видимый браузер и страницу")
