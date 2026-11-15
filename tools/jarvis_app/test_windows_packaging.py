@@ -26,6 +26,8 @@ class WindowsPackagingContractTests(unittest.TestCase):
         self.assertIn(r"JARVIS\JARVIS.exe", source)
         self.assertIn("Start-Process", source)
         self.assertIn("/api/health", source)
+        self.assertIn("auth_required -eq $false", source)
+        self.assertIn("auth_scheme -eq 'none'", source)
         self.assertIn("startup.log", source)
         self.assertIn("Нажмите Enter", source)
         self.assertIn("LAUNCHER ERROR:", source)
