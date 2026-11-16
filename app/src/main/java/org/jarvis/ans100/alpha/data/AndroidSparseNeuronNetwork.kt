@@ -98,7 +98,7 @@ data class AndroidNeuronRunResult(
 )
 
 private fun connectionIdFromPropagatedEvent(eventId: String): String? =
-    Regex("^spike-\\d+-\\d+-(ans100-v4-[A-Za-z0-9._:-]+)$")
+    Regex("^spike-\\d+-\\d+-(ans100-v4-[A-Za-z0-9._:-]+|ans100-v9-canonical-readout-[A-Za-z0-9._:-]+)$")
         .matchEntire(eventId)?.groupValues?.get(1)
 
 open class AndroidNeuronNetworkException(message: String) : IllegalStateException(message)
@@ -1931,6 +1931,15 @@ private class AndroidNeuronSqliteStore(
         try {
             val version = scalar(db, "SELECT value FROM metadata WHERE key='ans100_topology_version'")
             if (version != 5L) throw AndroidNeuronNetworkException("canonical readout requires topology V5")
+            val turnAlreadyRated = db.rawQuery(
+                "SELECT 1 FROM canonical_readout_feedback_events WHERE turn_id=? LIMIT 1",
+                arrayOf(turnId),
+            ).use { it.moveToFirst() }
+            if (turnAlreadyRated) {
+                db.delete("canonical_readout_eligibility", "turn_id=?", arrayOf(turnId))
+                db.setTransactionSuccessful()
+                return 0
+            }
             db.delete(
                 "canonical_readout_eligibility",
                 "created_at_ms<?",
@@ -1978,6 +1987,15 @@ private class AndroidNeuronSqliteStore(
         val nowMs = System.currentTimeMillis()
         db.beginTransaction()
         try {
+            val turnAlreadyRated = db.rawQuery(
+                "SELECT 1 FROM canonical_readout_feedback_events WHERE turn_id=? LIMIT 1",
+                arrayOf(turnId),
+            ).use { it.moveToFirst() }
+            if (turnAlreadyRated) {
+                db.delete("canonical_readout_eligibility", "turn_id=?", arrayOf(turnId))
+                db.setTransactionSuccessful()
+                return 0
+            }
             val sourceIds = mutableListOf<Int>()
             db.rawQuery(
                 "SELECT source_neuron_id FROM canonical_readout_eligibility WHERE turn_id=? AND created_at_ms>=? ORDER BY source_neuron_id",
@@ -2007,6 +2025,7 @@ private class AndroidNeuronSqliteStore(
                     SQLiteDatabase.CONFLICT_IGNORE,
                 ) == -1L
             ) {
+                db.delete("canonical_readout_eligibility", "turn_id=?", arrayOf(turnId))
                 db.setTransactionSuccessful()
                 return 0
             }
