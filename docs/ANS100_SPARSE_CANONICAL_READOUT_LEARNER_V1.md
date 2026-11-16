@@ -24,7 +24,7 @@ Eligible readout source neurons are restricted to:
 
 The six Core-labelled candidate input neurons `1056..1061` are rejected by the contract. A graph-reachability regression test traverses the complete static topology from those six Core inputs and verifies that none can reach an eligible readout source or any canonical output neuron.
 
-The static topology also has no incoming edge to `8800..9399`. Those output synapses are created only after an explicit feedback event. The existing heuristic candidate/critic/readout lanes remain at `5800..9999` outside the canonical range; their labels are not converted into canonical classes.
+The static topology also has no incoming edge to `8800..9399`. Those output synapses are created only after an explicit feedback event. The intermediate heuristic candidate and critic lanes remain at `5800..8499`; the six legacy heuristic readout lanes remain at `9400..9999`. Both are disjoint from the canonical output range, and their labels are not converted into canonical classes.
 
 The isolation proof covers the versioned static topology and the approved structural-growth path (concept input to general association). It does not prove safety against arbitrary future code that calls the generic low-level connection API to add new edges. Any such API use must preserve this boundary and add a regression test.
 
