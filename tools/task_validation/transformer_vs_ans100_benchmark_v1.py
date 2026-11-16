@@ -145,7 +145,11 @@ def _percentile(values: list[float], percentile: float) -> float | None:
 
 def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, Any]],
                       system_label: str) -> dict[str, Any]:
-    task_by_id = {task["task_id"]: task for task in tasks}
+    # Development examples are training-only and must never affect held-out scores.
+    evaluation_tasks = [task for task in tasks if task.get("split") != "development"]
+    if not evaluation_tasks:
+        raise ValueError("benchmark contains no held-out evaluation tasks")
+    task_by_id = {task["task_id"]: task for task in evaluation_tasks}
     prediction_by_id = {}
     for row in predictions:
         task_id = row.get("task_id")
@@ -156,7 +160,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         prediction_by_id[task_id] = row
     groups: dict[tuple[str, str], list[bool]] = defaultdict(list)
     latencies, memories, correct_by_id = [], [], {}
-    for task in tasks:
+    for task in evaluation_tasks:
         task_id = task["task_id"]
         row = prediction_by_id.get(task_id)
         correct = canonical_answer(row.get("answer")) == task["expected_answer"] if row else False
@@ -170,7 +174,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
                 memories.append(float(memory))
     grouped = {}
     for (split, family), outcomes in sorted(groups.items()):
-        answered = sum(1 for task in tasks if task["split"] == split and task["family"] == family and task["task_id"] in prediction_by_id)
+        answered = sum(1 for task in evaluation_tasks if task["split"] == split and task["family"] == family and task["task_id"] in prediction_by_id)
         grouped[f"{split}/{family}"] = {"tasks":len(outcomes),"answered":answered,
             "correct":sum(outcomes),"accuracy":sum(outcomes)/len(outcomes) if outcomes else 0.0}
     correct_count, answered_count = sum(correct_by_id.values()), len(prediction_by_id)
@@ -189,7 +193,8 @@ def compare_prediction_files(task_path: Path, transformer_path: Path, ans100_pat
     tasks = _load_jsonl(task_path)
     transformer = score_predictions(tasks,_load_jsonl(transformer_path),"transformer")
     ans100 = score_predictions(tasks,_load_jsonl(ans100_path),"ANS-100")
-    paired = [(transformer["correct_by_task"][t["task_id"]],ans100["correct_by_task"][t["task_id"]]) for t in tasks]
+    evaluation_tasks = [task for task in tasks if task.get("split") != "development"]
+    paired = [(transformer["correct_by_task"][t["task_id"]],ans100["correct_by_task"][t["task_id"]]) for t in evaluation_tasks]
     transformer_wins = sum(t and not a for t,a in paired)
     ans100_wins = sum(a and not t for t,a in paired)
     ties = len(paired)-transformer_wins-ans100_wins
@@ -197,7 +202,8 @@ def compare_prediction_files(task_path: Path, transformer_path: Path, ans100_pat
     ans100.pop("correct_by_task")
     return {
         "benchmark":"JARVIS_TRANSFORMER_VS_ANS100_COMPARISON_V1",
-        "status":"SCORED_FROM_SUBMITTED_PREDICTIONS","task_count":len(tasks),
+        "status":"SCORED_FROM_SUBMITTED_PREDICTIONS","task_count":len(evaluation_tasks),
+        "excluded_training_splits":["development"],
         "transformer":transformer,"ans100":ans100,
         "paired_task_outcomes":{"transformer_only_correct":transformer_wins,
             "ans100_only_correct":ans100_wins,"both_same_correctness":ties},
