@@ -109,7 +109,7 @@ def predictions_from_traces(traces, inputs):
         answer = row.get("answer")
         # Preserve null as an explicit abstention so the scorer can distinguish it
         # from a missing prediction row.
-        item = {"task_id": task_id, "answer": answer}
+        item = {"task_id": task_id, "answer": answer, "input_sha256": row["input_sha256"]}
         measured = row.get("measurement", {})
         if not isinstance(measured, dict): raise ValueError(f"{task_id}: invalid measurement")
         duration_ns = measured.get("inference_duration_ns")
