@@ -11,10 +11,10 @@ from tools.task_validation.transformer_vs_ans100_benchmark_v1 import (
 class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tasks = build_tasks(seeds=SEEDS[:2], tasks_per_family=8)
+        cls.tasks = build_tasks(seeds=SEEDS[:2], tasks_per_split=8)
 
     def test_task_set_is_deterministic_and_has_all_splits(self):
-        self.assertEqual(self.tasks,build_tasks(seeds=SEEDS[:2],tasks_per_family=8))
+        self.assertEqual(self.tasks,build_tasks(seeds=SEEDS[:2],tasks_per_split=8))
         self.assertEqual({t["split"] for t in self.tasks},
             {"development","pair_disjoint","concept_disjoint","compositional"})
 
