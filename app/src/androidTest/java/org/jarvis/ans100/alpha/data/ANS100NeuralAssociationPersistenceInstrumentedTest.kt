@@ -21,6 +21,7 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
         val name = databaseName()
         val candidateId = "neural-association:" + "c".repeat(32)
         val network = AndroidSparseNeuronNetwork(context, name)
+        var networkClosed = false
         try {
             network.initializeHybridTopologyV2()
             repeat(3) { index ->
@@ -48,6 +49,7 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
                 ),
             )
             network.close()
+            networkClosed = true
 
             val reopened = AndroidSparseNeuronNetwork(context, name)
             try {
@@ -58,7 +60,7 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
                 reopened.close()
             }
         } finally {
-            runCatching { network.close() }
+            if (!networkClosed) runCatching { network.close() }
             context.deleteDatabase(name)
         }
     }
