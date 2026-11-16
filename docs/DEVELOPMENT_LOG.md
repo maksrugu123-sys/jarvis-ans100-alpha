@@ -3238,3 +3238,35 @@ Benchmark traces include hashed cross-source comparison summaries. The ViewModel
 
 **Next step:** design a versioned physical four-class output population and a provenance-preserving Android adapter, without reinterpreting existing V4 SQLite databases. Before production routing, evaluate on pair-disjoint, concept-disjoint and compositional held-out data against shuffled-label and frozen/random-weight controls.
 
+
+
+## 2026-11-16 — Harden Android canonical readout fan-in, feedback and Core isolation
+
+**Objective:** continue the four-class neural canonical readout experiment without allowing heuristic Core labels into its inputs; fix high fan-in behavior and ensure feedback is consumed once.
+
+**Changed:**
+- `ANS100CanonicalReadoutContract.kt` — lowered initial canonical readout synapse weight to 0.25 so one source event is subthreshold; multiple convergent source events are required for a LIF output spike.
+- `AndroidSparseNeuronNetwork.kt` — propagated-event telemetry now recognizes the versioned `ans100-v9-canonical-readout-` synapses as well as existing V4 edges. Canonical feedback now checks whether the turn was already consumed, prevents a second rating even if a caller supplies a new feedback ID, and clears stale eligibility on duplicate feedback.
+- `AndroidSparseNeuronNetworkTest.kt` — expanded the Android instrumentation fixture to 512 contiguous eligible sources, verifies the trained class alone produces canonical LIF spikes, verifies learned output-edge telemetry, and verifies one-shot feedback and model-generated-label rejection.
+- `ANS100CanonicalReadoutDecoderTest.kt` — added static graph reachability checks from all six Core candidate inputs to the readout source/output ranges and a deterministic 512-source fan-in bound.
+- `ANS100_SPARSE_CANONICAL_READOUT_LEARNER_V1.md` and `ANS100_NEURAL_CANONICAL_READOUT_READINESS_V1.md` — corrected the status from Python-only prototype to Android-integrated experimental readout, and documented the remaining limits and production gates.
+
+**Architecture:** the four output groups remain `8800..9399`; legacy Core-labelled output lanes remain `9400..9999`. The static topology routes general working state to planning neurons `8500..8799`. The canonical readout accepts only the allowlisted concept, general-association and general-working source ranges. No production answer-routing change was made; Qwen remains downstream verbalization only.
+
+**Tests added/updated (AUTHORED, NOT RUN):**
+- `app/src/test/java/org/jarvis/ans100/alpha/data/ANS100CanonicalReadoutDecoderTest.kt`
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidSparseNeuronNetworkTest.kt`
+
+**Verification:** source files and update responses were fetched/checked after writes. Executable Kotlin tests, Python tests, Android/Windows builds, GitHub Actions and on-device measurements: **NOT RUN**. No APK/AAB was produced.
+
+**Limitations:** the 512-source fan-in fixture is deterministic and does not prove robustness for arbitrary sparse/adversarial source sets. The static reachability test does not prevent a future unsafe dynamic edge added through a generic low-level connection API. The readout remains uncalibrated and is not the production decision producer. No natural-language understanding or autonomous-reasoning claim is made.
+
+**Commits in this stage:**
+- `9aeb047e94d20abbdcfc667fd7ca76b34088d824` — subthreshold initialization.
+- `648b590b890e53d4ea838149f084d462d78213e0` — output-edge telemetry and one-shot feedback.
+- `7842b94aff6c73f04b423ce295dc95399bcd6db9` — dense LIF and feedback regression fixture.
+- `8b5b9e47cc4e556a721f54d5be8de20c3c16a32a` — static Core-isolation and fan-in tests.
+- `c42447923bb5daed2e0d74c4b5a9a4028221f330` / `a39f382b3857dd87be82925e4e1a7be88e619e76` — architecture/readiness documentation.
+- `780166fe4bd1308c796b3cf49eb8019b14521ebc` / `e5e079b64d161f7a5d0a1ff7908123f72f33d9f8` — contract note and untrusted-feedback test.
+
+**Next step:** run the newly authored regression tests when execution is authorized, then build held-out pair/concept/compositional evaluation and compare with shuffled-label and frozen-weight baselines before considering any production readout routing.
