@@ -2823,6 +2823,44 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
     var status by remember { mutableStateOf("Выбери два JSONL-файла, подготовленных Python-адаптером.") }
     var busy by remember { mutableStateOf(false) }
     var pendingFiles by remember { mutableStateOf<ANS100BenchmarkJsonl.PredictionFiles?>(null) }
+    var pendingEncodingFiles by remember { mutableStateOf<ANS100BenchmarkJsonl.EncodingComparisonFiles?>(null) }
+
+    val structuredEncodingExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-ndjson"),
+    ) { uri: Uri? ->
+        val files = pendingEncodingFiles
+        if (uri != null && files != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(files.structuredAns100Jsonl) }
+                    ?: error("Не удалось сохранить структурированный ANS-100.")
+            }.onSuccess { status = "Оба набора ANS-100 прогнозов сохранены." }
+                .onFailure { status = "Ошибка сохранения structured ANS-100: ${it.message}" }
+        } else status = "Сохранение structured ANS-100 отменено."
+        pendingEncodingFiles = null
+        busy = false
+    }
+    val lexicalEncodingExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-ndjson"),
+    ) { uri: Uri? ->
+        val files = pendingEncodingFiles
+        if (uri != null && files != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(files.lexicalAns100Jsonl) }
+                    ?: error("Не удалось сохранить лексический ANS-100.")
+            }.onSuccess {
+                status = "Лексический ANS-100 сохранён. Теперь сохрани structured."
+                structuredEncodingExportLauncher.launch("ans100_structured_predictions.jsonl")
+            }.onFailure {
+                status = "Ошибка сохранения лексического ANS-100: ${it.message}"
+                pendingEncodingFiles = null
+                busy = false
+            }
+        } else {
+            status = "Сохранение лексического ANS-100 отменено."
+            pendingEncodingFiles = null
+            busy = false
+        }
+    }
 
     val ansExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/x-ndjson"),
@@ -2940,6 +2978,36 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                 enabled = !busy && modelInstalled && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (busy) "Эксперимент выполняется…" else "Начать честное сравнение") }
+            Button(
+                onClick = {
+                    busy = true
+                    status = "Подготовка двух независимых ANS-100 экспериментов…"
+                    viewModel.runCompleteAns100EncodingComparison(
+                        developmentRows,
+                        heldOutRows,
+                        onProgress = { status = it },
+                        onComplete = { result ->
+                            result.onSuccess { comparisons ->
+                                runCatching { ANS100BenchmarkJsonl.encodeEncodingComparisons(comparisons) }
+                                    .onSuccess {
+                                        pendingEncodingFiles = it
+                                        status = "Сравнение завершено. Сохраняю лексические прогнозы…"
+                                        lexicalEncodingExportLauncher.launch("ans100_lexical_predictions.jsonl")
+                                    }
+                                    .onFailure {
+                                        busy = false
+                                        status = "Не удалось подготовить результаты: ${it.message}"
+                                    }
+                            }.onFailure {
+                                busy = false
+                                status = "Сравнение ANS-100 прервано: ${it.message}"
+                            }
+                        },
+                    )
+                },
+                enabled = !busy && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Сравнить два механизма ANS-100") }
             if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (!modelInstalled) {
