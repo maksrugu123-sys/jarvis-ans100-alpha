@@ -614,7 +614,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             "held-out batch contains duplicate task IDs"
         }
         require(inputs.all { input ->
-            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(input.taskId::startsWith) &&
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any { prefix -> input.taskId.startsWith(prefix) } &&
                 input.inputText.isNotBlank() &&
                 input.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS
         }) {
