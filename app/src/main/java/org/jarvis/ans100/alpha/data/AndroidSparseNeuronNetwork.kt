@@ -99,7 +99,7 @@ data class AndroidNeuronRunResult(
     val hybridTelemetry: AndroidHybridRunTelemetry? = null,
     /** Synapses whose propagated event reached a neuron that spiked in this run. */
     val activatedConnectionIds: Set<String> = emptySet(),
-    /** Spikes whose neuron state has received Core-heuristic taint in this turn. */
+    /** All neurons whose state received Core-heuristic taint in this turn, whether or not they spiked. */
     val coreTaintedNeuronIds: Set<Int> = emptySet(),
 )
 
