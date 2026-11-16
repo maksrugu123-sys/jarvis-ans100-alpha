@@ -28,6 +28,7 @@ class SparseCanonicalReadoutTests(unittest.TestCase):
     def test_prediction_uses_spikes_not_a_supplied_label(self):
         model = SparseCanonicalReadout()
         model.learn(event("e1", [10, 11], CanonicalClass.YES))
+        model.learn(event("e2", [10, 11], CanonicalClass.YES))
         self.assertEqual(model.predict([10, 11]).answer, CanonicalClass.YES)
 
     def test_disjoint_patterns_can_learn_four_classes(self):
