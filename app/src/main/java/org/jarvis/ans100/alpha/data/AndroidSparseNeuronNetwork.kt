@@ -1640,11 +1640,17 @@ private class AndroidNeuronSqliteStore(
                     if (!cursor.moveToFirst()) throw AndroidNeuronNetworkException("unknown neural association synapse")
                     cursor.getInt(0) to cursor.getInt(1)
                 }
+                val isFixedProjection = connectionId.startsWith("ans100-v4-evidence-general-association-")
+                val isRegisteredGrownSynapse = connectionId.startsWith("ans100-v5-grown-association-") &&
+                    db.rawQuery(
+                        "SELECT 1 FROM structural_synapse_registry WHERE connection_id=?",
+                        arrayOf(connectionId),
+                    ).use { it.moveToFirst() }
                 if (endpoints.first !in ANS100ConceptMemory.NEURAL_INPUT_START until
                     ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS ||
                     endpoints.second !in 1_200 until 2_200 ||
-                    !connectionId.startsWith("ans100-v4-evidence-general-association-"))
-                    throw AndroidNeuronNetworkException("synapse is outside concept-association projection")
+                    (!isFixedProjection && !isRegisteredGrownSynapse))
+                    throw AndroidNeuronNetworkException("synapse is outside registered concept-association topology")
                 if (!sourcesByTarget.getOrPut(endpoints.second) { LinkedHashSet() }.add(endpoints.first)) {
                     throw AndroidNeuronNetworkException("candidate repeats a concept input to the same association neuron")
                 }
@@ -1709,14 +1715,74 @@ private class AndroidNeuronSqliteStore(
                 while (cursor.moveToNext()) rows += cursor.getString(0) to cursor.getDouble(1)
             }
             var updated = 0
+            val eligibilityById = rows.toMap()
+            val grownProposalIds = rows.mapNotNull { (connectionId, _) ->
+                db.rawQuery(
+                    "SELECT proposal_id FROM structural_synapse_registry WHERE connection_id=?",
+                    arrayOf(connectionId),
+                ).use { if (it.moveToFirst()) it.getString(0) else null }
+            }.toSet()
+            val grownConnectionIds = LinkedHashSet<String>()
+            for (proposalId in grownProposalIds) {
+                val pairIds = mutableListOf<String>()
+                db.rawQuery(
+                    "SELECT connection_id FROM structural_synapse_registry WHERE proposal_id=? ORDER BY connection_id",
+                    arrayOf(proposalId),
+                ).use { cursor -> while (cursor.moveToNext()) pairIds += cursor.getString(0) }
+                if (pairIds.size != 2 || !eligibilityById.keys.containsAll(pairIds)) {
+                    throw AndroidNeuronNetworkException("grown association feedback must contain both proposal synapses")
+                }
+                val pairEligibility = pairIds.map { eligibilityById.getValue(it) }
+                if (kotlin.math.abs(pairEligibility[0] - pairEligibility[1]) > 0.000001) {
+                    throw AndroidNeuronNetworkException("grown association pair eligibility is inconsistent")
+                }
+                val delta = (NEURAL_ASSOCIATION_LEARNING_RATE * reward * pairEligibility.average())
+                    .coerceIn(-NEURAL_ASSOCIATION_MAX_DELTA, NEURAL_ASSOCIATION_MAX_DELTA)
+                val feedbackValues = ContentValues().apply {
+                    put("feedback_id", feedbackId)
+                    put("proposal_id", proposalId)
+                    put("delta", delta)
+                    put("source", source.name)
+                    put("created_at_ms", nowMs)
+                }
+                if (db.insertWithOnConflict(
+                        "structural_synapse_feedback_events", null, feedbackValues, SQLiteDatabase.CONFLICT_IGNORE,
+                    ) == -1L) {
+                    grownConnectionIds.addAll(pairIds)
+                    continue
+                }
+                pairIds.forEach { connectionId ->
+                    val current = db.rawQuery(
+                        "SELECT weight FROM connections WHERE connection_id=?",
+                        arrayOf(connectionId),
+                    ).use { if (it.moveToFirst()) it.getDouble(0) else null }
+                        ?: throw AndroidNeuronNetworkException("grown synapse disappeared before feedback commit")
+                    val next = (current + delta).coerceIn(NEURAL_ASSOCIATION_MIN_WEIGHT, 1.0)
+                    if (next != current) {
+                        if (db.update("connections", ContentValues().apply { put("weight", next) },
+                                "connection_id=?", arrayOf(connectionId)) != 1)
+                            throw AndroidNeuronNetworkException("grown pair update did not affect exactly one synapse")
+                        updated++
+                    }
+                    db.update(
+                        "structural_synapse_registry",
+                        ContentValues().apply { put("last_adjusted_at_ms", nowMs) },
+                        "connection_id=?",
+                        arrayOf(connectionId),
+                    )
+                    grownConnectionIds += connectionId
+                }
+            }
             for ((connectionId, eligibility) in rows) {
+                if (connectionId in grownConnectionIds) continue
                 val current = db.rawQuery("SELECT weight, source_id, target_id FROM connections WHERE connection_id=?",
                     arrayOf(connectionId)).use { cursor ->
                     if (!cursor.moveToFirst()) throw AndroidNeuronNetworkException("synapse disappeared before feedback commit")
                     if (cursor.getInt(1) !in ANS100ConceptMemory.NEURAL_INPUT_START until
                         ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS ||
-                        cursor.getInt(2) !in 1_200 until 2_200)
-                        throw AndroidNeuronNetworkException("feedback synapse is outside concept-association projection")
+                        cursor.getInt(2) !in 1_200 until 2_200 ||
+                        !connectionId.startsWith("ans100-v4-evidence-general-association-"))
+                        throw AndroidNeuronNetworkException("feedback synapse is outside registered concept-association topology")
                     cursor.getDouble(0)
                 }
                 val delta = (NEURAL_ASSOCIATION_LEARNING_RATE * reward * eligibility)
