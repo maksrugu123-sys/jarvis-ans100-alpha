@@ -170,7 +170,7 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
             dump(task_path,self.tasks)
             held_out=[t for t in self.tasks if t["split"] != "development"]
             dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"input_sha256":hashlib.sha256(t["input_text"].encode("utf-8")).hexdigest(),"latency_ms":100,"initialization_ms":450,"peak_memory_mb":512,"peak_memory_delta_mb":80,"memory_measurement_scope":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL","cold_start":i == 0} for i,t in enumerate(held_out)])
-            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","input_sha256":hashlib.sha256(t["input_text"].encode("utf-8")).hexdigest(),"latency_ms":20,"network_initialization_ms":35,"peak_memory_mb":64,"peak_memory_delta_mb":12,"memory_measurement_scope":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL","input_encoding":"role_structured_v1","cold_start":True} for t in held_out])
+            dump(ans_path,[{"task_id":t["task_id"],"answer":next(answer for answer in ("YES","NO","UNKNOWN","CONFLICT") if answer != t["expected_answer"]),"input_sha256":hashlib.sha256(t["input_text"].encode("utf-8")).hexdigest(),"latency_ms":20,"network_initialization_ms":35,"peak_memory_mb":64,"peak_memory_delta_mb":12,"memory_measurement_scope":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL","input_encoding":"role_structured_v1","cold_start":True} for t in held_out])
             report=compare_prediction_files(task_path,transformer_path,ans_path)
             self.assertEqual(report["transformer"]["accuracy_over_all_tasks"],1.0)
             self.assertEqual(report["ans100"]["accuracy_over_all_tasks"],0.0)
