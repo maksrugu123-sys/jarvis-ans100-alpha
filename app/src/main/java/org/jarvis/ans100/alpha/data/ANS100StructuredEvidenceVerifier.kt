@@ -77,14 +77,22 @@ class ANS100StructuredEvidenceVerifier {
         if (query.relation == "directed_path_at_most_two") {
             val edges = input.facts.filter { it.relation == "directed_link" }
             val adjacency = edges.groupBy { it.subject }.mapValues { (_, rows) -> rows.map { it.objectValue }.toSet() }
-            val direct = query.objectValue in adjacency[query.subject].orEmpty()
-            val oneIntermediate = adjacency[query.subject].orEmpty().any { middle ->
-                query.objectValue in adjacency[middle].orEmpty()
-            }
-            val found = direct || oneIntermediate
-            val refs = edges.filter { it.subject == query.subject || it.objectValue == query.objectValue ||
-                (it.subject in adjacency[query.subject].orEmpty() && it.objectValue == query.objectValue)
-            }.map { it.provenance }.distinct().sorted()
+            val directPath = edges.firstOrNull {
+                it.subject == query.subject && it.objectValue == query.objectValue
+            }?.let(::listOf)
+            val twoHopPath = if (directPath == null) {
+                edges.asSequence()
+                    .filter { it.subject == query.subject }
+                    .mapNotNull { first ->
+                        edges.firstOrNull {
+                            it.subject == first.objectValue && it.objectValue == query.objectValue
+                        }?.let { second -> listOf(first, second) }
+                    }
+                    .firstOrNull()
+            } else null
+            val pathEvidence = directPath ?: twoHopPath.orEmpty()
+            val found = pathEvidence.isNotEmpty()
+            val refs = pathEvidence.map { it.provenance }.distinct().sorted()
             return Audit(
                 answer = if (found) "YES" else "NO",
                 method = "complete_directed_graph_path_at_most_two",
