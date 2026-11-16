@@ -25,9 +25,13 @@ class ANS100BenchmarkTraceStore(filesDir: File) {
             traceFile.readLines(Charsets.UTF_8).filter { it.isNotBlank() }.takeLast(MAX_RECORDS - 1)
         } else emptyList()
         val temporary = File(directory, "$FILE_NAME.tmp")
-        (existing + jsonLine).forEach { line ->
-            if (line.length <= MAX_LINE_CHARS) {
-                temporary.appendText(line + "\n", Charsets.UTF_8)
+        if (temporary.exists()) temporary.delete()
+        temporary.bufferedWriter(Charsets.UTF_8).use { writer ->
+            (existing + jsonLine).forEach { line ->
+                if (line.length <= MAX_LINE_CHARS) {
+                    writer.write(line)
+                    writer.newLine()
+                }
             }
         }
         if (traceFile.exists() && !traceFile.delete()) {
