@@ -145,6 +145,22 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
             self.assertEqual(result["correct"], 0)
             self.assertEqual(result["accuracy"], 0.0)
 
+    def test_paired_comparison_requires_input_hashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task_path, transformer_path, ans_path = (
+                root / "tasks.jsonl", root / "transformer.jsonl", root / "ans.jsonl"
+            )
+            held_out = next(t for t in self.tasks if t["split"] != "development")
+            def dump(path, rows):
+                path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            dump(task_path, self.tasks)
+            prediction = {"task_id": held_out["task_id"], "answer": held_out["expected_answer"]}
+            dump(transformer_path, [prediction])
+            dump(ans_path, [prediction])
+            with self.assertRaises(ValueError):
+                compare_prediction_files(task_path, transformer_path, ans_path)
+
     def test_paired_comparison_uses_same_tasks_and_reports_resources(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
