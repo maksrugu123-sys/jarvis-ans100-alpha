@@ -23,6 +23,7 @@ class ANS100NeuralAssociationBenchmarkAssessmentAdapterTest {
     private fun task(answer: String, split: String = "pair_disjoint", family: String = "relation_status") =
         ANS100NeuralAssociationBenchmarkAssessmentAdapter.HeldOutTask(
             taskId = "task-001",
+            independenceKey = "independent-task-001",
             split = split,
             family = family,
             queryPair = "BETA" to "Alpha",
@@ -40,7 +41,7 @@ class ANS100NeuralAssociationBenchmarkAssessmentAdapterTest {
     fun explicitNoContradictsOnlyAnObservedCandidate() {
         val adapter = ANS100NeuralAssociationBenchmarkAssessmentAdapter()
         val reproduced = adapter.observe(candidate(), task("NO"), candidateReproduced = true)
-        val absent = adapter.observe(candidate(), task("NO").copy(taskId = "task-002"), candidateReproduced = false)
+        val absent = adapter.observe(candidate(), task("NO").copy(taskId = "task-002", independenceKey = "independent-task-002"), candidateReproduced = false)
         assertEquals(ANS100NeuralAssociationAssessment.Outcome.CONTRADICTED, reproduced?.outcome)
         assertEquals(ANS100NeuralAssociationAssessment.Outcome.INCONCLUSIVE, absent?.outcome)
     }
