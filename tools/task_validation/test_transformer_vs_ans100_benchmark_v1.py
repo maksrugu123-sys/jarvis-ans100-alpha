@@ -1,5 +1,6 @@
 """Regression tests for the shared Transformer vs ANS-100 benchmark."""
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -103,6 +104,26 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
         self.assertEqual(report["correct"],0)
         self.assertEqual(report["coverage"],0.0)
 
+    def test_invalid_non_null_predictions_are_rejected(self):
+        held_out = next(t for t in self.tasks if t["split"] != "development")
+        for invalid in ("MAYBE", "", 7, []):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    score_predictions(
+                        self.tasks,
+                        [{"task_id": held_out["task_id"], "answer": invalid}],
+                        "invalid-answer",
+                    )
+
+    def test_prediction_input_hash_must_match_source_task(self):
+        held_out = next(t for t in self.tasks if t["split"] != "development")
+        with self.assertRaises(ValueError):
+            score_predictions(
+                self.tasks,
+                [{"task_id": held_out["task_id"], "answer": "YES", "input_sha256": "0" * 64}],
+                "tampered-input",
+            )
+
     def test_development_predictions_are_rejected_from_held_out_scoring(self):
         development=next(t for t in self.tasks if t["split"]=="development")
         with self.assertRaises(ValueError):
@@ -132,13 +153,15 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
                 path.write_text("".join(json.dumps(row)+"\n" for row in rows),encoding="utf-8")
             dump(task_path,self.tasks)
             held_out=[t for t in self.tasks if t["split"] != "development"]
-            dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"latency_ms":100,"initialization_ms":450,"peak_memory_mb":512,"peak_memory_delta_mb":80,"memory_measurement_scope":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL","cold_start":i == 0} for i,t in enumerate(held_out)])
-            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","latency_ms":20,"network_initialization_ms":35,"peak_memory_mb":64,"peak_memory_delta_mb":12,"memory_measurement_scope":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL","input_encoding":"role_structured_v1","cold_start":True} for t in held_out])
+            dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"input_sha256":hashlib.sha256(t["input_text"].encode("utf-8")).hexdigest(),"latency_ms":100,"initialization_ms":450,"peak_memory_mb":512,"peak_memory_delta_mb":80,"memory_measurement_scope":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL","cold_start":i == 0} for i,t in enumerate(held_out)])
+            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","input_sha256":hashlib.sha256(t["input_text"].encode("utf-8")).hexdigest(),"latency_ms":20,"network_initialization_ms":35,"peak_memory_mb":64,"peak_memory_delta_mb":12,"memory_measurement_scope":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL","input_encoding":"role_structured_v1","cold_start":True} for t in held_out])
             report=compare_prediction_files(task_path,transformer_path,ans_path)
             self.assertEqual(report["transformer"]["accuracy_over_all_tasks"],1.0)
             self.assertEqual(report["ans100"]["accuracy_over_all_tasks"],0.0)
             self.assertEqual(report["paired_task_outcomes"]["transformer_only_correct"],len(held_out))
             self.assertEqual(report["task_count"],len(held_out))
+            self.assertEqual(report["transformer"]["input_integrity"]["verified_hashes"],len(held_out))
+            self.assertEqual(report["ans100"]["input_integrity"]["verified_hashes"],len(held_out))
             self.assertEqual(report["excluded_training_splits"],["development"])
             self.assertEqual(report["ans100"]["peak_memory_mb"]["max"],64)
             self.assertEqual(report["transformer"]["peak_memory_delta_mb"]["max"],80)
