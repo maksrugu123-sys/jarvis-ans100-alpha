@@ -133,6 +133,54 @@ class ANS100BenchmarkTraceAdapterTest {
         assertTrue(trace.toString().contains("memory_hypothesis_explanations"))
     }
 
+
+    @Test
+    fun exportsHypothesisCompetitionWithoutRawLabelsOrEvidence() {
+        val (evidence, decision, telemetry) = fixture()
+        val candidate = ANS100NeuralAssociationDecoder.Candidate(
+            candidateId = "neural-association:" + "c".repeat(32),
+            firstConceptId = "concept.dog",
+            firstLabel = "Private Dog",
+            secondConceptId = "concept.animal",
+            secondLabel = "Private Animal",
+            convergentNeuronIds = listOf(1200),
+            activatedConnectionIds = listOf(
+                "ans100-v4-evidence-general-association-left",
+                "ans100-v4-evidence-general-association-right",
+            ),
+            evidenceRefs = listOf("memory:dog", "memory:animal"),
+            activationHint = 1.0 / 3.0,
+        )
+        val report = ANS100WorkspaceConceptInputBridge.HypothesisReport(
+            hypothesisId = "private-hypothesis-id",
+            fromLabel = "Private Dog",
+            relationType = ANS100ConceptMemory.RelationType.IS_A,
+            toLabel = "Private Animal",
+            premiseEvidenceRefs = listOf("private-evidence-1", "private-evidence-2"),
+            verificationStatus = ANS100ConceptMemory.VerificationStatus.UNRESOLVED,
+            supportingEvidenceRefs = emptyList(),
+            contradictingEvidenceRefs = emptyList(),
+        )
+        val comparison = ANS100HypothesisCompetitionEngine().compare(listOf(candidate), listOf(report))
+        val trace = ANS100BenchmarkTraceAdapter.create(
+            taskId = null,
+            inputText = "test input",
+            evidence = evidence,
+            decision = decision,
+            telemetry = telemetry,
+            emittedSpikeNeuronIds = emptySet(),
+            activatedConnectionIds = emptySet(),
+            associationResult = ANS100NeuralAssociationDecoder.Result(2, 1, 1, listOf(candidate)),
+            memoryHypothesisReports = listOf(report),
+            hypothesisComparisons = comparison,
+        )
+        val row = trace.getJSONArray("hypothesis_competition").getJSONObject(0)
+        assertEquals("MEMORY_PATH_UNRESOLVED", row.getString("status"))
+        assertEquals(1, row.getJSONArray("explanations").length())
+        assertFalse(trace.toString().contains("Private Dog"))
+        assertFalse(trace.toString().contains("private-evidence-1"))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsDecisionFromAnotherTurn() {
         val (evidence, decision, telemetry) = fixture()
