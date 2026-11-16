@@ -3183,3 +3183,8 @@ Benchmark telemetry now carries memory-derived typed explanations separately fro
 **Provenance boundary:** workspace evidence is EXPLICIT_USER only. It is user-entered assertion, not independently verified external evidence. Text cannot self-assign VERIFIED_TOOL provenance. Authenticated tool ingestion remains future work.
 
 **Tests authored, NOT RUN:** support/refute/conflict parsing, malformed/unapproved/ambiguous evidence rejection. No Gradle tests, Android build, APK, CI, GitHub Actions, or device inference were run.
+
+
+The same stage adds `ANS100HypothesisCompetitionEngine`, which cross-references actual neural association candidates with typed two-hop memory explanations for the same concept labels. It preserves relation type and direction and classifies the comparison as neural-only, unresolved memory path, user-assertion support, user counter-evidence, or mixed user assertions. It does not choose a winner or claim truth. Per-candidate alternatives are capped at 12.
+
+Benchmark traces include hashed cross-source comparison summaries. The ViewModel diagnostics now expose the number and status of neural-memory comparisons. Tests authored for directionality, unresolved paths, user support/counter-evidence, mixed assertions and privacy-safe trace export. Tests NOT RUN.
