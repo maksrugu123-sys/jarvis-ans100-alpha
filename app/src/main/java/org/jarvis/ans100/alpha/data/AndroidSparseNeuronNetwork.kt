@@ -1765,7 +1765,7 @@ private class AndroidNeuronSqliteStore(
 
     override fun loadNeuron(neuronId: Int): AndroidNeuronState {
         return readableDatabase.rawQuery(
-            "SELECT neuron_id, potential, adaptation, last_update_ns, refractory_until_ns, spike_sequence FROM neurons WHERE neuron_id=?",
+            "SELECT neuron_id, potential, adaptation, last_update_ns, refractory_until_ns, spike_sequence, core_tainted FROM neurons WHERE neuron_id=?",
             arrayOf(neuronId.toString()),
         ).use { cursor ->
             if (!cursor.moveToFirst()) throw AndroidNeuronNetworkException("unknown neuron $neuronId")
