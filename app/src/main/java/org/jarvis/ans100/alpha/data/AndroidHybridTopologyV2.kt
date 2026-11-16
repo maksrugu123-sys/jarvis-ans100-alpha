@@ -24,6 +24,11 @@ object AndroidHybridTopologyV2 {
     const val CONNECTION_DELAY_NS = 1_000_000L
     const val FEED_FORWARD_WEIGHT = 1.0
     const val RECURRENT_WEIGHT = 0.18
+    private const val GENERAL_ASSOCIATION_SIZE = 1_000
+    private const val EVIDENCE_GENERAL_FAN_OUT = 3
+    private const val EVIDENCE_GENERAL_MULTIPLIER = 37L
+    private const val EVIDENCE_GENERAL_SLOT_STEP = 113L
+    private const val EVIDENCE_GENERAL_SALT = 11L
 
     data class Population(
         val id: String,
@@ -67,7 +72,7 @@ object AndroidHybridTopologyV2 {
         val working = populations[2]
         val goal = populations[5]
 
-        val generalAssociation = slice(association, 0, 1_000, "association_general")
+        val generalAssociation = slice(association, 0, GENERAL_ASSOCIATION_SIZE, "association_general")
         val generalWorking = slice(working, 0, 300, "working_general")
         val candidateInputIds = (0 until ANS100CandidateSlotContract.INPUT_SIGNAL_COUNT)
             .map { ANS100CandidateSlotContract.INPUT_START + it }
@@ -79,8 +84,8 @@ object AndroidHybridTopologyV2 {
             "evidence-general-association",
             evidence,
             generalAssociation,
-            fanOut = 3,
-            salt = 11,
+            fanOut = EVIDENCE_GENERAL_FAN_OUT,
+            salt = EVIDENCE_GENERAL_SALT.toInt(),
             excludedSourceIds = candidateInputIds,
         )
         ANS100CandidateSlotContract.Slot.values().forEach { slot ->
