@@ -53,7 +53,9 @@ def _make_relation_task(seed: int, index: int, split: str) -> dict[str, Any]:
     # The task index selects a unique query subject within each split. Fixed
     # offsets keep all roles distinct while reusing the shared 32-symbol pool.
     a, b, c, d = (_symbol(seed, index + offset, split) for offset in (0, 8, 16, 24))
-    mode = index % 3
+    # Family assignment uses index % 3, so derive the within-family label
+    # from the quotient; otherwise this branch would generate YES only.
+    mode = (index // 3) % 3
     if mode == 0:
         facts, qa, qb, expected = [{"kind":"relation","subject":a,"object":b,"polarity":1}], a, b, "YES"
     elif mode == 1:
@@ -92,8 +94,8 @@ def build_tasks(seeds: Iterable[int] = SEEDS, tasks_per_split: int = 12) -> list
     seed_list = tuple(seeds)
     if not seed_list or len(seed_list) != len(set(seed_list)):
         raise ValueError("at least one unique seed is required")
-    if not 1 <= tasks_per_split <= 1000:
-        raise ValueError("tasks_per_split must be in 1..1000")
+    if not 2 <= tasks_per_split <= 16:
+        raise ValueError("tasks_per_split must be in 2..16 to preserve split invariants")
     tasks = []
     for seed in seed_list:
         for split in SPLITS:
