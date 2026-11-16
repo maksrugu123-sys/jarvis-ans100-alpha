@@ -5079,3 +5079,6 @@ tools/task_validation/structural_plasticity_eval_v1.py воспроизводи�
 ### 3.54. Leakage-safe ANS-100 benchmark adapter V1
 
 `tools/task_validation/ans100_benchmark_adapter_v1.py` separates model-only inputs from evaluator metadata and validates raw ANS trace exports by exact-input SHA-256. Only a dedicated neural canonical readout with explicit provenance may produce benchmark labels YES/NO/UNKNOWN/CONFLICT. Existing `HYBRID_POPULATION_CONTROLLER_V1` decisions are policy-level choices (answer/clarify/abstain), not semantic answers; they remain unscored rather than being relabelled. Core heuristic sources must be disclosed. Tests are AUTHORED / NOT RUN. This adapter does not alter Android inference or establish autonomous reasoning. Details: `docs/ANS100_BENCHMARK_ADAPTER_V1.md`.
+
+
+**Implementation note (adapter V1):** Android already has `ANS100BenchmarkTraceAdapter.kt`, which exports LIF activity and Core heuristic provenance while keeping the canonical answer null. The Python benchmark adapter validates this exact schema and strips evaluator-only fields from model inputs. The Kotlin adapter is not yet called by `JarvisViewModel`; automatic app trace capture/export remains unimplemented. Current policy-level decisions cannot be scored as semantic answers.
