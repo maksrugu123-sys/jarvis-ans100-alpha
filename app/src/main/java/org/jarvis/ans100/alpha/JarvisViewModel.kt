@@ -199,6 +199,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
     private val hybridNetworkExecutor = Executors.newSingleThreadExecutor()
+    private val benchmarkExecutor = Executors.newSingleThreadExecutor()
+    private val ans100BenchmarkRuntimeDelegate = lazy {
+        org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime(appContext)
+    }
+    private val ans100BenchmarkRuntime by ans100BenchmarkRuntimeDelegate
     /** Separate SQLite namespace; never shares or migrates the legacy dialogue graph. */
     private val hybridNeuronNetworkDelegate = lazy {
         AndroidHybridTopologyV2.open(application.applicationContext)
@@ -480,6 +485,25 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute {
             val result = runCatching {
                 conversationResponseEngine.benchmarkTransformerOnly(inputText)
+            }
+            mainHandler.post { onComplete(result) }
+        }
+    }
+
+
+    /**
+     * Runs one ANS-100-only benchmark item on its isolated SQLite topology.
+     * A non-null label is permitted only for the development/training split.
+     */
+    fun runAns100OnlyBenchmark(
+        taskId: String,
+        inputText: String,
+        trainingLabel: String? = null,
+        onComplete: (Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>) -> Unit,
+    ) {
+        benchmarkExecutor.execute {
+            val result = runCatching {
+                ans100BenchmarkRuntime.runTask(taskId, inputText, trainingLabel)
             }
             mainHandler.post { onComplete(result) }
         }
@@ -2578,6 +2602,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         // Disconnect it first so the worker can finish and close the model engine.
         modelStore.cancelDownload()
         conversationExecutor.execute { conversationResponseEngine.close() }
+        benchmarkExecutor.execute {
+            if (ans100BenchmarkRuntimeDelegate.isInitialized()) {
+                runCatching { ans100BenchmarkRuntime.close() }
+            }
+        }
         hybridNetworkExecutor.execute {
             if (hybridNeuronNetworkDelegate.isInitialized()) {
                 runCatching { hybridNeuronNetwork.close() }
@@ -2585,6 +2614,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
         conversationExecutor.shutdown()
         hybridNetworkExecutor.shutdown()
+        benchmarkExecutor.shutdown()
         runtimeExecutor.shutdownNow()
         peerSyncExecutor.shutdownNow()
         super.onCleared()
