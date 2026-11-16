@@ -5052,3 +5052,17 @@ Four conditions are compared with matched splits and deterministic seeds: source
 **Important fidelity boundary:** the evaluator mirrors the Android v4 concept projection constants and the bounded per-edge reward update, but its pair score is an offline topology/weight proxy. It does not execute Android Adaptive LIF-DT dynamics, SQLite, the actual app input pipeline, or device inference. It must not be reported as a runtime benchmark or evidence of semantic understanding.
 
 **No real user-labeled dataset is bundled.** Synthetic labels in unit fixtures validate the protocol only and are not performance evidence. Evaluation is AUTHORED / NOT RUN; the promotion gate remains CLOSED. Learned weights must not influence live answer/decision competition until real held-out evidence and a separate Android replay/ablation justify it.
+
+### 3.52. Activity-driven structural-plasticity evaluation V1
+
+**Статус:** offline Python reference harness IMPLEMENTED; focused tests AUTHORED / NOT RUN. Promotion gate CLOSED. Спецификация: docs/ANS100_ACTIVITY_DRIVEN_STRUCTURAL_PLASTICITY_EVAL_V1.md.
+
+tools/task_validation/structural_plasticity_eval_v1.py воспроизводит ограниченный механизм предложения новых связей: фиксированную трёхцелевую проекцию концептуальных входов, порог трёх различных совместных активаций в окне 16 ходов, детерминированный поиск наименее загруженного общего target и лимиты роста. Сравниваются фиксированная топология, топология с динамически добавленными парами и контроль с перестановкой B-стороны событий. Встроенный набор содержит 4 положительные пары, 4 отрицательные пары и 2 повторяющиеся hard-negative пары; первые два наблюдения относятся к train-времени, третье наблюдение для выбранных пар — к held-out-времени. Метки не передаются learner.
+
+Отчёт содержит confusion matrix, precision/recall/F1, false-association rate, число новых пар/синапсов, операции поиска, пиковые pending traces, максимальную нагрузку target, степень роста на понятие и оценку логического payload. Последняя является только оценкой сериализуемого объёма данных, а не измерением RAM, SQLite, CPU или задержки. Четыре фиксированных seed меняют порядок событий, но не являются четырьмя независимыми реальными датасетами.
+
+**Границы достоверности:** это синтетическая проверка временного co-activation правила, а не семантического понимания. Не моделируются Android LIF, реальное распространение импульсов, decoder, SQLite и устройство. Повторяющаяся совместная активность может создавать ложные связи — hard-negative примеры специально показывают этот риск. Метрики нельзя выдавать за реальную точность ANS-100.
+
+**Безопасность:** STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED = false остаётся неизменным. Результат не является основанием для включения автоматического роста. Перед продвижением нужны реальные независимо размеченные данные, более крупные pair-disjoint и concept-disjoint наборы, проверка actual LIF/decoder/SQLite replay и отдельные измерения RAM/CPU/latency на Android.
+
+**Тесты:** tools/task_validation/test_structural_plasticity_eval_v1.py AUTHORED / NOT RUN. Android/Windows build, Gradle, APK/AAB, CI и GitHub Actions не запускались.
