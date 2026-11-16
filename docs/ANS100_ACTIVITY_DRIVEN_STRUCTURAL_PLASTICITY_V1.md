@@ -1,0 +1,89 @@
+# ANS-100 activity-driven structural plasticity V1
+
+## Status
+
+**Status: PROTOTYPE AUTHORED / TESTS NOT RUN / NOT IN LIVE DIALOGUE.**
+
+This stage adds a bounded mechanism that can propose new concept-to-association synapses from repeated network activity. It does not use a predefined concept-pair catalogue and does not ask Qwen to generate associations.
+
+## Why it is needed
+
+The existing concept projection gives each concept input neuron exactly three deterministic outgoing edges into the 1,000-neuron general association slice. Two concepts with no shared target can never become a co-activation candidate through weight updates alone.
+
+Structural plasticity addresses this by creating a new shared target after repeated co-activation. It changes the graph structure rather than only adjusting existing weights.
+
+## Mechanism
+
+ANS100ActivityDrivenStructuralPlasticity receives completed-turn observations containing:
+- stable concept IDs and their persistent input-neuron IDs;
+- the labels and provenance references attached to the current activation;
+- the existing outgoing association targets for each active concept neuron;
+- current incoming-edge counts for association targets.
+
+A pair is considered only when both concepts were active in the same completed turn and currently have no shared association target.
+
+The pair must co-activate in **three distinct turn IDs** inside a rolling **16-observation window**. Replaying the same turn ID is ignored. Repeated calls for one turn therefore cannot manufacture eligibility.
+
+After the threshold is reached:
+1. The allocator excludes every target already used by either source concept.
+2. It scans the 1,000-neuron general association population using a deterministic pair-hash starting offset. The hash only breaks ties in the search order; it does not encode a fixed target.
+3. A least-loaded target wins. Targets at the incoming-edge cap are ineligible.
+4. Two new synapses are proposed: each concept input neuron connects to the same newly selected association target.
+5. Initial weight is deliberately conservative (0.25); no relation truth or semantic confidence is assigned.
+
+The proposal contains both concept identities, current labels, provenance references, supporting distinct-turn count, target neuron and the exact two AndroidNeuronConnection records. It can be audited before any caller applies it.
+
+## Bounds
+
+Default limits:
+- 64 active concepts per turn (at most 2,016 unordered pairs considered);
+- 2,048 tracked pending pair traces;
+- three distinct turns required within 16 observations;
+- at most 256 grown pairs in one learner instance;
+- at most four grown outgoing edges per concept;
+- at most 12 incoming edges per association target;
+- at most 256 remembered turn IDs for replay protection;
+- hard ceilings: 4,096 tracked pairs, 512 grown pairs, eight grown edges per concept, 16 incoming edges per target;
+- new synapse weight 0.25, allowed configuration range 0.05..0.50.
+
+The learner prunes the oldest pending traces when its pair table reaches its configured bound. It does not prune or rewrite existing network connections.
+
+## Important boundaries
+
+- This is structural growth from repeated co-activation, not proof that the two concepts are semantically related.
+- Repeated co-activation can be incidental (for example, concepts that often appear in the same topic). A future stage must add independent evidence/reward and false-association analysis.
+- Eligibility and the set of already-grown pairs are currently in-memory state. They do **not** survive process restart yet.
+- The class returns proposals; it does not insert them into SQLite or mutate the live topology.
+- It is not wired into JarvisViewModel, the live decoder, or decision competition. The existing three-edge projection remains the only production path.
+- It does not change Qwen's role. Qwen remains a language realizer, not an association generator.
+- No live learned weights or newly proposed connections are used to choose an answer.
+
+## Tests authored
+
+ANS100ActivityDrivenStructuralPlasticityTest covers:
+- no growth before three distinct turns;
+- new shared target and two matching synapses after the threshold;
+- duplicate turn replay;
+- already-shared target suppression;
+- exclusion of either source's existing targets;
+- least-loaded target competition;
+- saturated-target rejection;
+- eligibility expiry outside the observation window;
+- per-concept growth-degree limits;
+- deterministic output;
+- duplicate concept identity rejection.
+
+Tests are **AUTHORED / NOT RUN**. No Android build, APK, CI, GitHub Actions workflow, or device inference was run.
+
+## Next integration gate
+
+Before production use:
+1. Persist pair eligibility and grown-pair identity in SQLite with transactional idempotency.
+2. Add a bounded atomic API to validate and insert exactly the two proposed concept-input synapses, including endpoint, degree, target-load and connection-ID checks.
+3. Extend the decoder to recognize approved grown synapses without weakening validation of the original V4 projection.
+4. Add restart/replay/migration tests and ensure schema migration preserves unrelated evidence weights and topology.
+5. Replay proposals through the actual Android LIF event runtime.
+6. Evaluate on human-verified pair-disjoint and concept-disjoint datasets against fixed, shuffled-label and random-growth controls.
+7. Keep the promotion gate closed until held-out performance, false-association rate, CPU, RAM, and latency are measured.
+
+No general understanding or autonomous reasoning claim is supported by this prototype.
