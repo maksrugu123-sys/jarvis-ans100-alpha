@@ -35,6 +35,14 @@ class AndroidHybridTopologyV2Test {
             listOf(1_200, 2_800, 1_800, 1_500, 1_200, 300, 600, 600),
             populations.map { it.size },
         )
+        assertEquals("goal_planning", populations[5].id)
+        assertEquals(8_500, populations[5].startInclusive)
+        assertEquals(8_800, populations[5].endExclusive)
+        assertEquals("canonical_readout", populations[6].id)
+        assertEquals(8_800, populations[6].startInclusive)
+        assertEquals(9_400, populations[6].endExclusive)
+        assertEquals("decision_readout", populations[7].id)
+        assertEquals(9_400, populations[7].startInclusive)
     }
 
     @Test
