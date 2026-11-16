@@ -495,7 +495,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         conversationExecutor.execute {
             val result = runCatching {
-                conversationResponseEngine.benchmarkTransformerOnly(inputText)
+                conversationResponseEngine.benchmarkTransformerOnly(inputText, coldStart)
             }
             mainHandler.post { onComplete(result) }
         }
@@ -557,7 +557,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             "paired benchmark input must fit the shared 2048-character model limit"
         }
         conversationExecutor.execute {
-            val paired = runPairedBenchmarkTaskBlocking(taskId, inputText)
+            val paired = runPairedBenchmarkTaskBlocking(taskId, inputText, coldStart = true)
             mainHandler.post { onComplete(paired) }
         }
     }
@@ -623,7 +623,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute {
             val results = ArrayList<PairedBenchmarkTaskResult>(inputs.size)
             inputs.forEachIndexed { index, input ->
-                val result = runPairedBenchmarkTaskBlocking(input.taskId, input.inputText)
+                val result = runPairedBenchmarkTaskBlocking(input.taskId, input.inputText, coldStart = index == 0)
                 results.add(result)
                 mainHandler.post { onProgress(index + 1, inputs.size, result) }
             }
@@ -634,12 +634,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private fun runPairedBenchmarkTaskBlocking(
         taskId: String,
         inputText: String,
+        coldStart: Boolean,
     ): PairedBenchmarkTaskResult {
         return if (pairedBenchmarkSequence++ % 2L == 0L) {
             val transformer = runCatching {
                 conversationResponseEngine.benchmarkTransformerOnly(inputText)
             }
-            val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+            val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null, coldStart) }
             PairedBenchmarkTaskResult(taskId, transformer, ans100)
         } else {
             val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
