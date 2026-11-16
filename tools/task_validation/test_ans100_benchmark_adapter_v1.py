@@ -76,8 +76,9 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError): export_model_inputs([self.task,self.task])
         with self.assertRaises(ValueError): export_model_inputs([{"task_id":"x","input_text":" "}])
 
-    def test_real_current_android_trace_is_valid_but_unscored(self):
-        self.assertEqual(predictions_from_traces([self.trace()],self.inputs),[])
+    def test_null_neural_trace_is_preserved_as_explicit_abstention(self):
+        self.assertEqual(predictions_from_traces([self.trace()],self.inputs),
+            [{"task_id":"heldout:001","answer":None}])
 
     def test_dedicated_neural_readout_is_scorable(self):
         row=self.trace(answer="YES",answer_emission=NEURAL_ORIGIN,
