@@ -72,11 +72,11 @@ class ANS100NeuralHypothesisEngine(
         }
 
         val byPair = candidates.associateBy { pairKey(it.firstConceptId, it.secondConceptId) }
-        val activePairs = activeConceptIds.sorted().let { ids ->
-            buildSet {
-                for (left in ids.indices) {
-                    for (right in left + 1 until ids.size) add(pairKey(ids[left], ids[right]))
-                }
+        val sortedActiveIds = activeConceptIds.sorted()
+        val activePairs = LinkedHashSet<String>()
+        for (left in sortedActiveIds.indices) {
+            for (right in left + 1 until sortedActiveIds.size) {
+                activePairs.add(pairKey(sortedActiveIds[left], sortedActiveIds[right]))
             }
         }
 
