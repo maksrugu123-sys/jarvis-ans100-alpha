@@ -62,7 +62,7 @@ class ANS100NeuralAssociationDecoder {
 
     private data class ActiveConcept(
         val trace: ANS100ConceptNeuralInputAdapter.TraceEntry,
-        val projection: Map<Int, String>,
+        val projection: Map<Int, List<String>>,
         val spikingTargets: Set<Int>,
     )
 
@@ -109,12 +109,14 @@ class ANS100NeuralAssociationDecoder {
         }
         val grownBySource = grownConnections.groupBy { it.sourceNeuronId }
         val active = conceptTrace.sortedBy { it.conceptId }.mapNotNull { trace ->
-            val projection = AndroidHybridTopologyV2.conceptAssociationProjection(trace.neuronId).toMutableMap()
+            val projection = AndroidHybridTopologyV2.conceptAssociationProjection(trace.neuronId)
+                .mapValues { listOf(it.value) }.toMutableMap()
             grownBySource[trace.neuronId].orEmpty().forEach { connection ->
-                projection[connection.targetNeuronId] = connection.connectionId
+                projection[connection.targetNeuronId] =
+                    (projection[connection.targetNeuronId].orEmpty() + connection.connectionId).distinct().sorted()
             }
-            val spiking = projection.filter { (targetId, connectionId) ->
-                targetId in associationSpikes && connectionId in activatedConnectionIds
+            val spiking = projection.filter { (targetId, connectionIds) ->
+                targetId in associationSpikes && connectionIds.any { it in activatedConnectionIds }
             }.keys
             if (spiking.isEmpty()) null else ActiveConcept(trace, projection, spiking)
         }
@@ -131,7 +133,12 @@ class ANS100NeuralAssociationDecoder {
                 if (convergent.isEmpty()) continue
 
                 val activatedSynapses = convergent.flatMap { targetId ->
-                    listOf(left.projection.getValue(targetId), right.projection.getValue(targetId))
+                    listOf(left, right).mapNotNull { concept ->
+                        concept.projection.getValue(targetId)
+                            .filter { it in activatedConnectionIds }
+                            .sortedBy { if (it.startsWith("ans100-v5-grown-association-")) 0 else 1 }
+                            .firstOrNull()
+                    }
                 }.distinct().sorted()
                 val refs = buildList {
                     add(left.trace.provenanceRef.substringBefore(":features:").take(160))
