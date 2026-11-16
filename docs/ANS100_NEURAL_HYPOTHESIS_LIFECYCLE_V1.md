@@ -82,3 +82,31 @@ The live Android trace now exports a privacy-bounded summary of typed memory exp
 The engine does not select a winner or convert these states into truth. "Support" and "counter-evidence" refer only to explicit user-entered workspace assertions. A reversed typed path remains a separate directional explanation. Up to 12 explanations are retained per neural candidate.
 
 Android telemetry records the comparison status and hashed explanation IDs, relation types, direction, verification status and evidence counts. This allows benchmark analysis to ask whether a neural association is accompanied by a typed memory path, while keeping the two mechanisms separate.
+
+
+## Durable neural hypothesis lifecycle V1.1
+
+The Android ViewModel now restores and checkpoints the bounded neural hypothesis engine through a separate app-private SQLite database:
+
+`ans100_neural_hypotheses.db`
+
+The checkpoint contains concept IDs and matched labels, the last bounded supporting/non-reproducing turn IDs for each hypothesis, shared-spiking-target counts, and the recent set of processed turn IDs. It does **not** contain raw user messages, Qwen responses, benchmark gold labels, or tool credentials.
+
+Persistence rules:
+
+- One singleton checkpoint row is replaced atomically in a SQLite transaction.
+- The engine retains at most 256 hypotheses (128 by default), 512 recent turn IDs, and eight supporting plus eight non-reproducing observations per hypothesis.
+- Duplicate turn IDs cannot count twice after process restart because the recent turn-ID set is restored.
+- A malformed, incompatible, or oversized checkpoint is ignored; the conversation continues without persistent hypothesis history.
+- A failed save is non-fatal and is surfaced as `neural_hypothesis_state_persisted=false` in the live trace and diagnostics.
+- The checkpoint is local application state, not a backup or a guarantee against uninstall/data clearing.
+
+### Mixed reproduction signal
+
+A hypothesis can now report `MIXED_REPRODUCTION_SIGNAL` when some complete independent turns reproduce shared neural convergence and other complete turns fail to reproduce it. This preserves disagreement in the network's observed behavior instead of collapsing it into either confirmation or refutation.
+
+This status is strictly about repeatability of the neural activation path. It is not a semantic contradiction, factual counter-evidence, confidence score, or truth judgement. Incomplete turns and turns whose pair scan may have been truncated still cannot create a non-reproduction observation.
+
+### Validation status
+
+Regression tests were added for checkpoint round-trip, mixed-signal retention, bounded per-hypothesis history, duplicate turn rejection after restore, and trace export. They have **not been executed**. No Gradle build, APK, CI, GitHub Actions run, or on-device inference was performed for this stage.
