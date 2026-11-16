@@ -124,7 +124,9 @@ object ANS100BenchmarkTraceAdapter {
                 .put("premise_evidence_count", report.premiseEvidenceRefs.size)
                 .put("verification_status", report.verificationStatus.name)
                 .put("supporting_evidence_count", report.supportingEvidenceRefs.size)
-                .put("contradicting_evidence_count", report.contradictingEvidenceRefs.size))
+                .put("contradicting_evidence_count", report.contradictingEvidenceRefs.size)
+                .put("supporting_evidence_sources", JSONArray(report.supportingEvidenceSources.map { it.name }.sorted()))
+                .put("contradicting_evidence_sources", JSONArray(report.contradictingEvidenceSources.map { it.name }.sorted())))
         }
 
         val comparisons = JSONArray()
@@ -141,7 +143,9 @@ object ANS100BenchmarkTraceAdapter {
                             .put("verification_status", explanation.verificationStatus.name)
                             .put("premise_evidence_count", explanation.premiseEvidenceCount)
                             .put("supporting_evidence_count", explanation.supportingEvidenceCount)
-                            .put("contradicting_evidence_count", explanation.contradictingEvidenceCount))
+                            .put("contradicting_evidence_count", explanation.contradictingEvidenceCount)
+                            .put("supporting_evidence_sources", JSONArray(explanation.supportingEvidenceSources.map { it.name }.sorted()))
+                            .put("contradicting_evidence_sources", JSONArray(explanation.contradictingEvidenceSources.map { it.name }.sorted())))
                     }
                 }))
         }
