@@ -113,6 +113,29 @@ def build_tasks(seeds: Iterable[int] = SEEDS, tasks_per_split: int = 12) -> list
     ids = [task["task_id"] for task in tasks]
     if len(ids) != len(set(ids)):
         raise AssertionError("task IDs are not unique")
+
+    # Enforce the split contract on the generated data itself. In particular,
+    # a custom tasks_per_split value must not silently degrade pair-disjoint
+    # evaluation into overlapping query pairs or concept-disjoint evaluation.
+    for seed in seed_list:
+        development = [t for t in tasks if t["seed"] == seed and t["split"] == "development"]
+        pair_held_out = [t for t in tasks if t["seed"] == seed and t["split"] == "pair_disjoint"]
+        dev_pairs = {tuple(t["query_pair"]) for t in development}
+        held_pairs = {tuple(t["query_pair"]) for t in pair_held_out}
+        if dev_pairs.intersection(held_pairs):
+            raise ValueError(
+                f"tasks_per_split={tasks_per_split} creates overlapping development/pair_disjoint query pairs"
+            )
+        def vocabulary(rows: list[dict[str, Any]]) -> set[str]:
+            return {
+                symbol for task in rows for fact in task["facts"]
+                for symbol in (fact.get("subject"), fact.get("object"))
+            }
+        if not vocabulary(development).intersection(vocabulary(pair_held_out)):
+            raise ValueError("pair_disjoint split does not reuse the development vocabulary")
+        concept_held_out = [t for t in tasks if t["seed"] == seed and t["split"] == "concept_disjoint"]
+        if vocabulary(development).intersection(vocabulary(concept_held_out)):
+            raise ValueError("concept_disjoint split reuses development symbols")
     return tasks
 
 def canonical_answer(value: Any) -> str:
@@ -157,11 +180,12 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
     if len(all_ids) != len(set(all_ids)):
         raise ValueError("benchmark task IDs must be unique")
     for task in tasks:
-        if task.get("split") not in SPLITS:
-            raise ValueError(f"unknown benchmark split: {task.get('split')!r}")
-        if task.get("family") not in FAMILIES:
-            raise ValueError(f"unknown benchmark family: {task.get('family')!r}")
-        if task.get("expected_answer") not in ANSWERS:
+        split, family, expected = task.get("split"), task.get("family"), task.get("expected_answer")
+        if not isinstance(split, str) or split not in SPLITS:
+            raise ValueError(f"unknown benchmark split: {split!r}")
+        if not isinstance(family, str) or family not in FAMILIES:
+            raise ValueError(f"unknown benchmark family: {family!r}")
+        if not isinstance(expected, str) or expected not in ANSWERS:
             raise ValueError(f"{task.get('task_id')}: invalid canonical expected answer")
 
     # Development examples are training-only and must never affect held-out scores.
