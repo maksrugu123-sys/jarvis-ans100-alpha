@@ -4,8 +4,8 @@ import java.security.MessageDigest
 
 /**
  * Decodes bounded concept co-activation from the actual ANS-100 association
- * population. A pair is emitted only when both concept inputs project to at
- * least one common association neuron and that neuron actually spiked.
+ * population. A pair is emitted only when both concept-to-association synapses
+ * are recorded as activated and their shared target actually spiked.
  *
  * This is a neural co-activation candidate, not a typed relation, semantic
  * interpretation, causal claim, learned probability, or verified fact.
@@ -18,6 +18,7 @@ class ANS100NeuralAssociationDecoder {
         val secondConceptId: String,
         val secondLabel: String,
         val convergentNeuronIds: List<Int>,
+        val activatedConnectionIds: List<String>,
         val evidenceRefs: List<String>,
         /** Shared spiking targets / three projection slots; not a probability. */
         val activationHint: Double,
@@ -32,6 +33,11 @@ class ANS100NeuralAssociationDecoder {
             require(convergentNeuronIds.distinct().size == convergentNeuronIds.size)
             require(convergentNeuronIds.all {
                 it in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END
+            })
+            require(activatedConnectionIds.size in 2..6)
+            require(activatedConnectionIds.distinct().size == activatedConnectionIds.size)
+            require(activatedConnectionIds.all {
+                it.startsWith("ans100-v4-evidence-general-association-") && it.length <= 128
             })
             require(evidenceRefs.size in 2..5 && evidenceRefs.distinct().size == evidenceRefs.size)
             require(evidenceRefs.all { it.isNotBlank() && it.length <= TypedEvidenceRecord.MAX_PROVENANCE_CHARS })
@@ -56,12 +62,14 @@ class ANS100NeuralAssociationDecoder {
 
     private data class ActiveConcept(
         val trace: ANS100ConceptNeuralInputAdapter.TraceEntry,
+        val projection: Map<Int, String>,
         val spikingTargets: Set<Int>,
     )
 
     fun decode(
         conceptTrace: List<ANS100ConceptNeuralInputAdapter.TraceEntry>,
         emittedSpikeNeuronIds: Set<Int>,
+        activatedConnectionIds: Set<String>,
         maxCandidates: Int = MAX_CANDIDATES,
     ): Result {
         require(conceptTrace.size <= ANS100ConceptNeuralInputAdapter.MAX_CONCEPTS_PER_TURN)
@@ -82,14 +90,20 @@ class ANS100NeuralAssociationDecoder {
         })
         require(emittedSpikeNeuronIds.size <= AndroidHybridTopologyV2.NEURON_COUNT)
         require(emittedSpikeNeuronIds.all { it in 0 until AndroidHybridTopologyV2.NEURON_COUNT })
+        require(activatedConnectionIds.size <= AndroidHybridTopologyV2.MAX_CONNECTION_COUNT)
+        require(activatedConnectionIds.all {
+            it.startsWith("ans100-v4-evidence-general-association-") && it.length <= 128
+        })
 
         val associationSpikes = emittedSpikeNeuronIds.filterTo(LinkedHashSet()) {
             it in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END
         }
         val active = conceptTrace.sortedBy { it.conceptId }.mapNotNull { trace ->
-            val projected = AndroidHybridTopologyV2.conceptAssociationTargets(trace.neuronId)
-            val spiking = projected.intersect(associationSpikes)
-            if (spiking.isEmpty()) null else ActiveConcept(trace, spiking)
+            val projection = AndroidHybridTopologyV2.conceptAssociationProjection(trace.neuronId)
+            val spiking = projection.filter { (targetId, connectionId) ->
+                targetId in associationSpikes && connectionId in activatedConnectionIds
+            }.keys
+            if (spiking.isEmpty()) null else ActiveConcept(trace, projection, spiking)
         }
 
         val candidates = ArrayList<Candidate>()
@@ -99,15 +113,13 @@ class ANS100NeuralAssociationDecoder {
                 consideredPairs++
                 val left = active[leftIndex]
                 val right = active[rightIndex]
-                // The two concept inputs must converge on the same association
-                // neuron, and that exact neuron must be present in the spike set.
-                val convergent = AndroidHybridTopologyV2
-                    .conceptAssociationTargets(left.trace.neuronId)
-                    .intersect(AndroidHybridTopologyV2.conceptAssociationTargets(right.trace.neuronId))
-                    .intersect(associationSpikes)
-                    .sorted()
+                // Both source synapses must have reached the same spiking target.
+                val convergent = left.spikingTargets.intersect(right.spikingTargets).sorted()
                 if (convergent.isEmpty()) continue
 
+                val activatedSynapses = convergent.flatMap { targetId ->
+                    listOf(left.projection.getValue(targetId), right.projection.getValue(targetId))
+                }.distinct().sorted()
                 val refs = buildList {
                     add(left.trace.provenanceRef)
                     add(right.trace.provenanceRef)
@@ -125,6 +137,7 @@ class ANS100NeuralAssociationDecoder {
                     secondConceptId = right.trace.conceptId,
                     secondLabel = right.trace.matchedAlias,
                     convergentNeuronIds = convergent,
+                    activatedConnectionIds = activatedSynapses,
                     evidenceRefs = refs,
                     activationHint = (convergent.size.toDouble() / PROJECTION_FAN_OUT).coerceIn(0.0, 1.0),
                 )
@@ -149,7 +162,7 @@ class ANS100NeuralAssociationDecoder {
         .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
     companion object {
-        const val MAX_CANDIDATES = 8
+        const val MAX_CANDIDATES = 3
         private const val PROJECTION_FAN_OUT = 3
         private const val GENERAL_ASSOCIATION_START = 1_200
         private const val GENERAL_ASSOCIATION_END = 2_200
