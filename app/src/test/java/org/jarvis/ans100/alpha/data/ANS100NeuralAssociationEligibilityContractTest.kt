@@ -1,6 +1,5 @@
 package org.jarvis.ans100.alpha.data
 
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ANS100NeuralAssociationEligibilityContractTest {
@@ -21,7 +20,6 @@ class ANS100NeuralAssociationEligibilityContractTest {
         ANS100NeuralAssociationEligibilityContract.validateEligibilityIds(
             listOf(fixed(1), fixed(2), grown(3), grown(4)),
         )
-        assertTrue(true)
     }
 
     @Test
