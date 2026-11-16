@@ -209,7 +209,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         SharedPreferencesLocalWorkspaceMemoryStorage(application.applicationContext),
     )
     private val workspaceConceptInputBridge = ANS100WorkspaceConceptInputBridge()
-    private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine()
+    private val neuralHypothesisLedger = ANS100NeuralHypothesisLedger(appContext)
+    private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine().apply {
+        runCatching { neuralHypothesisLedger.load()?.let { restoreSnapshot(it) } }
+    }
     private val benchmarkTraceStore = ANS100BenchmarkTraceStore(appContext.filesDir)
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
@@ -1095,6 +1098,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         pairScanComplete = neuralAssociationResult.activeConceptCount == batch.conceptTrace.size &&
                             neuralAssociationResult.consideredPairCount <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES,
                     )
+                    // A failed checkpoint must never fail the user-facing turn.
+                    val neuralHypothesisStatePersisted = runCatching {
+                        neuralHypothesisLedger.save(neuralHypothesisEngine.exportSnapshot())
+                    }.getOrDefault(false)
                     val hypothesisComparisons = ANS100HypothesisCompetitionEngine().compare(
                         neuralCandidates = neuralAssociationResult.candidates,
                         memoryHypotheses = conceptInput.hypothesisReports,
@@ -1124,6 +1131,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             neuralHypotheses = neuralHypotheses,
                             memoryHypothesisReports = conceptInput.hypothesisReports,
                             hypothesisComparisons = hypothesisComparisons,
+                            hypothesisStatePersisted = neuralHypothesisStatePersisted,
                         )
                         benchmarkTraceStore.append(ANS100BenchmarkTraceAdapter.toJsonLine(trace))
                     }.getOrDefault(false)
@@ -1202,6 +1210,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         append("; neural_association_candidates=").append(neuralAssociationResult.candidates.size)
                         append("; neural_hypotheses=").append(neuralHypotheses.size)
                         append("; neural_memory_comparisons=").append(hypothesisComparisons.size)
+                        append("; neural_hypothesis_state_persisted=").append(neuralHypothesisStatePersisted)
                         append("; comparison_memory_unresolved=").append(hypothesisComparisons.count { it.status == org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine.Status.MEMORY_PATH_UNRESOLVED })
                         append("; comparison_user_support=").append(hypothesisComparisons.count { it.status == org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine.Status.USER_ASSERTIONS_SUPPORT })
                         append("; comparison_user_counter=").append(hypothesisComparisons.count { it.status == org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine.Status.USER_COUNTER_EVIDENCE })
