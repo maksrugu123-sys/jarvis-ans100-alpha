@@ -1711,14 +1711,14 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Цель:** дать Android и Windows/desktop один переносимый формат памяти без облака, без открытия локального API в LAN и без автоматической перезаписи существующих данных.
 
 **Изменено:**
-- \`schemas/workspace/v1/encrypted-bundle.schema.json\` — зафиксирован envelope V1: PBKDF2-HMAC-SHA256, 310 000 итераций, случайная соль 16 байт, AES-256-GCM, nonce 12 байт, tag 128 бит и Base64-кодирование.
-- \`tools/jarvis_app/static/app.js\` и \`static/index.html\` — desktop PWA экспортирует \`.jws\` через WebCrypto и импортирует его после проверки GCM-тега, канонического workspace JSON, SHA-256, лимитов и схемы. Перед записью отображаются счётчики; пользователь может подтвердить или отменить импорт.
-- Android \`WorkspaceTransferCrypto.kt\` — добавлен соответствующий PBKDF2/AES-GCM codec с UTF-8 passphrase bytes, фиксированным AAD, ограничениями размера и очисткой временных byte/char buffers best-effort.
-- \`LocalRuntimeBridgeClient.kt\` — добавлены decrypt/validate, merge planning и CAS commit. Записи объединяются по стабильному ID, настройки по key; одинаковые записи пропускаются, конфликт оставляет локальную версию.
-- \`JarvisViewModel.kt\` и \`MainActivity.kt\` — подключён Android Storage Access Framework для \`.jws\` CreateDocument/OpenDocument; импорт разбит на preview и отдельное подтверждение. Изменение локальной ревизии между preview и commit приводит к отказу CAS, а не к перезаписи.
-- \`workspace_store.py\` и \`workspace.schema.json\` — числовые значения настроек ограничены JSON safe-integer диапазоном ±9,007,199,254,740,991 для одинакового представления в Python, JavaScript и Kotlin.
-- \`test_workspace_store.py\` — добавлен тест отклонения integer setting вне safe-integer диапазона; workspace-store inventory теперь 11 методов.
-- \`app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt\` — 4 instrumentation test cases: UTF-8 round-trip, фиксированный PBKDF2/AES-GCM fixture с полным каноническим workspace V1 и проверяемым SHA-256, неверная парольная фраза и изменение ciphertext.
+- `schemas/workspace/v1/encrypted-bundle.schema.json` — зафиксирован envelope V1: PBKDF2-HMAC-SHA256, 310 000 итераций, случайная соль 16 байт, AES-256-GCM, nonce 12 байт, tag 128 бит и Base64-кодирование.
+- `tools/jarvis_app/static/app.js` и `static/index.html` — desktop PWA экспортирует `.jws` через WebCrypto и импортирует его после проверки GCM-тега, канонического workspace JSON, SHA-256, лимитов и схемы. Перед записью отображаются счётчики; пользователь может подтвердить или отменить импорт.
+- Android `WorkspaceTransferCrypto.kt` — добавлен соответствующий PBKDF2/AES-GCM codec с UTF-8 passphrase bytes, фиксированным AAD, ограничениями размера и очисткой временных byte/char buffers best-effort.
+- `LocalRuntimeBridgeClient.kt` — добавлены decrypt/validate, merge planning и CAS commit. Записи объединяются по стабильному ID, настройки по key; одинаковые записи пропускаются, конфликт оставляет локальную версию.
+- `JarvisViewModel.kt` и `MainActivity.kt` — подключён Android Storage Access Framework для `.jws` CreateDocument/OpenDocument; импорт разбит на preview и отдельное подтверждение. Изменение локальной ревизии между preview и commit приводит к отказу CAS, а не к перезаписи.
+- `workspace_store.py` и `workspace.schema.json` — числовые значения настроек ограничены JSON safe-integer диапазоном ±9,007,199,254,740,991 для одинакового представления в Python, JavaScript и Kotlin.
+- `test_workspace_store.py` — добавлен тест отклонения integer setting вне safe-integer диапазона; workspace-store inventory теперь 11 методов.
+- `app/src/androidTest/java/org/jarvis/ans100/alpha/data/WorkspaceTransferCryptoTest.kt` — 4 instrumentation test cases: UTF-8 round-trip, фиксированный PBKDF2/AES-GCM fixture с полным каноническим workspace V1 и проверяемым SHA-256, неверная парольная фраза и изменение ciphertext.
 - `tools/jarvis_app/static/sw.js` — cache version повышен до v6, чтобы уже установленная PWA получила новый transfer UI вместо старого app.js из cache.
 - Синхронизированы README, Android Runtime Bridge, Shared Workspace Memory и Cross-Platform Runtime docs.
 
@@ -3055,14 +3055,14 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 
 **Objective:** remove the hard limit where concept pairs with no shared fixed projection target can never form a neural association candidate.
 
-**Implemented on \`experiment/jarvis-integrated-prototype-v1\`:**
-- Added \`ANS100ActivityDrivenStructuralPlasticity\`, a bounded experimental growth kernel that has no predefined concept-pair catalogue.
+**Implemented on `experiment/jarvis-integrated-prototype-v1`:**
+- Added `ANS100ActivityDrivenStructuralPlasticity`, a bounded experimental growth kernel that has no predefined concept-pair catalogue.
 - A pair becomes eligible only after co-activation in three distinct completed turn IDs inside a rolling 16-observation window. Replayed turn IDs are ignored.
 - The allocator excludes all targets already used by either source concept, then chooses a least-loaded target in the general association population. A stable pair hash only chooses the scan's starting offset; target selection remains based on current graph load, not a fixed pair-to-target table.
 - Emits exactly two proposed synapses from the two concept input neurons to the newly selected common target, with conservative initial weight 0.25 and auditable concept/provenance metadata.
 - Added bounds for active concepts, pending pair traces, remembered turn IDs, total grown pairs, per-concept growth degree, and target incoming degree.
 - Added focused unit tests for distinct-turn threshold, duplicate-turn replay, existing shared-target suppression, target exclusion and load competition, saturation, eligibility expiry, per-concept degree, deterministic proposals, and duplicate concept IDs.
-- Added \`docs/ANS100_ACTIVITY_DRIVEN_STRUCTURAL_PLASTICITY_V1.md\` with the algorithm, limits, trust boundaries and integration gates.
+- Added `docs/ANS100_ACTIVITY_DRIVEN_STRUCTURAL_PLASTICITY_V1.md` with the algorithm, limits, trust boundaries and integration gates.
 
 **Critical limitations / integration boundary:**
 - This is a prototype kernel, not yet a live topology mutation. It returns proposals; it does not insert them into SQLite or alter the production network.
@@ -3071,7 +3071,7 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 - Repeated co-activation can be incidental and is not proof of semantic relation. Human-verified held-out evaluation and false-association controls remain required.
 - Qwen remains a language realizer and is not used to generate associations.
 
-**Verification:** tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, GitHub Actions workflow, or device inference was run. Automatic workflows remain manual-only (\`workflow_dispatch\`). \`main\` was not modified.
+**Verification:** tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, GitHub Actions workflow, or device inference was run. Automatic workflows remain manual-only (`workflow_dispatch`). `main` was not modified.
 
 
 ## 2026-11-16 — Activity-driven structural plasticity prototype
@@ -3079,9 +3079,9 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 **Objective:** remove the fixed-three-edge coverage ceiling as an experimental capability, without hard-coded concept pairs or language-model-generated associations.
 
 **Added:**
-- \`app/src/main/java/org/jarvis/ans100/alpha/data/ANS100ActivityDrivenStructuralPlasticity.kt\` — bounded activity-driven proposal engine. It observes active concept assemblies, skips pairs already sharing an association target, accumulates distinct turn IDs, and after three observations proposes two directed synapses to a competitively selected shared target. The target is selected by a deterministic pair-hash scan with least-incoming-load competition, excluding both sources' existing targets.
-- \`app/src/test/java/org/jarvis/ans100/alpha/data/ANS100ActivityDrivenStructuralPlasticityTest.kt\` — regression coverage for thresholding, replay idempotency, existing shared targets, target exclusion/load competition, capacity, expiry, degree bounds, deterministic proposals and duplicate inputs.
-- \`docs/ANS100_ACTIVITY_DRIVEN_STRUCTURAL_PLASTICITY_V1.md\` — mechanism, limits, epistemic boundaries and integration/evaluation gates.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/ANS100ActivityDrivenStructuralPlasticity.kt` — bounded activity-driven proposal engine. It observes active concept assemblies, skips pairs already sharing an association target, accumulates distinct turn IDs, and after three observations proposes two directed synapses to a competitively selected shared target. The target is selected by a deterministic pair-hash scan with least-incoming-load competition, excluding both sources' existing targets.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/ANS100ActivityDrivenStructuralPlasticityTest.kt` — regression coverage for thresholding, replay idempotency, existing shared targets, target exclusion/load competition, capacity, expiry, degree bounds, deterministic proposals and duplicate inputs.
+- `docs/ANS100_ACTIVITY_DRIVEN_STRUCTURAL_PLASTICITY_V1.md` — mechanism, limits, epistemic boundaries and integration/evaluation gates.
 
 **Changed:**
 - Corrected the least-loaded-target test fixture so every target except the deliberately empty target has non-zero incoming load; this makes the expected winner independent of the pair-hash starting offset.
@@ -3105,9 +3105,9 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 ## 2026-11-16 — Persistent dynamic structural synapse lifecycle (V1.1)
 
 **Added to Android JNVM SQLite schema V7:**
-- \`structural_synapse_registry\` records grown connection ownership, proposal ID, concept IDs and timestamps.
-- \`structural_synapse_feedback_events\` records unique feedback ID, proposal ID, delta, source and timestamp.
-- Atomic \`addStructuralGrowthProposal\` persists both concept-to-association synapses in one transaction, rejects out-of-range endpoints/IDs/weights and enforces total connection, target in-degree and per-concept grown-edge limits. Replaying a proposal is idempotent.
+- `structural_synapse_registry` records grown connection ownership, proposal ID, concept IDs and timestamps.
+- `structural_synapse_feedback_events` records unique feedback ID, proposal ID, delta, source and timestamp.
+- Atomic `addStructuralGrowthProposal` persists both concept-to-association synapses in one transaction, rejects out-of-range endpoints/IDs/weights and enforces total connection, target in-degree and per-concept grown-edge limits. Replaying a proposal is idempotent.
 - Pairwise weight mutation clamps weights to [0.05, 1.0], limits delta to ±0.10, requires both edges of each proposal, and accepts only explicit-user or verified-external-outcome feedback. A unique feedback ID prevents duplicate reward application.
 - Weak-link removal deletes both edges only when both are included and both weights are below the caller threshold (public API caps threshold at 0.20).
 - Read API exposes weights only for registered grown synapses.
@@ -3117,3 +3117,18 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 **Tests:** instrumented tests AUTHORED for proposal insertion/idempotency, feedback persistence across reopen, duplicate feedback replay, rejection of model-generated feedback, whole-pair mutation/removal, preservation of base topology count, and explicit rating of a grown association. Unit test AUTHORED for decoder support of a new target absent from fixed projections; instrumented migration test covers schema V6→V7 feedback-ledger creation without rebuilding topology. NOT RUN. Build, APK, CI, GitHub Actions and device inference: NOT RUN.
 
 **Next:** persist the activity learner's distinct-turn eligibility and bounded growth counters in SQLite, then connect a disabled-by-default proposal observer to completed turns. Evaluate fixed topology vs grown topology vs shuffled co-activation on held-out concepts before enabling automatic insertion.
+
+
+## 2026-11-16 — Durable structural-plasticity observations (V1.3)
+
+**Android JNVM schema V8:** added bounded turn and concept-observation tables. Each completed turn is recorded transactionally with up to 64 concepts; 64 recent turn IDs are retained for idempotency and the latest 16 are replayed for eligibility reconstruction. The store verifies persistent concept ID-to-neuron-slot identity before accepting observations.
+
+**Graph snapshot:** reads current concept outgoing targets, association-target in-degree, registered grown concept pairs and per-concept grown-edge counts. The activity learner can restore durable growth limits before replay. SQLite independently caps grown pairs at 512, grown edges per concept at 8 and target in-degree at 16.
+
+**ViewModel integration:** added a disabled-by-default observer path. It only records concept inputs that actually spiked and propagated a fixed or grown association synapse; it ignores unfinished/budget-exhausted turns. It replays the last 16 durable observations and sends newly generated proposals through atomic SQLite insertion. Grown links are available to the sparse runtime and decoder on later turns.
+
+**Safety:** STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED remains false. Ordinary app behavior does not automatically mutate topology. Enablement is deferred until a held-out evaluation compares fixed topology, grown topology and shuffled co-activation controls. Co-activation does not establish semantic truth.
+
+**Tests authored, NOT RUN:** persistence and replay after database reopen, duplicate turn replay after reopen, reconstruction of a proposal from three persisted turns, growth-state restoration, and V7 to V8 migration without base-topology rebuild. No Gradle tests, Android build, APK, CI, GitHub Actions or device inference were run.
+
+**Next:** create a deterministic held-out evaluation harness with positive/negative concept-pair labels, temporal split, shuffled-activity and fixed-topology baselines; measure candidate precision/recall, false associations, connection growth, storage and runtime cost before considering enabling automatic growth.
