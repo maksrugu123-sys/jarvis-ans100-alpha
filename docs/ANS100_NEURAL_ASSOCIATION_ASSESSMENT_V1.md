@@ -19,6 +19,8 @@ SQLite enforces uniqueness for both (candidate, task ID) and (candidate, indepen
 
 An inconclusive or missing reproduction is not a contradiction. Only decisive reproduced/contradicted outcomes contribute to the stability ratio.
 
+The current decoder emits an undirected concept co-activation candidate, not a typed relation. Therefore a benchmark task labelled NO cannot by itself contradict that candidate, even if it reactivates: the pair may co-activate for another reason. The V1 benchmark adapter conservatively records such cases as INCONCLUSIVE. A contradiction requires an independently justified label for the exact association, not merely a negative answer about a relation between the same concepts.
+
 The held-out benchmark adapter accepts only `pair_disjoint`, `concept_disjoint`, or `compositional` splits and direct-pair task families (`relation_status`, `evidence_conflict`). It requires an explicit independence key from the harness. Multi-hop reachability tasks are not treated as direct semantic-pair labels. `YES` plus an observed neural candidate is a reproduction; `NO` plus an observed candidate is a contradiction. If the candidate is absent, or the label is `UNKNOWN`/`CONFLICT`, the outcome is inconclusive.
 
 ## Assessment policy
