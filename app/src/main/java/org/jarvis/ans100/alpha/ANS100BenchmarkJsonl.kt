@@ -18,6 +18,7 @@ object ANS100BenchmarkJsonl {
     private val heldOutPrefixes = listOf("pair_disjoint:", "concept_disjoint:", "compositional:")
 
     data class PredictionFiles(val transformerJsonl: ByteArray, val ans100Jsonl: ByteArray)
+    data class EncodingComparisonFiles(val lexicalAns100Jsonl: ByteArray, val structuredAns100Jsonl: ByteArray)
 
     fun readDevelopmentRows(resolver: ContentResolver, uri: Uri): List<ANS100BenchmarkDevelopmentExample> =
         readRows(resolver, uri, TRAIN_SCHEMA).map { row ->
@@ -83,10 +84,71 @@ object ANS100BenchmarkJsonl {
                     .put("peak_memory_delta_mb", ar.peakMemoryDeltaMb)
                     .put("memory_sample_interval_ms", ar.memorySampleIntervalMs)
                     .put("cold_start", ar.coldStart)
+                    .put("input_encoding", ar.inputEncoding)
+                    .put("parsed_fact_count", ar.parsedFactCount)
+                    .put("neural_association_candidate_count", ar.neuralAssociationCandidateCount)
+                    .put("neural_hypothesis_count", ar.neuralHypothesisCount)
+                    .put("reproduced_neural_hypothesis_count", ar.reproducedNeuralHypothesisCount)
+                    .put("neural_hypothesis_status_counts", JSONObject(ar.neuralHypothesisStatusCounts))
+                    .put("evidence_audit_answer", ar.evidenceAuditAnswer)
+                    .put("evidence_audit_method", ar.evidenceAuditMethod)
+                    .put("neural_evidence_agreement", ar.neuralEvidenceAgreement)
             } else ans.put("inference_error", paired.ans100.exceptionOrNull()?.message ?: "inference_failed")
             ansRows.add(ans)
         }
         return PredictionFiles(jsonl(transformerRows), jsonl(ansRows))
+    }
+
+
+    /** Exports paired lexical-versus-structured ANS results without mixing their predictions. */
+    fun encodeEncodingComparisons(
+        results: List<JarvisViewModel.Ans100EncodingComparisonResult>,
+    ): EncodingComparisonFiles {
+        require(results.isNotEmpty() && results.size <= MAX_ROWS)
+        require(results.map { it.taskId }.distinct().size == results.size)
+        fun encodeRows(structured: Boolean): ByteArray {
+            val rows = results.map { item ->
+                val result = if (structured) item.structured else item.lexical
+                val row = JSONObject().put("task_id", item.taskId)
+                    .put("answer", result.getOrNull()?.answer ?: JSONObject.NULL)
+                val value = result.getOrNull()
+                if (value != null) {
+                    row.put("readout_status", value.readoutStatus)
+                        .put("completed", value.completed)
+                        .put("latency_ms", value.inferenceDurationNs.toDouble() / 1_000_000.0)
+                        .put("processed_events", value.processedEvents)
+                        .put("encoded_feature_count", value.encodedTokenCount)
+                        .put("activated_feature_count", value.activatedTokenCount)
+                        .put("slot_collision_count", value.slotCollisionCount)
+                        .put("clean_source_spike_count", value.cleanSourceSpikeCount)
+                        .put("class_spike_counts", JSONObject(value.classSpikeCounts))
+                        .put("network_initialization_ms", value.networkInitializationDurationNs.toDouble() / 1_000_000.0)
+                        .put("learned_synapse_count", value.learnedSynapseCount)
+                        .put("memory_baseline_pss_mb", value.memoryBaselinePssMb)
+                        .put("peak_memory_mb", value.peakMemoryPssMb)
+                        .put("peak_memory_delta_mb", value.peakMemoryDeltaMb)
+                        .put("memory_sample_interval_ms", value.memorySampleIntervalMs)
+                        .put("cold_start", value.coldStart)
+                        .put("input_encoding", value.inputEncoding)
+                        .put("parsed_fact_count", value.parsedFactCount)
+                        .put("neural_association_candidate_count", value.neuralAssociationCandidateCount)
+                        .put("neural_hypothesis_count", value.neuralHypothesisCount)
+                        .put("reproduced_neural_hypothesis_count", value.reproducedNeuralHypothesisCount)
+                        .put("neural_hypothesis_status_counts", JSONObject(value.neuralHypothesisStatusCounts))
+                        .put("evidence_audit_answer", value.evidenceAuditAnswer)
+                        .put("evidence_audit_method", value.evidenceAuditMethod)
+                        .put("neural_evidence_agreement", value.neuralEvidenceAgreement)
+                } else {
+                    row.put("inference_error", result.exceptionOrNull()?.message ?: "inference_failed")
+                }
+                row
+            }
+            return jsonl(rows)
+        }
+        return EncodingComparisonFiles(
+            lexicalAns100Jsonl = encodeRows(structured = false),
+            structuredAns100Jsonl = encodeRows(structured = true),
+        )
     }
 
     private fun readRows(resolver: ContentResolver, uri: Uri, schema: String): List<JSONObject> {
