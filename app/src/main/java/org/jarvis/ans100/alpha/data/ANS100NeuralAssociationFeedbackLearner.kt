@@ -113,6 +113,6 @@ class ANS100NeuralAssociationFeedbackLearner(
     }
 
     companion object {
-        const val MAX_CONNECTIONS_PER_CANDIDATE = 6
+        const val MAX_CONNECTIONS_PER_CANDIDATE = 12
     }
 }
