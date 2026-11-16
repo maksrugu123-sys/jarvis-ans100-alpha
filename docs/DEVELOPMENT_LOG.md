@@ -2955,3 +2955,22 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Next research stage: introduce a bounded, explicit-feedback learning rule for concept assemblies and test it against random/collision baselines and held-out concept pairs before connecting it to decision competition.
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
+
+
+## Android ANS-100 explicit-feedback neural association learning kernel — 2026-11-16
+
+**Implemented on `experiment/jarvis-integrated-prototype-v1`:**
+- Added `ANS100NeuralAssociationFeedbackLearner`, a bounded adapter over the existing reward-learning rule. It accepts only a decoded neural co-activation candidate, exact current weights for all participating synapses, and feedback tied to the same candidate and turn.
+- Validates every candidate edge against the real topology projection and verifies exactly two distinct concept-input synapses per convergent association target. It cannot train unrelated topology edges.
+- Allows only explicit user feedback or a verified external outcome. Model-generated and implicit-behavior feedback return a rejection without updates.
+- Reuses the existing bounded update rule: positive reward strengthens, negative reward weakens, per-synapse delta is capped at 0.01, and weights remain in 0.05..1.0.
+- Added tests for positive and negative updates, untrusted sources, candidate mismatch, missing weights and boundary clamping.
+- Added `docs/ANS100_NEURAL_ASSOCIATION_FEEDBACK_LEARNING_V1.md` with the algorithm, trust boundary and required integration work.
+
+**Verification and limitations:**
+- Tests were authored but NOT RUN. No Gradle build, APK, CI, or device inference was run.
+- This is a pure learning kernel. It returns proposed weight updates but does not yet persist them to SQLite, expose a user feedback control, or participate in live chat. Duplicate-feedback idempotency and restart/restore behavior remain unimplemented.
+- No semantic understanding claim: the update reinforces or weakens the exact edges involved in an observed co-activation candidate; it does not prove a relation between concepts.
+- Automatic Android and Windows builds remain disabled. `main` untouched.
+
+**Next stage:** connect explicit feedback to an idempotent SQLite transaction, persist learned weights across turns/restarts, and evaluate against shuffled-pair and random-weight baselines on held-out concept pairs.
