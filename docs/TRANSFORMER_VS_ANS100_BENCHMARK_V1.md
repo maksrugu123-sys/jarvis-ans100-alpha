@@ -39,7 +39,7 @@ Run both systems on the same target device and runtime conditions. Record the ex
 
 Use the same task order and repeat protocol. Report quality and resource use separately rather than pretending two different architectures have equal compute. If practical, run both an unrestricted-quality comparison and a fixed-device-resource comparison. Never infer RAM, CPU, or energy from parameter count alone.
 
-Missing predictions count as wrong in overall accuracy. Duplicate or unknown task IDs are rejected. The scorer reports per-split/per-family accuracy, latency median/p95, peak-memory max/median, and paired task outcomes (only Transformer correct / only ANS-100 correct / same correctness). The `development` split is excluded from every score and paired outcome; predictions carrying development task IDs are rejected.
+Missing predictions count as wrong in overall accuracy. Duplicate or unknown task IDs are rejected. The scorer reports per-split/per-family accuracy, submitted rows, answered rows, abstentions, missing rows, coverage, latency median/p95, peak-memory max/median, and paired task outcomes (only Transformer correct / only ANS-100 correct / same correctness). Explicit null answers count as abstentions and reduce coverage; they are not confused with missing output files. The `development` split is excluded from every score and paired outcome; predictions carrying development task IDs are rejected.
 
 ## Current implementation boundary
 
