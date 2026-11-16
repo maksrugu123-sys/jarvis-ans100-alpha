@@ -3148,3 +3148,10 @@ Added a deterministic shared task generator and prediction scorer for direct Tra
 **Fairness contract:** both systems receive the same task input; evaluator labels/expected answers are never model inputs. No tools or extra examples in the primary run. Model/runtime/quantization/device/resource metadata must be disclosed. ANS-100 adapters must disclose heuristic Core signals and cannot call the current integrated pipeline pure autonomous neural reasoning.
 
 **Status:** generator/scorer and focused tests committed; tests NOT RUN. No Transformer or ANS-100 model inference has been run, no predictions or measured resource report exist, and no winner is declared. The benchmark is synthetic and is only a first controlled task suite.
+
+
+## 2026-11-16 — Leakage-safe ANS-100 benchmark adapter V1
+
+Added `ans100_benchmark_adapter_v1.py` to export exact model inputs without evaluator labels/split metadata and validate Android trace exports. The adapter checks the SHA-256 of each exact input, records heuristic provenance, and emits scorer predictions only when a dedicated `NEURAL_CANONICAL_READOUT` explicitly produces YES/NO/UNKNOWN/CONFLICT. Current `HYBRID_POPULATION_CONTROLLER_V1` SELECTED/clarification/abstention statuses are deliberately not converted into semantic answers. Added focused regression tests and adapter documentation.
+
+**Status:** implementation and tests committed; tests NOT RUN. No production inference path changed, no Android trace exporter or actual predictions exist yet, no Transformer/ANS inference or resource measurements were run. No build, CI or Actions run.
