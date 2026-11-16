@@ -20,6 +20,17 @@ class ANS100StructuredBenchmarkInputAdapter {
         QUERY_OBJECT(5),
     }
 
+    data class Fact(
+        val subject: String,
+        val relation: String,
+        val objectValue: String,
+        val index: Int,
+    ) {
+        val provenance: String get() = "fact:$index"
+    }
+
+    data class Query(val subject: String, val relation: String, val objectValue: String)
+
     data class Result(
         val batch: AndroidHybridEvidenceInputAdapter.ActivationBatch,
         val parsedFactCount: Int,
@@ -27,16 +38,11 @@ class ANS100StructuredBenchmarkInputAdapter {
         val activatedFeatureCount: Int,
         val slotCollisionCount: Int,
         val queryParsed: Boolean,
+        val facts: List<Fact>,
+        val query: Query,
     )
 
     private data class Feature(val role: Role, val value: String, val provenance: String)
-
-    private data class ParsedFact(
-        val subject: String,
-        val relation: String,
-        val objectValue: String,
-        val index: Int,
-    )
 
     fun createBatch(turnId: String, inputText: String, timestampNs: Long): Result {
         require(turnId.isNotBlank() && turnId.length <= ANS100NeuralInputFrame.MAX_TURN_ID_CHARS)
@@ -52,9 +58,9 @@ class ANS100StructuredBenchmarkInputAdapter {
             features += Feature(Role.FACT_RELATION, fact.relation, "fact:${fact.index}:relation")
             features += Feature(Role.FACT_OBJECT, fact.objectValue, "fact:${fact.index}:object")
         }
-        features += Feature(Role.QUERY_SUBJECT, query.first, "query:subject")
-        features += Feature(Role.QUERY_RELATION, query.second, "query:relation")
-        features += Feature(Role.QUERY_OBJECT, query.third, "query:object")
+        features += Feature(Role.QUERY_SUBJECT, query.subject, "query:subject")
+        features += Feature(Role.QUERY_RELATION, query.relation, "query:relation")
+        features += Feature(Role.QUERY_OBJECT, query.objectValue, "query:object")
 
         val uniqueFeatures = features.distinctBy { it.role to normalize(it.value) }
         val slotOwners = LinkedHashMap<Int, Feature>()
@@ -100,6 +106,8 @@ class ANS100StructuredBenchmarkInputAdapter {
             activatedFeatureCount = events.size,
             slotCollisionCount = collisions,
             queryParsed = true,
+            facts = facts,
+            query = query,
         )
     }
 
@@ -120,11 +128,11 @@ class ANS100StructuredBenchmarkInputAdapter {
         return factLines to question
     }
 
-    private fun parseFact(line: String, index: Int): ParsedFact {
+    private fun parseFact(line: String, index: Int): Fact {
         val relation = RELATION_FACT.matchEntire(line)
         if (relation != null) {
             val polarity = relation.groupValues[2]
-            return ParsedFact(
+            return Fact(
                 relation.groupValues[1],
                 if (polarity == "is") "connected_positive" else "connected_negative",
                 relation.groupValues[3],
@@ -143,13 +151,13 @@ class ANS100StructuredBenchmarkInputAdapter {
         throw IllegalArgumentException("unsupported structured fact at line ${index + 1}: $line")
     }
 
-    private fun parseQuery(question: String): Triple<String, String, String> {
+    private fun parseQuery(question: String): Query {
         val direct = DIRECT_QUERY.matchEntire(question)
-        if (direct != null) return Triple(direct.groupValues[1], "connected", direct.groupValues[2])
+        if (direct != null) return Query(direct.groupValues[1], "connected", direct.groupValues[2])
         val path = PATH_QUERY.matchEntire(question)
-        if (path != null) return Triple(path.groupValues[1], "directed_path_at_most_two", path.groupValues[2])
+        if (path != null) return Query(path.groupValues[1], "directed_path_at_most_two", path.groupValues[2])
         val evidence = EVIDENCE_QUERY.matchEntire(question)
-        if (evidence != null) return Triple(evidence.groupValues[1], "connected", evidence.groupValues[2])
+        if (evidence != null) return Query(evidence.groupValues[1], "connected", evidence.groupValues[2])
         throw IllegalArgumentException("unsupported structured benchmark question")
     }
 
@@ -171,7 +179,7 @@ class ANS100StructuredBenchmarkInputAdapter {
         const val ROLE_COUNT = 6
         const val INPUT_END_EXCLUSIVE = INPUT_START + SLOTS_PER_ROLE * ROLE_COUNT
         const val MAX_INPUT_CHARS = 2_048
-        const val MAX_FACTS = 32
+        const val MAX_FACTS = 20
 
         private val RELATION_FACT = Regex("""- ([A-Za-z0-9_:-]+) (is explicitly not|is) connected to ([A-Za-z0-9_:-]+)\.""")
         private val EDGE_FACT = Regex("""- Directed link: ([A-Za-z0-9_:-]+) -> ([A-Za-z0-9_:-]+)\.""")
