@@ -82,8 +82,9 @@ class SparseCanonicalReadoutTests(unittest.TestCase):
 
     def test_tied_scores_abstain(self):
         model = SparseCanonicalReadout()
-        model.learn(event("yes", [10], CanonicalClass.YES))
-        model.learn(event("no", [10], CanonicalClass.NO))
+        for index in range(4):
+            model.learn(event(f"yes-{index}", [10], CanonicalClass.YES))
+            model.learn(event(f"no-{index}", [10], CanonicalClass.NO))
         result = model.predict([10])
         self.assertIsNone(result.answer)
         self.assertEqual(result.status, "AMBIGUOUS_TIE")
