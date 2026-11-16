@@ -150,6 +150,10 @@ class AndroidHybridEvidenceInputAdapterTest {
         assertEquals("turn-input-1", first.turnId)
         assertEquals(2, first.events.size)
         assertTrue(first.events.all { it.timeNs == 10L && it.strength == 1.0 })
+        assertEquals(
+            listOf(false, true),
+            first.events.map { it.coreTainted },
+        )
         assertEquals(first.events.map { it.targetNeuronId }, first.trace.map { it.neuronId })
         assertEquals(EvidenceStatus.USER_PROVIDED, first.trace.first().status)
         assertEquals("turn:turn-input-1:user.message.text", first.trace.first().provenanceRef)
