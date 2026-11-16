@@ -36,6 +36,8 @@ Four matched conditions are evaluated:
 
 Metrics include accuracy, balanced accuracy, precision, recall, specificity, F1, confusion matrix, sample counts, split sizes and class counts. No probability calibration is claimed.
 
+The report also includes `projection_coverage` for the full dataset and each train/held-out partition. It counts pairs with at least one shared deterministic association target and pairs with no shared target. This is only a **necessary-condition upper bound** for decoder candidates: a real Android candidate still requires both source synapses to activate and the shared association neuron to spike in the same turn. Pairs with no shared target cannot be decoded by the current topology, regardless of feedback labels or weight updates. Coverage must therefore be reviewed before interpreting model metrics.
+
 ## Faithfulness and limits
 
 The script mirrors the Android v4 concept projection formula (three outgoing edges, multiplier 37, slot step 113, salt 11, 1,000 association targets) and the bounded reward update (learning rate 0.02, per-event delta cap 0.01, weight range 0.05..1.0). Its sorted concept-ID slot assignment models a fresh V5 registry populated from the complete approved concept inventory. Android now persists mappings across later inventory changes; this offline proxy does not replay historical SQLite allocation chronology, so reports remain topology/weight proxies rather than exact database replays.
