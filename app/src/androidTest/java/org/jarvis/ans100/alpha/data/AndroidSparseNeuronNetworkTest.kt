@@ -991,7 +991,7 @@ class AndroidSparseNeuronNetworkTest {
             assertTrue(updated > 0)
             assertEquals(sources.size * 4, network.canonicalReadoutSynapseCount())
             assertEquals(
-                0,
+                sources.size,
                 network.recordCanonicalReadoutEligibility("canonical-turn-1", sources),
             )
             assertEquals(0, network.applyCanonicalReadoutFeedback(
