@@ -45,6 +45,7 @@ class ANS100ConceptMemory(
 
     private val concepts = LinkedHashMap<String, Concept>()
     private val relations = LinkedHashMap<String, Relation>()
+    private val neuralInputSlots = LinkedHashMap<String, Int>()
 
     init {
         require(maxConcepts in 1..MAX_CONCEPTS)
@@ -190,6 +191,22 @@ class ANS100ConceptMemory(
         return concepts.values.sortedBy { it.id }.take(limit)
     }
 
+    /**
+     * Assigns a stable input-population slot to a known concept for this memory
+     * instance. The reserved range is intentionally small and exhaustion is explicit.
+     */
+    @Synchronized
+    fun neuralInputNeuronId(conceptId: String): Int? {
+        require(conceptId in concepts) { "concept must exist before neural slot allocation" }
+        neuralInputSlots[conceptId]?.let { return it }
+        if (neuralInputSlots.size >= MAX_NEURAL_INPUT_SLOTS) return null
+        val neuronId = NEURAL_INPUT_START + neuralInputSlots.size
+        neuralInputSlots[conceptId] = neuronId
+        return neuronId
+    }
+
+    @Synchronized fun neuralInputSlotCount(): Int = neuralInputSlots.size
+
     @Synchronized fun conceptCount(): Int = concepts.size
     @Synchronized fun relationCount(): Int = relations.size
 
@@ -198,6 +215,8 @@ class ANS100ConceptMemory(
 
     companion object {
         const val MAX_CONCEPTS = 2_048
+        const val NEURAL_INPUT_START = 1_062
+        const val MAX_NEURAL_INPUT_SLOTS = 138
         const val MAX_RELATIONS = 8_192
         const val MAX_LABEL_CHARS = 96
         const val MAX_ALIASES = 16
