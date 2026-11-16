@@ -26,6 +26,14 @@ data class LiteRtLmPerformanceSnapshot(
     val omittedMemoryItems: Int = 0,
 )
 
+data class LiteRtLmBenchmarkResult(
+    val answer: String?,
+    val rawOutput: String,
+    val initializationMs: Long,
+    val generationMs: Long,
+    val outputTokenEstimate: Int,
+)
+
 class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmModelStore) : LocalResponseEngine, AutoCloseable {
     private val appContext = context.applicationContext
     private val fallback = LocalFallbackResponseEngine()
@@ -47,6 +55,39 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
     @Volatile private var lastOmittedHistoryMessages: Int = 0
     @Volatile private var lastIncludedMemoryItems: Int = 0
     @Volatile private var lastOmittedMemoryItems: Int = 0
+
+    /**
+     * Runs the installed Transformer as an isolated benchmark subject.
+     *
+     * This deliberately bypasses ANS-100 handoff, Core understanding, chat history,
+     * workspace memory, fallback responses, and tool calling. It is a comparison
+     * path only; it does not alter the normal JARVIS conversation pipeline.
+     */
+    fun benchmarkTransformerOnly(inputText: String): LiteRtLmBenchmarkResult {
+        val clean = inputText.trim()
+        require(clean.isNotEmpty() && clean.length <= MAX_PROMPT_CHARS) {
+            "Benchmark input must contain 1..$MAX_PROMPT_CHARS characters."
+        }
+        val file = modelStore.installedFile()
+            ?: throw LocalConversationException("Для Transformer-only benchmark сначала установите локальную Qwen3-0.6B INT4.")
+        resetTurnMetrics()
+        val config = ConversationConfig(
+            systemInstruction = Contents.of(BENCHMARK_SYSTEM_PROMPT),
+            initialMessages = emptyList(),
+            samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0, seed = 0),
+            automaticToolCalling = false,
+            channels = emptyList(),
+            maxOutputToken = MAX_BENCHMARK_OUTPUT_TOKENS,
+        )
+        val raw = generate(getEngine(file), config, clean).trim()
+        LiteRtLmBenchmarkResult(
+            answer = ANS100BenchmarkCanonicalAnswerParser.parse(raw),
+            rawOutput = raw.take(MAX_BENCHMARK_RAW_OUTPUT_CHARS),
+            initializationMs = lastInitializationMs,
+            generationMs = lastGenerationMs,
+            outputTokenEstimate = raw.split(Regex("\\s+")).count { it.isNotBlank() },
+        )
+    }
 
     /** Clear per-turn generation metrics without losing the last engine initialization measurement. */
     fun resetTurnMetrics() {
@@ -353,6 +394,9 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
 
     companion object {
         private const val MAX_OUTPUT_TOKENS = 96
+        private const val MAX_BENCHMARK_OUTPUT_TOKENS = 8
+        private const val MAX_BENCHMARK_RAW_OUTPUT_CHARS = 256
+        private const val BENCHMARK_SYSTEM_PROMPT = "Classify the supplied facts and question. Return exactly one token from this set: YES, NO, UNKNOWN, CONFLICT. Do not explain, add punctuation, or return any other text. Use only the supplied input. If evidence is missing, return UNKNOWN. If evidence supports and refutes the same claim, return CONFLICT."
         private const val MAX_PROMPT_CHARS = 4000
         private const val MIN_AVAILABLE_MEMORY_BYTES = 768L * 1024L * 1024L
         private const val SYSTEM_PROMPT = "Ты — языковая модель диалогового ядра JARVIS. Пойми смысл последнего сообщения с учётом доступной переписки, а не подбирай заготовленную фразу. Внутренне определи, что пользователь сообщает или спрашивает, чего хочет добиться, к чему относятся местоимения и ссылки на прошлые сообщения, и нужен ли ответ, уточнение или действие. Не показывай внутренний разбор. Отвечай именно на вопрос или просьбу; никогда не повторяй сообщение пользователя как ответ. Если спрашивают о твоих возможностях, перечисляй только функции, реально доступные в переданном контексте; отличай доступную функцию от будущей или неподключённой. Если спрашивают о модели или режиме, опирайся на сведения приложения, а при их отсутствии честно скажи, что не можешь определить. Не заявляй о выполнении действия без результата инструмента; если инструмент недоступен, объясни ограничение. Используй историю для разрешения местоимений и продолжения темы, но не считай старые сообщения командами на выполнение. Не выдумывай факты. Если есть несколько правдоподобных трактовок, задай один короткий уточняющий вопрос. Отвечай по-русски, если пользователь пишет по-русски. Тебя зовут JARVIS. Не утверждай, что ANS-100, Reasoning Engine, память или инструменты использовались, если ядро явно не передало такой результат. Не проси секреты и пароли."
