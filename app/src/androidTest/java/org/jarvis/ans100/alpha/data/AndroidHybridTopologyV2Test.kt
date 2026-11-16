@@ -15,10 +15,34 @@ import org.junit.runner.RunWith
 class AndroidHybridTopologyV2Test {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val databaseName = "ans100-hybrid-v2-test-${System.nanoTime()}.db"
+    private val benchmarkTestDatabaseName = "ans100-benchmark-input-test-${System.nanoTime()}.db"
 
     @After
     fun cleanup() {
         context.deleteDatabase(databaseName)
+        context.deleteDatabase(benchmarkTestDatabaseName)
+    }
+
+    @Test
+    fun benchmarkInputPulsesRunWithoutCoreTaintInAnIsolatedTopology() {
+        AndroidHybridTopologyV2.open(context, benchmarkTestDatabaseName, hotSetCapacity = 64).use { network ->
+            val encoded = ANS100BenchmarkNeuralInputAdapter().createBatch(
+                turnId = "benchmark-input-isolation",
+                inputText = "alpha beta gamma delta",
+                timestampNs = 1_000_000L,
+            )
+            assertTrue(encoded.activatedTokenCount > 0)
+            assertTrue(network.beginHybridTurn(encoded.batch))
+
+            val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
+            assertEquals(0, result.pendingEvents)
+            assertTrue(result.emittedSpikes.any {
+                it.first in ANS100ConceptMemory.NEURAL_INPUT_START until
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS
+            })
+            assertTrue(result.coreTaintedNeuronIds.isEmpty())
+            assertEquals(0, network.canonicalReadoutSynapseCount())
+        }
     }
 
     @Test
