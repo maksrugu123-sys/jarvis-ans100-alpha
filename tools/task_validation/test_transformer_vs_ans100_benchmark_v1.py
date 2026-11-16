@@ -87,8 +87,8 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
                 path.write_text("".join(json.dumps(row)+"\n" for row in rows),encoding="utf-8")
             dump(task_path,self.tasks)
             held_out=[t for t in self.tasks if t["split"] != "development"]
-            dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"latency_ms":100,"peak_memory_mb":512} for t in held_out])
-            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","latency_ms":20,"peak_memory_mb":64} for t in held_out])
+            dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"latency_ms":100,"peak_memory_mb":512,"peak_memory_delta_mb":80} for t in held_out])
+            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","latency_ms":20,"peak_memory_mb":64,"peak_memory_delta_mb":12} for t in held_out])
             report=compare_prediction_files(task_path,transformer_path,ans_path)
             self.assertEqual(report["transformer"]["accuracy_over_all_tasks"],1.0)
             self.assertEqual(report["ans100"]["accuracy_over_all_tasks"],0.0)
@@ -96,6 +96,8 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
             self.assertEqual(report["task_count"],len(held_out))
             self.assertEqual(report["excluded_training_splits"],["development"])
             self.assertEqual(report["ans100"]["peak_memory_mb"]["max"],64)
+            self.assertEqual(report["transformer"]["peak_memory_delta_mb"]["max"],80)
+            self.assertEqual(report["ans100"]["peak_memory_delta_mb"]["max"],12)
 
 if __name__ == "__main__":
     unittest.main()
