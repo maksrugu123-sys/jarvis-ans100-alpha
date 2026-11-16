@@ -70,11 +70,20 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
         val network = AndroidSparseNeuronNetwork(context, name)
         try {
             network.initializeHybridTopologyV2()
-            val slots = network.resolveConceptInputSlots(listOf("concept:first", "concept:second"))
-            val first = slots.getValue("concept:first")
-            val second = slots.getValue("concept:second")
-            val firstProjection = AndroidHybridTopologyV2.conceptAssociationProjection(first)
-            val secondProjection = AndroidHybridTopologyV2.conceptAssociationProjection(second)
+            val concepts = (0 until 96).map { "concept:test-$it" }
+            val slots = network.resolveConceptInputSlots(concepts)
+            val pair = slots.entries.toList().let { entries ->
+                entries.indices.asSequence().flatMap { left ->
+                    (left + 1 until entries.size).asSequence().map { right ->
+                        entries[left] to entries[right]
+                    }
+                }.first { (left, right) ->
+                    AndroidHybridTopologyV2.conceptAssociationTargets(left.value)
+                        .intersect(AndroidHybridTopologyV2.conceptAssociationTargets(right.value)).isNotEmpty()
+                }
+            }
+            val firstProjection = AndroidHybridTopologyV2.conceptAssociationProjection(pair.first.value)
+            val secondProjection = AndroidHybridTopologyV2.conceptAssociationProjection(pair.second.value)
             val target = firstProjection.keys.intersect(secondProjection.keys).first()
             val connectionIds = listOf(firstProjection.getValue(target), secondProjection.getValue(target))
             val before = network.neuralAssociationWeights(connectionIds)
