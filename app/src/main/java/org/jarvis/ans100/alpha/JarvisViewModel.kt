@@ -509,6 +509,15 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+
+    /** Starts the ANS-100 benchmark from an empty, isolated learning database. */
+    fun resetAns100OnlyBenchmark(onComplete: (Result<Unit>) -> Unit) {
+        benchmarkExecutor.execute {
+            val result = runCatching { ans100BenchmarkRuntime.resetLearnedState() }
+            mainHandler.post { onComplete(result) }
+        }
+    }
+
     fun setGpuEnabled(enabled: Boolean) {
         val before = mutableState.value
         if (before.conversation.isBusy || before.conversation.gpuEnabled == enabled) return
