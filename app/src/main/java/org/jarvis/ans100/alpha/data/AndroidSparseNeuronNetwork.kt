@@ -2237,14 +2237,24 @@ private class AndroidNeuronSqliteStore(
             throw AndroidNeuronNetworkException("neural association weight query is outside its bounds")
         val placeholders = List(connectionIds.size) { "?" }.joinToString(",")
         val result = LinkedHashMap<String, Double>()
-        readableDatabase.rawQuery("SELECT connection_id, weight, source_id, target_id FROM connections WHERE connection_id IN ($placeholders)",
-            connectionIds.toTypedArray()).use { cursor ->
+        readableDatabase.rawQuery(
+            "SELECT c.connection_id, c.weight, c.source_id, c.target_id, " +
+                "CASE WHEN r.connection_id IS NULL THEN 0 ELSE 1 END " +
+                "FROM connections c LEFT JOIN structural_synapse_registry r " +
+                "ON r.connection_id=c.connection_id WHERE c.connection_id IN ($placeholders)",
+            connectionIds.toTypedArray(),
+        ).use { cursor ->
             while (cursor.moveToNext()) {
+                val connectionId = cursor.getString(0)
+                val fixedProjection = connectionId.startsWith("ans100-v4-evidence-general-association-")
+                val registeredGrownSynapse = connectionId.startsWith("ans100-v5-grown-association-") &&
+                    cursor.getInt(4) == 1
                 if (cursor.getInt(2) !in ANS100ConceptMemory.NEURAL_INPUT_START until
                     ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS ||
-                    cursor.getInt(3) !in 1_200 until 2_200)
-                    throw AndroidNeuronNetworkException("stored synapse is outside concept-association projection")
-                result[cursor.getString(0)] = cursor.getDouble(1)
+                    cursor.getInt(3) !in 1_200 until 2_200 ||
+                    (!fixedProjection && !registeredGrownSynapse))
+                    throw AndroidNeuronNetworkException("stored synapse is outside registered concept-association projection")
+                result[connectionId] = cursor.getDouble(1)
             }
         }
         return result
