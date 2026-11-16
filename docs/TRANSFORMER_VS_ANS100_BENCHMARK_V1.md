@@ -82,7 +82,7 @@ Generate the shared task set:
 python3 -m tools.task_validation.transformer_vs_ans100_benchmark_v1 generate --output benchmark/transformer_vs_ans100_tasks.jsonl
 ```
 
-Each system must produce JSONL rows with `task_id`, `answer`, `latency_ms`, and `peak_memory_mb`. Resource fields may be omitted when not measured; do not invent values. The answer must be one of YES, NO, UNKNOWN, CONFLICT (or a documented canonical alias).
+Each system must produce JSONL rows with `task_id`, `answer`, `latency_ms`, and `peak_memory_mb`. Resource fields may be omitted when not measured; do not invent values. The Android runner samples process-wide PSS every 20 ms during each inference and records `memory_baseline_pss_mb`, `peak_memory_mb`, `peak_memory_delta_mb`, and `memory_sample_interval_ms`. PSS includes the app, runtime, loaded model/network and shared process allocations; it is not per-model heap attribution. Compare peak PSS and delta together, and treat measurements as sampled peaks (brief spikes between samples may be missed). The answer must be one of YES, NO, UNKNOWN, CONFLICT (or a documented canonical alias).
 
 Score both prediction files against the exact same task file. Prediction files must contain one row for every held-out task (including explicit null answers for abstentions); development rows are training-only and must not appear:
 
@@ -113,7 +113,7 @@ For every held-out row, the app now also exposes a batch entry point, `runPaired
 
 For development training, call `resetAns100OnlyBenchmark` first, then `trainAns100DevelopmentBatch(examples, onProgress, onComplete)`. This accepts only unique `development:` IDs, bounded inputs, and canonical labels. It passes the label separately from the text to the isolated ANS-100 runtime. Never include a training label in the input text.
 
-The ANS-100 settings panel now includes a benchmark workflow: choose the development-training JSONL and held-out-input JSONL using Android's document picker, then start the experiment. The app resets the isolated ANS-100 database, trains only on development rows, runs both systems on all held-out rows, and asks where to save `transformer_predictions.jsonl` and `ans100_predictions.jsonl`. The JSONL reader checks schema, unique IDs, split prefixes, input length, SHA-256, and rejects held-out files containing gold labels or split metadata. Output rows preserve explicit null answers and inference errors. Pause/resume and durable in-app experiment history are not implemented.
+The ANS-100 settings panel now includes a benchmark workflow: choose the development-training JSONL and held-out-input JSONL using Android's document picker, then start the experiment. The app resets the isolated ANS-100 database, trains only on development rows, runs both systems on all held-out rows, samples process PSS during each inference, and asks where to save `transformer_predictions.jsonl` and `ans100_predictions.jsonl`. The JSONL reader checks schema, unique IDs, split prefixes, input length, SHA-256, and rejects held-out files containing gold labels or split metadata. Output rows preserve explicit null answers and inference errors. Pause/resume and durable in-app experiment history are not implemented.
 
 The benchmark database is deliberately separate from the production ANS-100 network. Do not change this boundary or pass benchmark labels through the ordinary production feedback API.
 
