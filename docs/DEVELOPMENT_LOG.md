@@ -3001,3 +3001,27 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Preserved the original absolute evidence-input offset when splitting concept input edges to use the 0.75 starting weight. Connection IDs and target mapping remain identical to the pre-learning topology.
 - Tightened SQLite eligibility validation: each convergent association target must have exactly two distinct concept-input source synapses, and non-concept evidence edges are rejected.
 - Added regression coverage for initial concept weights and v3 migration headroom. Tests remain NOT RUN.
+
+
+## Android ANS-100 held-out concept-association evaluation protocol — 2026-11-16
+
+**Objective:** establish a leakage-resistant research gate before learned concept-association weights can influence live decision competition.
+
+**Added on `experiment/jarvis-integrated-prototype-v1`:**
+- `tools/task_validation/neural_association_eval_v1.py` — bounded JSONL dataset validation, trusted-label enforcement, deterministic pair-disjoint and concept-disjoint splits, exact source-constant projection mapping, bounded reward updates, training-only threshold selection, and four matched evaluation conditions.
+- `tools/task_validation/test_neural_association_eval_v1.py` — synthetic protocol fixtures for topology mapping, split leakage, label-source rejection, duplicate-pair rejection, update bounds, deterministic evaluation, and the closed promotion gate.
+- `docs/ANS100_NEURAL_ASSOCIATION_EVAL_V1.md` — dataset contract, split protocol, baselines, metrics, commands and interpretation limits.
+- `docs/JARVIS_ARCHITECTURE.md` — Phase 6 status and explicit offline-proxy fidelity boundary.
+
+**Experimental design:**
+- Pair-disjoint stratified split prevents the same unordered pair appearing in both training and held-out sets.
+- Concept-disjoint split evaluates pairs made only from concepts absent from training; cross-partition pairs are excluded and counted.
+- Training-only threshold selection prevents held-out tuning.
+- Conditions: learned feedback, fixed weights, shuffled training labels and deterministic random weights.
+- Metrics: accuracy, balanced accuracy, precision, recall, specificity, F1 and confusion matrix, with per-seed results.
+
+**Verification:** source and documentation are AUTHORED / NOT RUN. No actual user-verified dataset is present, so no task-performance result is claimed. Synthetic labels exist only inside unit tests to validate protocol mechanics. Python tests and benchmarks were NOT RUN. No Gradle build, APK, CI, GitHub Actions workflow, or device inference was run.
+
+**Interpretation / gate:** the score is an offline topology/weight proxy, not an Android LIF replay or calibrated probability. The promotion gate remains CLOSED; learned weights remain excluded from live answer/decision competition. A real dataset and a separate Android runtime replay/ablation are still required.
+
+**Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched. Automatic workflows remain `workflow_dispatch` only.
