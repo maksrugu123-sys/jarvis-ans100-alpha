@@ -85,24 +85,27 @@ def _make_conflict_task(seed: int, index: int, split: str) -> dict[str, Any]:
     question = f"Classify the evidence about the claim that {a} connects to {b}. Answer exactly YES, NO, CONFLICT, or UNKNOWN."
     return _task(seed, split, "evidence_conflict", index, facts, question, expected)
 
-def build_tasks(seeds: Iterable[int] = SEEDS, tasks_per_family: int = 12) -> list[dict[str, Any]]:
+def build_tasks(seeds: Iterable[int] = SEEDS, tasks_per_split: int = 12) -> list[dict[str, Any]]:
     seed_list = tuple(seeds)
     if not seed_list or len(seed_list) != len(set(seed_list)):
         raise ValueError("at least one unique seed is required")
-    if not 1 <= tasks_per_family <= 1000:
-        raise ValueError("tasks_per_family must be in 1..1000")
+    if not 1 <= tasks_per_split <= 1000:
+        raise ValueError("tasks_per_split must be in 1..1000")
     tasks = []
     for seed in seed_list:
         for split in SPLITS:
-            for index in range(tasks_per_family):
+            for index in range(tasks_per_split):
+                # Keep the vocabulary shared but ensure queried pairs are disjoint
+                # between development and pair-disjoint evaluation.
+                effective_index = index + (tasks_per_split if split == "pair_disjoint" else 0)
                 if split == "compositional":
-                    tasks.append(_make_two_hop_task(seed, index, split))
-                elif index % 3 == 0:
-                    tasks.append(_make_relation_task(seed, index, split))
-                elif index % 3 == 1:
-                    tasks.append(_make_conflict_task(seed, index, split))
+                    tasks.append(_make_two_hop_task(seed, effective_index, split))
+                elif effective_index % 3 == 0:
+                    tasks.append(_make_relation_task(seed, effective_index, split))
+                elif effective_index % 3 == 1:
+                    tasks.append(_make_conflict_task(seed, effective_index, split))
                 else:
-                    tasks.append(_make_two_hop_task(seed, index, split))
+                    tasks.append(_make_two_hop_task(seed, effective_index, split))
     ids = [task["task_id"] for task in tasks]
     if len(ids) != len(set(ids)):
         raise AssertionError("task IDs are not unique")
@@ -212,7 +215,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command",required=True)
     generate = sub.add_parser("generate",help="create the shared benchmark task set")
     generate.add_argument("--output",type=Path,default=Path("benchmark/transformer_vs_ans100_tasks.jsonl"))
-    generate.add_argument("--tasks-per-family",type=int,default=12)
+    generate.add_argument("--tasks-per-split",type=int,default=12)
     score = sub.add_parser("score",help="score predictions from both systems")
     score.add_argument("--tasks",type=Path,required=True)
     score.add_argument("--transformer",type=Path,required=True)
@@ -220,7 +223,7 @@ def main() -> None:
     score.add_argument("--report",type=Path,default=Path("benchmark/transformer_vs_ans100_report.json"))
     args = parser.parse_args()
     if args.command == "generate":
-        tasks=build_tasks(tasks_per_family=args.tasks_per_family)
+        tasks=build_tasks(tasks_per_split=args.tasks_per_split)
         write_jsonl(args.output,tasks)
         print(json.dumps({"status":"TASKS_GENERATED","path":str(args.output),"task_count":len(tasks),
             "splits":list(SPLITS),"families":list(FAMILIES),
