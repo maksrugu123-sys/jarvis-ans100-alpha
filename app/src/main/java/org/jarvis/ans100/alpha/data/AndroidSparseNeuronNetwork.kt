@@ -816,6 +816,7 @@ private class AndroidNeuronSqliteStore(
         createNeuralAssociationLearningTables(db)
         createConceptInputSlotTable(db)
         createStructuralSynapseRegistry(db)
+        createStructuralSynapseFeedbackTable(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
         )
@@ -858,6 +859,7 @@ private class AndroidNeuronSqliteStore(
             db.delete("neural_association_feedback_events", null, null)
         }
         if (oldVersion < 6) createStructuralSynapseRegistry(db)
+        if (oldVersion < 7) createStructuralSynapseFeedbackTable(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -880,6 +882,9 @@ private class AndroidNeuronSqliteStore(
     private fun createStructuralSynapseRegistry(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS structural_synapse_registry (connection_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, first_concept_id TEXT NOT NULL, second_concept_id TEXT NOT NULL, created_at_ms INTEGER NOT NULL, last_adjusted_at_ms INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX IF NOT EXISTS structural_synapse_proposal_idx ON structural_synapse_registry(proposal_id)")
+    }
+
+    private fun createStructuralSynapseFeedbackTable(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS structural_synapse_feedback_events (feedback_id TEXT NOT NULL, proposal_id TEXT NOT NULL, delta REAL NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(feedback_id, proposal_id))")
     }
 
@@ -2092,7 +2097,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 6
+        private const val DATABASE_VERSION = 7
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
