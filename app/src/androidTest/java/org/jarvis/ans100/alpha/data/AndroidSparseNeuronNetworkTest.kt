@@ -1056,6 +1056,18 @@ class AndroidSparseNeuronNetworkTest {
             }
             assertTrue(rejected)
             assertEquals(0, network.recordCanonicalReadoutEligibility("empty-canonical-turn", emptyList()))
+            var untrustedFeedbackRejected = false
+            try {
+                network.applyCanonicalReadoutFeedback(
+                    feedbackId = "untrusted-canonical-feedback",
+                    turnId = "empty-canonical-turn",
+                    answer = ANS100CanonicalReadoutContract.Answer.YES,
+                    source = ANS100CandidateFeedbackLearner.FeedbackSource.MODEL_GENERATED,
+                )
+            } catch (_: IllegalArgumentException) {
+                untrustedFeedbackRejected = true
+            }
+            assertTrue(untrustedFeedbackRejected)
         }
     }
 
