@@ -10,6 +10,7 @@ import java.util.UUID
  */
 class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     private val appContext = context.applicationContext
+    private var lastNetworkInitializationNs = 0L
     private var network = openNetwork()
     private val inputAdapter = ANS100BenchmarkNeuralInputAdapter()
     private val decoder = ANS100CanonicalReadoutDecoder()
@@ -25,6 +26,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         val cleanSourceSpikeCount: Int,
         val processedEvents: Int,
         val inferenceDurationNs: Long,
+        val networkInitializationDurationNs: Long,
         val learnedSynapseCount: Int,
         val trainingApplied: Boolean,
         val completed: Boolean,
@@ -107,6 +109,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             cleanSourceSpikeCount = cleanSourceSpikes.size,
             processedEvents = processed,
             inferenceDurationNs = (System.nanoTime() - startedAtNs).coerceAtLeast(0L),
+            networkInitializationDurationNs = lastNetworkInitializationNs,
             learnedSynapseCount = network.canonicalReadoutSynapseCount(),
             trainingApplied = trainingApplied,
             completed = completed,
@@ -123,10 +126,17 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         network = openNetwork()
     }
 
-    private fun openNetwork() = AndroidHybridTopologyV2.open(
-        appContext,
-        AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME,
-    )
+    private fun openNetwork(): AndroidSparseNeuronNetwork {
+        val startedAtNs = System.nanoTime()
+        return try {
+            AndroidHybridTopologyV2.open(
+                appContext,
+                AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME,
+            )
+        } finally {
+            lastNetworkInitializationNs = (System.nanoTime() - startedAtNs).coerceAtLeast(0L)
+        }
+    }
 
     override fun close() = network.close()
 
