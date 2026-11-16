@@ -96,7 +96,8 @@ def predictions_from_traces(traces, inputs):
         seen.add(task_id)
         if row["input_sha256"] != by_id[task_id]["input_sha256"]: raise ValueError(f"{task_id}: input hash mismatch")
         answer = row.get("answer")
-        if answer is None: continue
+        # Preserve null as an explicit abstention so the scorer can distinguish it
+        # from a missing prediction row.
         item = {"task_id": task_id, "answer": answer}
         measured = row.get("measurement", {})
         if not isinstance(measured, dict): raise ValueError(f"{task_id}: invalid measurement")
