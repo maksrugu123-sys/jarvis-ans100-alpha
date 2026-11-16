@@ -153,6 +153,7 @@ class ANS100ActivityDrivenStructuralPlasticity(
 
         val ordered = activeConcepts.sortedBy { it.conceptId }
         val localLoads = HashMap(targetIncomingEdgeCounts)
+        val localTargets = existingTargetsByConceptNeuron.mapValues { it.value.toMutableSet() }.toMutableMap()
         var considered = 0
         var blocked = 0
         val proposals = ArrayList<GrowthProposal>()
@@ -162,8 +163,8 @@ class ANS100ActivityDrivenStructuralPlasticity(
                 considered++
                 val left = ordered[leftIndex]
                 val right = ordered[rightIndex]
-                val leftTargets = existingTargetsByConceptNeuron[left.neuronId].orEmpty()
-                val rightTargets = existingTargetsByConceptNeuron[right.neuronId].orEmpty()
+                val leftTargets = localTargets[left.neuronId].orEmpty()
+                val rightTargets = localTargets[right.neuronId].orEmpty()
                 if (leftTargets.intersect(rightTargets).isNotEmpty()) continue
 
                 val key = PairKey(left.conceptId, right.conceptId)
@@ -195,6 +196,8 @@ class ANS100ActivityDrivenStructuralPlasticity(
                     continue
                 }
                 proposals += createProposal(trace, target, turnId)
+                localTargets.getOrPut(left.neuronId) { LinkedHashSet() }.add(target)
+                localTargets.getOrPut(right.neuronId) { LinkedHashSet() }.add(target)
                 localLoads[target] = (localLoads[target] ?: 0) + 2
                 grownPairs += key
                 grownEdgesByConcept[left.conceptId] = (grownEdgesByConcept[left.conceptId] ?: 0) + 1
