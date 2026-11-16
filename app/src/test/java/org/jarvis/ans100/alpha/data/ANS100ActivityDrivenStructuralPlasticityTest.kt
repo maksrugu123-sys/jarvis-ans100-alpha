@@ -69,7 +69,7 @@ class ANS100ActivityDrivenStructuralPlasticityTest {
     fun newTargetAvoidsEitherSourcesExistingTargetsAndUsesLeastLoadedCompetition() {
         val learner = ANS100ActivityDrivenStructuralPlasticity()
         val existing = mapOf(1_062 to setOf(1_250, 1_251), 1_063 to setOf(1_260))
-        val loads = mapOf(1_200 to 4, 1_201 to 2, 1_202 to 0)
+        val loads = (1_200 until 2_200).associateWith { 1 }.toMutableMap().apply { put(1_202, 0) }
         repeat(2) { observe(learner, "turn-$it", existing = existing, loads = loads) }
         val proposal = observe(learner, "turn-2", existing = existing, loads = loads).emittedProposals.single()
         assertNotEquals(1_250, proposal.targetNeuronId)
