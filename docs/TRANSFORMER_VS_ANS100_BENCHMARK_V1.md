@@ -109,12 +109,16 @@ Export held-out inputs without gold labels or split metadata:
 python3 -m tools.task_validation.ans100_benchmark_adapter_v1 export-evaluation-inputs --tasks benchmark/transformer_vs_ans100_tasks.jsonl --output benchmark/held_out_inputs.jsonl
 ```
 
-For every held-out row, call `runPairedBenchmarkTask(task_id, input_text)`. It runs both systems sequentially and returns separate success/failure results, preserving abstentions as null answers. Persist the canonical answer (or null), task ID, and measured latency. Score against the original task file only after both prediction files are complete. Reset the ANS-100 benchmark database before each independent run. The Qwen-only path has no training-label parameter.
+For every held-out row, the app now also exposes a batch entry point, `runPairedBenchmarkBatch(inputs, onProgress, onComplete)`. Supply only `taskId` and `inputText` from the held-out export. It accepts up to 1,000 unique rows, runs both models sequentially on the shared conversation executor, alternates model order, and reports each task's independent success/failure result through progress callbacks. A failed or unparseable answer must be written as an explicit null answer, not omitted.
+
+For development training, call `resetAns100OnlyBenchmark` first, then `trainAns100DevelopmentBatch(examples, onProgress, onComplete)`. This accepts only unique `development:` IDs, bounded inputs, and canonical labels. It passes the label separately from the text to the isolated ANS-100 runtime. Never include a training label in the input text.
+
+The batch APIs currently return results to their callbacks; a dedicated in-app file picker, pause/resume, and automatic JSONL import/export/persistence are not implemented yet. Until those exist, a benchmark screen or instrumentation harness must persist the returned per-task values into the two prediction JSONL files. Score against the original task file only after both prediction files contain exactly one row for every held-out task. Reset the ANS-100 benchmark database before each independent run. The Qwen-only path has no training-label parameter.
 
 The benchmark database is deliberately separate from the production ANS-100 network. Do not change this boundary or pass benchmark labels through the ordinary production feedback API.
 
 ## Android Transformer-only entry point
 
-The app-side API is intended for a future benchmark screen or instrumentation harness. Call `runTransformerOnlyBenchmark` once per exported input row, persist the returned `answer` (including null when parsing fails), `generationMs`, and task ID in a prediction JSONL file. Do not pass the expected answer or any ANS-100 output to this method. The current API handles one input per call; batch orchestration and app-side JSONL import/export remain future work.
+The app-side API is intended for a benchmark screen or instrumentation harness. The paired batch API invokes the Qwen-only engine once per exported held-out row and returns its parsed answer (including null when parsing fails), initialization time, and generation time alongside ANS-100 measurements. Do not pass the expected answer or any ANS-100 output to the Transformer method. App-side JSONL import/export and durable persistence remain future work.
 
 A null parsed answer is an abstention/unscorable output, not a guessed label. Do not treat a missing local model or inference exception as a model answer. Record failures separately and keep the same task set for both systems.
