@@ -49,6 +49,10 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
         self.assertTrue(pairs("pair_disjoint"))
         self.assertTrue(pairs("development").isdisjoint(pairs("pair_disjoint")))
 
+    def test_generator_rejects_custom_count_that_breaks_pair_disjoint_contract(self):
+        with self.assertRaises(ValueError):
+            build_tasks(seeds=SEEDS[:1], tasks_per_split=4)
+
     def test_scorer_rejects_duplicate_or_invalid_source_tasks(self):
         duplicate = self.tasks + [dict(self.tasks[0])]
         with self.assertRaises(ValueError):
