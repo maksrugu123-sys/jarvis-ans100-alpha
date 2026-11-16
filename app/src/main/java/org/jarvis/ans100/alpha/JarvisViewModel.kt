@@ -1093,11 +1093,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     )
                     val neuralHypotheses = neuralHypothesisEngine.observeTurn(
                         turnId = turnId,
-                        activeConceptIds = batch.conceptTrace.map { it.conceptId }.toSet(),
+                        activeConceptIds = neuralAssociationResult.observedConceptIds.toSet(),
                         candidates = neuralAssociationResult.candidates,
                         completed = !result.budgetExhausted && result.pendingEvents == 0,
-                        pairScanComplete = neuralAssociationResult.activeConceptCount == batch.conceptTrace.size &&
-                            neuralAssociationResult.consideredPairCount <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES,
+                        pairScanComplete = neuralAssociationResult.pairScanComplete &&
+                            neuralAssociationResult.candidateSetComplete,
                     )
                     // A failed checkpoint must never fail the user-facing turn.
                     val neuralHypothesisStatePersisted = runCatching {
