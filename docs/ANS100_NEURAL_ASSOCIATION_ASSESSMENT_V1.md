@@ -17,6 +17,8 @@ SQLite enforces uniqueness for both (candidate, task ID) and (candidate, indepen
 
 An inconclusive or missing reproduction is not a contradiction. Only decisive reproduced/contradicted outcomes contribute to the stability ratio.
 
+The held-out benchmark adapter accepts only `pair_disjoint`, `concept_disjoint`, or `compositional` splits and direct-pair task families (`relation_status`, `evidence_conflict`). It requires an explicit independence key from the harness. Multi-hop reachability tasks are not treated as direct semantic-pair labels. `YES` plus an observed neural candidate is a reproduction; `NO` plus an observed candidate is a contradiction. If the candidate is absent, or the label is `UNKNOWN`/`CONFLICT`, the outcome is inconclusive.
+
 ## Assessment policy
 
 - Fewer than three decisive independent outcomes: `INSUFFICIENT_EVIDENCE`.
@@ -45,7 +47,7 @@ A feedback event that does not change a weight does not create a fictitious chan
 
 ## Remaining integration work
 
-The assessment API and SQLite persistence are now available to a controlled held-out evaluation harness. The latest explicit feedback is automatically compared with persisted task outcomes. The current conversation path does not yet automatically turn arbitrary live dialogue turns into independent labelled task outcomes. That must be wired only through benchmark tasks with explicit labels and documented independence keys; ordinary model output must never be treated as ground truth.
+A held-out benchmark adapter now maps direct-pair task outcomes to assessment observations without treating missing activations as negative evidence. The assessment API and SQLite persistence are available to a controlled held-out evaluation harness. The latest explicit feedback is automatically compared with persisted task outcomes. The current conversation path does not yet automatically turn arbitrary live dialogue turns into independent labelled task outcomes. That must be wired only through benchmark tasks with explicit labels and documented independence keys; ordinary model output must never be treated as ground truth.
 
 ## Verification state
 
