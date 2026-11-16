@@ -18,6 +18,7 @@ object AndroidHybridTopologyV2 {
     const val TOPOLOGY_ID = "ans100-hybrid-v2"
     const val TOPOLOGY_VERSION = 5
     const val DATABASE_NAME = "jarvis_ans100_hybrid_v4.db"
+    const val BENCHMARK_DATABASE_NAME = "jarvis_ans100_benchmark_v1.db"
     const val NEURON_COUNT = 10_000
     const val MAX_CONNECTION_COUNT = 100_000
     const val EXPECTED_CONNECTION_COUNT = 25_500
