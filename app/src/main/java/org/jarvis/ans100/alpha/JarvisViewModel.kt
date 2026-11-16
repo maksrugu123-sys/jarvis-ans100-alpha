@@ -56,6 +56,8 @@ import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisEngine
 import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisLedger
 import org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceAdapter
+import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutContract
+import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutDecoder
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceStore
 import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
@@ -67,6 +69,11 @@ data class NeuralAssociationFeedbackUi(
     val candidateId: String,
     val firstLabel: String,
     val secondLabel: String,
+)
+
+data class CanonicalReadoutFeedbackUi(
+    val predictedAnswer: String,
+    val spikeCountsSummary: String,
 )
 
 data class LocalConversationUiState(
@@ -83,6 +90,7 @@ data class LocalConversationUiState(
     val hybridFeedbackAvailable: Boolean = false,
     val hybridFeedbackMessage: String? = null,
     val neuralAssociationFeedback: NeuralAssociationFeedbackUi? = null,
+    val canonicalReadoutFeedback: CanonicalReadoutFeedbackUi? = null,
     val modelInitializationMs: Long = 0L,
     val responseGenerationMs: Long = 0L,
     val lastTurnDurationMs: Long = 0L,
@@ -200,6 +208,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     /** One explicit rating may train the top neural association candidate from the same turn. */
     @Volatile private var latestNeuralAssociationFeedback: Triple<String, String, String>? = null
     @Volatile private var pendingNeuralAssociationFeedbackUi: NeuralAssociationFeedbackUi? = null
+    /** One explicit class label may train only the latest isolated canonical readout trace. */
+    @Volatile private var latestCanonicalReadoutFeedback: Pair<String, String>? = null
+    @Volatile private var pendingCanonicalReadoutFeedbackUi: CanonicalReadoutFeedbackUi? = null
     @Volatile private var conversationGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
@@ -670,6 +681,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         latestHybridFeedback = null
         latestNeuralAssociationFeedback = null
         pendingNeuralAssociationFeedbackUi = null
+        latestCanonicalReadoutFeedback = null
+        pendingCanonicalReadoutFeedbackUi = null
         mutableState.value = before.copy(
             conversation = before.conversation.copy(
                 isBusy = true,
@@ -678,6 +691,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 hybridFeedbackAvailable = false,
                 hybridFeedbackMessage = null,
                 neuralAssociationFeedback = null,
+                canonicalReadoutFeedback = null,
             ),
         )
         if (searchIntent != null || searchCapabilityQuestion) {
@@ -820,6 +834,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             hybridFeedbackAvailable = latestHybridFeedback != null,
                             hybridFeedbackMessage = null,
                             neuralAssociationFeedback = pendingNeuralAssociationFeedbackUi,
+                            canonicalReadoutFeedback = pendingCanonicalReadoutFeedbackUi,
                             modelInitializationMs = modelMetrics.initializationMs,
                             responseGenerationMs = modelMetrics.generationMs,
                             lastTurnDurationMs = elapsedMs,
@@ -925,6 +940,46 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         "Связь понятий сохранена: обновлено синапсов — $updated."
                     } else {
                         "Оценка связи принята, но подходящих следов для обучения нет."
+                    },
+                ))
+            }
+        }
+    }
+
+    /**
+     * Explicitly labels the latest isolated neural readout trace. The selected
+     * class is training supervision, never a model-generated reward signal.
+     */
+    fun rateCanonicalReadout(correctAnswer: String) {
+        val trace = latestCanonicalReadoutFeedback ?: return
+        val answer = ANS100CanonicalReadoutContract.Answer.values()
+            .firstOrNull { it.wireValue == correctAnswer } ?: return
+        latestCanonicalReadoutFeedback = null
+        pendingCanonicalReadoutFeedbackUi = null
+        mutableState.value = mutableState.value.copy(
+            conversation = mutableState.value.conversation.copy(
+                canonicalReadoutFeedback = null,
+                hybridFeedbackMessage = "Сохраняю метку для нейронного считывателя…",
+            ),
+        )
+        hybridNetworkExecutor.execute {
+            val updated = runCatching {
+                hybridNeuronNetwork.applyCanonicalReadoutFeedback(
+                    feedbackId = trace.second,
+                    turnId = trace.first,
+                    answer = answer,
+                    source = org.jarvis.ans100.alpha.data.ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+                )
+            }.getOrDefault(0)
+            val total = runCatching { hybridNeuronNetwork.canonicalReadoutSynapseCount() }.getOrDefault(0)
+            mainHandler.post {
+                val current = mutableState.value
+                mutableState.value = current.copy(conversation = current.conversation.copy(
+                    canonicalReadoutFeedback = null,
+                    hybridFeedbackMessage = if (updated > 0) {
+                        "Метка сохранена: обновлено синапсов — $updated; всего в считывателе — $total."
+                    } else {
+                        "Метка принята, но пригодных нейронных следов для обучения нет."
                     },
                 ))
             }
@@ -1265,6 +1320,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         latestHybridFeedback = null
         latestNeuralAssociationFeedback = null
         pendingNeuralAssociationFeedbackUi = null
+        latestCanonicalReadoutFeedback = null
+        pendingCanonicalReadoutFeedbackUi = null
         val before = mutableState.value
         if (before.conversation.isBusy || before.conversation.messages.isEmpty()) return
         mutableState.value = before.copy(
