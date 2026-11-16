@@ -108,6 +108,14 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             score_predictions(self.tasks,[{"task_id":"not-a-task","answer":"YES"}],"unknown")
 
+    def test_report_exposes_per_seed_results(self):
+        report = score_predictions(self.tasks, [], "empty")
+        self.assertEqual(set(report["per_seed"]), {str(seed) for seed in SEEDS[:2]})
+        for result in report["per_seed"].values():
+            self.assertEqual(result["tasks"], 24)
+            self.assertEqual(result["correct"], 0)
+            self.assertEqual(result["accuracy"], 0.0)
+
     def test_paired_comparison_uses_same_tasks_and_reports_resources(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
