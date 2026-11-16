@@ -1005,10 +1005,15 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     // Decode only associations supported by actual shared spikes
                     // in the general association population; no symbolic relation
                     // hypotheses are fed into this neural candidate path.
+                    val learnedAssociationConnections =
+                        hybridNeuronNetwork.structuralAssociationConnections(
+                            batch.conceptTrace.map { it.neuronId },
+                        )
                     val neuralAssociationResult = ANS100NeuralAssociationDecoder().decode(
                         conceptTrace = batch.conceptTrace,
                         emittedSpikeNeuronIds = emittedSpikeNeuronIds,
                         activatedConnectionIds = activatedConnectionIds,
+                        grownConnections = learnedAssociationConnections,
                     )
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
