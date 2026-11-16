@@ -50,7 +50,9 @@ The training export contains labels from development only. The held-out export c
 3. Select `ans100_development_training.jsonl` as development input.
 4. Select `held_out_inputs.jsonl` as held-out input.
 5. Start the primary comparison. The app resets only the isolated structured ANS-100 benchmark database, trains structured ANS-100 on development rows, and runs Qwen plus structured ANS-100 on each identical held-out input.
-6. Save the generated transformer and ANS-100 JSONL files without editing their contents.
+6. Save the generated transformer and ANS-100 JSONL files without editing their contents. Each prediction row carries the SHA-256 digest of the exact held-out input supplied to both systems; the scorer checks this digest against the source task before scoring.
+
+The current paired runner deliberately requests a cold start for each model on each task. Initialization time is reported separately from generation/inference time; these measurements are not a warm steady-state throughput benchmark.
 
 The separate ANS-100 encoding experiment compares lexical-hash and role-structured input encoders. It is a diagnostic control, not the primary transformer comparison.
 
@@ -64,7 +66,7 @@ python3 -m tools.task_validation.transformer_vs_ans100_benchmark_v1 score \
   --report benchmark/transformer_vs_ans100_report.json
 ```
 
-Review overall accuracy, accuracy by split/family/seed, coverage, abstentions, missing rows, paired task outcomes, initialization latency, inference latency, and memory measurements. Missing predictions and explicit abstentions do not receive credit.
+Review overall accuracy, accuracy by split/family/seed, coverage, abstentions, missing rows, paired task outcomes, verified input-hash counts, initialization latency, inference latency, and memory measurements. A supplied input hash that differs from the source task is rejected. Non-null predictions outside the canonical answer set are rejected rather than counted as answered. Missing predictions and explicit abstentions do not receive credit.
 
 ## Resource measurement limits
 
