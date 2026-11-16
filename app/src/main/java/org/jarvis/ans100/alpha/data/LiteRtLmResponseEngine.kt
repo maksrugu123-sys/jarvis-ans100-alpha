@@ -32,6 +32,10 @@ data class LiteRtLmBenchmarkResult(
     val initializationMs: Long,
     val generationMs: Long,
     val outputTokenEstimate: Int,
+    val memoryBaselinePssMb: Double? = null,
+    val peakMemoryPssMb: Double? = null,
+    val peakMemoryDeltaMb: Double? = null,
+    val memorySampleIntervalMs: Long? = null,
 )
 
 class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmModelStore) : LocalResponseEngine, AutoCloseable {
@@ -64,6 +68,18 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
      * path only; it does not alter the normal JARVIS conversation pipeline.
      */
     fun benchmarkTransformerOnly(inputText: String): LiteRtLmBenchmarkResult {
+        val measured = ProcessMemoryPeakSampler.measure {
+            benchmarkTransformerOnlyInternal(inputText)
+        }
+        return measured.value.copy(
+            memoryBaselinePssMb = measured.baselinePssMb,
+            peakMemoryPssMb = measured.peakPssMb,
+            peakMemoryDeltaMb = measured.peakDeltaMb,
+            memorySampleIntervalMs = measured.sampleIntervalMs,
+        )
+    }
+
+    private fun benchmarkTransformerOnlyInternal(inputText: String): LiteRtLmBenchmarkResult {
         val clean = inputText.trim()
         require(clean.isNotEmpty() && clean.length <= MAX_PROMPT_CHARS) {
             "Benchmark input must contain 1..$MAX_PROMPT_CHARS characters."
