@@ -71,6 +71,25 @@ class ANS100ActivityDrivenStructuralPlasticity(
         val capacityBlockedPairCount: Int,
     )
 
+    data class TurnSnapshot(
+        val turnId: String,
+        val activeConcepts: List<ActiveConcept>,
+    ) {
+        init {
+            require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+            require(activeConcepts.size <= MAX_ACTIVE_CONCEPTS_PER_TURN)
+            require(activeConcepts.map { it.conceptId }.distinct().size == activeConcepts.size)
+            require(activeConcepts.map { it.neuronId }.distinct().size == activeConcepts.size)
+        }
+    }
+
+    data class GraphSnapshot(
+        val existingTargetsByConceptNeuron: Map<Int, Set<Int>>,
+        val targetIncomingEdgeCounts: Map<Int, Int>,
+        val grownConceptPairs: Set<Pair<String, String>>,
+        val grownEdgesByConcept: Map<String, Int>,
+    )
+
     private data class PairKey(val firstId: String, val secondId: String) {
         val stableText: String get() = "${firstId}|${secondId}"
     }
@@ -186,6 +205,22 @@ class ANS100ActivityDrivenStructuralPlasticity(
 
         pruneTraces()
         return ObservationResult(true, considered, pendingCount(), proposals, blocked)
+    }
+
+    /** Restore durable growth limits before replaying persisted observations. */
+    @Synchronized
+    fun restoreGrownState(
+        grownConceptPairs: Set<Pair<String, String>>,
+        grownEdgesByConcept: Map<String, Int>,
+    ) {
+        require(grownConceptPairs.size <= MAX_GROWN_PAIRS_HARD_LIMIT)
+        require(grownConceptPairs.all { (first, second) -> first.isNotBlank() && first < second })
+        require(grownEdgesByConcept.values.all { it in 0..MAX_GROWN_EDGES_PER_CONCEPT_HARD_LIMIT })
+        grownPairs.clear()
+        grownPairs.addAll(grownConceptPairs.map { PairKey(it.first, it.second) })
+        this.grownEdgesByConcept.clear()
+        this.grownEdgesByConcept.putAll(grownEdgesByConcept)
+        require(this.grownEdgesByConcept.values.sum() == grownPairs.size * 2)
     }
 
     @Synchronized
