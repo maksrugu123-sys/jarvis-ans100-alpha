@@ -534,8 +534,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         inputText: String,
         onComplete: (PairedBenchmarkTaskResult) -> Unit,
     ) {
-        require(!taskId.startsWith("development:")) {
-            "paired benchmark evaluation accepts held-out tasks only"
+        require(
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(taskId::startsWith),
+        ) {
+            "paired benchmark evaluation accepts only held-out split task IDs"
         }
         conversationExecutor.execute {
             val paired = if (pairedBenchmarkSequence++ % 2L == 0L) {
