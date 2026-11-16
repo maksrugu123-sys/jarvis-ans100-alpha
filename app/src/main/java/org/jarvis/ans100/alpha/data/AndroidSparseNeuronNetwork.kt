@@ -764,6 +764,17 @@ class AndroidSparseNeuronNetwork(
         return store.neuralAssociationWeightHistory(candidateId, limit)
     }
 
+    /** Compute stability from persisted independent outcomes; this never updates weights. */
+    @Synchronized
+    fun assessNeuralAssociation(
+        candidateId: String,
+        feedback: ANS100NeuralAssociationAssessment.ExplicitFeedback = ANS100NeuralAssociationAssessment.ExplicitFeedback.NONE,
+    ): ANS100NeuralAssociationAssessment.Assessment {
+        val observations = neuralAssociationEvaluations(candidateId, ANS100NeuralAssociationAssessment.MAX_OBSERVATIONS)
+            .map { it.observation }
+        return ANS100NeuralAssociationAssessment().assess(observations, feedback)
+    }
+
     /** Applies a stable user-feedback event at most once, atomically with weight updates. */
     @Synchronized
     fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String, reward: Double,
@@ -2452,6 +2463,8 @@ private class AndroidNeuronSqliteStore(
                     updated++
                 }
             }
+            val historyExcess = scalar(db, "SELECT COUNT(*) FROM neural_association_weight_history") - MAX_NEURAL_ASSOCIATION_WEIGHT_HISTORY
+            if (historyExcess > 0L) db.execSQL("DELETE FROM neural_association_weight_history WHERE rowid IN (SELECT rowid FROM neural_association_weight_history ORDER BY changed_at_ms ASC, rowid ASC LIMIT ?)", arrayOf(historyExcess))
             db.delete("neural_association_eligibility", "turn_id=? AND candidate_id=?", arrayOf(turnId, candidateId))
             val excess = scalar(db, "SELECT COUNT(*) FROM neural_association_feedback_events") - MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS
             if (excess > 0L) db.execSQL("DELETE FROM neural_association_feedback_events WHERE feedback_id IN (SELECT feedback_id FROM neural_association_feedback_events ORDER BY created_at_ms ASC LIMIT ?)", arrayOf(excess))
@@ -2760,6 +2773,7 @@ private class AndroidNeuronSqliteStore(
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
         private const val MAX_NEURAL_ASSOCIATION_EVALUATIONS = 20_000L
+        private const val MAX_NEURAL_ASSOCIATION_WEIGHT_HISTORY = 20_000L
         private const val MAX_CANONICAL_READOUT_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_CANONICAL_READOUT_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
