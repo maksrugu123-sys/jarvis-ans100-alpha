@@ -40,7 +40,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     fun runTask(taskId: String, inputText: String, trainingLabel: String? = null): TaskResult {
         require(taskId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")))
         val label = trainingLabel?.let {
-            ANS100CanonicalReadoutContract.Answer.valueOf(it.uppercase())
+            ANS100CanonicalReadoutContract.Answer.valueOf(it.trim().uppercase())
         }
         val startedAtNs = System.nanoTime()
         val currentTime = network.stats().currentTimeNs
@@ -48,7 +48,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             throw AndroidNeuronNetworkException("benchmark model clock reached its time limit")
         }
         val timestampNs = maxOf(System.nanoTime(), currentTime + MINIMUM_TURN_STEP_NS)
-        val turnId = "benchmark-$taskId-${UUID.randomUUID()}"
+        val turnId = "benchmark-${taskId.take(40)}-${UUID.randomUUID()}"
         val encoded = inputAdapter.createBatch(turnId, inputText, timestampNs)
         if (encoded.batch.events.isEmpty()) {
             throw AndroidNeuronNetworkException("benchmark input produced no lexical concept pulses")
