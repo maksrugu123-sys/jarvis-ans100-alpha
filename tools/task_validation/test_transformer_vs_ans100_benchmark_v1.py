@@ -28,16 +28,35 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
         held={s for t in self.tasks if t["split"]=="concept_disjoint" for f in t["facts"] for s in (f.get("subject"),f.get("object"))}
         self.assertTrue(dev.isdisjoint(held))
 
-    def test_pair_disjoint_split_uses_new_pairs_with_shared_vocabulary(self):
-        def pairs(split):
+    def test_pair_disjoint_split_uses_new_query_pairs_with_shared_vocabulary(self):
+        def vocabulary(split):
             return {
-                (fact["subject"], fact["object"])
+                symbol
                 for task in self.tasks if task["split"] == split
                 for fact in task["facts"]
+                for symbol in (fact.get("subject"), fact.get("object"))
             }
+        def pairs(split):
+            return {
+                tuple(task["query_pair"])
+                for task in self.tasks if task["split"] == split
+            }
+        dev_vocab, held_vocab = vocabulary("development"), vocabulary("pair_disjoint")
+        self.assertTrue(dev_vocab)
+        self.assertTrue(held_vocab)
+        self.assertTrue(dev_vocab.intersection(held_vocab))
         self.assertTrue(pairs("development"))
         self.assertTrue(pairs("pair_disjoint"))
         self.assertTrue(pairs("development").isdisjoint(pairs("pair_disjoint")))
+
+    def test_scorer_rejects_duplicate_or_invalid_source_tasks(self):
+        duplicate = self.tasks + [dict(self.tasks[0])]
+        with self.assertRaises(ValueError):
+            score_predictions(duplicate, [], "invalid-source")
+        invalid = [dict(task) for task in self.tasks]
+        invalid[0]["expected_answer"] = "MAYBE"
+        with self.assertRaises(ValueError):
+            score_predictions(invalid, [], "invalid-gold")
 
     def test_compositional_split_contains_two_hop_queries(self):
         rows=[t for t in self.tasks if t["split"]=="compositional"]
