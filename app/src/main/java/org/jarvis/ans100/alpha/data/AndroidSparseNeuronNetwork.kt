@@ -136,6 +136,9 @@ internal interface AndroidNeuronStateStore : Closeable {
     ): AndroidDialogueRewardResult
     fun recordHybridCandidateEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
     fun applyHybridCandidateFeedback(turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
+    fun recordNeuralAssociationEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
+    fun neuralAssociationWeights(connectionIds: List<String>): Map<String, Double>
+    fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double
     fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double>
     fun commitTimestamp(
@@ -554,6 +557,37 @@ class AndroidSparseNeuronNetwork(
         return store.applyHybridCandidateFeedback(turnId, candidateId, reward, source)
     }
 
+    /** Persist eligibility for actual concept-to-association synapses. */
+    @Synchronized
+    fun recordNeuralAssociationEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int {
+        require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
+        require(connectionIds.size in 2..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE)
+        require(connectionIds.distinct().size == connectionIds.size)
+        require(connectionIds.all { it.startsWith("ans100-v4-evidence-general-association-") })
+        require(eligibility.isFinite() && eligibility in 0.0..1.0)
+        return store.recordNeuralAssociationEligibility(turnId, candidateId, connectionIds, eligibility)
+    }
+
+    @Synchronized
+    fun neuralAssociationWeights(connectionIds: List<String>): Map<String, Double> {
+        require(connectionIds.size in 1..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE)
+        require(connectionIds.distinct().size == connectionIds.size)
+        require(connectionIds.all { it.startsWith("ans100-v4-evidence-general-association-") })
+        return store.neuralAssociationWeights(connectionIds)
+    }
+
+    /** Applies a stable user-feedback event at most once, atomically with weight updates. */
+    @Synchronized
+    fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String, reward: Double,
+        source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
+        require(feedbackId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
+        require(reward.isFinite() && reward in -1.0..1.0 && reward != 0.0)
+        return store.applyNeuralAssociationFeedback(feedbackId, turnId, candidateId, reward, source)
+    }
+
     private fun validateHybridCandidateTrace(
         turnId: String,
         candidateId: String,
@@ -717,6 +751,7 @@ private class AndroidNeuronSqliteStore(
         db.execSQL("CREATE INDEX connections_source_idx ON connections(source_id)")
         createDialogueEligibilityTable(db)
         createHybridCandidateEligibilityTable(db)
+        createNeuralAssociationLearningTables(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
         )
@@ -728,6 +763,7 @@ private class AndroidNeuronSqliteStore(
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) createDialogueEligibilityTable(db)
         if (oldVersion < 3) createHybridCandidateEligibilityTable(db)
+        if (oldVersion < 4) createNeuralAssociationLearningTables(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -738,6 +774,13 @@ private class AndroidNeuronSqliteStore(
             "CREATE TABLE IF NOT EXISTS hybrid_candidate_eligibility (turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, connection_id TEXT NOT NULL, eligibility REAL NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(turn_id, candidate_id, connection_id))",
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS hybrid_candidate_eligibility_age_idx ON hybrid_candidate_eligibility(created_at_ms)")
+    }
+
+    private fun createNeuralAssociationLearningTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_eligibility (turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, connection_id TEXT NOT NULL, eligibility REAL NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(turn_id, candidate_id, connection_id))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_eligibility_age_idx ON neural_association_eligibility(created_at_ms)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_feedback_events (feedback_id TEXT PRIMARY KEY, turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, reward REAL NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_feedback_age_idx ON neural_association_feedback_events(created_at_ms)")
     }
 
     private fun createDialogueEligibilityTable(db: SQLiteDatabase) {
@@ -1241,6 +1284,113 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
+    override fun recordNeuralAssociationEligibility(turnId: String, candidateId: String,
+        connectionIds: List<String>, eligibility: Double): Int {
+        if (connectionIds.isEmpty() || connectionIds.size > ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE ||
+            connectionIds.distinct().size != connectionIds.size || !eligibility.isFinite() || eligibility !in 0.0..1.0)
+            throw AndroidNeuronNetworkException("neural association eligibility is outside its bounds")
+        val db = writableDatabase
+        val nowMs = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            db.delete("neural_association_eligibility", "created_at_ms<?", arrayOf((nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()))
+            for (connectionId in connectionIds) {
+                val endpoints = db.rawQuery("SELECT source_id, target_id FROM connections WHERE connection_id=?",
+                    arrayOf(connectionId)).use { cursor ->
+                    if (!cursor.moveToFirst()) throw AndroidNeuronNetworkException("unknown neural association synapse")
+                    cursor.getInt(0) to cursor.getInt(1)
+                }
+                if (endpoints.first !in ANS100ConceptMemory.NEURAL_INPUT_START until
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS ||
+                    endpoints.second !in 1_200 until 2_200 ||
+                    !connectionId.startsWith("ans100-v4-evidence-general-association-"))
+                    throw AndroidNeuronNetworkException("synapse is outside concept-association projection")
+                val values = ContentValues().apply {
+                    put("turn_id", turnId); put("candidate_id", candidateId); put("connection_id", connectionId)
+                    put("eligibility", eligibility); put("created_at_ms", nowMs)
+                }
+                db.insertOrThrow("neural_association_eligibility", null, values)
+            }
+            val excess = scalar(db, "SELECT COUNT(*) FROM neural_association_eligibility") - MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS
+            if (excess > 0L) db.execSQL("DELETE FROM neural_association_eligibility WHERE rowid IN (SELECT rowid FROM neural_association_eligibility ORDER BY created_at_ms ASC, rowid ASC LIMIT ?)", arrayOf(excess))
+            db.setTransactionSuccessful()
+            return connectionIds.size
+        } finally { db.endTransaction() }
+    }
+
+    override fun neuralAssociationWeights(connectionIds: List<String>): Map<String, Double> {
+        if (connectionIds.isEmpty() || connectionIds.size > ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE ||
+            connectionIds.distinct().size != connectionIds.size)
+            throw AndroidNeuronNetworkException("neural association weight query is outside its bounds")
+        val placeholders = List(connectionIds.size) { "?" }.joinToString(",")
+        val result = LinkedHashMap<String, Double>()
+        readableDatabase.rawQuery("SELECT connection_id, weight, source_id, target_id FROM connections WHERE connection_id IN ($placeholders)",
+            connectionIds.toTypedArray()).use { cursor ->
+            while (cursor.moveToNext()) {
+                if (cursor.getInt(2) !in ANS100ConceptMemory.NEURAL_INPUT_START until
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS ||
+                    cursor.getInt(3) !in 1_200 until 2_200)
+                    throw AndroidNeuronNetworkException("stored synapse is outside concept-association projection")
+                result[cursor.getString(0)] = cursor.getDouble(1)
+            }
+        }
+        return result
+    }
+
+    override fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String,
+        reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
+        val db = writableDatabase
+        val nowMs = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            if (source != ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER &&
+                source != ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME) {
+                db.delete("neural_association_eligibility", "turn_id=? AND candidate_id=?", arrayOf(turnId, candidateId))
+                db.setTransactionSuccessful()
+                return 0
+            }
+            val event = ContentValues().apply {
+                put("feedback_id", feedbackId); put("turn_id", turnId); put("candidate_id", candidateId)
+                put("reward", reward); put("source", source.name); put("created_at_ms", nowMs)
+            }
+            if (db.insertWithOnConflict("neural_association_feedback_events", null, event, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
+                db.setTransactionSuccessful()
+                return 0
+            }
+            val rows = mutableListOf<Pair<String, Double>>()
+            db.rawQuery("SELECT connection_id, eligibility FROM neural_association_eligibility WHERE turn_id=? AND candidate_id=? AND created_at_ms>=?",
+                arrayOf(turnId, candidateId, (nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString())).use { cursor ->
+                while (cursor.moveToNext()) rows += cursor.getString(0) to cursor.getDouble(1)
+            }
+            var updated = 0
+            for ((connectionId, eligibility) in rows) {
+                val current = db.rawQuery("SELECT weight, source_id, target_id FROM connections WHERE connection_id=?",
+                    arrayOf(connectionId)).use { cursor ->
+                    if (!cursor.moveToFirst()) throw AndroidNeuronNetworkException("synapse disappeared before feedback commit")
+                    if (cursor.getInt(1) !in ANS100ConceptMemory.NEURAL_INPUT_START until
+                        ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS ||
+                        cursor.getInt(2) !in 1_200 until 2_200)
+                        throw AndroidNeuronNetworkException("feedback synapse is outside concept-association projection")
+                    cursor.getDouble(0)
+                }
+                val delta = (NEURAL_ASSOCIATION_LEARNING_RATE * reward * eligibility)
+                    .coerceIn(-NEURAL_ASSOCIATION_MAX_DELTA, NEURAL_ASSOCIATION_MAX_DELTA)
+                val next = (current + delta).coerceIn(NEURAL_ASSOCIATION_MIN_WEIGHT, 1.0)
+                if (next != current) {
+                    if (db.update("connections", ContentValues().apply { put("weight", next) },
+                            "connection_id=?", arrayOf(connectionId)) != 1)
+                        throw AndroidNeuronNetworkException("neural association update did not affect exactly one synapse")
+                    updated++
+                }
+            }
+            db.delete("neural_association_eligibility", "turn_id=? AND candidate_id=?", arrayOf(turnId, candidateId))
+            val excess = scalar(db, "SELECT COUNT(*) FROM neural_association_feedback_events") - MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS
+            if (excess > 0L) db.execSQL("DELETE FROM neural_association_feedback_events WHERE feedback_id IN (SELECT feedback_id FROM neural_association_feedback_events ORDER BY created_at_ms ASC LIMIT ?)", arrayOf(excess))
+            db.setTransactionSuccessful()
+            return updated
+        } finally { db.endTransaction() }
+    }
+
     override fun recordHybridCandidateEligibility(
         turnId: String,
         candidateId: String,
@@ -1527,7 +1677,12 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
+        private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
+        private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
+        private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
+        private const val NEURAL_ASSOCIATION_MAX_DELTA = 0.01
+        private const val NEURAL_ASSOCIATION_MIN_WEIGHT = 0.05
         private const val MAX_HYBRID_CANDIDATE_ELIGIBILITY_ROWS = 50_000L
         private const val HYBRID_CANDIDATE_LEARNING_RATE = 0.02
         private const val HYBRID_CANDIDATE_MAX_DELTA = 0.01
