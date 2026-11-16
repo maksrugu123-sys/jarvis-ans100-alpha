@@ -13,7 +13,7 @@ import java.security.MessageDigest
  * separately reviewed processing.
  */
 object AndroidHybridEvidenceInputAdapter {
-    const val MAX_ACTIVE_INPUTS_PER_TURN = 64
+    const val MAX_ACTIVE_INPUTS_PER_TURN = 128
     private const val SLOT_WIDTH_PER_FEATURE = 48
     private const val MAX_ORDINAL_PER_FEATURE = SLOT_WIDTH_PER_FEATURE / 2
     private const val ACTIVE_PULSE_STRENGTH = 1.0
@@ -64,6 +64,7 @@ object AndroidHybridEvidenceInputAdapter {
         val timestampNs: Long,
         val events: List<AndroidNeuronEvent>,
         val trace: List<TraceEntry>,
+        val conceptTrace: List<ANS100ConceptNeuralInputAdapter.TraceEntry> = emptyList(),
     )
 
     fun createBatch(bundle: TypedEvidenceBundle, timestampNs: Long): ActivationBatch {
