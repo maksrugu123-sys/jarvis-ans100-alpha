@@ -56,6 +56,13 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
         self.assertEqual(report["missing"],held_out_count)
         self.assertEqual(report["accuracy_over_all_tasks"],0.0)
 
+    def test_explicit_null_answer_is_counted_as_an_abstention_not_a_missing_row(self):
+        held_out=next(t for t in self.tasks if t["split"] != "development")
+        report=score_predictions(self.tasks,[{"task_id":held_out["task_id"],"answer":None}],"abstaining")
+        self.assertEqual(report["answered"],1)
+        self.assertEqual(report["missing"],sum(t["split"] != "development" for t in self.tasks)-1)
+        self.assertEqual(report["correct"],0)
+
     def test_development_predictions_are_rejected_from_held_out_scoring(self):
         development=next(t for t in self.tasks if t["split"]=="development")
         with self.assertRaises(ValueError):
