@@ -13,6 +13,10 @@ data class AndroidWebSearchIntent(val query: String) {
         private val politePrefixes = listOf(
             "можешь ли ты",
             "можете ли вы",
+            "не мог бы ты",
+            "не могла бы ты",
+            "мог бы ты",
+            "могла бы ты",
             "умеешь ли ты",
             "умеете ли вы",
             "можешь ты",
@@ -29,6 +33,7 @@ data class AndroidWebSearchIntent(val query: String) {
             "можете",
             "умеешь",
             "умеете",
+            "пожалуйста",
             "could you",
             "can you",
             "please",
@@ -37,6 +42,10 @@ data class AndroidWebSearchIntent(val query: String) {
         private val prefixes = listOf(
             "найди информацию в интернете",
             "поищи информацию в интернете",
+            "искать информацию в интернете",
+            "поискать информацию в интернете",
+            "искать в сети",
+            "поискать в сети",
             "найди в интернете",
             "поищи в интернете",
             "найти в интернете",
@@ -59,6 +68,8 @@ data class AndroidWebSearchIntent(val query: String) {
         )
 
         private val capabilityPhrases = listOf(
+            "искать информацию в интернете",
+            "поискать информацию в интернете",
             "искать в интернете",
             "искать в сети",
             "поискать в интернете",
