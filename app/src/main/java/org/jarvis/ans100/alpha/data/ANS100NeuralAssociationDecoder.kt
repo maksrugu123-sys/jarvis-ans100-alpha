@@ -29,15 +29,15 @@ class ANS100NeuralAssociationDecoder {
             require(firstConceptId != secondConceptId)
             require(firstLabel.isNotBlank() && firstLabel.length <= ANS100ConceptMemory.MAX_LABEL_CHARS)
             require(secondLabel.isNotBlank() && secondLabel.length <= ANS100ConceptMemory.MAX_LABEL_CHARS)
-            require(convergentNeuronIds.isNotEmpty() && convergentNeuronIds.size <= 3)
+            require(convergentNeuronIds.isNotEmpty() && convergentNeuronIds.size <= MAX_CONVERGENT_TARGETS)
             require(convergentNeuronIds.distinct().size == convergentNeuronIds.size)
             require(convergentNeuronIds.all {
                 it in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END
             })
-            require(activatedConnectionIds.size in 2..6)
+            require(activatedConnectionIds.size in 2..MAX_ACTIVATED_CONNECTIONS)
             require(activatedConnectionIds.distinct().size == activatedConnectionIds.size)
             require(activatedConnectionIds.all {
-                it.startsWith("ans100-v4-evidence-general-association-") && it.length <= 128
+                (it.startsWith("ans100-v4-evidence-general-association-") || it.startsWith("ans100-v5-grown-association-")) && it.length <= 128
             })
             require(evidenceRefs.size in 2..5 && evidenceRefs.distinct().size == evidenceRefs.size)
             require(evidenceRefs.all { it.isNotBlank() && it.length <= TypedEvidenceRecord.MAX_PROVENANCE_CHARS })
@@ -71,6 +71,7 @@ class ANS100NeuralAssociationDecoder {
         emittedSpikeNeuronIds: Set<Int>,
         activatedConnectionIds: Set<String>,
         maxCandidates: Int = MAX_CANDIDATES,
+        grownConnections: List<AndroidNeuronConnection> = emptyList(),
     ): Result {
         require(conceptTrace.size <= ANS100ConceptNeuralInputAdapter.MAX_CONCEPTS_PER_TURN)
         require(maxCandidates in 0..MAX_CANDIDATES)
@@ -91,6 +92,13 @@ class ANS100NeuralAssociationDecoder {
         require(emittedSpikeNeuronIds.size <= AndroidHybridTopologyV2.NEURON_COUNT)
         require(emittedSpikeNeuronIds.all { it in 0 until AndroidHybridTopologyV2.NEURON_COUNT })
         require(activatedConnectionIds.size <= AndroidHybridTopologyV2.MAX_CONNECTION_COUNT)
+        require(grownConnections.size <= conceptTrace.size * 8)
+        require(grownConnections.all {
+            it.sourceNeuronId in ANS100ConceptMemory.NEURAL_INPUT_START until
+                ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS &&
+            it.targetNeuronId in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END &&
+            it.connectionId.startsWith("ans100-v5-grown-association-")
+        })
         val generalActivatedConnections = activatedConnectionIds.filterTo(LinkedHashSet()) {
             it.startsWith("ans100-v4-evidence-general-association-")
         }
@@ -99,10 +107,14 @@ class ANS100NeuralAssociationDecoder {
         val associationSpikes = emittedSpikeNeuronIds.filterTo(LinkedHashSet()) {
             it in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END
         }
+        val grownBySource = grownConnections.groupBy { it.sourceNeuronId }
         val active = conceptTrace.sortedBy { it.conceptId }.mapNotNull { trace ->
-            val projection = AndroidHybridTopologyV2.conceptAssociationProjection(trace.neuronId)
+            val projection = AndroidHybridTopologyV2.conceptAssociationProjection(trace.neuronId).toMutableMap()
+            grownBySource[trace.neuronId].orEmpty().forEach { connection ->
+                projection[connection.targetNeuronId] = connection.connectionId
+            }
             val spiking = projection.filter { (targetId, connectionId) ->
-                targetId in associationSpikes && connectionId in generalActivatedConnections
+                targetId in associationSpikes && connectionId in activatedConnectionIds
             }.keys
             if (spiking.isEmpty()) null else ActiveConcept(trace, projection, spiking)
         }
@@ -164,6 +176,8 @@ class ANS100NeuralAssociationDecoder {
 
     companion object {
         const val MAX_CANDIDATES = 3
+        private const val MAX_CONVERGENT_TARGETS = 6
+        private const val MAX_ACTIVATED_CONNECTIONS = MAX_CONVERGENT_TARGETS * 2
         private const val PROJECTION_FAN_OUT = 3
         private const val GENERAL_ASSOCIATION_START = 1_200
         private const val GENERAL_ASSOCIATION_END = 2_200
