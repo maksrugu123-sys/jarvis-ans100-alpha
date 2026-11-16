@@ -117,6 +117,10 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun initializeSparseDialogueNetwork(neuronCount: Int, featureNeuronCount: Int, delayNs: Long, weight: Double, inputToHiddenWeight: Double): Boolean
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
+    fun addStructuralGrowthProposal(proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal): Int
+    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double): Int
+    fun removeStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int
+    fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double>
     fun enqueue(event: AndroidNeuronEvent)
     fun enqueueAll(events: List<AndroidNeuronEvent>)
     fun nextTimestampEvents(maxEvents: Int): List<AndroidNeuronEvent>?
@@ -325,6 +329,36 @@ class AndroidSparseNeuronNetwork(
             connection.targetNeuronId !in 0 until MAX_NEURONS
         ) throw AndroidNeuronNetworkException("connection endpoint is outside the 10,000-neuron bound")
         store.addConnection(connection)
+    }
+
+    /**
+     * Atomically persist a pair of bounded concept-to-association synapses.
+     * This route accepts only the experimental structural-growth namespace.
+     */
+    @Synchronized
+    fun addStructuralGrowthProposal(proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal): Int =
+        store.addStructuralGrowthProposal(proposal)
+
+    @Synchronized
+    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double): Int {
+        require(connectionIds.isNotEmpty() && connectionIds.size <= MAX_STRUCTURAL_SYNAPSES_PER_UPDATE)
+        require(connectionIds.distinct().size == connectionIds.size)
+        require(delta.isFinite() && delta in -MAX_STRUCTURAL_WEIGHT_DELTA..MAX_STRUCTURAL_WEIGHT_DELTA)
+        return store.adjustStructuralSynapseWeights(connectionIds, delta)
+    }
+
+    @Synchronized
+    fun removeWeakStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int {
+        require(connectionIds.isNotEmpty() && connectionIds.size <= MAX_STRUCTURAL_SYNAPSES_PER_UPDATE)
+        require(connectionIds.distinct().size == connectionIds.size)
+        require(maximumWeight.isFinite() && maximumWeight in 0.0..MAX_STRUCTURAL_MIN_WEIGHT)
+        return store.removeStructuralSynapses(connectionIds, maximumWeight)
+    }
+
+    @Synchronized
+    fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double> {
+        require(connectionIds.size <= MAX_STRUCTURAL_SYNAPSES_PER_UPDATE)
+        return store.structuralSynapseWeights(connectionIds)
     }
 
     @Synchronized
@@ -706,6 +740,9 @@ class AndroidSparseNeuronNetwork(
     companion object {
         const val MAX_NEURONS = 10_000
         const val MAX_CONNECTIONS = 100_000
+        const val MAX_STRUCTURAL_SYNAPSES_PER_UPDATE = 64
+        const val MAX_STRUCTURAL_WEIGHT_DELTA = 0.10
+        const val MAX_STRUCTURAL_MIN_WEIGHT = 0.20
         const val MAX_PENDING_EVENTS = 100_000
         const val MAX_HOT_SET_CAPACITY = 4_096
         const val DIALOGUE_OUTPUT_NEURONS = 4
@@ -767,6 +804,7 @@ private class AndroidNeuronSqliteStore(
         createHybridCandidateEligibilityTable(db)
         createNeuralAssociationLearningTables(db)
         createConceptInputSlotTable(db)
+        createStructuralSynapseRegistry(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
         )
@@ -808,6 +846,7 @@ private class AndroidNeuronSqliteStore(
             db.delete("neural_association_eligibility", null, null)
             db.delete("neural_association_feedback_events", null, null)
         }
+        if (oldVersion < 6) createStructuralSynapseRegistry(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -825,6 +864,11 @@ private class AndroidNeuronSqliteStore(
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_eligibility_age_idx ON neural_association_eligibility(created_at_ms)")
         db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_feedback_events (feedback_id TEXT PRIMARY KEY, turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, reward REAL NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_feedback_age_idx ON neural_association_feedback_events(created_at_ms)")
+    }
+
+    private fun createStructuralSynapseRegistry(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS structural_synapse_registry (connection_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, first_concept_id TEXT NOT NULL, second_concept_id TEXT NOT NULL, created_at_ms INTEGER NOT NULL, last_adjusted_at_ms INTEGER NOT NULL)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS structural_synapse_proposal_idx ON structural_synapse_registry(proposal_id)")
     }
 
     private fun createConceptInputSlotTable(db: SQLiteDatabase) {
@@ -1118,6 +1162,125 @@ private class AndroidNeuronSqliteStore(
         } finally {
             db.endTransaction()
         }
+    }
+
+    override fun addStructuralGrowthProposal(
+        proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal,
+    ): Int {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (proposal.connections.size != 2 ||
+                proposal.connections.map { it.sourceNeuronId }.distinct().size != 2 ||
+                proposal.connections.map { it.targetNeuronId }.distinct().size != 1 ||
+                proposal.connections.any {
+                    it.sourceNeuronId !in 1_062 until 1_200 ||
+                    it.targetNeuronId !in 1_200 until 2_200 ||
+                    !it.connectionId.startsWith("ans100-v5-grown-association-") ||
+                    it.weight !in 0.05..0.50
+                }
+            ) throw AndroidNeuronNetworkException("structural growth proposal is outside approved bounds")
+
+            val already = db.rawQuery(
+                "SELECT COUNT(*) FROM structural_synapse_registry WHERE proposal_id=?",
+                arrayOf(proposal.proposalId),
+            ).use { it.moveToFirst(); it.getInt(0) }
+            if (already > 0) {
+                db.setTransactionSuccessful()
+                return 0
+            }
+            if (scalar(db, "SELECT COUNT(*) FROM connections") + 2 > AndroidSparseNeuronNetwork.MAX_CONNECTIONS) {
+                throw AndroidNeuronNetworkException("global connection capacity reached")
+            }
+            val target = proposal.targetNeuronId
+            val incoming = scalar(db, "SELECT COUNT(*) FROM connections WHERE target_id=?", arrayOf(target.toString()))
+            if (incoming + 2 > 16) throw AndroidNeuronNetworkException("structural target in-degree capacity reached")
+            proposal.connections.forEach { connection ->
+                requireNeuron(db, connection.sourceNeuronId)
+                requireNeuron(db, connection.targetNeuronId)
+                val degree = scalar(
+                    db,
+                    "SELECT COUNT(*) FROM structural_synapse_registry WHERE connection_id IN (SELECT connection_id FROM connections WHERE source_id=?)",
+                    arrayOf(connection.sourceNeuronId.toString()),
+                )
+                if (degree >= 8) throw AndroidNeuronNetworkException("concept structural degree capacity reached")
+                insertConnection(db, connection)
+                val values = ContentValues().apply {
+                    put("connection_id", connection.connectionId)
+                    put("proposal_id", proposal.proposalId)
+                    put("first_concept_id", proposal.firstConceptId)
+                    put("second_concept_id", proposal.secondConceptId)
+                    put("created_at_ms", System.currentTimeMillis())
+                    put("last_adjusted_at_ms", System.currentTimeMillis())
+                }
+                db.insertOrThrow("structural_synapse_registry", null, values)
+            }
+            db.setTransactionSuccessful()
+            return 2
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double): Int {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            var changed = 0
+            connectionIds.forEach { id ->
+                val current = db.rawQuery(
+                    "SELECT c.weight FROM connections c INNER JOIN structural_synapse_registry r ON r.connection_id=c.connection_id WHERE c.connection_id=?",
+                    arrayOf(id),
+                ).use { if (it.moveToFirst()) it.getDouble(0) else null } ?: return@forEach
+                val update = ContentValues().apply { put("weight", (current + delta).coerceIn(0.05, 1.0)) }
+                if (db.update("connections", update, "connection_id=?", arrayOf(id)) == 1) {
+                    db.update(
+                        "structural_synapse_registry",
+                        ContentValues().apply { put("last_adjusted_at_ms", System.currentTimeMillis()) },
+                        "connection_id=?",
+                        arrayOf(id),
+                    )
+                    changed++
+                }
+            }
+            db.setTransactionSuccessful()
+            return changed
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun removeStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            var removed = 0
+            connectionIds.forEach { id ->
+                val weight = db.rawQuery(
+                    "SELECT c.weight FROM connections c INNER JOIN structural_synapse_registry r ON r.connection_id=c.connection_id WHERE c.connection_id=?",
+                    arrayOf(id),
+                ).use { if (it.moveToFirst()) it.getDouble(0) else null } ?: return@forEach
+                if (weight <= maximumWeight) {
+                    db.delete("structural_synapse_registry", "connection_id=?", arrayOf(id))
+                    removed += db.delete("connections", "connection_id=?", arrayOf(id))
+                }
+            }
+            db.setTransactionSuccessful()
+            return removed
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double> {
+        val result = LinkedHashMap<String, Double>()
+        connectionIds.forEach { id ->
+            readableDatabase.rawQuery(
+                "SELECT c.weight FROM connections c INNER JOIN structural_synapse_registry r ON r.connection_id=c.connection_id WHERE c.connection_id=?",
+                arrayOf(id),
+            ).use { if (it.moveToFirst()) result[id] = it.getDouble(0) }
+        }
+        return result
     }
 
     override fun addConnection(connection: AndroidNeuronConnection) {
@@ -1780,7 +1943,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 5
+        private const val DATABASE_VERSION = 6
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
