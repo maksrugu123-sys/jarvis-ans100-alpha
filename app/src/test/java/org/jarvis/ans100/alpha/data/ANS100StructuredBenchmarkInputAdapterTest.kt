@@ -28,8 +28,19 @@ class ANS100StructuredBenchmarkInputAdapterTest {
         }.neuronId
 
         assertNotEquals(forwardSubject, forwardObject)
-        assertEquals(forwardSubject, reverseObject)
-        assertEquals(forwardObject, reverseSubject)
+        assertNotEquals(forwardSubject, reverseObject)
+        assertEquals("alpha", forward.batch.conceptTrace.single {
+            "role:query_subject" in it.matchedFeatureIds
+        }.matchedAlias)
+        assertEquals("alpha", reverse.batch.conceptTrace.single {
+            "role:query_object" in it.matchedFeatureIds
+        }.matchedAlias)
+        assertEquals("beta", forward.batch.conceptTrace.single {
+            "role:query_object" in it.matchedFeatureIds
+        }.matchedAlias)
+        assertEquals("beta", reverse.batch.conceptTrace.single {
+            "role:query_subject" in it.matchedFeatureIds
+        }.matchedAlias)
     }
 
     @Test
