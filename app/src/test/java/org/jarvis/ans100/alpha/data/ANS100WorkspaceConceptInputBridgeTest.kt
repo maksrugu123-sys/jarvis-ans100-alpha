@@ -201,6 +201,35 @@ class ANS100WorkspaceConceptInputBridgeTest {
     }
 
     @Test
+    fun causalChainIsReportedAsUnresolvedCandidateAndNotStoredAsFact() {
+        val result = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(),
+            "Собака рядом",
+            listOf(
+                memory("dog", "Собака", "concept"),
+                memory("mammal", "Млекопитающее", "concept"),
+                memory("animal", "Животное", "concept"),
+                memory("cause-1", "Собака | CAUSES | Млекопитающее", "relation"),
+                memory("cause-2", "Млекопитающее | CAUSES | Животное", "relation"),
+            ),
+        )
+
+        val candidate = result.causalChainHypotheses.single()
+        assertEquals("Собака", result.hypothesisReports.last().fromLabel)
+        assertEquals("Животное", result.hypothesisReports.last().toLabel)
+        assertEquals(
+            ANS100CausalHypothesisEngine.Status.UNRESOLVED,
+            candidate.status,
+        )
+        assertTrue(candidate.supportingEvidenceRefs.isEmpty())
+        assertEquals(2, candidate.premiseEvidenceRefs.size)
+        assertTrue(result.hypothesisReports.any {
+            it.hypothesisId == candidate.hypothesisId &&
+                it.verificationStatus == ANS100ConceptMemory.VerificationStatus.UNRESOLVED
+        })
+    }
+
+    @Test
     fun relationSyntaxMustUseExactTypeAndThreeFields() {
         val result = ANS100WorkspaceConceptInputBridge().merge(
             evidenceBatch(),
