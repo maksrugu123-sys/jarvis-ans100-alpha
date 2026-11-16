@@ -35,7 +35,7 @@ object ANS100CanonicalReadoutContract {
     const val MAX_SOURCE_NEURONS_PER_TURN = 512
     const val MAX_PERSISTED_SOURCE_NEURONS = 1_024
     const val MAX_PERSISTED_SYNAPSES = MAX_PERSISTED_SOURCE_NEURONS * 4
-    const val INITIAL_SYNAPSE_WEIGHT = 0.25
+    const val INITIAL_SYNAPSE_WEIGHT = 1.0
     const val MIN_SYNAPSE_WEIGHT = 0.05
     const val MAX_SYNAPSE_WEIGHT = 1.0
     const val LEARNING_RATE = 0.02
