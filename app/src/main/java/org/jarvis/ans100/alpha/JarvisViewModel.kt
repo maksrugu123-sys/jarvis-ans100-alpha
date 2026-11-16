@@ -1091,6 +1091,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         activeConceptIds = batch.conceptTrace.map { it.conceptId }.toSet(),
                         candidates = neuralAssociationResult.candidates,
                         completed = !result.budgetExhausted && result.pendingEvents == 0,
+                        pairScanComplete = neuralAssociationResult.consideredPairCount <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES,
                     )
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
