@@ -347,12 +347,14 @@ class AndroidSparseNeuronNetwork(
     fun addStructuralGrowthProposal(proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal): Int =
         store.addStructuralGrowthProposal(proposal)
 
+    @Synchronized
     fun recordStructuralPlasticityTurn(
         turnId: String,
         activeConcepts: List<ANS100ActivityDrivenStructuralPlasticity.ActiveConcept>,
     ): List<ANS100ActivityDrivenStructuralPlasticity.TurnSnapshot> =
         store.recordStructuralPlasticityTurn(turnId, activeConcepts)
 
+    @Synchronized
     fun structuralPlasticityGraphSnapshot(
         sourceNeuronIds: List<Int>,
     ): ANS100ActivityDrivenStructuralPlasticity.GraphSnapshot =
