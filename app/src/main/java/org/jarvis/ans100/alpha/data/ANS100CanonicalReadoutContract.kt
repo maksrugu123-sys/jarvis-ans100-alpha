@@ -21,8 +21,8 @@ object ANS100CanonicalReadoutContract {
         val endExclusive: Int,
     ) {
         init {
-            require(startInclusive >= OUTPUT_START)
-            require(endExclusive <= OUTPUT_END)
+            require(startInclusive >= ANS100CanonicalReadoutContract.OUTPUT_START)
+            require(endExclusive <= ANS100CanonicalReadoutContract.OUTPUT_END)
             require(startInclusive < endExclusive)
         }
         val size: Int get() = endExclusive - startInclusive
