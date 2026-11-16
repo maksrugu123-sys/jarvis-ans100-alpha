@@ -3129,6 +3129,6 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 
 **Safety:** STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED remains false. Ordinary app behavior does not automatically mutate topology. Enablement is deferred until a held-out evaluation compares fixed topology, grown topology and shuffled co-activation controls. Co-activation does not establish semantic truth.
 
-**Tests authored, NOT RUN:** persistence and replay after database reopen, duplicate turn replay after reopen, reconstruction of a proposal from three persisted turns, growth-state restoration, and V7 to V8 migration without base-topology rebuild. No Gradle tests, Android build, APK, CI, GitHub Actions or device inference were run.
+**Tests authored, NOT RUN:** persistence and replay after database reopen, duplicate turn replay after reopen, reconstruction of a proposal from three persisted turns, growth-state restoration, bounded 64-turn retention/16-turn replay, per-turn target de-duplication, and V7 to V8 migration without base-topology rebuild. No Gradle tests, Android build, APK, CI, GitHub Actions or device inference were run.
 
 **Next:** create a deterministic held-out evaluation harness with positive/negative concept-pair labels, temporal split, shuffled-activity and fixed-topology baselines; measure candidate precision/recall, false associations, connection growth, storage and runtime cost before considering enabling automatic growth.
