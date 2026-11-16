@@ -261,6 +261,14 @@ class ANS100WorkspaceConceptInputBridgeTest {
         assertEquals(1, supported.relationEvidenceCount)
         assertEquals(ANS100ConceptMemory.VerificationStatus.SUPPORTED,
             supported.hypothesisVerifications.single().status)
+        assertEquals(
+            setOf(ANS100ConceptMemory.LearningSource.EXPLICIT_USER),
+            supported.hypothesisVerifications.single().supportingSources,
+        )
+        assertEquals(
+            setOf(ANS100ConceptMemory.LearningSource.EXPLICIT_USER),
+            supported.hypothesisReports.single().supportingEvidenceSources,
+        )
 
         val conflicting = ANS100WorkspaceConceptInputBridge().merge(
             evidenceBatch(), "Собака рядом",
