@@ -26,6 +26,15 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun recognizesQuestionsAboutAvailableAssistantCapabilities() {
+        val result = pipeline.analyze("Ты можешь искать в интернете?")
+        assertEquals("capability_question", result.intent)
+        assertEquals("answer_capability_question", result.taskKind)
+        assertFalse(result.reasoningPlan.requiresClarification)
+        assertTrue(result.reasoningPlan.steps.any { it.contains("подключённые функции") })
+    }
+
+    @Test
     fun recognizesComparisonAndExplanation() {
         assertEquals("comparison", pipeline.analyze("Что лучше: трансформер или нейронная сеть?").intent)
         assertTrue(pipeline.analyze("Объясни, зачем это нужно").asksForExplanation)
