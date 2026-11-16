@@ -110,3 +110,14 @@ This status is strictly about repeatability of the neural activation path. It is
 ### Validation status
 
 Regression tests were added for checkpoint round-trip, mixed-signal retention, bounded per-hypothesis history, duplicate turn rejection after restore, and trace export. They have **not been executed**. No Gradle build, APK, CI, GitHub Actions run, or on-device inference was performed for this stage.
+
+
+## Neural observation integrity V1.2
+
+A concept is eligible for a neural pair observation only when its own concept-input neuron emitted a spike and at least one outgoing association synapse actually propagated during the completed turn. A downstream association-neuron spike without the corresponding source-neuron spike cannot qualify a concept.
+
+The decoder records total input concepts, exact observed/eligible concept IDs, pairs actually scanned, candidate count before the public three-candidate output cap, and separate flags for exhaustive pair scanning and complete candidate output.
+
+A later turn can contribute a non-reproduction observation only when both concepts in the prior hypothesis independently qualify as observed, the turn completed without a compute-budget stop, every eligible pair was scanned, and no positive candidates were hidden by the output cap. If more than three candidates exist, the lifecycle records no negative observation for that turn. This prefers missing a negative update over learning from truncated output.
+
+This verifies repeatability of neural activation only, not semantic truth. It does not add a canonical YES/NO/UNKNOWN/CONFLICT readout or give Qwen decision authority.
