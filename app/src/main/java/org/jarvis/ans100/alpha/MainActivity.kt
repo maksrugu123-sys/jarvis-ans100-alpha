@@ -299,6 +299,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onClear = viewModel::clearConversation,
                                 onRateLatestAnswer = viewModel::rateLatestHybridAnswer,
                                 onRateNeuralAssociation = viewModel::rateNeuralAssociationCandidate,
+                                onRateCanonicalReadout = viewModel::rateCanonicalReadout,
                                 feedbackAvailable = ui.conversation.hybridFeedbackAvailable,
                                 feedbackMessage = ui.conversation.hybridFeedbackMessage,
                                 glowEnabled = glowEnabled,
@@ -2354,6 +2355,7 @@ private fun ConversationPanel(
     onClear: () -> Unit,
     onRateLatestAnswer: (Boolean) -> Unit,
     onRateNeuralAssociation: (String, Boolean) -> Unit,
+    onRateCanonicalReadout: (String) -> Unit,
     feedbackAvailable: Boolean,
     feedbackMessage: String?,
     glowEnabled: Boolean,
@@ -2458,6 +2460,46 @@ private fun ConversationPanel(
                                                 TextButton(onClick = {
                                                     onRateNeuralAssociation(association.candidateId, false)
                                                 }) { Text("Не связаны") }
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!userMessage && message.id == latestAssistantId &&
+                                    state.canonicalReadoutFeedback != null
+                                ) {
+                                    val readout = state.canonicalReadoutFeedback
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text(
+                                                "Экспериментальный выход ANS-100",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                            Text(
+                                                "Сигнал: ${readout.predictedAnswer}. Это не откалиброванный ответ и он не используется для ответа пользователю.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                            Text(
+                                                "Импульсы: ${readout.spikeCountsSummary}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            Text("Какой класс правильный? Эта оценка обучит отдельные синапсы.",
+                                                style = MaterialTheme.typography.bodySmall)
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                listOf("YES" to "Да", "NO" to "Нет", "UNKNOWN" to "Неизвестно", "CONFLICT" to "Конфликт")
+                                                    .forEach { (answer, label) ->
+                                                        TextButton(onClick = { onRateCanonicalReadout(answer) }) {
+                                                            Text(label)
+                                                        }
+                                                    }
                                             }
                                         }
                                     }
