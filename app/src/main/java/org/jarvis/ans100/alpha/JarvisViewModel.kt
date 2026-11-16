@@ -611,7 +611,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         require(inputs.isNotEmpty() && inputs.size <= MAX_BENCHMARK_BATCH_SIZE)
         require(inputs.map { it.taskId }.distinct().size == inputs.size)
         require(inputs.all {
-            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(it.taskId::startsWith) &&
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any { prefix -> it.taskId.startsWith(prefix) } &&
                 it.inputText.isNotBlank() &&
                 it.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS
         }) { "encoding comparison accepts only valid held-out inputs" }
@@ -638,7 +638,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         inputText: String,
         onComplete: (StructuredPairedBenchmarkTaskResult) -> Unit,
     ) {
-        require(listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(taskId::startsWith))
+        require(listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any { prefix -> taskId.startsWith(prefix) })
         require(inputText.isNotBlank() &&
             inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS)
         conversationExecutor.execute {
@@ -663,7 +663,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         require(inputs.isNotEmpty() && inputs.size <= MAX_BENCHMARK_BATCH_SIZE)
         require(inputs.map { it.taskId }.distinct().size == inputs.size)
         require(inputs.all {
-            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(it.taskId::startsWith) &&
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any { prefix -> it.taskId.startsWith(prefix) } &&
                 it.inputText.isNotBlank() &&
                 it.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS
         }) { "structured paired evaluation accepts only valid held-out inputs" }
