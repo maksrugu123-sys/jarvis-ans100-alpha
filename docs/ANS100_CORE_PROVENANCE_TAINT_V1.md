@@ -34,8 +34,8 @@ When upgrading a version-9 database, pending events are marked tainted because t
 ## Enforcement points
 
 1. Input scheduling rejects mismatches between typed provenance and the event taint bit.
-2. The runtime returns the set of tainted spiking neuron IDs; the ViewModel aggregates that set across every partial run pass.
-3. The canonical decoder excludes tainted output spikes. If all canonical output spikes are tainted, the result is `NO_LEARNED_SIGNAL`, not a guessed answer.
+2. The runtime returns every neuron that became tainted, including neurons that spiked earlier and were contaminated later; the ViewModel aggregates this set across every partial run pass.
+3. The canonical decoder excludes every spike from a neuron that became tainted at any point in the turn, including an earlier spike emitted before contamination. If all canonical output spikes are tainted, the result is `NO_LEARNED_SIGNAL`, not a guessed answer.
 4. SQLite filters tainted source neurons out of canonical-readout eligibility before feedback can create or update the four class synapses.
 
 ## Tests added
