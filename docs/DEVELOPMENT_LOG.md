@@ -3100,3 +3100,20 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 **Limitations:** persistence and atomic synapse insertion, runtime integration, decoder support, restart/replay migration tests, and held-out evaluation against fixed-topology, shuffled-activity and random-growth controls remain outstanding. No claim of autonomous semantic understanding is supported.
 
 **Next stage:** implement durable SQLite eligibility and atomic validation/insertion of proposed synapse pairs, then exercise those synapses in the actual Android LIF runtime behind a disabled-by-default experimental gate.
+
+
+## 2026-11-16 — Persistent dynamic structural synapse lifecycle (V1.1)
+
+**Added to Android JNVM SQLite schema V6:**
+- \`structural_synapse_registry\` records grown connection ownership, proposal ID, concept IDs and timestamps.
+- \`structural_synapse_feedback_events\` records unique feedback ID, proposal ID, delta, source and timestamp.
+- Atomic \`addStructuralGrowthProposal\` persists both concept-to-association synapses in one transaction, rejects out-of-range endpoints/IDs/weights and enforces total connection, target in-degree and per-concept grown-edge limits. Replaying a proposal is idempotent.
+- Pairwise weight mutation clamps weights to [0.05, 1.0], limits delta to ±0.10, requires both edges of each proposal, and accepts only explicit-user or verified-external-outcome feedback. A unique feedback ID prevents duplicate reward application.
+- Weak-link removal deletes both edges only when both are included and both weights are below the caller threshold (public API caps threshold at 0.20).
+- Read API exposes weights only for registered grown synapses.
+
+**Important:** the underlying sparse runtime reads the same SQLite connections table, so persisted grown edges can propagate signals once the proposal API is explicitly invoked. The production turn pipeline does not yet call it; the decoder does not yet enumerate learned proposals; no automatic reward or pruning policy is active. This is a controlled capability, not live autonomous learning.
+
+**Tests:** NOT RUN. No new instrumented test file was added in this substage. Build, APK, CI, GitHub Actions and device inference: NOT RUN.
+
+**Next:** add restart/atomicity/idempotency instrumented tests; integrate the decoder with registered grown targets and evaluate new vs fixed topology on held-out combinations before enabling automatic proposal insertion.
