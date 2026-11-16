@@ -188,18 +188,19 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         // B2: candidates are decoded only from actual input/association spikes and
         // synapses observed on this turn. No Core or Qwen hypotheses enter here.
         val conceptTrace = encodedBatch.conceptTrace
-        val grownConnections = if (completed && conceptTrace.isNotEmpty()) {
-            network.structuralAssociationConnections(conceptTrace.map { it.neuronId }.distinct())
+        val boundedConceptTrace = conceptTrace.take(ANS100ConceptNeuralInputAdapter.MAX_CONCEPTS_PER_TURN)
+        val grownConnections = if (completed && boundedConceptTrace.isNotEmpty()) {
+            network.structuralAssociationConnections(boundedConceptTrace.map { it.neuronId }.distinct())
         } else emptyList()
-        val associationResult = if (completed && conceptTrace.isNotEmpty()) {
+        val associationResult = if (completed && boundedConceptTrace.isNotEmpty()) {
             associationDecoder.decode(
-                conceptTrace = conceptTrace,
-                emittedSpikeNeuronIds = spikes,
+                conceptTrace = boundedConceptTrace,
+                emittedSpikeNeuronIds = spikes - tainted,
                 activatedConnectionIds = activatedConnections,
                 grownConnections = grownConnections,
             )
         } else null
-        val activeConceptIds = conceptTrace.asSequence()
+        val activeConceptIds = boundedConceptTrace.asSequence()
             .filter { it.neuronId in spikes && it.neuronId !in tainted }
             .map { it.conceptId }
             .toSet()
@@ -208,9 +209,12 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             activeConceptIds = activeConceptIds,
             candidates = associationResult?.candidates.orEmpty(),
             completed = completed,
-            pairScanComplete = associationResult?.pairScanComplete ?: completed,
+            pairScanComplete = completed && conceptTrace.size <= ANS100ConceptNeuralInputAdapter.MAX_CONCEPTS_PER_TURN &&
+                (associationResult?.pairScanComplete ?: true),
         )
-        if (completed) hypothesisLedger.save(hypothesisEngine.exportSnapshot())
+        if (completed && !hypothesisLedger.save(hypothesisEngine.exportSnapshot())) {
+            throw AndroidNeuronNetworkException("unable to persist the isolated neural hypothesis checkpoint")
+        }
         val hypothesisSnapshot = hypothesisEngine.snapshot()
         val hypothesisStatusCounts = hypothesisSnapshot.groupingBy { it.status.name }.eachCount()
         val reproducedCount = hypothesisSnapshot.count {
