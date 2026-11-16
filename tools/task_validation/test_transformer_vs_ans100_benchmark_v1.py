@@ -1,0 +1,70 @@
+"""Regression tests for the shared Transformer vs ANS-100 benchmark."""
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from tools.task_validation.transformer_vs_ans100_benchmark_v1 import (
+    SEEDS, build_tasks, canonical_answer, compare_prediction_files, score_predictions,
+)
+
+class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tasks = build_tasks(seeds=SEEDS[:2], tasks_per_family=8)
+
+    def test_task_set_is_deterministic_and_has_all_splits(self):
+        self.assertEqual(self.tasks,build_tasks(seeds=SEEDS[:2],tasks_per_family=8))
+        self.assertEqual({t["split"] for t in self.tasks},
+            {"development","pair_disjoint","concept_disjoint","compositional"})
+
+    def test_task_ids_are_unique_and_answers_are_canonical(self):
+        ids=[t["task_id"] for t in self.tasks]
+        self.assertEqual(len(ids),len(set(ids)))
+        self.assertTrue(all(t["expected_answer"] in {"YES","NO","UNKNOWN","CONFLICT"} for t in self.tasks))
+
+    def test_concept_disjoint_split_uses_unseen_symbol_namespace(self):
+        dev={s for t in self.tasks if t["split"]=="development" for f in t["facts"] for s in (f.get("subject"),f.get("object"))}
+        held={s for t in self.tasks if t["split"]=="concept_disjoint" for f in t["facts"] for s in (f.get("subject"),f.get("object"))}
+        self.assertTrue(dev.isdisjoint(held))
+
+    def test_compositional_split_contains_two_hop_queries(self):
+        rows=[t for t in self.tasks if t["split"]=="compositional"]
+        self.assertTrue(rows)
+        self.assertTrue(all(t["family"]=="two_hop_reachability" for t in rows))
+
+    def test_canonical_answer_maps_common_equivalents(self):
+        self.assertEqual(canonical_answer(" true. "),"YES")
+        self.assertEqual(canonical_answer("not enough information"),"UNKNOWN")
+        self.assertEqual(canonical_answer("both"),"CONFLICT")
+
+    def test_missing_predictions_count_as_wrong(self):
+        report=score_predictions(self.tasks,[],"empty")
+        self.assertEqual(report["answered"],0)
+        self.assertEqual(report["missing"],len(self.tasks))
+        self.assertEqual(report["accuracy_over_all_tasks"],0.0)
+
+    def test_duplicate_or_unknown_prediction_ids_are_rejected(self):
+        first={"task_id":self.tasks[0]["task_id"],"answer":self.tasks[0]["expected_answer"]}
+        with self.assertRaises(ValueError):
+            score_predictions(self.tasks,[first,first],"duplicate")
+        with self.assertRaises(ValueError):
+            score_predictions(self.tasks,[{"task_id":"not-a-task","answer":"YES"}],"unknown")
+
+    def test_paired_comparison_uses_same_tasks_and_reports_resources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            task_path,transformer_path,ans_path=(root/"tasks.jsonl",root/"transformer.jsonl",root/"ans.jsonl")
+            def dump(path,rows):
+                path.write_text("".join(json.dumps(row)+"\n" for row in rows),encoding="utf-8")
+            dump(task_path,self.tasks)
+            dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"latency_ms":100,"peak_memory_mb":512} for t in self.tasks])
+            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","latency_ms":20,"peak_memory_mb":64} for t in self.tasks])
+            report=compare_prediction_files(task_path,transformer_path,ans_path)
+            self.assertEqual(report["transformer"]["accuracy_over_all_tasks"],1.0)
+            self.assertEqual(report["ans100"]["accuracy_over_all_tasks"],0.0)
+            self.assertEqual(report["paired_task_outcomes"]["transformer_only_correct"],len(self.tasks))
+            self.assertEqual(report["ans100"]["peak_memory_mb"]["max"],64)
+
+if __name__ == "__main__":
+    unittest.main()
