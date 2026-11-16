@@ -8,6 +8,7 @@ package org.jarvis.ans100.alpha.data
 class ANS100NeuralAssociationBenchmarkAssessmentAdapter {
     data class HeldOutTask(
         val taskId: String,
+        val independenceKey: String,
         val split: String,
         val family: String,
         val queryPair: Pair<String, String>,
@@ -20,6 +21,7 @@ class ANS100NeuralAssociationBenchmarkAssessmentAdapter {
         candidateReproduced: Boolean,
     ): ANS100NeuralAssociationAssessment.Observation? {
         require(task.taskId.matches(ID_PATTERN))
+        require(task.independenceKey.matches(ID_PATTERN))
         require(task.split in HELD_OUT_SPLITS) { "development data cannot assess learned associations" }
         require(task.family in DIRECT_RELATION_FAMILIES) { "multi-hop tasks cannot directly label a pair association" }
         require(task.expectedAnswer in CANONICAL_ANSWERS)
@@ -42,7 +44,7 @@ class ANS100NeuralAssociationBenchmarkAssessmentAdapter {
         }
         return ANS100NeuralAssociationAssessment.Observation(
             taskId = task.taskId,
-            independenceKey = "heldout:${task.split}:${task.taskId}",
+            independenceKey = task.independenceKey,
             outcome = outcome,
             source = ANS100NeuralAssociationAssessment.EvidenceSource.CONTROLLED_BENCHMARK_LABEL,
         )
