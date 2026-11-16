@@ -7,7 +7,7 @@ package org.jarvis.ans100.alpha.data
  */
 class ANS100NeuralAssociationAssessment {
     enum class Outcome { REPRODUCED, CONTRADICTED, INCONCLUSIVE }
-    enum class EvidenceSource { CONTROLLED_BENCHMARK_LABEL, VERIFIED_EXTERNAL_OUTCOME }
+    enum class EvidenceSource { CONTROLLED_BENCHMARK_LABEL }
     enum class Stability { INSUFFICIENT_EVIDENCE, STABLE, UNSTABLE, MIXED }
     enum class ExplicitFeedback { POSITIVE, NEGATIVE, NONE }
     enum class FeedbackAgreement { NO_FEEDBACK, ALIGNED, CONFLICTS, NOT_YET_DECIDABLE }
