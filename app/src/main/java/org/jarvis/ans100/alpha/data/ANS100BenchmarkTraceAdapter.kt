@@ -31,6 +31,7 @@ object ANS100BenchmarkTraceAdapter {
         neuralHypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis> = emptyList(),
         memoryHypothesisReports: List<ANS100WorkspaceConceptInputBridge.HypothesisReport> = emptyList(),
         hypothesisComparisons: List<ANS100HypothesisCompetitionEngine.Comparison> = emptyList(),
+        hypothesisStatePersisted: Boolean = false,
     ): JSONObject {
         require(inputText.isNotBlank() && inputText.length <= MAX_INPUT_CHARS)
         require(taskId == null || (
@@ -164,6 +165,7 @@ object ANS100BenchmarkTraceAdapter {
             .put("neural_outputs", neuralOutputs)
             .put("population_activity", populations)
             .put("neural_hypotheses", hypotheses)
+            .put("neural_hypothesis_state_persisted", hypothesisStatePersisted)
             .put("memory_hypothesis_explanations", memoryExplanations)
             .put("hypothesis_competition", comparisons)
             .put("measurement", JSONObject()
@@ -176,6 +178,8 @@ object ANS100BenchmarkTraceAdapter {
                 "Controller status is not a YES/NO/UNKNOWN/CONFLICT benchmark answer.",
                 "No expected answer or gold label is accepted or exported.",
                 "Hypothesis reproduction means repeated neural co-activation only; it does not establish factual truth.",
+                "Mixed reproduction signal means complete turns alternated between convergence and non-convergence; it is not factual contradiction.",
+                "Hypothesis state persistence is a local checkpoint indicator, not a correctness or durability guarantee against storage loss.",
                 "Memory relation explanations are separate from neural hypotheses; user-entered support or counter-evidence is not independently tool-verified.",
                 "Hypothesis competition is a cross-reference between independent signal paths, not a calibrated winner or truth decision."
             )))
