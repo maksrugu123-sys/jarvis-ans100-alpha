@@ -57,7 +57,12 @@ class AndroidHybridTopologyV2Test {
         assertTrue(first.filter { it.connectionId.contains("recurrent") || it.connectionId.contains("critic-candidate") }
             .all { it.weight == AndroidHybridTopologyV2.RECURRENT_WEIGHT })
         assertTrue(first.filterNot { it.connectionId.contains("recurrent") || it.connectionId.contains("critic-candidate") }
-            .all { it.weight == AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT })
+            .all { edge ->
+                val conceptInput = edge.sourceNeuronId in ANS100ConceptMemory.NEURAL_INPUT_START until
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS
+                edge.weight == if (conceptInput) AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT
+                    else AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT
+            })
         assertEquals(1.0, AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT, 0.0)
         assertTrue(AndroidHybridTopologyV2.RECURRENT_WEIGHT < 1.0)
     }
