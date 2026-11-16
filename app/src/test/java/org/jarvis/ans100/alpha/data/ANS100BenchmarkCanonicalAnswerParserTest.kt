@@ -17,7 +17,7 @@ class ANS100BenchmarkCanonicalAnswerParserTest {
     fun rejectsExplanationsAndAmbiguousOutput() {
         assertNull(ANS100BenchmarkCanonicalAnswerParser.parse("YES because the path exists"))
         assertNull(ANS100BenchmarkCanonicalAnswerParser.parse("The answer is YES"))
-        assertNull(ANS100BenchmarkCanonicalAnswerParser.parse("YES\\nNO"))
+        assertNull(ANS100BenchmarkCanonicalAnswerParser.parse("YES\nNO"))
         assertNull(ANS100BenchmarkCanonicalAnswerParser.parse(""))
         assertNull(ANS100BenchmarkCanonicalAnswerParser.parse("MAYBE"))
     }
