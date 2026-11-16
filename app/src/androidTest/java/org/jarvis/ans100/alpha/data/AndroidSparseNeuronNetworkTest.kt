@@ -977,6 +977,73 @@ class AndroidSparseNeuronNetworkTest {
 
 
     @Test
+    fun coreHeuristicTaintPropagatesAcrossPersistedEventsAndBlocksCanonicalReadoutEligibility() {
+        val edge = AndroidHybridTopologyV2.connections().first {
+            it.sourceNeuronId == 1_200 &&
+                ANS100CanonicalReadoutContract.isEligibleSourceNeuron(it.targetNeuronId)
+        }
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 16).use { network ->
+            network.initializeHybridTopologyV2()
+            network.scheduleInputs(
+                listOf(
+                    AndroidNeuronEvent(
+                        eventId = "core-origin-taint",
+                        timeNs = 1_000_000L,
+                        targetNeuronId = 1_200,
+                        strength = 1.0,
+                        coreTainted = true,
+                    ),
+                ),
+            )
+            val firstPass = network.run(maxEvents = 1, maxTimestamps = 1)
+            assertTrue(firstPass.emittedSpikes.any { it.first == 1_200 })
+            assertTrue("propagated events must remain queued for the persistence check", firstPass.pendingEvents > 0)
+        }
+
+        // Reopening forces the propagated event's taint and the source neuron's
+        // sticky taint to be restored from SQLite rather than the in-memory LRU.
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 16).use { reopened ->
+            reopened.initializeHybridTopologyV2()
+            val secondPass = reopened.run(maxEvents = 4_096, maxTimestamps = 8)
+            assertTrue(
+                "a synaptically reached downstream neuron should spike",
+                secondPass.emittedSpikes.any { it.first == edge.targetNeuronId },
+            )
+            assertEquals(
+                "Core-tainted downstream activity must not enter canonical training",
+                0,
+                reopened.recordCanonicalReadoutEligibility(
+                    "core-tainted-turn",
+                    listOf(edge.targetNeuronId),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun cleanNeuralSpikeRemainsEligibleForCanonicalReadoutTraining() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 16).use { network ->
+            network.initializeHybridTopologyV2()
+            network.scheduleInputs(
+                listOf(
+                    AndroidNeuronEvent(
+                        eventId = "independent-origin",
+                        timeNs = 1_000_000L,
+                        targetNeuronId = 1_200,
+                        strength = 1.0,
+                    ),
+                ),
+            )
+            val result = network.run(maxEvents = 1, maxTimestamps = 1)
+            assertTrue(result.emittedSpikes.any { it.first == 1_200 })
+            assertEquals(
+                1,
+                network.recordCanonicalReadoutEligibility("independent-turn", listOf(1_200)),
+            )
+        }
+    }
+
+    @Test
     fun canonicalReadoutFeedbackPersistsFourClassLifSynapsesAndProducesOnlyTrainedClassSpikes() {
         // A dense, deterministic source set exercises convergence into all 150
         // output buckets. One labelled example must separate the target class
