@@ -50,7 +50,7 @@ The shared Python tool still generates tasks and scores prediction JSONL files; 
 - `LiteRtLmResponseEngine.benchmarkTransformerOnly(inputText)` uses the installed local Qwen3-0.6B INT4 model directly;
 - the path bypasses ANS-100 handoff, Core understanding, chat history, workspace memory, fallback responses, and tool calling;
 - output is parsed strictly as one canonical label; explanations and ambiguous generations are unscorable;
-- generation and initialization time are returned; peak memory is not measured by this path.
+- generation and initialization time are returned; the Android wrapper samples process PSS around this path (see measurement limitations below).
 
 This is a real Transformer-only inference entry point, but it is not yet a batch runner and has not been executed on-device.
 
@@ -63,7 +63,7 @@ The Android app also now exposes an isolated ANS-100-only runtime:
 - `resetAns100OnlyBenchmark` clears the isolated database before a fresh experiment;
 - `JarvisViewModel.runPairedBenchmarkTask(taskId, inputText, onComplete)` runs Qwen and ANS-100 sequentially on exactly the same held-out input and alternates which model runs first across tasks to reduce fixed order bias;
 - paired evaluation accepts only `pair_disjoint`, `concept_disjoint`, and `compositional` task IDs;
-- per-task latency, network initialization duration, event counts, source spikes, readout spike counts, and learned-synapse count are returned. Peak memory is not measured.
+- per-task latency, network initialization duration, event counts, source spikes, readout spike counts, and learned-synapse count are returned. The Android wrapper samples process PSS around each task.
 
 The neural adapter is intentionally lexical and lossy: it hashes token features into 138 input slots and reports collisions. Training labels are accepted only when the task ID begins with `development:`. It does not parse relation semantics or prove autonomous reasoning. This makes the current ANS-100 condition an honest test of the existing sparse network plus learned canonical readout, not a claim of full semantic intelligence.
 
@@ -82,7 +82,7 @@ Generate the shared task set:
 python3 -m tools.task_validation.transformer_vs_ans100_benchmark_v1 generate --output benchmark/transformer_vs_ans100_tasks.jsonl
 ```
 
-Each system must produce JSONL rows with `task_id`, `answer`, `latency_ms`, and `peak_memory_mb`. Resource fields may be omitted when not measured; do not invent values. The Android runner samples process-wide PSS every 20 ms during each inference and records `memory_baseline_pss_mb`, `peak_memory_mb`, `peak_memory_delta_mb`, and `memory_sample_interval_ms`. PSS includes the app, runtime, loaded model/network and shared process allocations; it is not per-model heap attribution. Compare peak PSS and delta together, and treat measurements as sampled peaks (brief spikes between samples may be missed). The answer must be one of YES, NO, UNKNOWN, CONFLICT (or a documented canonical alias).
+Each system must produce JSONL rows with `task_id`, `answer`, `latency_ms`, and `peak_memory_mb`. Resource fields may be omitted when not measured; do not invent values. The Android runner samples process-wide PSS every 20 ms during each inference and records `memory_baseline_pss_mb`, `peak_memory_mb`, `peak_memory_delta_mb`, and `memory_sample_interval_ms`. PSS includes the app, runtime, loaded model/network and shared process allocations; it is not per-model heap attribution. Because both subjects run in one app process and the other model may remain resident, absolute peak PSS is a whole-process figure, not an isolated model footprint. The peak-minus-baseline delta is the better indicator of additional memory during that inference, but it still excludes allocations already resident at baseline. Compare both fields and treat them as sampled peaks (brief spikes between samples may be missed). For a definitive model-footprint comparison, run each subject in a fresh process with the other subject unloaded. The answer must be one of YES, NO, UNKNOWN, CONFLICT (or a documented canonical alias).
 
 Score both prediction files against the exact same task file. Prediction files must contain one row for every held-out task (including explicit null answers for abstentions); development rows are training-only and must not appear:
 
@@ -119,7 +119,7 @@ The benchmark database is deliberately separate from the production ANS-100 netw
 
 ## Android Transformer-only entry point
 
-The paired batch API invokes the Qwen-only engine once per exported held-out row and returns its parsed answer (including null when parsing fails), initialization time, and generation time alongside ANS-100 measurements. The Android JSONL exporter writes both prediction files without expected answers. Do not pass the expected answer or any ANS-100 output to the Transformer method. Durable experiment history and peak-memory measurement remain future work.
+The paired batch API invokes the Qwen-only engine once per exported held-out row and returns its parsed answer (including null when parsing fails), initialization time, and generation time alongside ANS-100 measurements. The Android JSONL exporter writes both prediction files without expected answers. Do not pass the expected answer or any ANS-100 output to the Transformer method. Durable experiment history remains future work. Peak process-PSS sampling is implemented, with the co-resident-model limitation described above.
 
 A null parsed answer is an abstention/unscorable output, not a guessed label. The Android exporter writes an explicit null answer row for abstentions and a separate `inference_error` field when an engine throws. The Python trace adapter also preserves null answers rather than dropping them. Do not treat a missing local model or inference exception as a model answer. Keep the same task set for both systems.
 
