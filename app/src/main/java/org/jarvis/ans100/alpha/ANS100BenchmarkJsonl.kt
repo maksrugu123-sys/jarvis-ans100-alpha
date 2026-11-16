@@ -61,6 +61,7 @@ object ANS100BenchmarkJsonl {
                     .put("peak_memory_mb", tr.peakMemoryPssMb)
                     .put("peak_memory_delta_mb", tr.peakMemoryDeltaMb)
                     .put("memory_sample_interval_ms", tr.memorySampleIntervalMs)
+                    .put("cold_start", tr.coldStart)
             } else transformer.put("inference_error", paired.transformer.exceptionOrNull()?.message ?: "inference_failed")
             transformerRows.add(transformer)
 
@@ -81,6 +82,7 @@ object ANS100BenchmarkJsonl {
                     .put("peak_memory_mb", ar.peakMemoryPssMb)
                     .put("peak_memory_delta_mb", ar.peakMemoryDeltaMb)
                     .put("memory_sample_interval_ms", ar.memorySampleIntervalMs)
+                    .put("cold_start", ar.coldStart)
             } else ans.put("inference_error", paired.ans100.exceptionOrNull()?.message ?: "inference_failed")
             ansRows.add(ans)
         }
