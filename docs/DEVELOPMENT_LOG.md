@@ -2994,3 +2994,10 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Automatic Android and Windows builds remain disabled (`workflow_dispatch` only). `main` untouched.
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`.
+
+
+**Follow-up correctness review — 2026-11-16:**
+- Separated the concept-pair label from generic answer-quality feedback in the Android UI. The user now explicitly confirms or rejects the displayed concept pair; a "helpful answer" vote cannot train the concept association.
+- Preserved the original absolute evidence-input offset when splitting concept input edges to use the 0.75 starting weight. Connection IDs and target mapping remain identical to the pre-learning topology.
+- Tightened SQLite eligibility validation: each convergent association target must have exactly two distinct concept-input source synapses, and non-concept evidence edges are rejected.
+- Added regression coverage for initial concept weights and v3 migration headroom. Tests remain NOT RUN.
