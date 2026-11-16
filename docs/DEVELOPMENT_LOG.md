@@ -3104,7 +3104,7 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 
 ## 2026-11-16 — Persistent dynamic structural synapse lifecycle (V1.1)
 
-**Added to Android JNVM SQLite schema V6:**
+**Added to Android JNVM SQLite schema V7:**
 - \`structural_synapse_registry\` records grown connection ownership, proposal ID, concept IDs and timestamps.
 - \`structural_synapse_feedback_events\` records unique feedback ID, proposal ID, delta, source and timestamp.
 - Atomic \`addStructuralGrowthProposal\` persists both concept-to-association synapses in one transaction, rejects out-of-range endpoints/IDs/weights and enforces total connection, target in-degree and per-concept grown-edge limits. Replaying a proposal is idempotent.
@@ -3112,8 +3112,8 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 - Weak-link removal deletes both edges only when both are included and both weights are below the caller threshold (public API caps threshold at 0.20).
 - Read API exposes weights only for registered grown synapses.
 
-**Important:** the underlying sparse runtime reads the same SQLite connections table, so persisted grown edges can propagate signals once the proposal API is explicitly invoked. The production turn pipeline does not yet call it; the decoder does not yet enumerate learned proposals; no automatic reward or pruning policy is active. This is a controlled capability, not live autonomous learning.
+**Important:** the underlying sparse runtime reads the same SQLite connections table, so persisted grown edges can propagate signals once the proposal API is explicitly invoked. The Android turn pipeline now fetches registered grown edges for the active concept neurons and supplies them to the association decoder. The existing explicit association rating path accepts registered grown edges and updates complete proposal pairs transactionally; partial grown pairs are deliberately not trained. Automatic proposal generation/insertion on completed turns is still disabled because eligibility traces are not yet durable and rollout needs held-out evaluation.
 
-**Tests:** instrumented tests AUTHORED for proposal insertion/idempotency, feedback persistence across reopen, duplicate feedback replay, rejection of model-generated feedback, whole-pair mutation/removal, and preservation of base topology count. NOT RUN. Build, APK, CI, GitHub Actions and device inference: NOT RUN.
+**Tests:** instrumented tests AUTHORED for proposal insertion/idempotency, feedback persistence across reopen, duplicate feedback replay, rejection of model-generated feedback, whole-pair mutation/removal, preservation of base topology count, and explicit rating of a grown association. Unit test AUTHORED for decoder support of a new target absent from fixed projections. NOT RUN. Build, APK, CI, GitHub Actions and device inference: NOT RUN.
 
-**Next:** add restart/atomicity/idempotency instrumented tests; integrate the decoder with registered grown targets and evaluate new vs fixed topology on held-out combinations before enabling automatic proposal insertion.
+**Next:** persist the activity learner's distinct-turn eligibility and bounded growth counters in SQLite, then connect a disabled-by-default proposal observer to completed turns. Evaluate fixed topology vs grown topology vs shuffled co-activation on held-out concepts before enabling automatic insertion.
