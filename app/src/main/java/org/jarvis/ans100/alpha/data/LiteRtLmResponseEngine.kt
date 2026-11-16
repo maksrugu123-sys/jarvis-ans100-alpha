@@ -263,6 +263,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         engine = cpu
         loadedPath = path
         activeBackend = "CPU"
+        backendNotice = null
         return cpu
     }
 
@@ -326,6 +327,19 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         backendNotice = "GPU завершился ошибкой, автоматически выбран CPU"
         activeBackend = null
         getEngine(file)
+    }
+
+    /**
+     * Releases native model weights and KV-cache after Android reports serious memory
+     * pressure or the app is hidden. The next turn initializes the engine again.
+     * Must be called on the conversation executor, never during generation.
+     */
+    fun releaseForMemoryPressure(): Boolean {
+        if (engine == null) return false
+        closeEngine()
+        activeBackend = null
+        backendNotice = "модель выгружена из RAM; загрузится при следующем сообщении"
+        return true
     }
 
     private fun closeEngine() {
