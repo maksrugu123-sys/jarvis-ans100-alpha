@@ -91,7 +91,7 @@ No general understanding or autonomous reasoning claim is supported by this prot
 
 ## V1.1 — persistent synapse lifecycle API
 
-The Android sparse-network SQLite store now has schema V6 and a
+The Android sparse-network SQLite store now has schema V7 and a
 \`structural_synapse_registry\` for grown synapses. The network exposes a
 separate structural-growth API, rather than routing these through unrestricted
 generic \`connect()\`.
@@ -126,7 +126,7 @@ not yet make live ANS-100 behavior change automatically.
 
 ### Safety refinements in V1.1
 
-- The SQLite store is schema V6. A registry associates every grown edge
+- The SQLite store is schema V7. A registry associates every grown edge
   with its proposal and concept IDs; a separate feedback ledger records
   feedback ID, proposal ID, delta, source and timestamp.
 - Weight adjustment requires a unique feedback ID. Duplicate feedback IDs
@@ -150,3 +150,27 @@ must precede any influence on reasoning.
 - Before insertion, SQLite also verifies that each proposal concept ID resolves
   to the exact persistent neuron slot carried by that proposal. A stale or
   forged per-turn neuron mapping is rejected.
+
+
+## V1.2 — learned links in live association decoding
+
+The network can now return only registry-backed grown connections for the
+current concept input neurons. The Android conversation pipeline supplies
+those persisted edges to \`ANS100NeuralAssociationDecoder\` alongside the
+original fixed projection. A candidate still requires both paths to have
+actually propagated and the shared target to have spiked.
+
+The decoder accepts the separate V5 grown-edge namespace, with hard limits of
+64 active concept inputs, eight returned grown edges per source, six shared
+targets, 12 activated synapse IDs per candidate, and three output candidates.
+The existing neural association feedback path now accepts registered grown
+edges too. For a complete grown proposal pair, both weights are updated in
+one transaction and the structural feedback ledger records the event. If a
+candidate contains only one side of a grown proposal (for example, it
+converges with a fixed edge), that partial grown pair is not trained; fixed
+edges can still be processed. This prevents one-sided structural drift.
+
+**Important remaining gap:** this connects *already persisted* grown links to
+the live LIF runtime and decoder, but the app does not yet automatically call
+the structural learner on every completed turn or insert its proposals. That
+requires durable co-activation eligibility state and an explicit rollout gate.
