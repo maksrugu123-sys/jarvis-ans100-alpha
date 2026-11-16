@@ -100,7 +100,8 @@ data class AndroidWebSearchIntent(val query: String) {
         fun isCapabilityQuestion(message: String): Boolean {
             val clean = message.trim()
             if (clean.isEmpty() || extract(clean) != null) return false
-            val tokens = ANDROID_SEARCH_TOKEN_REGEX.findAll(clean.lowercase(Locale.ROOT))
+            val normalized = clean.lowercase(Locale.ROOT)
+            val tokens = ANDROID_SEARCH_TOKEN_REGEX.findAll(normalized)
                 .map { it.value }
                 .toList()
             val matchedPhrase = capabilityPhrases
