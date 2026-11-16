@@ -216,4 +216,52 @@ class ANS100WorkspaceConceptInputBridgeTest {
         assertEquals(0, result.learnedRelationCount)
     }
 
+    @Test
+    fun explicitRelationEvidenceCanSupportRefuteAndExposeConflict() {
+        val base = listOf(
+            memory("dog", "Собака", "concept"),
+            memory("mammal", "Млекопитающее", "concept"),
+            memory("animal", "Животное", "concept"),
+            memory("dog-mammal", "Собака | IS_A | Млекопитающее", "relation"),
+            memory("mammal-animal", "Млекопитающее | IS_A | Животное", "relation"),
+        )
+        val supported = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(), "Собака рядом",
+            base + memory("support", "Собака | IS_A | Животное | SUPPORTS", "relation_evidence"),
+        )
+        assertEquals(1, supported.relationEvidenceCount)
+        assertEquals(ANS100ConceptMemory.VerificationStatus.SUPPORTED,
+            supported.hypothesisVerifications.single().status)
+
+        val conflicting = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(), "Собака рядом",
+            base + listOf(
+                memory("support", "Собака | IS_A | Животное | SUPPORTS", "relation_evidence"),
+                memory("counter", "Собака | IS_A | Животное | REFUTES", "свидетельство_связи"),
+            ),
+        )
+        assertEquals(2, conflicting.relationEvidenceCount)
+        assertEquals(ANS100ConceptMemory.VerificationStatus.CONFLICTING,
+            conflicting.hypothesisVerifications.single().status)
+        assertEquals(1, conflicting.hypothesisReports.single().supportingEvidenceRefs.size)
+        assertEquals(1, conflicting.hypothesisReports.single().contradictingEvidenceRefs.size)
+    }
+
+    @Test
+    fun malformedUnapprovedAndAmbiguousRelationEvidenceIsIgnored() {
+        val result = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(), "Собака рядом",
+            listOf(
+                memory("dog-1", "Собака", "concept"),
+                memory("dog-2", "Собака", "concept"),
+                memory("animal", "Животное", "concept"),
+                memory("ambiguous", "Собака | IS_A | Животное | SUPPORTS", "relation_evidence"),
+                memory("unapproved", "Собака | IS_A | Животное | REFUTES", "relation_evidence", approved = false),
+                memory("bad-polarity", "Собака | IS_A | Животное | MAYBE", "relation_evidence"),
+            ),
+        )
+        assertEquals(0, result.relationEvidenceCount)
+        assertTrue(result.hypothesisVerifications.isEmpty())
+    }
+
 }
