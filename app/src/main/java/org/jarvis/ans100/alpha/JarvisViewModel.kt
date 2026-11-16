@@ -539,6 +539,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         ) {
             "paired benchmark evaluation accepts only held-out split task IDs"
         }
+        require(
+            inputText.isNotBlank() &&
+                inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS,
+        ) {
+            "paired benchmark input must fit the shared 2048-character model limit"
+        }
         conversationExecutor.execute {
             val paired = if (pairedBenchmarkSequence++ % 2L == 0L) {
                 val transformer = runCatching {
