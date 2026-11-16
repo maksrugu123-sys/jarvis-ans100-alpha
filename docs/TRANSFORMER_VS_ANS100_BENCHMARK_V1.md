@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-**Shared task generator and offline scorer implemented. Focused tests authored, not run. No model has been executed.**
+**Shared task generator/scorer and isolated Android inference entry points implemented. Tests authored, not run. No on-device inference or benchmark measurements have been executed.**
 
 This stage establishes a common comparison contract; it does not claim ANS-100 beats a Transformer or vice versa. The benchmark is intentionally small and synthetic so the expected answers are known and repeatable. The Qwen-only inference adapter is now present, but both model prediction files must be collected before any performance conclusion.
 
@@ -52,7 +52,22 @@ The shared Python tool still generates tasks and scores prediction JSONL files; 
 - output is parsed strictly as one canonical label; explanations and ambiguous generations are unscorable;
 - generation and initialization time are returned; peak memory is not measured by this path.
 
-This is a real Transformer-only inference entry point, but it is not yet a batch runner and has not been executed on-device. The ANS-100 path still exports telemetry and an experimental readout separately; it does not yet provide a validated benchmark answer for each task. Therefore a paired Transformer-vs-ANS-100 result is still unavailable, and no empirical winner can be declared.
+This is a real Transformer-only inference entry point, but it is not yet a batch runner and has not been executed on-device.
+
+The Android app also now exposes an isolated ANS-100-only runtime:
+- `JarvisViewModel.runAns100OnlyBenchmark(taskId, inputText, trainingLabel, onComplete)` runs the sparse network on a dedicated single-thread executor;
+- `ANS100StandaloneBenchmarkRuntime` owns `jarvis_ans100_benchmark_v1.db`, separate from the production hybrid network;
+- `ANS100BenchmarkNeuralInputAdapter` maps lexical token features into clean concept-input pulses (1062..1199), without Core hints, candidate labels, expected answers, or Qwen;
+- the existing four-class canonical readout is decoded directly from network spikes; ties, insufficient activity, and no signal remain abstentions;
+- a non-null `trainingLabel` is accepted only by the dedicated benchmark database, and the generic production feedback API still rejects this label source;
+- `resetAns100OnlyBenchmark` clears the isolated database before a fresh experiment;
+- per-task latency, event counts, source spikes, readout spike counts, and learned-synapse count are returned. Peak memory is not measured.
+
+The neural adapter is intentionally lexical and lossy: it hashes token features into 138 input slots and reports collisions. It does not parse relation semantics or prove autonomous reasoning. This makes the current ANS-100 condition an honest test of the existing sparse network plus learned canonical readout, not a claim of full semantic intelligence.
+
+The Python adapter now separates development-only training labels from held-out evaluation inputs. Development labels may be passed to ANS-100 training only; held-out task inputs contain no labels or split metadata. Both Qwen and ANS-100 must receive the same held-out `input_text`.
+
+No on-device inference has been run yet. The Android ANS-100 path is now callable, but a paired Transformer-vs-ANS-100 result is still unavailable and no empirical winner can be declared.
 
 ## Files and commands
 
@@ -75,6 +90,26 @@ python3 -m tools.task_validation.transformer_vs_ans100_benchmark_v1 score --task
 
 Do not commit private user data or real conversation text into benchmark fixtures. The current fixture contains only synthetic symbols and facts.
 
+
+## Leakage-safe ANS-100 training/evaluation export
+
+Export labels only for the development split:
+
+```sh
+python3 -m tools.task_validation.ans100_benchmark_adapter_v1 export-ans-training --tasks benchmark/transformer_vs_ans100_tasks.jsonl --output benchmark/ans100_development_training.jsonl
+```
+
+Pass each row's `input_text` and `training_label` separately to `runAns100OnlyBenchmark`. The label must never be included in the input text. Do not train on pair-disjoint, concept-disjoint, or compositional rows.
+
+Export held-out inputs without gold labels or split metadata:
+
+```sh
+python3 -m tools.task_validation.ans100_benchmark_adapter_v1 export-evaluation-inputs --tasks benchmark/transformer_vs_ans100_tasks.jsonl --output benchmark/held_out_inputs.jsonl
+```
+
+For every held-out row, call both `runTransformerOnlyBenchmark(input_text)` and `runAns100OnlyBenchmark(task_id, input_text, trainingLabel = null)`. Persist the canonical answer (or null), task ID, and measured latency. Score against the original task file only after both prediction files are complete. Reset the ANS-100 benchmark database before each independent run. The Qwen-only path has no training-label parameter.
+
+The benchmark database is deliberately separate from the production ANS-100 network. Do not change this boundary or pass benchmark labels through the ordinary production feedback API.
 
 ## Android Transformer-only entry point
 
