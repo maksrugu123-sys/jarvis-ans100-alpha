@@ -38,11 +38,11 @@ class ANS100NeuralAssociationBenchmarkAssessmentAdapterTest {
     }
 
     @Test
-    fun explicitNoContradictsOnlyAnObservedCandidate() {
+    fun negativeRelationLabelCannotContradictUndirectedCoActivation() {
         val adapter = ANS100NeuralAssociationBenchmarkAssessmentAdapter()
         val reproduced = adapter.observe(candidate(), task("NO"), candidateReproduced = true)
         val absent = adapter.observe(candidate(), task("NO").copy(taskId = "task-002", independenceKey = "independent-task-002"), candidateReproduced = false)
-        assertEquals(ANS100NeuralAssociationAssessment.Outcome.CONTRADICTED, reproduced?.outcome)
+        assertEquals(ANS100NeuralAssociationAssessment.Outcome.INCONCLUSIVE, reproduced?.outcome)
         assertEquals(ANS100NeuralAssociationAssessment.Outcome.INCONCLUSIVE, absent?.outcome)
     }
 
