@@ -139,12 +139,12 @@ class SparseCanonicalReadout:
         if not isinstance(event.provenance, FeedbackProvenance):
             raise ValueError("untrusted feedback provenance")
         ids = self._validate_active_neurons(event.active_neuron_ids)
+        if event.event_id in self._feedback_id_set:
+            return False
         new_keys = sum((neuron_id, label) not in self._weights
                        for neuron_id in ids for label in CanonicalClass)
         if len(self._weights) + new_keys > self.MAX_WEIGHT_ENTRIES:
             raise ValueError("readout synapse capacity would be exceeded")
-        if event.event_id in self._feedback_id_set:
-            return False
 
         # One-vs-rest reward modulation. The per-event delta is bounded and
         # symmetric; no score is interpreted as a probability.
