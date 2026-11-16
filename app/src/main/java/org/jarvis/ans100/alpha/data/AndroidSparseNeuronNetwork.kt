@@ -1735,7 +1735,10 @@ private class AndroidNeuronSqliteStore(
                     arrayOf(proposalId),
                 ).use { cursor -> while (cursor.moveToNext()) pairIds += cursor.getString(0) }
                 if (pairIds.size != 2 || !eligibilityById.keys.containsAll(pairIds)) {
-                    throw AndroidNeuronNetworkException("grown association feedback must contain both proposal synapses")
+                    // This candidate may combine a grown path with an unrelated
+                    // fixed path at the same target. Do not train half a grown pair.
+                    grownConnectionIds.addAll(pairIds.filter { it in eligibilityById })
+                    continue
                 }
                 val pairEligibility = pairIds.map { eligibilityById.getValue(it) }
                 if (kotlin.math.abs(pairEligibility[0] - pairEligibility[1]) > 0.000001) {
