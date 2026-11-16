@@ -114,6 +114,8 @@ class LocalUnderstandingPipeline {
         val explanation = containsAnyPhrase(tokens, EXPLANATION_MARKERS)
         val actionRequest = containsAnyPhrase(tokens, ACTION_MARKERS)
         val correction = containsAnyPhrase(tokens, CORRECTION_MARKERS)
+        val capabilityQuestion = containsAnyPhrase(tokens, CAPABILITY_SEARCH_PHRASES) &&
+            tokens.any { it in CAPABILITY_MARKERS }
 
         val intent: String
         val confidence: Double
@@ -123,6 +125,7 @@ class LocalUnderstandingPipeline {
             farewell -> { intent = "farewell"; confidence = 0.90; taskKind = "social_response"; evidence += "farewell_marker" }
             thanks -> { intent = "thanks"; confidence = 0.88; taskKind = "social_response"; evidence += "gratitude_marker" }
             greeting -> { intent = "greeting"; confidence = 0.88; taskKind = "social_response"; evidence += "greeting_marker" }
+            capabilityQuestion -> { intent = "capability_question"; confidence = 0.82; taskKind = "answer_capability_question"; evidence += "capability_question_marker" }
             comparison -> { intent = "comparison"; confidence = 0.76; taskKind = "compare_options"; evidence += "comparison_marker" }
             explanation -> { intent = "explanation"; confidence = 0.72; taskKind = "explain_concept"; evidence += "explanation_marker" }
             actionRequest -> { intent = "action_request"; confidence = 0.68; taskKind = "plan_or_explain_requested_action"; evidence += "action_marker" }
@@ -254,6 +257,12 @@ class LocalUnderstandingPipeline {
             else -> ""
         }
         val steps = when (intent) {
+            "capability_question" -> listOf(
+                "Определить, о какой возможности спрашивает пользователь",
+                "Проверить реально подключённые функции и доступные инструменты",
+                "Чётко отделить доступные действия от неподключённых возможностей",
+                "Ответить прямо и назвать ограничения",
+            )
             "question" -> listOf(
                 "Определить точный вопрос и его предмет",
                 "Проверить доступный контекст и подтверждённые сведения",
@@ -337,6 +346,15 @@ class LocalUnderstandingPipeline {
         private val FAREWELLS = listOf("пока", "до свидания", "увидимся", "bye", "goodbye")
         private val COMPARISON_MARKERS = listOf("сравни", "сравнение", "что лучше", "лучше чем", "разница", "отличие", "compare", "versus", " vs ")
         private val EXPLANATION_MARKERS = listOf("объясни", "расскажи", "что означает", "что такое", "explain", "describe")
+        private val CAPABILITY_SEARCH_PHRASES = listOf(
+            "искать в интернете", "искать в сети", "поискать в интернете",
+            "поиск в интернете", "поиск в сети", "search the internet",
+            "search the web", "search online", "browse the web",
+        )
+        private val CAPABILITY_MARKERS = setOf(
+            "можешь", "можете", "умеешь", "умеете", "может",
+            "способен", "способна", "способны", "can", "could", "able",
+        )
         private val ACTION_MARKERS = listOf("сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь", "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь", "можешь ли", "сделать", "implement", "build", "fix", "find", "create")
         private val CORRECTION_MARKERS = listOf("я имел в виду", "не так", "исправление", "точнее", "я ошибся", "i meant", "correction")
         private val CONTEXT_REFERENCES = listOf("это", "там", "тогда", "продолжай", "дальше", "предыдущ", "it", "that", "those", "continue", "previous")
