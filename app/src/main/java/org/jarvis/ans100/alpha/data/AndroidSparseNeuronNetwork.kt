@@ -129,6 +129,14 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun removeStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int
     fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double>
     fun structuralAssociationConnections(sourceNeuronIds: List<Int>): List<AndroidNeuronConnection>
+    fun recordCanonicalReadoutEligibility(turnId: String, sourceNeuronIds: List<Int>): Int
+    fun applyCanonicalReadoutFeedback(
+        feedbackId: String,
+        turnId: String,
+        answer: ANS100CanonicalReadoutContract.Answer,
+        source: ANS100CandidateFeedbackLearner.FeedbackSource,
+    ): Int
+    fun canonicalReadoutSynapseCount(): Int
     fun enqueue(event: AndroidNeuronEvent)
     fun enqueueAll(events: List<AndroidNeuronEvent>)
     fun nextTimestampEvents(maxEvents: Int): List<AndroidNeuronEvent>?
@@ -391,6 +399,36 @@ class AndroidSparseNeuronNetwork(
         require(sourceNeuronIds.all { it in 1_062 until 1_200 })
         return store.structuralAssociationConnections(sourceNeuronIds)
     }
+
+    /**
+     * Stores only actual source-neuron spikes from the isolated general concept,
+     * association and working-state populations. Core candidate lanes are rejected.
+     */
+    @Synchronized
+    fun recordCanonicalReadoutEligibility(turnId: String, sourceNeuronIds: List<Int>): Int {
+        require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        val validated = ANS100CanonicalReadoutContract.validateSourceNeuronIds(sourceNeuronIds)
+        if (validated.isEmpty()) return 0
+        return store.recordCanonicalReadoutEligibility(turnId, validated)
+    }
+
+    /** Train real SQLite-backed LIF synapses from the latest explicitly rated turn. */
+    @Synchronized
+    fun applyCanonicalReadoutFeedback(
+        feedbackId: String,
+        turnId: String,
+        answer: ANS100CanonicalReadoutContract.Answer,
+        source: ANS100CandidateFeedbackLearner.FeedbackSource,
+    ): Int {
+        require(feedbackId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(source == ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER ||
+            source == ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME)
+        return store.applyCanonicalReadoutFeedback(feedbackId, turnId, answer, source)
+    }
+
+    @Synchronized
+    fun canonicalReadoutSynapseCount(): Int = store.canonicalReadoutSynapseCount()
 
     @Synchronized
     fun scheduleInput(
@@ -838,6 +876,7 @@ private class AndroidNeuronSqliteStore(
         createStructuralSynapseRegistry(db)
         createStructuralSynapseFeedbackTable(db)
         createStructuralPlasticityObservationTables(db)
+        createCanonicalReadoutTables(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
         )
@@ -882,6 +921,7 @@ private class AndroidNeuronSqliteStore(
         if (oldVersion < 6) createStructuralSynapseRegistry(db)
         if (oldVersion < 7) createStructuralSynapseFeedbackTable(db)
         if (oldVersion < 8) createStructuralPlasticityObservationTables(db)
+        if (oldVersion < 9) createCanonicalReadoutTables(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -914,6 +954,13 @@ private class AndroidNeuronSqliteStore(
 
     private fun createStructuralSynapseFeedbackTable(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS structural_synapse_feedback_events (feedback_id TEXT NOT NULL, proposal_id TEXT NOT NULL, delta REAL NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(feedback_id, proposal_id))")
+    }
+
+    private fun createCanonicalReadoutTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS canonical_readout_eligibility (turn_id TEXT NOT NULL, source_neuron_id INTEGER NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(turn_id, source_neuron_id))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS canonical_readout_eligibility_age_idx ON canonical_readout_eligibility(created_at_ms)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS canonical_readout_feedback_events (feedback_id TEXT PRIMARY KEY, turn_id TEXT NOT NULL, answer TEXT NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS canonical_readout_feedback_age_idx ON canonical_readout_feedback_events(created_at_ms)")
     }
 
     private fun createConceptInputSlotTable(db: SQLiteDatabase) {
@@ -2267,7 +2314,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 8
+        private const val DATABASE_VERSION = 9
         private const val MAX_PERSISTED_STRUCTURAL_TURNS = 64
         private const val STRUCTURAL_OBSERVATION_WINDOW_TURNS = 16
         private const val MAX_STRUCTURAL_GROWN_PAIRS = 512
