@@ -3,7 +3,7 @@ package org.jarvis.ans100.alpha.data
 import android.content.Context
 
 /**
- * Version-5 sparse topology for seven ANS-100 populations.
+ * Version-5 sparse topology with eight explicitly disjoint ANS-100 populations.
  *
  * Legacy candidate and critic populations are split into six isolated lanes:
  * answer/support, answer/conflict, clarification/support, clarification/conflict,
@@ -48,7 +48,8 @@ object AndroidHybridTopologyV2 {
         Population("working_state", 4_000, 5_800),
         Population("candidate", 5_800, 7_300),
         Population("critic_uncertainty", 7_300, 8_500),
-        Population("goal_planning", 8_500, 9_400),
+        Population("goal_planning", 8_500, 8_800),
+        Population("canonical_readout", 8_800, 9_400),
         Population("decision_readout", 9_400, 10_000),
     )
 
