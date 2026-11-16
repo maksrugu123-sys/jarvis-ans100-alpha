@@ -2957,7 +2957,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                                 status = "Проверка обеих моделей: $done / $total · ${result.taskId}"
                                             },
                                             onComplete = { results ->
-                                                runCatching { ANS100BenchmarkJsonl.encodeStructuredPredictions(results) }
+                                                runCatching { ANS100BenchmarkJsonl.encodeStructuredPredictions(results, heldOutRows) }
                                                     .onSuccess {
                                                         pendingFiles = it
                                                         status = "Эксперимент завершён. Сохраняю прогнозы…"
