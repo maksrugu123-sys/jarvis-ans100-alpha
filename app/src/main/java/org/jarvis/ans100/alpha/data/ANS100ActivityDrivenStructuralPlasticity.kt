@@ -189,7 +189,7 @@ class ANS100ActivityDrivenStructuralPlasticity(
     }
 
     @Synchronized
-    fun pendingCount(): Int = traces.values.count { it.seenTurns.size < minDistinctTurns }
+    fun pendingCount(): Int = traces.size
 
     @Synchronized
     fun grownPairCount(): Int = grownPairs.size
