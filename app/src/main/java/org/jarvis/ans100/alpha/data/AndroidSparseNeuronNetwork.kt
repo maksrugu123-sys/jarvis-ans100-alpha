@@ -99,6 +99,8 @@ data class AndroidNeuronRunResult(
     val hybridTelemetry: AndroidHybridRunTelemetry? = null,
     /** Synapses whose propagated event reached a neuron that spiked in this run. */
     val activatedConnectionIds: Set<String> = emptySet(),
+    /** Spikes whose neuron state has received Core-heuristic taint in this turn. */
+    val coreTaintedSpikingNeuronIds: Set<Int> = emptySet(),
 )
 
 private fun connectionIdFromPropagatedEvent(eventId: String): String? =
@@ -473,6 +475,7 @@ class AndroidSparseNeuronNetwork(
         var timestamps = 0
         var exhausted = false
         val spikes = mutableListOf<Pair<Int, Long>>()
+        val coreTaintedSpikingNeuronIds = LinkedHashSet<Int>()
         val activatedConnectionIds = LinkedHashSet<String>()
         val isHybridTopology = store.matchesTopology(
             topologyId = AndroidHybridTopologyV2.TOPOLOGY_ID,
@@ -525,6 +528,7 @@ class AndroidSparseNeuronNetwork(
                 val updatedState = result.first.copy(coreTainted = targetCoreTainted)
                 changed[targetId] = updatedState
                 if (result.second) {
+                    if (targetCoreTainted) coreTaintedSpikingNeuronIds += targetId
                     // These events were delivered to a target that spiked at this timestamp.
                     // Simultaneous inputs share coarse eligibility; this is not causal attribution.
                     targetEvents.forEach { event ->
@@ -594,6 +598,7 @@ class AndroidSparseNeuronNetwork(
             processedNeuronBatches = processedBatches,
             emittedSpikes = spikes,
             activatedConnectionIds = activatedConnectionIds,
+            coreTaintedSpikingNeuronIds = coreTaintedSpikingNeuronIds,
             pendingEvents = finalStats.pendingEvents,
             budgetExhausted = exhausted,
             currentTimeNs = finalStats.currentTimeNs,
