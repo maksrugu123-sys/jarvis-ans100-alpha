@@ -115,7 +115,7 @@ class ANS100WorkspaceConceptInputBridge {
             activeConceptIds = activeConceptIds,
             limit = MAX_HYPOTHESES_PER_TURN,
         )
-        val verifications = hypotheses.map(memory::verify)
+        val verifications = hypotheses.map { memory.verify(it) }
 
         return Result(
             batch = merged,

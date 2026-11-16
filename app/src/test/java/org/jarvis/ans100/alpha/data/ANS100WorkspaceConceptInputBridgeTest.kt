@@ -128,7 +128,7 @@ class ANS100WorkspaceConceptInputBridgeTest {
 
         assertEquals(2, result.eligibleRelationCount)
         assertEquals(2, result.learnedRelationCount)
-        assertEquals(2, result.activeRelationCount)
+        assertEquals(1, result.activeRelationCount)
         assertEquals(1, result.hypotheses.size)
         val hypothesis = result.hypotheses.single()
         assertEquals(ANS100ConceptMemory.RelationType.IS_A, hypothesis.type)
