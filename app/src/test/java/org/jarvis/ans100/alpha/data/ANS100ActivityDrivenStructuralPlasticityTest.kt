@@ -132,4 +132,22 @@ class ANS100ActivityDrivenStructuralPlasticityTest {
             listOf(duplicate, duplicate.copy(neuronId = 1_063)),
         )
     }
+
+    @Test
+    fun restoredGrownPairsAreNotProposedAgainAndConsumeConceptDegree() {
+        val learner = ANS100ActivityDrivenStructuralPlasticity(
+            maxGrownPairs = 8,
+            maxGrownEdgesPerConcept = 1,
+        )
+        learner.restoreGrownState(
+            grownConceptPairs = setOf("concept:alpha" to "concept:beta"),
+            grownEdgesByConcept = mapOf("concept:alpha" to 1, "concept:beta" to 1),
+        )
+        repeat(3) { index ->
+            val result = observe(learner, "restored-turn-$index")
+            assertTrue(result.emittedProposals.isEmpty())
+        }
+        assertEquals(1, learner.grownPairCount())
+    }
+
 }
