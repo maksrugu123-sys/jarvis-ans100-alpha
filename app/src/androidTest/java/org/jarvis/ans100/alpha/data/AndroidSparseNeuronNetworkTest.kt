@@ -554,6 +554,13 @@ class AndroidSparseNeuronNetworkTest {
         try {
             legacy.execSQL("DROP TABLE IF EXISTS neural_association_eligibility")
             legacy.execSQL("DROP TABLE IF EXISTS neural_association_feedback_events")
+            legacy.execSQL(
+                "UPDATE connections SET weight=1.0 WHERE source_id BETWEEN ? AND ?",
+                arrayOf(
+                    ANS100ConceptMemory.NEURAL_INPUT_START,
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS - 1,
+                ),
+            )
             legacy.version = 3
         } finally {
             legacy.close()
