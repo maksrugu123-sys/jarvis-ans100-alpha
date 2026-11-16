@@ -13,7 +13,7 @@
 
 The Kotlin trace adapter is telemetry-only: it sets `answer=null` and `answer_emission=NOT_SUPPORTED_BY_CURRENT_ANS100_PIPELINE`. It explicitly records that Core supplies heuristic understanding and candidate support/conflict signals. The controller's SELECTED, NEEDS_CLARIFICATION and ABSTAINED statuses are policy-level decisions, not semantic benchmark answers.
 
-The Kotlin adapter currently has no call site in `JarvisViewModel`; this Python stage validates its output contract but does not wire automatic trace capture or file export into the app. Therefore, no current Android trace file or scored ANS prediction exists. This deliberate gap prevents a heuristic controller status from being mislabeled as neural reasoning.
+The adapter is now called from the real `JarvisViewModel` hybrid dialogue pass. It writes app-private JSONL traces to `files/ans100_benchmark/android_traces_v1.jsonl`, with a 256-record cap and no raw user message. Trace capture is best-effort and does not interrupt the conversation. The trace still has a null canonical answer, so these records are telemetry and not scored ANS predictions.
 
 ## Commands
 
@@ -38,3 +38,16 @@ The present Kotlin adapter's null answer is retained as an unscored trace. The v
 ## What this does not claim
 
 No Android inference change, automatic trace capture, Transformer inference, ANS accuracy score, model winner, APK or resource measurement was produced. This is a leakage guard and trace validation boundary, not proof of autonomous reasoning. No tests, builds, CI or GitHub Actions were run.
+
+
+## Android runtime capture added
+
+The ViewModel now calls the trace adapter after the actual sparse LIF pass and decision-provenance construction. It records observed spikes, activated synapses, population telemetry, Core heuristic provenance and measured ANS-pass elapsed time. The private JSONL store retains at most 256 rows, rejects raw-message fields, and performs no network upload. Peak memory remains unmeasured/null.
+
+## Neural hypothesis lifecycle
+
+A new bounded engine forms a hypothesis only from a shared association target that spiked and was reached by both concept paths. On a later independent completed turn, it records whether the same pair's shared-spike signal was reproduced. A non-reproduction is not treated as factual contradiction; incomplete turns and potentially truncated candidate scans cannot create negative verification. State is in-memory and bounded, not durable.
+
+The new hypothesis status is included in benchmark telemetry. It is not promoted to a canonical answer and is not supplied to Qwen as a decision. Core still prepares upstream lexical concept activations and typed evidence; this is a first network-driven hypothesis lifecycle, not end-to-end autonomous semantic reasoning.
+
+**Tests authored, NOT RUN:** neural hypothesis generation, independent-turn reproduction, non-reproduction semantics, duplicate/incomplete turn handling, and bounded privacy-safe trace storage. No Gradle tests, Android build, APK, CI, GitHub Actions or device inference were run.
