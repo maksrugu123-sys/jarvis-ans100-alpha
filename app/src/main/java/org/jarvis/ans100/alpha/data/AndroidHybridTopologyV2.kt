@@ -23,6 +23,7 @@ object AndroidHybridTopologyV2 {
     const val EXPECTED_CONNECTION_COUNT = 25_500
     const val CONNECTION_DELAY_NS = 1_000_000L
     const val FEED_FORWARD_WEIGHT = 1.0
+    const val CONCEPT_ASSOCIATION_INITIAL_WEIGHT = 0.75
     const val RECURRENT_WEIGHT = 0.18
     private const val GENERAL_ASSOCIATION_SIZE = 1_000
     private const val EVIDENCE_GENERAL_FAN_OUT = 3
@@ -78,15 +79,27 @@ object AndroidHybridTopologyV2 {
             .map { ANS100CandidateSlotContract.INPUT_START + it }
             .toSet()
 
-        // Ordinary typed evidence feeds a shared analysis lane. Candidate slot
-        // inputs are excluded here and routed only into their declared lane.
+        // Ordinary evidence and approved concept inputs share the same exact
+        // deterministic projection, but concept synapses start below the ceiling
+        // so positive explicit feedback can strengthen them.
+        val conceptInputIds = (ANS100ConceptMemory.NEURAL_INPUT_START until
+            ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS).toSet()
         addProjection(
             "evidence-general-association",
             evidence,
             generalAssociation,
             fanOut = EVIDENCE_GENERAL_FAN_OUT,
             salt = EVIDENCE_GENERAL_SALT.toInt(),
-            excludedSourceIds = candidateInputIds,
+            excludedSourceIds = candidateInputIds + conceptInputIds,
+        )
+        addProjection(
+            "evidence-general-association",
+            Population("concept_input", ANS100ConceptMemory.NEURAL_INPUT_START,
+                ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS),
+            generalAssociation,
+            fanOut = EVIDENCE_GENERAL_FAN_OUT,
+            salt = EVIDENCE_GENERAL_SALT.toInt(),
+            feedForwardWeight = CONCEPT_ASSOCIATION_INITIAL_WEIGHT,
         )
         ANS100CandidateSlotContract.Slot.values().forEach { slot ->
             ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
@@ -210,6 +223,7 @@ object AndroidHybridTopologyV2 {
         salt: Int,
         recurrent: Boolean = false,
         excludedSourceIds: Set<Int> = emptySet(),
+        feedForwardWeight: Double = FEED_FORWARD_WEIGHT,
     ) {
         require(fanOut in 1..8)
         for (sourceOffset in 0 until source.size) {
@@ -233,7 +247,7 @@ object AndroidHybridTopologyV2 {
                         sourceNeuronId = sourceId,
                         targetNeuronId = targetId,
                         delayNs = CONNECTION_DELAY_NS,
-                        weight = if (recurrent) RECURRENT_WEIGHT else FEED_FORWARD_WEIGHT,
+                        weight = if (recurrent) RECURRENT_WEIGHT else feedForwardWeight,
                     ),
                 )
             }
