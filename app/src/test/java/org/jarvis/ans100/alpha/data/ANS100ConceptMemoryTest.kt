@@ -38,6 +38,24 @@ class ANS100ConceptMemoryTest {
         assertEquals(ANS100ConceptMemory.VerificationStatus.UNRESOLVED, memory.verify(hypothesis).status)
     }
 
+    @Test fun hypothesesAreScopedToConceptsActivatedByCurrentInput() {
+        val memory = memory()
+        memory.learnRelation(relation("dog-mammal", "dog", ANS100ConceptMemory.RelationType.IS_A, "mammal"))
+        memory.learnRelation(relation("mammal-animal", "mammal", ANS100ConceptMemory.RelationType.IS_A, "animal"))
+        memory.learnRelation(relation("vehicle-animal", "vehicle", ANS100ConceptMemory.RelationType.IS_A, "animal"))
+
+        val activeDog = memory.generateHypothesesFor(setOf("dog"))
+        assertEquals(1, activeDog.size)
+        assertEquals("dog", activeDog.single().fromConceptId)
+        assertTrue(memory.generateHypothesesFor(setOf("vehicle")).isEmpty())
+        assertTrue(memory.generateHypothesesFor(emptySet()).isEmpty())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun activatedConceptMustExistInMemory() {
+        memory().generateHypothesesFor(setOf("unknown"))
+    }
+
     @Test fun directEvidenceCanSupportRefuteOrConflictWithHypothesis() {
         val memory = memory()
         memory.learnRelation(relation("dog-mammal", "dog", ANS100ConceptMemory.RelationType.IS_A, "mammal"))
