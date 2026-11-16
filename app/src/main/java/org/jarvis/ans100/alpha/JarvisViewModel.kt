@@ -49,6 +49,7 @@ import org.jarvis.ans100.alpha.data.ANS100CandidateSlotContract
 import org.jarvis.ans100.alpha.data.ANS100QwenHandoffBuilder
 import org.jarvis.ans100.alpha.data.LocalUnderstandingPipeline
 import org.jarvis.ans100.alpha.data.ANS100WorkspaceConceptInputBridge
+import org.jarvis.ans100.alpha.data.ANS100NeuralAssociationDecoder
 import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
 import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
