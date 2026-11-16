@@ -132,6 +132,52 @@ class ANS100DecisionTest {
         )
     }
 
+    @Test
+    fun handoffCarriesNeuralCoActivationAsUnverifiedCandidate() {
+        val candidate = ANS100NeuralAssociationDecoder.Candidate(
+            candidateId = "neural-association:" + "a".repeat(32),
+            firstConceptId = "concept:dog",
+            firstLabel = "Собака",
+            secondConceptId = "concept:animal",
+            secondLabel = "Животное",
+            convergentNeuronIds = listOf(1_234),
+            evidenceRefs = listOf(
+                "turn:decision:concept:concept:dog",
+                "turn:decision:concept:concept:animal",
+                "ans100-neuron:1234",
+            ),
+            activationHint = 1.0 / 3.0,
+        )
+        val handoff = ANS100QwenHandoffBuilder().build(
+            originalUserMessage = message, understanding = understanding,
+            evidence = evidence, decision = selectedDecision(),
+            neuralAssociations = listOf(candidate),
+        )
+
+        assertTrue(handoff.promptContext.contains("Собака + Животное"))
+        assertTrue(handoff.promptContext.contains("shared_spiking_neurons=1234"))
+        assertTrue(handoff.promptContext.contains("does not prove similarity, a relation, causality, or truth"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun handoffRejectsTooManyNeuralAssociationCandidates() {
+        val candidate = ANS100NeuralAssociationDecoder.Candidate(
+            candidateId = "neural-association:" + "b".repeat(32),
+            firstConceptId = "concept:a",
+            firstLabel = "A",
+            secondConceptId = "concept:b",
+            secondLabel = "B",
+            convergentNeuronIds = listOf(1_234),
+            evidenceRefs = listOf("ref:a", "ref:b", "ans100-neuron:1234"),
+            activationHint = 1.0 / 3.0,
+        )
+        ANS100QwenHandoffBuilder().build(
+            originalUserMessage = message, understanding = understanding,
+            evidence = evidence, decision = selectedDecision(),
+            neuralAssociations = List(9) { candidate.copy(candidateId = "neural-association:" + it.toString(16).padStart(32, '0')) },
+        )
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun handoffRejectsMismatchedOriginalMessage() {
         ANS100QwenHandoffBuilder().build(
