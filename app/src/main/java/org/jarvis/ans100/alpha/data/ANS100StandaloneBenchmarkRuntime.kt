@@ -205,7 +205,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             .filter { it.neuronId in spikes && it.neuronId !in tainted }
             .map { it.conceptId }
             .toSet()
-        val hypotheses = hypothesisEngine.observeTurn(
+        hypothesisEngine.observeTurn(
             turnId = turnId,
             activeConceptIds = activeConceptIds,
             candidates = associationResult?.candidates.orEmpty(),
@@ -225,9 +225,9 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         // B3: this audit is transparent benchmark instrumentation only. It is
         // never injected into the network and never replaces its canonical readout.
         val evidenceAudit = structuredParse?.let(evidenceVerifier::verify)
-        val candidateEvidenceAudits = if (structuredParse != null) {
-            evidenceVerifier.verifyCandidates(structuredParse, associationResult?.candidates.orEmpty())
-        } else emptyList()
+        val candidateEvidenceAudits = structuredParse?.let {
+            evidenceVerifier.verifyCandidates(it, associationResult?.candidates.orEmpty())
+        }.orEmpty()
         val candidateEvidenceAuditCounts = candidateEvidenceAudits.groupingBy { it.status }.eachCount()
         return TaskResult(
             taskId = taskId,
