@@ -3170,3 +3170,16 @@ Added ANS100NeuralHypothesisEngine. It forms hypotheses from actual shared assoc
 **Important limitation:** upstream concept activation and typed evidence still come from lexical/Core preparation. The new engine is a first neural-output-driven association hypothesis lifecycle, not a fully autonomous semantic reasoner. It does not emit benchmark canonical answers, does not give Qwen decision authority, and does not enable automatic structural growth.
 
 **Tests authored, NOT RUN:** hypothesis lifecycle and trace-store regression tests. No Gradle tests, Android build, APK, CI, GitHub Actions, Transformer inference, ANS scoring or device inference were run.
+
+
+## 2026-11-16 — Typed hypothesis evidence and competing memory explanations V1
+
+Extended the workspace concept bridge with an explicit relation-evidence category. Approved records use the exact syntax `source | RELATION_TYPE | target | SUPPORTS|REFUTES`. Endpoints must resolve uniquely to approved concepts; malformed, ambiguous, unapproved, multiline and overlong records are rejected. Per-turn evidence is capped at the concept-memory verification limit (128).
+
+The existing typed memory verifier now receives these observations and can distinguish SUPPORTED, REFUTED, CONFLICTING and UNRESOLVED. A support and counter-evidence for the same typed relation yields CONFLICTING. The Android diagnostic summary exposes counts for each state.
+
+Benchmark telemetry now carries memory-derived typed explanations separately from neural co-activation hypotheses. It hashes concept labels and hypothesis identifiers and exports only relation type, status and evidence counts. This creates two auditable evidence streams for subsequent comparison; it does not collapse them into a neural canonical answer.
+
+**Provenance boundary:** workspace evidence is EXPLICIT_USER only. It is user-entered assertion, not independently verified external evidence. Text cannot self-assign VERIFIED_TOOL provenance. Authenticated tool ingestion remains future work.
+
+**Tests authored, NOT RUN:** support/refute/conflict parsing, malformed/unapproved/ambiguous evidence rejection. No Gradle tests, Android build, APK, CI, GitHub Actions, or device inference were run.
