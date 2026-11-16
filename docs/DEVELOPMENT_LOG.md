@@ -3298,3 +3298,18 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 **Limitations:** no pause/resume, persistent experiment history, peak-memory sampling, or automatic report generation inside the Android app yet. Use the Python scorer after exporting both prediction files. The benchmark remains synthetic and bounded; it does not establish general intelligence or a universal model winner.
 
 **Commits:** `a973453`, `4df64e5`, `830655e`, `e48f339`, `0fc653a`, `2aebc3a`, `6bff054`, `d25e6ce`, `73c51f`.
+
+
+## 2026-11-16 — Sample peak process RAM during paired model benchmark
+
+**Objective:** add real Android memory measurements to the existing paired Transformer-vs-ANS-100 experiment rather than leaving the scorer's `peak_memory_mb` field empty.
+
+**Changed:**
+- Added `ProcessMemoryPeakSampler`, sampling Android process PSS every 20 ms around each model inference and recording baseline PSS, sampled peak PSS, peak-minus-baseline delta, and sample interval.
+- Wrapped the Transformer-only inference and isolated ANS-100 task execution independently, so each exported prediction row receives its own measurement.
+- Extended both result records and JSONL exports with `memory_baseline_pss_mb`, `peak_memory_mb`, `peak_memory_delta_mb`, and `memory_sample_interval_ms`.
+- Updated the benchmark UI and protocol documentation to explain the measurement and its limitations.
+
+**Interpretation limits:** PSS is process-wide and includes app/runtime/model/network/shared allocations; it is not a precise per-model heap measurement. The 20 ms sampler can miss shorter spikes. Baseline and delta are both recorded because persistent model/runtime allocations differ between runs. Failed inferences do not receive fabricated memory values.
+
+**Verification:** source edits only. Kotlin compilation, Android tests, Python tests, APK builds, CI, and on-device measurements: **NOT RUN** by project policy. No measured peak values exist until the experiment is run on the phone.
