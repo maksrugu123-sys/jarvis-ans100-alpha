@@ -38,6 +38,9 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     fun runTask(taskId: String, inputText: String, trainingLabel: String? = null): TaskResult {
         require(taskId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")))
         val label = trainingLabel?.let {
+            require(taskId.startsWith("development:")) {
+                "supervised ANS-100 benchmark labels are accepted only for development tasks"
+            }
             ANS100CanonicalReadoutContract.Answer.valueOf(it.trim().uppercase())
         }
         val startedAtNs = System.nanoTime()
