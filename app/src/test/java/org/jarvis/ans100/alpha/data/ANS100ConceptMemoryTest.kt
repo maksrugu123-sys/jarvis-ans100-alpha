@@ -76,9 +76,15 @@ class ANS100ConceptMemoryTest {
         memory.learnRelation(relation("mammal-animal", "mammal", ANS100ConceptMemory.RelationType.IS_A, "animal"))
         val hypothesis = memory.generateHypotheses().single()
         val support = ANS100ConceptMemory.RelationEvidence("dog", ANS100ConceptMemory.RelationType.IS_A, "animal", true, ANS100ConceptMemory.LearningSource.VERIFIED_TOOL, "tool:taxonomy")
-        assertEquals(ANS100ConceptMemory.VerificationStatus.SUPPORTED, memory.verify(hypothesis, listOf(support)).status)
+        val supported = memory.verify(hypothesis, listOf(support))
+        assertEquals(ANS100ConceptMemory.VerificationStatus.SUPPORTED, supported.status)
+        assertEquals(setOf(ANS100ConceptMemory.LearningSource.VERIFIED_TOOL), supported.supportingSources)
+        assertTrue(supported.contradictingSources.isEmpty())
         val conflict = support.copy(supports = false, evidenceRef = "tool:counterexample")
-        assertEquals(ANS100ConceptMemory.VerificationStatus.CONFLICTING, memory.verify(hypothesis, listOf(support, conflict)).status)
+        val conflicting = memory.verify(hypothesis, listOf(support, conflict))
+        assertEquals(ANS100ConceptMemory.VerificationStatus.CONFLICTING, conflicting.status)
+        assertEquals(setOf(ANS100ConceptMemory.LearningSource.VERIFIED_TOOL), conflicting.supportingSources)
+        assertEquals(setOf(ANS100ConceptMemory.LearningSource.VERIFIED_TOOL), conflicting.contradictingSources)
         assertEquals(ANS100ConceptMemory.VerificationStatus.REFUTED, memory.verify(hypothesis, listOf(conflict)).status)
     }
 
