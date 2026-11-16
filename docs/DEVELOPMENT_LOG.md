@@ -3159,3 +3159,14 @@ Inspected the existing Android `ANS100BenchmarkTraceAdapter.kt`: it already expo
 Added `ans100_benchmark_adapter_v1.py` to export exact model inputs without evaluator labels/split metadata and validate Android trace exports. The adapter checks the SHA-256 of each exact input, records heuristic provenance, and emits scorer predictions only when a dedicated `NEURAL_CANONICAL_READOUT` explicitly produces YES/NO/UNKNOWN/CONFLICT. Current `HYBRID_POPULATION_CONTROLLER_V1` SELECTED/clarification/abstention statuses are deliberately not converted into semantic answers. Added focused regression tests and adapter documentation.
 
 **Status:** implementation and tests committed; tests NOT RUN. No production inference path changed, no Android trace exporter or actual predictions exist yet, no Transformer/ANS inference or resource measurements were run. No build, CI or Actions run.
+
+
+## 2026-11-16 — Android benchmark telemetry and neural hypothesis lifecycle V1
+
+Connected ANS100BenchmarkTraceAdapter to the real JarvisViewModel hybrid dialogue pass. Each pass attempts a best-effort app-private JSONL write with bounded 256-record retention, 64 KiB row cap, input SHA-256 and character count only (no raw message, gold labels, expected answers, or assistant response). Captured values include actual emitted spikes, activated connection IDs, population activity, Core heuristic provenance, association candidates and measured ANS-pass elapsed time. Peak process memory remains null because it is not measured.
+
+Added ANS100NeuralHypothesisEngine. It forms hypotheses from actual shared association-target spikes and checks reproduction on later distinct completed turns. It distinguishes generated, reproduced, and not-reproduced signals; non-reproduction is not factual refutation. Incomplete turns, duplicate turns and potentially truncated candidate scans cannot count as negative verification. State is bounded but currently in-memory only.
+
+**Important limitation:** upstream concept activation and typed evidence still come from lexical/Core preparation. The new engine is a first neural-output-driven association hypothesis lifecycle, not a fully autonomous semantic reasoner. It does not emit benchmark canonical answers, does not give Qwen decision authority, and does not enable automatic structural growth.
+
+**Tests authored, NOT RUN:** hypothesis lifecycle and trace-store regression tests. No Gradle tests, Android build, APK, CI, GitHub Actions, Transformer inference, ANS scoring or device inference were run.
