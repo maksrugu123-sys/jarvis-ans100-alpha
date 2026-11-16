@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -970,6 +971,146 @@ class AndroidSparseNeuronNetworkTest {
                 assertEquals(64, count)
             } finally {
                 db.close()
+            }
+        }
+    }
+
+
+    @Test
+    fun canonicalReadoutFeedbackPersistsFourRealLifSynapsesAndProducesOnlyTrainedClassSpikes() {
+        val sources = listOf(1_062, 1_200, 4_000)
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            assertEquals(sources.size, network.recordCanonicalReadoutEligibility("canonical-turn-1", sources))
+            val updated = network.applyCanonicalReadoutFeedback(
+                feedbackId = "canonical-feedback-1",
+                turnId = "canonical-turn-1",
+                answer = ANS100CanonicalReadoutContract.Answer.YES,
+                source = ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            )
+            assertTrue(updated > 0)
+            assertEquals(sources.size * 4, network.canonicalReadoutSynapseCount())
+            assertEquals(
+                0,
+                network.recordCanonicalReadoutEligibility("canonical-turn-1", sources),
+            )
+            assertEquals(0, network.applyCanonicalReadoutFeedback(
+                feedbackId = "canonical-feedback-1",
+                turnId = "canonical-turn-1",
+                answer = ANS100CanonicalReadoutContract.Answer.NO,
+                source = ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            ))
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
+            reopened.initializeHybridTopologyV2()
+            assertEquals(sources.size * 4, reopened.canonicalReadoutSynapseCount())
+            reopened.scheduleInputs(sources.map { neuronId ->
+                AndroidNeuronEvent(
+                    eventId = "canonical-replay-$neuronId",
+                    timeNs = 1_000_000L,
+                    targetNeuronId = neuronId,
+                    strength = 1.0,
+                )
+            })
+            val run = reopened.run(maxEvents = 2_000, maxTimestamps = 2_000)
+            assertEquals(0, run.pendingEvents)
+            val decoded = ANS100CanonicalReadoutDecoder().decode(
+                run.emittedSpikes.map { it.first }.toSet(),
+            )
+            assertEquals(ANS100CanonicalReadoutContract.Answer.YES, decoded.answer)
+            assertEquals(
+                ANS100CanonicalReadoutDecoder.Result.Status.UNCALIBRATED_WINNER,
+                decoded.status,
+            )
+        }
+    }
+
+    @Test
+    fun canonicalReadoutRejectsCoreCandidateSignalsAndUntrustedFeedbackSources() {
+        AndroidHybridTopologyV2.open(context, databaseName).use { network ->
+            network.initializeHybridTopologyV2()
+            var rejected = false
+            try {
+                network.recordCanonicalReadoutEligibility("bad-canonical-turn", listOf(1_056))
+            } catch (_: IllegalArgumentException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+            assertEquals(0, network.recordCanonicalReadoutEligibility("empty-canonical-turn", emptyList()))
+        }
+    }
+
+    @Test
+    fun v4ToV5MigrationPreservesLearnedReadoutSynapsesAndMovesPlanningEdges() {
+        val sources = listOf(1_062, 1_200)
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            network.recordCanonicalReadoutEligibility("migration-turn", sources)
+            network.applyCanonicalReadoutFeedback(
+                feedbackId = "migration-feedback",
+                turnId = "migration-turn",
+                answer = ANS100CanonicalReadoutContract.Answer.CONFLICT,
+                source = ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            )
+        }
+
+        val db = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            db.beginTransaction()
+            try {
+                db.rawQuery(
+                    "SELECT connection_id, source_id FROM connections WHERE connection_id LIKE 'ans100-v4-working-to-goal-%'",
+                    null,
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val connectionId = cursor.getString(0)
+                        val sourceId = cursor.getInt(1)
+                        val oldOffset = Math.floorMod((sourceId - 4_000).toLong() * 37L + 97L, 900L).toInt()
+                        val values = ContentValues().apply { put("target_id", 8_500 + oldOffset) }
+                        db.update("connections", values, "connection_id=?", arrayOf(connectionId))
+                    }
+                }
+                db.update(
+                    "metadata",
+                    ContentValues().apply { put("value", 4) },
+                    "key='ans100_topology_version'",
+                    null,
+                )
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        } finally {
+            db.close()
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { migrated ->
+            migrated.initializeHybridTopologyV2()
+            assertEquals(sources.size * 4, migrated.canonicalReadoutSynapseCount())
+            assertEquals(
+                AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT + sources.size * 4,
+                migrated.stats().connectionCount,
+            )
+            val checkDb = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+            try {
+                val invalidPlanningTargets = checkDb.rawQuery(
+                    "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v4-working-to-goal-%' AND target_id NOT BETWEEN 8500 AND 8799",
+                    null,
+                ).use { it.moveToFirst(); it.getInt(0) }
+                val canonicalIncoming = checkDb.rawQuery(
+                    "SELECT COUNT(*) FROM connections WHERE target_id BETWEEN 8800 AND 9399 AND connection_id NOT LIKE 'ans100-v9-canonical-readout-%'",
+                    null,
+                ).use { it.moveToFirst(); it.getInt(0) }
+                assertEquals(0, invalidPlanningTargets)
+                assertEquals(0, canonicalIncoming)
+                val canonicalCount = checkDb.rawQuery(
+                    "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v9-canonical-readout-%'",
+                    null,
+                ).use { it.moveToFirst(); it.getInt(0) }
+                assertEquals(sources.size * 4, canonicalCount)
+            } finally {
+                checkDb.close()
             }
         }
     }
