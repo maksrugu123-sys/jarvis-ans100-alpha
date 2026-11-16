@@ -1009,6 +1009,60 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         hybridNeuronNetwork.structuralAssociationConnections(
                             batch.conceptTrace.map { it.neuronId },
                         )
+
+                    // Structural growth is intentionally disabled by default.
+                    // When enabled for a measured experiment, only concepts whose
+                    // input neurons spiked and propagated an association edge are
+                    // recorded, and incomplete/budget-exhausted turns are ignored.
+                    if (STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED &&
+                        !result.budgetExhausted && result.pendingEvents == 0
+                    ) {
+                        runCatching {
+                            val propagatedConcepts = batch.conceptTrace.filter { trace ->
+                                if (trace.neuronId !in emittedSpikeNeuronIds) return@filter false
+                                val fixedPaths = AndroidHybridTopologyV2
+                                    .conceptAssociationProjection(trace.neuronId).values
+                                val grownPaths = learnedAssociationConnections
+                                    .asSequence()
+                                    .filter { it.sourceNeuronId == trace.neuronId }
+                                    .map { it.connectionId }
+                                (fixedPaths.asSequence() + grownPaths)
+                                    .any { it in activatedConnectionIds }
+                            }.map { trace ->
+                                org.jarvis.ans100.alpha.data.ANS100ActivityDrivenStructuralPlasticity.ActiveConcept(
+                                    conceptId = trace.conceptId,
+                                    neuronId = trace.neuronId,
+                                    label = trace.matchedAlias,
+                                    provenanceRef = trace.provenanceRef,
+                                )
+                            }
+                            val snapshots = hybridNeuronNetwork.recordStructuralPlasticityTurn(
+                                turnId = turnId,
+                                activeConcepts = propagatedConcepts,
+                            )
+                            val sourceIds = snapshots.flatMap { snapshot ->
+                                snapshot.activeConcepts.map { it.neuronId }
+                            }.distinct().sorted()
+                            val graph = hybridNeuronNetwork.structuralPlasticityGraphSnapshot(sourceIds)
+                            val learner = org.jarvis.ans100.alpha.data.ANS100ActivityDrivenStructuralPlasticity(
+                                maxGrownPairs = org.jarvis.ans100.alpha.data.ANS100ActivityDrivenStructuralPlasticity.MAX_GROWN_PAIRS_HARD_LIMIT,
+                                maxGrownEdgesPerConcept = org.jarvis.ans100.alpha.data.ANS100ActivityDrivenStructuralPlasticity.MAX_GROWN_EDGES_PER_CONCEPT_HARD_LIMIT,
+                            )
+                            learner.restoreGrownState(graph.grownConceptPairs, graph.grownEdgesByConcept)
+                            snapshots.forEach { snapshot ->
+                                val observation = learner.observeTurn(
+                                    turnId = snapshot.turnId,
+                                    activeConcepts = snapshot.activeConcepts,
+                                    existingTargetsByConceptNeuron = graph.existingTargetsByConceptNeuron,
+                                    targetIncomingEdgeCounts = graph.targetIncomingEdgeCounts,
+                                )
+                                observation.emittedProposals.forEach { proposal ->
+                                    hybridNeuronNetwork.addStructuralGrowthProposal(proposal)
+                                }
+                            }
+                        }
+                    }
+
                     val neuralAssociationResult = ANS100NeuralAssociationDecoder().decode(
                         conceptTrace = batch.conceptTrace,
                         emittedSpikeNeuronIds = emittedSpikeNeuronIds,
@@ -2325,6 +2379,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         private const val MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS = 4_096
         private const val MAX_HYBRID_DIALOGUE_TIMESTAMPS_PER_PASS = 128
         private const val MAX_HYBRID_DIALOGUE_MAX_PASSES = 4
+        private const val STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED = false
     }
 
     override fun onCleared() {
