@@ -34,6 +34,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         val peakMemoryPssMb: Double? = null,
         val peakMemoryDeltaMb: Double? = null,
         val memorySampleIntervalMs: Long? = null,
+        val coldStart: Boolean = false,
     )
 
     /**
@@ -41,8 +42,10 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
      * Held-out evaluation examples must call this with trainingLabel=null.
      */
     @Synchronized
-    fun runTask(taskId: String, inputText: String, trainingLabel: String? = null): TaskResult {
+    fun runTask(taskId: String, inputText: String, trainingLabel: String? = null, coldStart: Boolean = false): TaskResult {
+        if (coldStart) network.close()
         val measured = ProcessMemoryPeakSampler.measure {
+            if (coldStart) network = openNetwork()
             runTaskInternal(taskId, inputText, trainingLabel)
         }
         return measured.value.copy(
@@ -50,6 +53,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             peakMemoryPssMb = measured.peakPssMb,
             peakMemoryDeltaMb = measured.peakDeltaMb,
             memorySampleIntervalMs = measured.sampleIntervalMs,
+            coldStart = coldStart,
         )
     }
 
