@@ -28,6 +28,17 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
         held={s for t in self.tasks if t["split"]=="concept_disjoint" for f in t["facts"] for s in (f.get("subject"),f.get("object"))}
         self.assertTrue(dev.isdisjoint(held))
 
+    def test_pair_disjoint_split_uses_new_pairs_with_shared_vocabulary(self):
+        def pairs(split):
+            return {
+                (fact["subject"], fact["object"])
+                for task in self.tasks if task["split"] == split
+                for fact in task["facts"]
+            }
+        self.assertTrue(pairs("development"))
+        self.assertTrue(pairs("pair_disjoint"))
+        self.assertTrue(pairs("development").isdisjoint(pairs("pair_disjoint")))
+
     def test_compositional_split_contains_two_hop_queries(self):
         rows=[t for t in self.tasks if t["split"]=="compositional"]
         self.assertTrue(rows)
