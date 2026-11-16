@@ -49,6 +49,32 @@ The adapter emits clean presence pulses and a trace containing role, normalized 
 
 The structured adapter is now exposed through `ANS100StandaloneBenchmarkRuntime.runStructuredTask(...)`; the original `runTask(...)` remains the lexical baseline. The two modes use separate SQLite databases (`jarvis_ans100_benchmark_v1.db` and `jarvis_ans100_structured_benchmark_v1.db`) and have separate reset methods, preventing learned readout weights from contaminating the comparison. The structured runtime reports `inputEncoding=role_structured_v1` and `parsedFactCount`; the legacy count fields represent encoded/activated features in structured mode. The Android ViewModel/UI batch workflow has NOT yet been wired to select this mode. The new JVM unit tests have been authored but have NOT been run. Do not compare performance until the tests pass and both modes are evaluated on the exact same tasks.
 
+
+## Stage B1-B5 implementation package
+
+### B1 — role-structured benchmark perception
+`ANS100StructuredBenchmarkInputAdapter` parses only the explicit benchmark grammar and allocates separate lanes for fact subject, fact relation, fact object, query subject, query relation, and query object. Each lane has 23 deterministic slots inside the existing 138-neuron concept-input range. It records role/value/provenance trace entries, counts slot collisions, rejects unsupported grammar, and bounds facts to 20 so the trace remains within the neural association decoder's 64-concept budget. The lexical hash adapter remains unchanged.
+
+### B2 — neural hypothesis generation
+`ANS100StandaloneBenchmarkRuntime` now sends actual completed-turn spikes and activated synapse IDs to `ANS100NeuralAssociationDecoder`. Candidates are generated from co-activation of concept-input neurons at shared association targets. `ANS100NeuralHypothesisEngine` records whether the same pair reproduces on a later independent completed turn; snapshots are persisted separately for lexical and structured benchmark modes. The event parser now recognizes grown v5 association synapses as well as fixed v4 and canonical readout synapses. This is neural co-activation and repeatability, not proof of semantic truth. Inputs are bounded to 64 concepts for hypothesis decoding; a truncated scan is explicitly marked incomplete.
+
+### B3 — evidence verification
+`ANS100StructuredEvidenceVerifier` provides a transparent benchmark-only evidence audit for direct positive/negative evidence, explicit support/refutation, conflicts, and directed paths of at most two edges in a graph explicitly declared complete. Its audit answer and provenance refs are reported separately from the neural readout. It is NEVER injected into the network and NEVER replaces the ANS-100 output. JSONL records whether an uncalibrated neural readout agrees with the independent audit.
+
+### B4 — learning and transfer
+The structured mode uses the existing canonical YES/NO/UNKNOWN/CONFLICT readout and the same supervised feedback mechanism as the lexical baseline. Training labels are accepted only for `development:` task IDs. Lexical and structured modes use separate SQLite topology databases and separate neural-hypothesis ledgers, with independent reset operations. The combined Android workflow resets both, trains each only on the same development examples, then evaluates both on identical held-out inputs with no labels. Pair-disjoint, concept-disjoint, and compositional splits remain separate transfer tests. This stage does not yet demonstrate that the network learns general semantic concepts or causal laws.
+
+### B5 — comparisons and exports
+The Android benchmark panel now exposes:
+- the existing Qwen versus lexical ANS-100 workflow;
+- lexical ANS-100 versus role-structured ANS-100 on identical held-out tasks;
+- Qwen versus role-structured ANS-100 on identical held-out tasks.
+
+Prediction exports preserve input encoding, parsed fact count, neural association candidate counts, hypothesis status counts, independent evidence-audit result/agreement, latency, PSS memory metrics, and readout status. The lexical and structured prediction files remain separate.
+
+### Interpretation and outstanding validation
+The new implementation has been committed to the experimental branch only. No Gradle build, Android instrumentation test, JVM test suite, CI run, APK build, or device benchmark has been executed for this package. Before treating Stage B as complete, run the targeted JVM tests and a debug compile; then run the 192-task workflow on-device and score the three held-out splits. The structured parser intentionally supports the benchmark's narrow grammar only. The evidence audit is symbolic instrumentation, not the neural brain. The current neural hypothesis engine verifies repeated co-activation, not factual correctness. Structural synapse growth is not yet automatically trained by this benchmark path; only the existing canonical readout feedback is supervised here. Do not claim semantic understanding, causal reasoning, or superiority over Qwen from implementation alone.
+
 ## Current implementation boundary
 
 The repository currently contains a 10k sparse LIF network, concept activation and associative/structural experiments, but the full app still has heuristic Core logic that prepares some evidence and candidate signals. A benchmark adapter must identify those signals and report them. It must not silently label the current integrated pipeline as pure neural reasoning.
