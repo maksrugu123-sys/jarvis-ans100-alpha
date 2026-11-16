@@ -131,6 +131,8 @@ class ANS100BenchmarkTraceAdapterTest {
             verificationStatus = ANS100ConceptMemory.VerificationStatus.CONFLICTING,
             supportingEvidenceRefs = listOf("workspace-memory-evidence:support"),
             contradictingEvidenceRefs = listOf("workspace-memory-evidence:counter"),
+            supportingEvidenceSources = setOf(ANS100ConceptMemory.LearningSource.EXPLICIT_USER),
+            contradictingEvidenceSources = setOf(ANS100ConceptMemory.LearningSource.EXPLICIT_USER),
         )
         val trace = ANS100BenchmarkTraceAdapter.create(
             taskId = null,
@@ -148,6 +150,8 @@ class ANS100BenchmarkTraceAdapterTest {
         assertEquals("IS_A", explanation.getString("relation_type"))
         assertEquals(1, explanation.getInt("supporting_evidence_count"))
         assertEquals(1, explanation.getInt("contradicting_evidence_count"))
+        assertEquals("EXPLICIT_USER", explanation.getJSONArray("supporting_evidence_sources").getString(0))
+        assertEquals("EXPLICIT_USER", explanation.getJSONArray("contradicting_evidence_sources").getString(0))
         assertFalse(trace.toString().contains("Private Concept A"))
         assertFalse(trace.toString().contains("workspace-memory:one"))
         assertTrue(trace.toString().contains("memory_hypothesis_explanations"))
