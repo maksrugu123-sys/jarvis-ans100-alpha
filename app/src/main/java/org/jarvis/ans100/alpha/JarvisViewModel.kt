@@ -632,6 +632,70 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Complete B5 encoding experiment: reset both isolated databases, train each
+     * encoder only on the same development rows, then evaluate both on identical
+     * held-out rows. No labels are passed during evaluation.
+     */
+    fun runCompleteAns100EncodingComparison(
+        development: List<ANS100BenchmarkDevelopmentExample>,
+        heldOut: List<ANS100BenchmarkBatchInput>,
+        onProgress: (String) -> Unit,
+        onComplete: (Result<List<Ans100EncodingComparisonResult>>) -> Unit,
+    ) {
+        require(development.isNotEmpty() && development.size <= MAX_BENCHMARK_BATCH_SIZE)
+        require(heldOut.isNotEmpty() && heldOut.size <= MAX_BENCHMARK_BATCH_SIZE)
+        require(development.map { it.taskId }.distinct().size == development.size)
+        require(heldOut.map { it.taskId }.distinct().size == heldOut.size)
+        require(development.all {
+            it.taskId.startsWith("development:") && it.inputText.isNotBlank() &&
+                it.inputText.length <= 2_048 &&
+                it.trainingLabel.uppercase() in setOf("YES", "NO", "UNKNOWN", "CONFLICT")
+        })
+        require(heldOut.all {
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any { prefix ->
+                it.taskId.startsWith(prefix)
+            } && it.inputText.isNotBlank() && it.inputText.length <= 2_048
+        })
+        conversationExecutor.execute {
+            val result = runCatching {
+                ans100BenchmarkRuntime.resetLearnedState()
+                ans100BenchmarkRuntime.resetStructuredLearnedState()
+                development.forEachIndexed { index, example ->
+                    val trained = ans100BenchmarkRuntime.runTask(
+                        example.taskId, example.inputText, example.trainingLabel,
+                    )
+                    check(trained.completed && trained.trainingApplied) {
+                        "Lexical training failed at ${example.taskId}"
+                    }
+                    mainHandler.post { onProgress("Лексическое обучение: ${index + 1}/${development.size}") }
+                }
+                development.forEachIndexed { index, example ->
+                    val trained = ans100BenchmarkRuntime.runStructuredTask(
+                        example.taskId, example.inputText, example.trainingLabel,
+                    )
+                    check(trained.completed && trained.trainingApplied) {
+                        "Structured training failed at ${example.taskId}"
+                    }
+                    mainHandler.post { onProgress("Структурированное обучение: ${index + 1}/${development.size}") }
+                }
+                val comparisons = ArrayList<Ans100EncodingComparisonResult>(heldOut.size)
+                heldOut.forEachIndexed { index, input ->
+                    val lexical = runCatching {
+                        ans100BenchmarkRuntime.runTask(input.taskId, input.inputText, null, coldStart = true)
+                    }
+                    val structured = runCatching {
+                        ans100BenchmarkRuntime.runStructuredTask(input.taskId, input.inputText, null, coldStart = true)
+                    }
+                    comparisons += Ans100EncodingComparisonResult(input.taskId, lexical, structured)
+                    mainHandler.post { onProgress("Сравнение на новых данных: ${index + 1}/${heldOut.size}") }
+                }
+                comparisons.toList()
+            }
+            mainHandler.post { onComplete(result) }
+        }
+    }
+
     /** Qwen versus structured ANS on exactly the same held-out input. */
     fun runStructuredPairedBenchmarkTask(
         taskId: String,
