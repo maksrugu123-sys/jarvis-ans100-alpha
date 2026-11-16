@@ -98,6 +98,9 @@ object AndroidHybridEvidenceInputAdapter {
                 // The current LIF threshold is 1.0. This is a presence pulse;
                 // activationHint is preserved in trace, not treated as confidence.
                 strength = ACTIVE_PULSE_STRENGTH,
+                coreTainted = record.status == EvidenceStatus.HEURISTIC ||
+                    record.source == EvidenceSourceKind.CORE_UNDERSTANDING ||
+                    record.source == EvidenceSourceKind.CORE_REASONING_PLAN,
             )
             trace += TraceEntry(
                 recordId = record.recordId,
