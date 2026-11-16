@@ -99,11 +99,6 @@ class ANS100NeuralAssociationDecoder {
             it.targetNeuronId in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END &&
             it.connectionId.startsWith("ans100-v5-grown-association-")
         })
-        val generalActivatedConnections = activatedConnectionIds.filterTo(LinkedHashSet()) {
-            it.startsWith("ans100-v4-evidence-general-association-")
-        }
-        require(generalActivatedConnections.all { it.length <= 128 })
-
         val associationSpikes = emittedSpikeNeuronIds.filterTo(LinkedHashSet()) {
             it in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END
         }
