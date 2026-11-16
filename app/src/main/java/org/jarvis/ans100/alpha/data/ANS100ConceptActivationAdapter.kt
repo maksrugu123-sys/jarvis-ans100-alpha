@@ -1,7 +1,5 @@
 package org.jarvis.ans100.alpha.data
 
-import java.util.Locale
-
 /**
  * Grounds explicit concept labels/aliases against lexical observations.
  *
