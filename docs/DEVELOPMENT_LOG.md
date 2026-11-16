@@ -3132,3 +3132,11 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 **Tests authored, NOT RUN:** persistence and replay after database reopen, duplicate turn replay after reopen, reconstruction of a proposal from three persisted turns, growth-state restoration, bounded 64-turn retention/16-turn replay, per-turn target de-duplication, and V7 to V8 migration without base-topology rebuild. No Gradle tests, Android build, APK, CI, GitHub Actions or device inference were run.
 
 **Next:** create a deterministic held-out evaluation harness with positive/negative concept-pair labels, temporal split, shuffled-activity and fixed-topology baselines; measure candidate precision/recall, false associations, connection growth, storage and runtime cost before considering enabling automatic growth.
+
+## 2026-11-16 — Structural-plasticity temporal evaluation V1
+
+Added tools/task_validation/structural_plasticity_eval_v1.py and focused tests. The deterministic synthetic fixture compares fixed projection, activity-grown topology and shuffled temporal identity. Each labelled pair receives two training-time observations; four positives and two hard negatives receive a third held-out observation. Labels are never supplied to the learner. The report covers classification metrics, false-association rate, growth count, target loads, bounded operation counts and estimated logical payload.
+
+**Interpretation:** the hard negatives intentionally test whether repeated co-activation can create false links. This experiment evaluates the temporal growth heuristic only; it does not establish semantic understanding, Android runtime behavior or real-world accuracy. The payload estimate is not measured RAM/SQLite size, and operation counts are not wall-clock CPU benchmarks.
+
+**Status:** implementation committed; tests AUTHORED / NOT RUN. STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED remains false. No Android/Windows build, APK/AAB, Gradle, CI, GitHub Actions or device inference was run.
