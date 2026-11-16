@@ -23,6 +23,11 @@ object ANS100BenchmarkJsonl {
     fun readDevelopmentRows(resolver: ContentResolver, uri: Uri): List<ANS100BenchmarkDevelopmentExample> =
         readRows(resolver, uri, TRAIN_SCHEMA).map { row ->
             val id = required(row, "task_id")
+            requireExactKeys(
+                row,
+                setOf("schema", "task_id", "input_text", "training_label", "input_sha256"),
+                id,
+            )
             val input = required(row, "input_text")
             val label = required(row, "training_label").uppercase()
             require(id.startsWith("development:")) { "$id: only development rows may train." }
@@ -35,6 +40,11 @@ object ANS100BenchmarkJsonl {
     fun readHeldOutRows(resolver: ContentResolver, uri: Uri): List<ANS100BenchmarkBatchInput> =
         readRows(resolver, uri, INPUT_SCHEMA).map { row ->
             val id = required(row, "task_id")
+            requireExactKeys(
+                row,
+                setOf("schema", "task_id", "input_text", "input_sha256"),
+                id,
+            )
             val input = required(row, "input_text")
             require(heldOutPrefixes.any { id.startsWith(it) }) { "$id: not a held-out task." }
             require(input.length <= 2_048) { "$id: input exceeds 2048 characters." }
@@ -185,6 +195,19 @@ object ANS100BenchmarkJsonl {
         require(rows.map { required(it, "task_id") }.distinct().size == rows.size) { "Duplicate task IDs in JSONL." }
         rows.forEach { require(required(it, "schema") == schema) { "Unexpected JSONL schema." } }
         return rows
+    }
+
+    private fun requireExactKeys(row: JSONObject, expected: Set<String>, taskId: String) {
+        val actual = row.keys().asSequence().toSet()
+        require(actual == expected) {
+            val unexpected = (actual - expected).sorted().joinToString()
+            val missing = (expected - actual).sorted().joinToString()
+            buildString {
+                append("$taskId: JSON fields do not match the required schema.")
+                if (unexpected.isNotEmpty()) append(" Unexpected: $unexpected.")
+                if (missing.isNotEmpty()) append(" Missing: $missing.")
+            }
+        }
     }
 
     private fun required(row: JSONObject, key: String): String {
