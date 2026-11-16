@@ -22,6 +22,20 @@ class AndroidHybridTopologyV2Test {
     }
 
     @Test
+    fun controlledBenchmarkLabelsCannotTrainTheProductionNetwork() {
+        AndroidSparseNeuronNetwork(context, databaseName).use { network ->
+            val rejected = runCatching {
+                network.applyCanonicalReadoutBenchmarkFeedback(
+                    feedbackId = "benchmark-feedback-guard",
+                    turnId = "benchmark-turn-guard",
+                    answer = ANS100CanonicalReadoutContract.Answer.YES,
+                )
+            }.isFailure
+            assertTrue(rejected)
+        }
+    }
+
+    @Test
     fun definesEightStableContiguousPopulationsWithinTenThousandNeuronLimit() {
         val populations = AndroidHybridTopologyV2.populations
         assertEquals(8, populations.size)
