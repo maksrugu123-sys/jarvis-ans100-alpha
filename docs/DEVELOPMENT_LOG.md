@@ -3140,3 +3140,11 @@ Added tools/task_validation/structural_plasticity_eval_v1.py and focused tests. 
 **Interpretation:** the hard negatives intentionally test whether repeated co-activation can create false links. This experiment evaluates the temporal growth heuristic only; it does not establish semantic understanding, Android runtime behavior or real-world accuracy. The payload estimate is not measured RAM/SQLite size, and operation counts are not wall-clock CPU benchmarks.
 
 **Status:** implementation committed; tests AUTHORED / NOT RUN. STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED remains false. No Android/Windows build, APK/AAB, Gradle, CI, GitHub Actions or device inference was run.
+
+## 2026-11-16 — Transformer vs ANS-100 benchmark V1
+
+Added a deterministic shared task generator and prediction scorer for direct Transformer-only vs ANS-100-only comparison, plus a separately scored ANS-100-led / Transformer-verbalizer hybrid condition. The default corpus contains 192 synthetic tasks across development, pair-disjoint, concept-disjoint and compositional splits. Task families cover relation status, two-hop reachability and evidence conflict. The scorer rejects duplicate/unknown task IDs, counts missing outputs as wrong, reports per-split/family accuracy, paired outcomes, latency and peak-memory fields.
+
+**Fairness contract:** both systems receive the same task input; evaluator labels/expected answers are never model inputs. No tools or extra examples in the primary run. Model/runtime/quantization/device/resource metadata must be disclosed. ANS-100 adapters must disclose heuristic Core signals and cannot call the current integrated pipeline pure autonomous neural reasoning.
+
+**Status:** generator/scorer and focused tests committed; tests NOT RUN. No Transformer or ANS-100 model inference has been run, no predictions or measured resource report exist, and no winner is declared. The benchmark is synthetic and is only a first controlled task suite.
