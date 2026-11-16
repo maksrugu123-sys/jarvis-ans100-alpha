@@ -121,6 +121,23 @@ class LocalDialogueFastPathsTest {
     }
 
     @Test
+    fun answersSimpleSpeakCommandWithoutInvokingTheLanguageModel() {
+        assertEquals("А", LocalDialogueFastPaths.assistantIdentityReply("Скажи А"))
+    }
+
+    @Test
+    fun answersInternetSearchCapabilityWithoutMistakingItForASearchQuery() {
+        val answer = LocalDialogueFastPaths.assistantIdentityReply("Ты можешь искать в интернете?")
+        assertTrue(answer!!.startsWith("Да. Я могу выполнять интернет-поиск"))
+        assertTrue(answer.contains("Найди в интернете"))
+    }
+
+    @Test
+    fun acceptsTheAssistantNameAsAStatement() {
+        assertEquals("Да, меня зовут JARVIS.", LocalDialogueFastPaths.assistantIdentityReply("Тебя зовут Джарвис"))
+    }
+
+    @Test
     fun leavesUnrelatedQuestionsToTheLanguageModel() {
         assertNull(LocalDialogueFastPaths.assistantIdentityReply("Почему не работает сеть?"))
     }
