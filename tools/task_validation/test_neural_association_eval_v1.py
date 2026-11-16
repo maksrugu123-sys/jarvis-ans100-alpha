@@ -122,6 +122,13 @@ class NeuralAssociationEvalV1Tests(unittest.TestCase):
             set(first["models"]),
         )
 
+    def test_library_api_rejects_untrusted_labels_even_without_jsonl_parser(self):
+        bad = list(sample_dataset())
+        first = bad[0]
+        bad[0] = PairExample(first.concept_a, first.concept_b, first.related, "model_generated", first.evidence_ref)
+        with self.assertRaises(DatasetError):
+            evaluate(tuple(bad), seeds=(7,))
+
     def test_concept_disjoint_evaluation_reports_unseen_concept_track(self):
         report = evaluate(sample_dataset(), seeds=(7,), split_mode="concept_disjoint")
         split = report["splits"][0]

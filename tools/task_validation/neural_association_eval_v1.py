@@ -340,6 +340,17 @@ def evaluate(
 ) -> dict[str, object]:
     if split_mode not in {"pair_disjoint", "concept_disjoint"}:
         raise ValueError("unsupported split mode")
+    # Re-validate even when called as a library API, not only through the CLI.
+    examples = parse_dataset_lines(
+        json.dumps({
+            "concept_a": item.concept_a,
+            "concept_b": item.concept_b,
+            "related": item.related,
+            "source": item.source,
+            "evidence_ref": item.evidence_ref,
+        }, ensure_ascii=False)
+        for item in examples
+    )
     if not seeds or len(set(seeds)) != len(seeds):
         raise ValueError("seeds must be a non-empty unique sequence")
     result_rows: dict[str, list[dict[str, object]]] = {
