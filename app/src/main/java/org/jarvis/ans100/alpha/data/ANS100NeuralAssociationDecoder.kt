@@ -156,10 +156,13 @@ class ANS100NeuralAssociationDecoder {
                     add(right.trace.provenanceRef.substringBefore(":features:").take(160))
                     convergent.forEach { add("ans100-neuron:$it") }
                 }.distinct().take(5)
+                // Candidate identity represents the concept pair, not the
+                // particular association neurons that happened to spike this turn.
+                // Otherwise independent reproductions could never accumulate under
+                // one durable assessment record.
                 val digestInput = listOf(
                     left.trace.conceptId,
                     right.trace.conceptId,
-                    convergent.joinToString(","),
                 ).joinToString("|")
                 candidates += Candidate(
                     candidateId = "neural-association:${digest(digestInput)}",
