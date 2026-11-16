@@ -25,7 +25,7 @@ The deterministic generator creates 192 tasks by default (4 fixed seeds × 4 spl
 
 Task families cover direct relation status (YES / NO / UNKNOWN), two-hop reachability (YES / NO), and evidence classification (YES / NO / CONFLICT / UNKNOWN). Each task has a single canonical expected answer.
 
-The pair-disjoint split uses a disjoint range of pairs from development. The concept-disjoint split uses a separate symbol namespace. The compositional split tests a two-link relation not supplied as a direct fact.
+The pair-disjoint split draws from the same bounded 32-symbol vocabulary as development while using disjoint queried subject/object pairs. The generator records each task's queried pair separately from its supporting fact edges and checks the pair-disjoint and shared-vocabulary invariants for every seed. It rejects custom task counts that would violate those guarantees instead of silently producing a weaker split. Supporting graph edges are not required to be globally disjoint: the contract is that the evaluated query pairs are new. The concept-disjoint split uses a separate symbol namespace and is checked for zero symbol overlap with development. The compositional split tests a two-link relation not supplied as a direct fact.
 
 ## Input fairness
 
@@ -39,7 +39,7 @@ Run both systems on the same target device and runtime conditions. Record the ex
 
 Use the same task order and repeat protocol. Report quality and resource use separately rather than pretending two different architectures have equal compute. If practical, run both an unrestricted-quality comparison and a fixed-device-resource comparison. Never infer RAM, CPU, or energy from parameter count alone.
 
-Missing predictions count as wrong in overall accuracy. Duplicate or unknown task IDs are rejected. The scorer reports per-split/per-family accuracy, submitted rows, answered rows, abstentions, missing rows, coverage, latency median/p95, peak-memory max/median, cold-start versus warm steady-state latency/memory summaries, and paired task outcomes (only Transformer correct / only ANS-100 correct / same correctness). Explicit null answers count as abstentions and reduce coverage; they are not confused with missing output files. The `development` split is excluded from every score and paired outcome; predictions carrying development task IDs are rejected.
+Missing predictions count as wrong in overall accuracy. Duplicate or unknown prediction task IDs are rejected. The scorer also rejects duplicate source-task IDs, unknown split/family values, and non-canonical gold labels before calculating any score. The scorer reports per-split/per-family accuracy, submitted rows, answered rows, abstentions, missing rows, coverage, latency median/p95, peak-memory max/median, cold-start versus warm steady-state latency/memory summaries, and paired task outcomes (only Transformer correct / only ANS-100 correct / same correctness). Explicit null answers count as abstentions and reduce coverage; they are not confused with missing output files. The `development` split is excluded from every score and paired outcome; predictions carrying development task IDs are rejected.
 
 ## Current implementation boundary
 
@@ -67,7 +67,7 @@ The Android app also now exposes an isolated ANS-100-only runtime:
 
 The neural adapter is intentionally lexical and lossy: it hashes token features into 138 input slots and reports collisions. Training labels are accepted only when the task ID begins with `development:`. It does not parse relation semantics or prove autonomous reasoning. This makes the current ANS-100 condition an honest test of the existing sparse network plus learned canonical readout, not a claim of full semantic intelligence.
 
-The Python adapter now separates development-only training labels from held-out evaluation inputs. Development labels may be passed to ANS-100 training only; held-out task inputs contain no labels or split metadata. Both Qwen and ANS-100 must receive the same held-out `input_text`.
+The Python adapter now separates development-only training labels from held-out evaluation inputs. Development labels may be passed to ANS-100 training only; held-out task inputs contain no labels or split metadata. Both Qwen and ANS-100 must receive the same held-out `input_text`. The training exporter requires `development:` task IDs, while the held-out exporter accepts only the three declared evaluation splits and verifies that each task ID matches its split. The trace adapter preserves cold-start flags, peak-memory deltas, and memory-sampling intervals so the scorer can report those measurements rather than silently dropping them.
 
 No on-device inference has been run yet. The Android ANS-100 path is now callable, but a paired Transformer-vs-ANS-100 result is still unavailable and no empirical winner can be declared.
 
