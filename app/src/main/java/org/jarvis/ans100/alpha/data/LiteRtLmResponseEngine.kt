@@ -70,6 +70,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         }
         val file = modelStore.installedFile()
             ?: throw LocalConversationException("Для Transformer-only benchmark сначала установите локальную Qwen3-0.6B INT4.")
+        val engineAlreadyLoaded = engine != null && loadedPath == file.absolutePath
         resetTurnMetrics()
         val config = ConversationConfig(
             systemInstruction = Contents.of(BENCHMARK_SYSTEM_PROMPT),
@@ -83,7 +84,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
         LiteRtLmBenchmarkResult(
             answer = ANS100BenchmarkCanonicalAnswerParser.parse(raw),
             rawOutput = raw.take(MAX_BENCHMARK_RAW_OUTPUT_CHARS),
-            initializationMs = lastInitializationMs,
+            initializationMs = if (engineAlreadyLoaded) 0L else lastInitializationMs,
             generationMs = lastGenerationMs,
             outputTokenEstimate = raw.split(Regex("\\s+")).count { it.isNotBlank() },
         )
