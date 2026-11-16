@@ -638,14 +638,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ): PairedBenchmarkTaskResult {
         return if (pairedBenchmarkSequence++ % 2L == 0L) {
             val transformer = runCatching {
-                conversationResponseEngine.benchmarkTransformerOnly(inputText)
+                conversationResponseEngine.benchmarkTransformerOnly(inputText, coldStart)
             }
             val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null, coldStart) }
             PairedBenchmarkTaskResult(taskId, transformer, ans100)
         } else {
-            val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+            val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null, coldStart) }
             val transformer = runCatching {
-                conversationResponseEngine.benchmarkTransformerOnly(inputText)
+                conversationResponseEngine.benchmarkTransformerOnly(inputText, coldStart)
             }
             PairedBenchmarkTaskResult(taskId, transformer, ans100)
         }
