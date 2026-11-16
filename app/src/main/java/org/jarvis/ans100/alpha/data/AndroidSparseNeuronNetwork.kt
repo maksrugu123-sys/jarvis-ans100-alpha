@@ -728,18 +728,14 @@ class AndroidSparseNeuronNetwork(
     fun recordNeuralAssociationEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int {
         require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
         require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
-        require(connectionIds.size in 2..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE && connectionIds.size % 2 == 0)
-        require(connectionIds.distinct().size == connectionIds.size)
-        require(connectionIds.all { it.startsWith("ans100-v4-evidence-general-association-") })
+        ANS100NeuralAssociationEligibilityContract.validateEligibilityIds(connectionIds)
         require(eligibility.isFinite() && eligibility in 0.0..1.0)
         return store.recordNeuralAssociationEligibility(turnId, candidateId, connectionIds, eligibility)
     }
 
     @Synchronized
     fun neuralAssociationWeights(connectionIds: List<String>): Map<String, Double> {
-        require(connectionIds.size in 1..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE)
-        require(connectionIds.distinct().size == connectionIds.size)
-        require(connectionIds.all { it.startsWith("ans100-v4-evidence-general-association-") })
+        ANS100NeuralAssociationEligibilityContract.validateWeightQueryIds(connectionIds)
         return store.neuralAssociationWeights(connectionIds)
     }
 
