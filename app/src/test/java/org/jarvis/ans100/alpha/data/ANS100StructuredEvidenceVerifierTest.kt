@@ -57,6 +57,39 @@ Question: Is there a directed path of at most two links from alpha to beta? Trea
         assertEquals("NO", verifier.verify(result).answer)
     }
 
+    @Test
+    fun auditsNeuralCoactivationCandidatesAgainstBothEvidenceDirections() {
+        val parsed = adapter.createBatch(
+            "audit-candidate",
+            """Use only the supplied facts. Do not assume unstated relations.
+
+Facts:
+- alpha is connected to beta.
+- beta is explicitly not connected to alpha.
+
+Question: What is the evidence status of 'connected' from alpha to beta? Answer exactly YES, NO, or UNKNOWN.""",
+            400L,
+        )
+        val candidate = ANS100NeuralAssociationDecoder.Candidate(
+            candidateId = "neural-association:0123456789abcdef0123456789abcdef",
+            firstConceptId = "concept:alpha",
+            firstLabel = "alpha",
+            secondConceptId = "concept:beta",
+            secondLabel = "beta",
+            convergentNeuronIds = listOf(1_200),
+            activatedConnectionIds = listOf(
+                "ans100-v4-evidence-general-association-alpha",
+                "ans100-v4-evidence-general-association-beta",
+            ),
+            evidenceRefs = listOf("fact:0", "fact:1"),
+            activationHint = 0.5,
+        )
+        val audit = verifier.verifyCandidates(parsed, listOf(candidate)).single()
+        assertEquals("FORWARD_SUPPORTED", audit.status)
+        assertTrue(audit.forwardSupportingRefs.isNotEmpty())
+        assertTrue(audit.reverseContradictingRefs.isNotEmpty())
+    }
+
     private fun audit(facts: String, subject: String, objectValue: String): String {
         val result = adapter.createBatch(
             "audit-${subject}-${objectValue}-${facts.length}",
