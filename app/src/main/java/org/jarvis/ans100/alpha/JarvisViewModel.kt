@@ -1149,6 +1149,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             error = null,
                             hybridFeedbackAvailable = false,
                             hybridFeedbackMessage = null,
+                            neuralAssociationFeedback = null,
                         ),
                     )
                 }
