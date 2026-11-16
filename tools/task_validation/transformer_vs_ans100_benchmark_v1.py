@@ -174,13 +174,21 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
                 memories.append(float(memory))
     grouped = {}
     for (split, family), outcomes in sorted(groups.items()):
-        answered = sum(1 for task in evaluation_tasks if task["split"] == split and task["family"] == family and task["task_id"] in prediction_by_id)
-        grouped[f"{split}/{family}"] = {"tasks":len(outcomes),"answered":answered,
-            "correct":sum(outcomes),"accuracy":sum(outcomes)/len(outcomes) if outcomes else 0.0}
-    correct_count, answered_count = sum(correct_by_id.values()), len(prediction_by_id)
+        submitted = sum(1 for task in evaluation_tasks if task["split"] == split and task["family"] == family and task["task_id"] in prediction_by_id)
+        answered = sum(1 for task in evaluation_tasks if task["split"] == split and task["family"] == family
+                       and task["task_id"] in prediction_by_id and prediction_by_id[task["task_id"]].get("answer") is not None)
+        grouped[f"{split}/{family}"] = {"tasks":len(outcomes),"submitted":submitted,"answered":answered,
+            "abstentions":submitted-answered,"correct":sum(outcomes),
+            "accuracy":sum(outcomes)/len(outcomes) if outcomes else 0.0}
+    correct_count = sum(correct_by_id.values())
+    submitted_count = len(prediction_by_id)
+    answered_count = sum(1 for row in prediction_by_id.values() if row.get("answer") is not None)
+    abstention_count = submitted_count - answered_count
     return {
-        "system":system_label,"tasks":len(evaluation_tasks),"answered":answered_count,
-        "missing":len(evaluation_tasks)-answered_count,"correct":correct_count,
+        "system":system_label,"tasks":len(evaluation_tasks),"submitted":submitted_count,
+        "answered":answered_count,"abstentions":abstention_count,
+        "missing":len(evaluation_tasks)-submitted_count,"correct":correct_count,
+        "coverage":answered_count/len(evaluation_tasks),
         "accuracy_over_all_tasks":correct_count/len(evaluation_tasks),
         "accuracy_when_answered":correct_count/answered_count if answered_count else 0.0,
         "groups":grouped,
