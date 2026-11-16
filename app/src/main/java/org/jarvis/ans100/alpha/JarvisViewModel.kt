@@ -734,13 +734,23 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute {
             val results = ArrayList<StructuredPairedBenchmarkTaskResult>(inputs.size)
             inputs.forEachIndexed { index, input ->
-                val transformer = runCatching {
-                    conversationResponseEngine.benchmarkTransformerOnly(input.inputText, true)
+                val result = if (pairedBenchmarkSequence++ % 2L == 0L) {
+                    val transformer = runCatching {
+                        conversationResponseEngine.benchmarkTransformerOnly(input.inputText, true)
+                    }
+                    val structured = runCatching {
+                        ans100BenchmarkRuntime.runStructuredTask(input.taskId, input.inputText, null, true)
+                    }
+                    StructuredPairedBenchmarkTaskResult(input.taskId, transformer, structured)
+                } else {
+                    val structured = runCatching {
+                        ans100BenchmarkRuntime.runStructuredTask(input.taskId, input.inputText, null, true)
+                    }
+                    val transformer = runCatching {
+                        conversationResponseEngine.benchmarkTransformerOnly(input.inputText, true)
+                    }
+                    StructuredPairedBenchmarkTaskResult(input.taskId, transformer, structured)
                 }
-                val structured = runCatching {
-                    ans100BenchmarkRuntime.runStructuredTask(input.taskId, input.inputText, null, true)
-                }
-                val result = StructuredPairedBenchmarkTaskResult(input.taskId, transformer, structured)
                 results.add(result)
                 mainHandler.post { onProgress(index + 1, inputs.size, result) }
             }
