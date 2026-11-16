@@ -185,6 +185,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
     private val hybridNeuronNetwork by hybridNeuronNetworkDelegate
     @Volatile private var latestHybridFeedback: Pair<String, String>? = null
+    /** One explicit rating may train the top neural association candidate from the same turn. */
+    @Volatile private var latestNeuralAssociationFeedback: Triple<String, String, String>? = null
     @Volatile private var conversationGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
@@ -648,6 +650,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val dialogueGeneration = conversationGeneration + 1L
         conversationGeneration = dialogueGeneration
         latestHybridFeedback = null
+        latestNeuralAssociationFeedback = null
         mutableState.value = before.copy(
             conversation = before.conversation.copy(
                 isBusy = true,
@@ -794,7 +797,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 hybridDialogueAnalysis?.hybridTelemetrySummary
                                     ?: "Гибридный проход не завершён; ответ продолжен без решения ANS-100."
                             },
-                            hybridFeedbackAvailable = latestHybridFeedback != null,
+                            hybridFeedbackAvailable = latestHybridFeedback != null || latestNeuralAssociationFeedback != null,
                             hybridFeedbackMessage = null,
                             modelInitializationMs = modelMetrics.initializationMs,
                             responseGenerationMs = modelMetrics.generationMs,
@@ -838,30 +841,49 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
      * A rating is consumed once; model text and implicit behavior never reward it.
      */
     fun rateLatestHybridAnswer(positive: Boolean) {
-        val trace = latestHybridFeedback ?: return
+        val candidateTrace = latestHybridFeedback
+        val associationTrace = latestNeuralAssociationFeedback
+        if (candidateTrace == null && associationTrace == null) return
         latestHybridFeedback = null
+        latestNeuralAssociationFeedback = null
         val before = mutableState.value
         mutableState.value = before.copy(conversation = before.conversation.copy(
             hybridFeedbackAvailable = false,
             hybridFeedbackMessage = "Сохраняю оценку…",
         ))
         hybridNetworkExecutor.execute {
-            val updated = runCatching {
-                hybridNeuronNetwork.applyHybridCandidateFeedback(
-                    turnId = trace.first,
-                    candidateId = trace.second,
-                    reward = if (positive) 1.0 else -1.0,
-                    source = org.jarvis.ans100.alpha.data.ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
-                )
-            }.getOrDefault(0)
+            val reward = if (positive) 1.0 else -1.0
+            val source = org.jarvis.ans100.alpha.data.ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER
+            var updated = 0
+            if (candidateTrace != null) {
+                updated += runCatching {
+                    hybridNeuronNetwork.applyHybridCandidateFeedback(
+                        turnId = candidateTrace.first,
+                        candidateId = candidateTrace.second,
+                        reward = reward,
+                        source = source,
+                    )
+                }.getOrDefault(0)
+            }
+            if (associationTrace != null) {
+                updated += runCatching {
+                    hybridNeuronNetwork.applyNeuralAssociationFeedback(
+                        feedbackId = associationTrace.third,
+                        turnId = associationTrace.first,
+                        candidateId = associationTrace.second,
+                        reward = reward,
+                        source = source,
+                    )
+                }.getOrDefault(0)
+            }
             mainHandler.post {
                 val current = mutableState.value
                 mutableState.value = current.copy(conversation = current.conversation.copy(
                     hybridFeedbackAvailable = false,
                     hybridFeedbackMessage = if (updated > 0) {
-                        "Оценка сохранена: обновлено синапсов — $updated."
+                        "Оценка сохранена: обновлено синапсов — $updated. Обучение сохранено локально."
                     } else {
-                        "Оценка принята, но подходящих следов для обновления не осталось."
+                        "Оценка принята, но подходящих новых синаптических следов для обновления нет."
                     },
                 ))
             }
@@ -956,6 +978,22 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         emittedSpikeNeuronIds = emittedSpikeNeuronIds,
                         activatedConnectionIds = activatedConnectionIds,
                     )
+                    // Save one bounded neural-association trace for explicit rating of this answer.
+                    // The model's generated wording is never used as a teaching signal.
+                    latestNeuralAssociationFeedback = null
+                    neuralAssociationResult.candidates.firstOrNull()?.let { candidate ->
+                        val saved = hybridNeuronNetwork.recordNeuralAssociationEligibility(
+                            turnId = turnId,
+                            candidateId = candidate.candidateId,
+                            connectionIds = candidate.activatedConnectionIds,
+                            eligibility = candidate.activationHint,
+                        )
+                        if (saved == candidate.activatedConnectionIds.size) {
+                            latestNeuralAssociationFeedback = Triple(
+                                turnId, candidate.candidateId, "na-feedback-" + UUID.randomUUID(),
+                            )
+                        }
+                    }
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
                         understanding = understanding,
@@ -1055,6 +1093,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearConversation() {
         latestHybridFeedback = null
+        latestNeuralAssociationFeedback = null
         val before = mutableState.value
         if (before.conversation.isBusy || before.conversation.messages.isEmpty()) return
         mutableState.value = before.copy(
