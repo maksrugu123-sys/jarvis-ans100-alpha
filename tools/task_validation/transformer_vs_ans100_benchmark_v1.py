@@ -211,6 +211,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
     seed_groups: dict[int, list[bool]] = defaultdict(list)
     latencies, initializations, memories, memory_deltas, correct_by_id = [], [], [], [], {}
     memory_scopes: set[str] = set()
+    input_encodings: set[str] = set()
     cold_warm = {True: {"latencies": [], "peaks": [], "deltas": []}, False: {"latencies": [], "peaks": [], "deltas": []}}
     for task in evaluation_tasks:
         task_id = task["task_id"]
@@ -223,6 +224,9 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             latency, memory = row.get("latency_ms"), row.get("peak_memory_mb")
             initialization = row.get("initialization_ms", row.get("network_initialization_ms"))
             memory_scope = row.get("memory_measurement_scope")
+            input_encoding = row.get("input_encoding")
+            if isinstance(input_encoding, str) and input_encoding:
+                input_encodings.add(input_encoding)
             if isinstance(memory_scope, str) and memory_scope:
                 memory_scopes.add(memory_scope)
             if isinstance(initialization, (int, float)) and not isinstance(initialization, bool) and initialization >= 0:
@@ -274,6 +278,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         "latency_ms":{"count":len(latencies),"median":statistics.median(latencies) if latencies else None,"p95":_percentile(latencies,0.95)},
         "initialization_ms":{"count":len(initializations),"median":statistics.median(initializations) if initializations else None,"p95":_percentile(initializations,0.95)},
         "memory_measurement_scope":sorted(memory_scopes),
+        "input_encodings":sorted(input_encodings),
         "peak_memory_mb":{"count":len(memories),"max":max(memories) if memories else None,"median":statistics.median(memories) if memories else None},
         "peak_memory_delta_mb":{"count":len(memory_deltas),"max":max(memory_deltas) if memory_deltas else None,"median":statistics.median(memory_deltas) if memory_deltas else None},
         "cold_vs_warm": {
