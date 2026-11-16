@@ -2974,3 +2974,23 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - Automatic Android and Windows builds remain disabled. `main` untouched.
 
 **Next stage:** connect explicit feedback to an idempotent SQLite transaction, persist learned weights across turns/restarts, and evaluate against shuffled-pair and random-weight baselines on held-out concept pairs.
+
+
+## Android ANS-100 SQLite-backed explicit concept-association learning — 2026-11-16
+
+**Implemented on `experiment/jarvis-integrated-prototype-v1`:**
+- Extended the Android sparse network store with schema v4 tables for bounded neural-association eligibility traces and feedback-event idempotency.
+- Added a bounded public network API to save eligibility for exact concept-input → general-association synapses, read their current weights, and apply explicit feedback.
+- Feedback event insertion and all synapse weight updates share one SQLite transaction. A repeated `feedbackId` is ignored and cannot apply the same rating twice. Updated weights remain in the existing `connections.weight` table and survive process/network recreation.
+- Added a v3 → v4 database migration. It creates the new tables without rebuilding the 10,000-neuron topology and moves only reserved concept-input projection edges from 1.0 to 0.75 to create positive-learning headroom. Other input and topology weights are untouched.
+- Split topology construction for the reserved concept input range while preserving the same deterministic edge IDs, target mapping and overall connection count. Concept association edges start at 0.75; reward updates remain bounded to 0.05..1.0 and at most 0.01 per event.
+- Connected the Android UI to a separate concept-pair feedback action: it asks whether the displayed pair is related. This is deliberately not the generic answer-quality rating, preventing unrelated answer satisfaction from becoming a false concept label.
+- Added instrumentation coverage for persistence across reopen, duplicate-event idempotency, untrusted model-generated feedback rejection, migration, and topology weight expectations.
+
+**Verification and limitations:**
+- Source files and workflow definitions were read back from GitHub. Tests were authored but NOT RUN. No Gradle build, APK, CI, or device inference was run.
+- The UI offers only the top neural co-activation candidate for explicit labeling. This learns the observed concept-to-association synapses; it does not prove general semantic understanding.
+- Learned association strength is not yet part of final answer/decision competition. Held-out evaluation against shuffled-pair and random-weight baselines remains mandatory before using these weights to steer decisions.
+- Automatic Android and Windows builds remain disabled (`workflow_dispatch` only). `main` untouched.
+
+**Branch:** `experiment/jarvis-integrated-prototype-v1`.
