@@ -3152,6 +3152,10 @@ Added a deterministic shared task generator and prediction scorer for direct Tra
 
 ## 2026-11-16 — Leakage-safe ANS-100 benchmark adapter V1
 
+Inspected the existing Android `ANS100BenchmarkTraceAdapter.kt`: it already exports actual neural telemetry and heuristic provenance, but deliberately sets answer=null because the current pipeline has no semantic canonical readout. Added a Python validator for this exact Kotlin JSON schema and a gold-free model-input exporter. The validator checks exact-input SHA-256 and accepts scorer predictions only from an explicit `NEURAL_CANONICAL_READOUT`; current controller decisions remain unscored. The Kotlin adapter currently has no call site in JarvisViewModel, so automatic app trace capture/export is still missing. Added regression tests and documentation.
+
+**Status:** implementation and tests committed; tests NOT RUN. No production inference changes, app trace capture, Transformer/ANS inference, predictions or resource measurements. No build, CI or Actions run.
+
 Added `ans100_benchmark_adapter_v1.py` to export exact model inputs without evaluator labels/split metadata and validate Android trace exports. The adapter checks the SHA-256 of each exact input, records heuristic provenance, and emits scorer predictions only when a dedicated `NEURAL_CANONICAL_READOUT` explicitly produces YES/NO/UNKNOWN/CONFLICT. Current `HYBRID_POPULATION_CONTROLLER_V1` SELECTED/clarification/abstention statuses are deliberately not converted into semantic answers. Added focused regression tests and adapter documentation.
 
 **Status:** implementation and tests committed; tests NOT RUN. No production inference path changed, no Android trace exporter or actual predictions exist yet, no Transformer/ANS inference or resource measurements were run. No build, CI or Actions run.
