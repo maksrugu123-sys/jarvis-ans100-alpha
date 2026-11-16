@@ -57,6 +57,10 @@ object ANS100BenchmarkJsonl {
                 transformer.put("latency_ms", tr.generationMs.toDouble())
                     .put("initialization_ms", tr.initializationMs.toDouble())
                     .put("output_token_estimate", tr.outputTokenEstimate)
+                    .put("memory_baseline_pss_mb", tr.memoryBaselinePssMb)
+                    .put("peak_memory_mb", tr.peakMemoryPssMb)
+                    .put("peak_memory_delta_mb", tr.peakMemoryDeltaMb)
+                    .put("memory_sample_interval_ms", tr.memorySampleIntervalMs)
             } else transformer.put("inference_error", paired.transformer.exceptionOrNull()?.message ?: "inference_failed")
             transformerRows.add(transformer)
 
@@ -73,6 +77,10 @@ object ANS100BenchmarkJsonl {
                     .put("class_spike_counts", JSONObject(ar.classSpikeCounts))
                     .put("network_initialization_ms", ar.networkInitializationDurationNs.toDouble() / 1_000_000.0)
                     .put("learned_synapse_count", ar.learnedSynapseCount)
+                    .put("memory_baseline_pss_mb", ar.memoryBaselinePssMb)
+                    .put("peak_memory_mb", ar.peakMemoryPssMb)
+                    .put("peak_memory_delta_mb", ar.peakMemoryDeltaMb)
+                    .put("memory_sample_interval_ms", ar.memorySampleIntervalMs)
             } else ans.put("inference_error", paired.ans100.exceptionOrNull()?.message ?: "inference_failed")
             ansRows.add(ans)
         }
