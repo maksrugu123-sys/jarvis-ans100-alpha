@@ -93,6 +93,7 @@ object ANS100BenchmarkJsonl {
                     .put("evidence_audit_answer", ar.evidenceAuditAnswer)
                     .put("evidence_audit_method", ar.evidenceAuditMethod)
                     .put("neural_evidence_agreement", ar.neuralEvidenceAgreement)
+                    .put("neural_candidate_evidence_audit_counts", JSONObject(ar.neuralCandidateEvidenceAuditCounts))
             } else ans.put("inference_error", paired.ans100.exceptionOrNull()?.message ?: "inference_failed")
             ansRows.add(ans)
         }
@@ -150,6 +151,7 @@ object ANS100BenchmarkJsonl {
                         .put("evidence_audit_answer", value.evidenceAuditAnswer)
                         .put("evidence_audit_method", value.evidenceAuditMethod)
                         .put("neural_evidence_agreement", value.neuralEvidenceAgreement)
+                        .put("neural_candidate_evidence_audit_counts", JSONObject(value.neuralCandidateEvidenceAuditCounts))
                 } else {
                     row.put("inference_error", result.exceptionOrNull()?.message ?: "inference_failed")
                 }
