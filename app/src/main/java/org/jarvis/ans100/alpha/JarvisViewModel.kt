@@ -176,6 +176,17 @@ data class RuntimeWorkspaceUiState(
     val restorePreview: RuntimeWorkspaceRestorePreview? = null,
 )
 
+data class ANS100BenchmarkBatchInput(
+    val taskId: String,
+    val inputText: String,
+)
+
+data class ANS100BenchmarkDevelopmentExample(
+    val taskId: String,
+    val inputText: String,
+    val trainingLabel: String,
+)
+
 data class JarvisUiState(
     val data: LocalDraftState = LocalDraftState(),
     val selectedSessionId: String? = null,
@@ -546,21 +557,101 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             "paired benchmark input must fit the shared 2048-character model limit"
         }
         conversationExecutor.execute {
-            val paired = if (pairedBenchmarkSequence++ % 2L == 0L) {
-                val transformer = runCatching {
-                    conversationResponseEngine.benchmarkTransformerOnly(inputText)
-                }
-                val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
-                PairedBenchmarkTaskResult(taskId, transformer, ans100)
-            } else {
-                val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
-                val transformer = runCatching {
-                    conversationResponseEngine.benchmarkTransformerOnly(inputText)
-                }
-                PairedBenchmarkTaskResult(taskId, transformer, ans100)
-            }
+            val paired = runPairedBenchmarkTaskBlocking(taskId, inputText)
             mainHandler.post { onComplete(paired) }
         }
+    }
+
+    /**
+     * Train only on explicitly exported development rows. Call resetAns100OnlyBenchmark
+     * before a fresh experiment; held-out rows are rejected here and by the runtime.
+     */
+    fun trainAns100DevelopmentBatch(
+        examples: List<ANS100BenchmarkDevelopmentExample>,
+        onProgress: (completed: Int, total: Int, result: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>) -> Unit,
+        onComplete: (List<Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>>) -> Unit,
+    ) {
+        require(examples.isNotEmpty() && examples.size <= MAX_BENCHMARK_BATCH_SIZE) {
+            "development batch must contain 1..$MAX_BENCHMARK_BATCH_SIZE rows"
+        }
+        require(examples.map { it.taskId }.distinct().size == examples.size) {
+            "development batch contains duplicate task IDs"
+        }
+        require(examples.all {
+            it.taskId.startsWith("development:") &&
+                it.inputText.isNotBlank() &&
+                it.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS &&
+                it.trainingLabel.uppercase() in setOf("YES", "NO", "UNKNOWN", "CONFLICT")
+        }) {
+            "development batch contains an invalid task, input, or canonical label"
+        }
+        conversationExecutor.execute {
+            val results = ArrayList<Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>>(examples.size)
+            examples.forEachIndexed { index, example ->
+                val result = runCatching {
+                    ans100BenchmarkRuntime.runTask(example.taskId, example.inputText, example.trainingLabel)
+                }
+                results.add(result)
+                mainHandler.post { onProgress(index + 1, examples.size, result) }
+            }
+            mainHandler.post { onComplete(results) }
+        }
+    }
+
+    /**
+     * Run every held-out row through both systems on the same text. Individual failures
+     * remain attached to their task result; callers must persist null answers as abstentions.
+     */
+    fun runPairedBenchmarkBatch(
+        inputs: List<ANS100BenchmarkBatchInput>,
+        onProgress: (completed: Int, total: Int, result: PairedBenchmarkTaskResult) -> Unit,
+        onComplete: (List<PairedBenchmarkTaskResult>) -> Unit,
+    ) {
+        require(inputs.isNotEmpty() && inputs.size <= MAX_BENCHMARK_BATCH_SIZE) {
+            "held-out batch must contain 1..$MAX_BENCHMARK_BATCH_SIZE rows"
+        }
+        require(inputs.map { it.taskId }.distinct().size == inputs.size) {
+            "held-out batch contains duplicate task IDs"
+        }
+        require(inputs.all { input ->
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(input.taskId::startsWith) &&
+                input.inputText.isNotBlank() &&
+                input.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS
+        }) {
+            "paired batch accepts only valid held-out task IDs and shared-size inputs"
+        }
+        conversationExecutor.execute {
+            val results = ArrayList<PairedBenchmarkTaskResult>(inputs.size)
+            inputs.forEachIndexed { index, input ->
+                val result = runPairedBenchmarkTaskBlocking(input.taskId, input.inputText)
+                results.add(result)
+                mainHandler.post { onProgress(index + 1, inputs.size, result) }
+            }
+            mainHandler.post { onComplete(results) }
+        }
+    }
+
+    private fun runPairedBenchmarkTaskBlocking(
+        taskId: String,
+        inputText: String,
+    ): PairedBenchmarkTaskResult {
+        return if (pairedBenchmarkSequence++ % 2L == 0L) {
+            val transformer = runCatching {
+                conversationResponseEngine.benchmarkTransformerOnly(inputText)
+            }
+            val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+            PairedBenchmarkTaskResult(taskId, transformer, ans100)
+        } else {
+            val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+            val transformer = runCatching {
+                conversationResponseEngine.benchmarkTransformerOnly(inputText)
+            }
+            PairedBenchmarkTaskResult(taskId, transformer, ans100)
+        }
+    }
+
+    private companion object {
+        const val MAX_BENCHMARK_BATCH_SIZE = 1000
     }
 
     fun setGpuEnabled(enabled: Boolean) {
