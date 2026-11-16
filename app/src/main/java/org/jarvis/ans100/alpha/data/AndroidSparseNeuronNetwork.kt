@@ -751,6 +751,18 @@ class AndroidSparseNeuronNetwork(
         return store.recordNeuralAssociationEvaluation(candidateId, observation)
     }
 
+    /** Map and persist one labelled held-out task for an existing neural candidate. */
+    @Synchronized
+    fun recordNeuralAssociationBenchmarkOutcome(
+        candidate: ANS100NeuralAssociationDecoder.Candidate,
+        task: ANS100NeuralAssociationBenchmarkAssessmentAdapter.HeldOutTask,
+        candidateReproduced: Boolean,
+    ): Int {
+        val observation = ANS100NeuralAssociationBenchmarkAssessmentAdapter()
+            .observe(candidate, task, candidateReproduced) ?: return 0
+        return recordNeuralAssociationEvaluation(candidate.candidateId, observation)
+    }
+
     @Synchronized
     fun neuralAssociationEvaluations(candidateId: String, limit: Int = 200): List<ANS100NeuralAssociationAssessment.PersistedObservation> {
         require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
