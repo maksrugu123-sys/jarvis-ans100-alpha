@@ -3049,3 +3049,26 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 The held-out evaluator now reports deterministic topology projection coverage for the full dataset and for each training/held-out split. It counts pairs with at least one shared association target versus pairs that cannot share any target under the current three-edge concept projection. The report labels this as a necessary-condition upper bound only: an Android decoder candidate still requires both input synapses to activate and the common association neuron to spike in the same turn. Pairs with zero shared targets cannot become candidates through feedback or weight updates alone.
 
 Added a focused regression test for coverage totals, histogram consistency, split accounting, and the still-closed promotion gate. Updated the evaluation protocol documentation. **Tests NOT RUN; no Gradle build, APK, CI, or device inference.** This is a diagnostic improvement to the offline topology/weight proxy, not evidence of semantic understanding and not a promotion of learned weights into live decisions.
+
+
+## Activity-driven concept-association structural plasticity V1 — 2026-11-16
+
+**Objective:** remove the hard limit where concept pairs with no shared fixed projection target can never form a neural association candidate.
+
+**Implemented on \`experiment/jarvis-integrated-prototype-v1\`:**
+- Added \`ANS100ActivityDrivenStructuralPlasticity\`, a bounded experimental growth kernel that has no predefined concept-pair catalogue.
+- A pair becomes eligible only after co-activation in three distinct completed turn IDs inside a rolling 16-observation window. Replayed turn IDs are ignored.
+- The allocator excludes all targets already used by either source concept, then chooses a least-loaded target in the general association population. A stable pair hash only chooses the scan's starting offset; target selection remains based on current graph load, not a fixed pair-to-target table.
+- Emits exactly two proposed synapses from the two concept input neurons to the newly selected common target, with conservative initial weight 0.25 and auditable concept/provenance metadata.
+- Added bounds for active concepts, pending pair traces, remembered turn IDs, total grown pairs, per-concept growth degree, and target incoming degree.
+- Added focused unit tests for distinct-turn threshold, duplicate-turn replay, existing shared-target suppression, target exclusion and load competition, saturation, eligibility expiry, per-concept degree, deterministic proposals, and duplicate concept IDs.
+- Added \`docs/ANS100_ACTIVITY_DRIVEN_STRUCTURAL_PLASTICITY_V1.md\` with the algorithm, limits, trust boundaries and integration gates.
+
+**Critical limitations / integration boundary:**
+- This is a prototype kernel, not yet a live topology mutation. It returns proposals; it does not insert them into SQLite or alter the production network.
+- Eligibility and grown-pair state are currently in memory and do not survive process restart.
+- The existing fixed three-edge projection remains the only live decoder path. New proposals do not affect chat answers or decision competition.
+- Repeated co-activation can be incidental and is not proof of semantic relation. Human-verified held-out evaluation and false-association controls remain required.
+- Qwen remains a language realizer and is not used to generate associations.
+
+**Verification:** tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, GitHub Actions workflow, or device inference was run. Automatic workflows remain manual-only (\`workflow_dispatch\`). \`main\` was not modified.
