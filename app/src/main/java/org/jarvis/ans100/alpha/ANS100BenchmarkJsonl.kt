@@ -55,7 +55,10 @@ object ANS100BenchmarkJsonl {
             ANS100BenchmarkBatchInput(id, input)
         }.also { require(it.isNotEmpty()) { "Held-out JSONL is empty." } }
 
-    fun encodePredictions(results: List<JarvisViewModel.PairedBenchmarkTaskResult>): PredictionFiles {
+    fun encodePredictions(
+        results: List<JarvisViewModel.PairedBenchmarkTaskResult>,
+        inputHashes: Map<String, String> = emptyMap(),
+    ): PredictionFiles {
         require(results.isNotEmpty() && results.size <= MAX_ROWS)
         require(results.map { it.taskId }.distinct().size == results.size) { "Duplicate task IDs in results." }
         val transformerRows = ArrayList<JSONObject>(results.size)
@@ -64,6 +67,7 @@ object ANS100BenchmarkJsonl {
             val tr = paired.transformer.getOrNull()
             val transformer = JSONObject().put("task_id", paired.taskId)
                 .put("answer", tr?.answer ?: JSONObject.NULL)
+            inputHashes[paired.taskId]?.let { transformer.put("input_sha256", it) }
             if (tr != null) {
                 transformer.put("latency_ms", tr.generationMs.toDouble())
                     .put("initialization_ms", tr.initializationMs.toDouble())
@@ -79,6 +83,7 @@ object ANS100BenchmarkJsonl {
 
             val ar = paired.ans100.getOrNull()
             val ans = JSONObject().put("task_id", paired.taskId).put("answer", ar?.answer ?: JSONObject.NULL)
+            inputHashes[paired.taskId]?.let { ans.put("input_sha256", it) }
             if (ar != null) {
                 ans.put("latency_ms", ar.inferenceDurationNs.toDouble() / 1_000_000.0)
                     .put("readout_status", ar.readoutStatus).put("completed", ar.completed)
@@ -115,15 +120,27 @@ object ANS100BenchmarkJsonl {
 
     fun encodeStructuredPredictions(
         results: List<JarvisViewModel.StructuredPairedBenchmarkTaskResult>,
-    ): PredictionFiles = encodePredictions(
-        results.map {
-            JarvisViewModel.PairedBenchmarkTaskResult(
-                taskId = it.taskId,
-                transformer = it.transformer,
-                ans100 = it.ans100Structured,
-            )
-        },
-    )
+        heldOutInputs: List<ANS100BenchmarkBatchInput>,
+    ): PredictionFiles {
+        require(results.isNotEmpty() && results.size <= MAX_ROWS)
+        require(heldOutInputs.map { it.taskId }.distinct().size == heldOutInputs.size)
+        val resultIds = results.map { it.taskId }.toSet()
+        val inputIds = heldOutInputs.map { it.taskId }.toSet()
+        require(resultIds.size == results.size && resultIds == inputIds) {
+            "Prediction task IDs must exactly match the selected held-out input IDs."
+        }
+        val hashes = heldOutInputs.associate { it.taskId to sha256(it.inputText) }
+        return encodePredictions(
+            results.map {
+                JarvisViewModel.PairedBenchmarkTaskResult(
+                    taskId = it.taskId,
+                    transformer = it.transformer,
+                    ans100 = it.ans100Structured,
+                )
+            },
+            inputHashes = hashes,
+        )
+    }
 
     /** Exports paired lexical-versus-structured ANS results without mixing their predictions. */
     fun encodeEncodingComparisons(
