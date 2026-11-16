@@ -24,7 +24,7 @@ An inconclusive or missing reproduction is not a contradiction. Only decisive re
 - A decisive reproduction ratio of at most 0.40: `UNSTABLE`.
 - Other adequately sampled results: `MIXED`.
 
-Explicit positive/negative feedback is compared with the independent assessment. The result can be `ALIGNED`, `CONFLICTS`, `NOT_YET_DECIDABLE`, or `NO_FEEDBACK`. Feedback disagreement is surfaced; it is not silently resolved in favor of either source.
+Explicit positive/negative feedback is compared with the independent assessment. The network reads the latest persisted explicit-user or verified-external feedback event for that candidate; callers do not have to restate the label. The result can be `ALIGNED`, `CONFLICTS`, `NOT_YET_DECIDABLE`, or `NO_FEEDBACK`, and the assessment preserves the feedback source. Feedback disagreement is surfaced; it is not silently resolved in favor of either source.
 
 These thresholds are engineering policy for a first bounded experiment, not calibrated probabilities or proof of semantic truth.
 
@@ -45,7 +45,7 @@ A feedback event that does not change a weight does not create a fictitious chan
 
 ## Remaining integration work
 
-The assessment API and SQLite persistence are now available to a controlled held-out evaluation harness. The current conversation path does not yet automatically turn arbitrary live dialogue turns into independent labelled task outcomes. That must be wired only through benchmark tasks with explicit labels and documented independence keys; ordinary model output must never be treated as ground truth.
+The assessment API and SQLite persistence are now available to a controlled held-out evaluation harness. The latest explicit feedback is automatically compared with persisted task outcomes. The current conversation path does not yet automatically turn arbitrary live dialogue turns into independent labelled task outcomes. That must be wired only through benchmark tasks with explicit labels and documented independence keys; ordinary model output must never be treated as ground truth.
 
 ## Verification state
 
