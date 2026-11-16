@@ -48,6 +48,7 @@ import org.jarvis.ans100.alpha.data.ANS100HybridPopulationController
 import org.jarvis.ans100.alpha.data.ANS100CandidateSlotContract
 import org.jarvis.ans100.alpha.data.ANS100QwenHandoffBuilder
 import org.jarvis.ans100.alpha.data.LocalUnderstandingPipeline
+import org.jarvis.ans100.alpha.data.ANS100WorkspaceConceptInputBridge
 import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
 import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
@@ -190,6 +191,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val workspaceMemoryCache = LocalWorkspaceMemoryCache(
         SharedPreferencesLocalWorkspaceMemoryStorage(application.applicationContext),
     )
+    private val workspaceConceptInputBridge = ANS100WorkspaceConceptInputBridge()
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
@@ -866,10 +868,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             understanding = understanding,
                         ),
                     )
-                    val batch = AndroidHybridEvidenceInputAdapter.createBatch(
+                    val evidenceBatch = AndroidHybridEvidenceInputAdapter.createBatch(
                         evidence,
                         prior.currentTimeNs + HYBRID_DIALOGUE_INPUT_STEP_NS,
                     )
+                    // Only explicitly approved workspace entries in the dedicated
+                    // concept category are eligible for lexical concept activation.
+                    val conceptInput = workspaceConceptInputBridge.merge(
+                        evidenceBatch = evidenceBatch,
+                        rawUserMessage = message,
+                        workspaceMemories = workspaceMemoryCache.snapshot().records,
+                    )
+                    val batch = conceptInput.batch
                     if (!hybridNeuronNetwork.beginHybridTurn(batch)) return@submit null
 
                     var result = hybridNeuronNetwork.run(
@@ -937,6 +947,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         append("; events=").append(totalProcessedEvents)
                         append("; passes=").append(passes)
                         append("; pending=").append(result.pendingEvents)
+                        append("; approved_concepts=").append(conceptInput.eligibleConceptCount)
+                        append("; active_concept_inputs=").append(conceptInput.activeConceptCount)
+                        append("; skipped_approved_memory_entries=").append(conceptInput.skippedConceptCount)
                         append("; budgetExhausted=").append(result.budgetExhausted)
                         append("; populations=")
                         append(telemetry.populations.joinToString(" | ") { activity ->
