@@ -939,6 +939,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         understanding = understanding,
                         evidence = evidence,
                         decision = decision,
+                        relationHypotheses = conceptInput.hypothesisReports,
                     )
                     val telemetrySummary = buildString {
                         append("topology=").append(telemetry.topologyId)

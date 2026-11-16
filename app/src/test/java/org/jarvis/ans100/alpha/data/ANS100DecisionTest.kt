@@ -98,6 +98,40 @@ class ANS100DecisionTest {
         assertEquals(evidence.records.map { it.recordId }, handoff.includedEvidenceIds)
     }
 
+    @Test
+    fun handoffCarriesUnresolvedConceptHypothesesAsExplicitlyUnverified() {
+        val report = ANS100WorkspaceConceptInputBridge.HypothesisReport(
+            hypothesisId = "hyp:r1:r2", fromLabel = "Собака",
+            relationType = ANS100ConceptMemory.RelationType.IS_A, toLabel = "Животное",
+            premiseEvidenceRefs = listOf("workspace-memory:r1", "workspace-memory:r2"),
+            verificationStatus = ANS100ConceptMemory.VerificationStatus.UNRESOLVED,
+            supportingEvidenceRefs = emptyList(), contradictingEvidenceRefs = emptyList(),
+        )
+        val handoff = ANS100QwenHandoffBuilder().build(
+            originalUserMessage = message, understanding = understanding,
+            evidence = evidence, decision = selectedDecision(), relationHypotheses = listOf(report),
+        )
+        assertTrue(handoff.promptContext.contains("Собака --IS_A--> Животное"))
+        assertTrue(handoff.promptContext.contains("verification=UNRESOLVED"))
+        assertTrue(handoff.promptContext.contains("Treat UNRESOLVED as unverified"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun handoffRejectsTooManyRelationHypotheses() {
+        val report = ANS100WorkspaceConceptInputBridge.HypothesisReport(
+            hypothesisId = "hyp:r1:r2", fromLabel = "A",
+            relationType = ANS100ConceptMemory.RelationType.IS_A, toLabel = "B",
+            premiseEvidenceRefs = listOf("r1", "r2"),
+            verificationStatus = ANS100ConceptMemory.VerificationStatus.UNRESOLVED,
+            supportingEvidenceRefs = emptyList(), contradictingEvidenceRefs = emptyList(),
+        )
+        ANS100QwenHandoffBuilder().build(
+            originalUserMessage = message, understanding = understanding,
+            evidence = evidence, decision = selectedDecision(),
+            relationHypotheses = List(13) { report.copy(hypothesisId = "hyp:r${it}:x") },
+        )
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun handoffRejectsMismatchedOriginalMessage() {
         ANS100QwenHandoffBuilder().build(

@@ -11,6 +11,17 @@ import java.util.Locale
  * relation extraction, synonym inference, or model-generated facts are accepted.
  */
 class ANS100WorkspaceConceptInputBridge {
+    data class HypothesisReport(
+        val hypothesisId: String,
+        val fromLabel: String,
+        val relationType: ANS100ConceptMemory.RelationType,
+        val toLabel: String,
+        val premiseEvidenceRefs: List<String>,
+        val verificationStatus: ANS100ConceptMemory.VerificationStatus,
+        val supportingEvidenceRefs: List<String>,
+        val contradictingEvidenceRefs: List<String>,
+    )
+
     data class Result(
         val batch: AndroidHybridEvidenceInputAdapter.ActivationBatch,
         val eligibleConceptCount: Int,
@@ -21,6 +32,7 @@ class ANS100WorkspaceConceptInputBridge {
         val activeRelationCount: Int,
         val hypotheses: List<ANS100ConceptMemory.Hypothesis>,
         val hypothesisVerifications: List<ANS100ConceptMemory.Verification>,
+        val hypothesisReports: List<HypothesisReport>,
     ) {
         val unresolvedHypothesisCount: Int
             get() = hypothesisVerifications.count {
@@ -116,6 +128,18 @@ class ANS100WorkspaceConceptInputBridge {
             limit = MAX_HYPOTHESES_PER_TURN,
         )
         val verifications = hypotheses.map { memory.verify(it) }
+        val hypothesisReports = hypotheses.zip(verifications).take(MAX_REPORTED_HYPOTHESES).map { (hypothesis, verification) ->
+            HypothesisReport(
+                hypothesisId = hypothesis.id,
+                fromLabel = memory.recallConcept(hypothesis.fromConceptId)?.label ?: hypothesis.fromConceptId,
+                relationType = hypothesis.type,
+                toLabel = memory.recallConcept(hypothesis.toConceptId)?.label ?: hypothesis.toConceptId,
+                premiseEvidenceRefs = hypothesis.evidenceRefs,
+                verificationStatus = verification.status,
+                supportingEvidenceRefs = verification.supportingEvidenceRefs,
+                contradictingEvidenceRefs = verification.contradictingEvidenceRefs,
+            )
+        }
 
         return Result(
             batch = merged,
@@ -127,6 +151,7 @@ class ANS100WorkspaceConceptInputBridge {
             activeRelationCount = activeRelations.size,
             hypotheses = hypotheses,
             hypothesisVerifications = verifications,
+            hypothesisReports = hypothesisReports,
         )
     }
 
@@ -172,12 +197,14 @@ class ANS100WorkspaceConceptInputBridge {
         activeRelationCount = 0,
         hypotheses = emptyList(),
         hypothesisVerifications = emptyList(),
+        hypothesisReports = emptyList(),
     )
 
     companion object {
         private const val MAX_RELATION_CHARS = 240
         private const val MAX_ACTIVE_RELATIONS_PER_TURN = 64
         private const val MAX_HYPOTHESES_PER_TURN = 64
+        private const val MAX_REPORTED_HYPOTHESES = 12
         private val CONCEPT_CATEGORIES = setOf("concept", "понятие")
         private val RELATION_CATEGORIES = setOf("relation", "связь")
     }
