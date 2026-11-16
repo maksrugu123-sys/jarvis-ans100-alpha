@@ -16,6 +16,8 @@ data class AndroidNeuronState(
     val lastUpdateNs: Long = 0L,
     val refractoryUntilNs: Long = 0L,
     val spikeSequence: Long = 0L,
+    /** Sticky within one isolated turn if any Core-heuristic signal reached this neuron. */
+    val coreTainted: Boolean = false,
 ) {
     init {
         require(neuronId >= 0)
@@ -46,6 +48,8 @@ data class AndroidNeuronEvent(
     val timeNs: Long,
     val targetNeuronId: Int,
     val strength: Double,
+    /** Origin taint is inherited by every event emitted from a tainted neuron. */
+    val coreTainted: Boolean = false,
 ) {
     init {
         require(eventId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$")))
@@ -517,14 +521,16 @@ class AndroidSparseNeuronNetwork(
             for ((targetId, targetEvents) in byTarget.toSortedMap()) {
                 val previous = stateFor(targetId)
                 val result = processNeuron(previous, timestamp, targetEvents.sumOf { it.strength })
-                changed[targetId] = result.first
+                val targetCoreTainted = previous.coreTainted || targetEvents.any { it.coreTainted }
+                val updatedState = result.first.copy(coreTainted = targetCoreTainted)
+                changed[targetId] = updatedState
                 if (result.second) {
                     // These events were delivered to a target that spiked at this timestamp.
                     // Simultaneous inputs share coarse eligibility; this is not causal attribution.
                     targetEvents.forEach { event ->
                         connectionIdFromPropagatedEvent(event.eventId)?.let(activatedConnectionIds::add)
                     }
-                    val spikeSequence = result.first.spikeSequence
+                    val spikeSequence = updatedState.spikeSequence
                     spikes += targetId to spikeSequence
                     if (spikingNeuronIds != null && spikeCounts != null) {
                         val index = populationIndex(targetId)
@@ -547,6 +553,7 @@ class AndroidSparseNeuronNetwork(
                             timeNs = timestamp + connection.delayNs,
                             targetNeuronId = connection.targetNeuronId,
                             strength = connection.weight,
+                            coreTainted = updatedState.coreTainted,
                         )
                     }
                 }
@@ -863,7 +870,7 @@ private class AndroidNeuronSqliteStore(
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
-            "CREATE TABLE neurons (neuron_id INTEGER PRIMARY KEY, potential REAL NOT NULL, adaptation REAL NOT NULL, last_update_ns INTEGER NOT NULL, refractory_until_ns INTEGER NOT NULL, spike_sequence INTEGER NOT NULL)",
+            "CREATE TABLE neurons (neuron_id INTEGER PRIMARY KEY, potential REAL NOT NULL, adaptation REAL NOT NULL, last_update_ns INTEGER NOT NULL, refractory_until_ns INTEGER NOT NULL, spike_sequence INTEGER NOT NULL, core_tainted INTEGER NOT NULL DEFAULT 0)",
         )
         db.execSQL(
             "CREATE TABLE connections (connection_id TEXT PRIMARY KEY, source_id INTEGER NOT NULL, target_id INTEGER NOT NULL, delay_ns INTEGER NOT NULL, weight REAL NOT NULL)",
@@ -878,7 +885,7 @@ private class AndroidNeuronSqliteStore(
         createStructuralPlasticityObservationTables(db)
         createCanonicalReadoutTables(db)
         db.execSQL(
-            "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
+            "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL, core_tainted INTEGER NOT NULL DEFAULT 0)",
         )
         db.execSQL("CREATE INDEX events_time_idx ON events(time_ns, event_id)")
         db.execSQL("CREATE TABLE metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL)")
@@ -922,6 +929,14 @@ private class AndroidNeuronSqliteStore(
         if (oldVersion < 7) createStructuralSynapseFeedbackTable(db)
         if (oldVersion < 8) createStructuralPlasticityObservationTables(db)
         if (oldVersion < 9) createCanonicalReadoutTables(db)
+        if (oldVersion < 10) {
+            db.execSQL("ALTER TABLE neurons ADD COLUMN core_tainted INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE events ADD COLUMN core_tainted INTEGER NOT NULL DEFAULT 0")
+            // Old queued events have unknown origin; fail closed. Residual membrane
+            // state is tainted until the next isolated hybrid-turn reset.
+            db.execSQL("UPDATE events SET core_tainted=1")
+            db.execSQL("UPDATE neurons SET core_tainted=1 WHERE potential!=0 OR adaptation!=0 OR refractory_until_ns>last_update_ns")
+        }
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -1147,6 +1162,7 @@ private class AndroidNeuronSqliteStore(
                 put("adaptation", 0.0)
                 put("last_update_ns", modelTimeNs)
                 put("refractory_until_ns", modelTimeNs)
+                put("core_tainted", 0)
             }
             db.update("neurons", values, null, null)
             db.setTransactionSuccessful()
@@ -1715,7 +1731,7 @@ private class AndroidNeuronSqliteStore(
         } ?: return null
         val result = mutableListOf<AndroidNeuronEvent>()
         db.rawQuery(
-            "SELECT event_id, time_ns, target_id, strength FROM events WHERE time_ns=? ORDER BY event_id LIMIT ?",
+            "SELECT event_id, time_ns, target_id, strength, core_tainted FROM events WHERE time_ns=? ORDER BY event_id LIMIT ?",
             arrayOf(timestamp.toString(), (maxEvents + 1).toString()),
         ).use { cursor ->
             while (cursor.moveToNext()) {
@@ -1931,6 +1947,13 @@ private class AndroidNeuronSqliteStore(
         try {
             val version = scalar(db, "SELECT value FROM metadata WHERE key='ans100_topology_version'")
             if (version != 5L) throw AndroidNeuronNetworkException("canonical readout requires topology V5")
+            val cleanSources = validated.filter { sourceId ->
+                scalar(db, "SELECT core_tainted FROM neurons WHERE neuron_id=?", arrayOf(sourceId.toString())) == 0L
+            }
+            if (cleanSources.isEmpty()) {
+                db.setTransactionSuccessful()
+                return 0
+            }
             val turnAlreadyRated = db.rawQuery(
                 "SELECT 1 FROM canonical_readout_feedback_events WHERE turn_id=? LIMIT 1",
                 arrayOf(turnId),
@@ -1946,7 +1969,7 @@ private class AndroidNeuronSqliteStore(
                 arrayOf((nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()),
             )
             var inserted = 0
-            for (sourceNeuronId in validated) {
+            for (sourceNeuronId in cleanSources) {
                 requireNeuron(db, sourceNeuronId)
                 val values = ContentValues().apply {
                     put("turn_id", turnId)
@@ -2544,6 +2567,7 @@ private class AndroidNeuronSqliteStore(
             put("time_ns", event.timeNs)
             put("target_id", event.targetNeuronId)
             put("strength", event.strength)
+            put("core_tainted", if (event.coreTainted) 1 else 0)
         }
         db.insertOrThrow("events", null, values)
     }
@@ -2563,6 +2587,7 @@ private class AndroidNeuronSqliteStore(
             put("last_update_ns", state.lastUpdateNs)
             put("refractory_until_ns", state.refractoryUntilNs)
             put("spike_sequence", state.spikeSequence)
+            put("core_tainted", if (state.coreTainted) 1 else 0)
         }
         if (db.update("neurons", values, "neuron_id=?", arrayOf(state.neuronId.toString())) != 1) {
             throw AndroidNeuronNetworkException("neuron disappeared before timestamp commit")
@@ -2574,6 +2599,7 @@ private class AndroidNeuronSqliteStore(
         timeNs = cursor.getLong(1),
         targetNeuronId = cursor.getInt(2),
         strength = cursor.getDouble(3),
+        coreTainted = cursor.getInt(4) != 0,
     )
 
     private fun readNeuron(cursor: Cursor) = AndroidNeuronState(
@@ -2583,6 +2609,7 @@ private class AndroidNeuronSqliteStore(
         lastUpdateNs = cursor.getLong(3),
         refractoryUntilNs = cursor.getLong(4),
         spikeSequence = cursor.getLong(5),
+        coreTainted = cursor.getInt(6) != 0,
     )
 
     private fun scalar(db: SQLiteDatabase, sql: String, args: Array<String>): Long =
@@ -2594,7 +2621,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 9
+        private const val DATABASE_VERSION = 10
         private const val MAX_PERSISTED_STRUCTURAL_TURNS = 64
         private const val STRUCTURAL_OBSERVATION_WINDOW_TURNS = 16
         private const val MAX_STRUCTURAL_GROWN_PAIRS = 512
