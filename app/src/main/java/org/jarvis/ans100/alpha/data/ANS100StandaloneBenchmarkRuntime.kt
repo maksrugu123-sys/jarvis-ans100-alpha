@@ -13,6 +13,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     private var lastNetworkInitializationNs = 0L
     private var network = openNetwork()
     private val inputAdapter = ANS100BenchmarkNeuralInputAdapter()
+    private val structuredInputAdapter = ANS100StructuredBenchmarkInputAdapter()
     private val decoder = ANS100CanonicalReadoutDecoder()
 
     data class TaskResult(
@@ -35,6 +36,8 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         val peakMemoryDeltaMb: Double? = null,
         val memorySampleIntervalMs: Long? = null,
         val coldStart: Boolean = false,
+        val inputEncoding: String = "lexical_hash",
+        val parsedFactCount: Int? = null,
     )
 
     /**
@@ -42,11 +45,29 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
      * Held-out evaluation examples must call this with trainingLabel=null.
      */
     @Synchronized
-    fun runTask(taskId: String, inputText: String, trainingLabel: String? = null, coldStart: Boolean = false): TaskResult {
+    fun runTask(taskId: String, inputText: String, trainingLabel: String? = null, coldStart: Boolean = false): TaskResult =
+        runMeasuredTask(taskId, inputText, trainingLabel, coldStart, structuredInput = false)
+
+    /** Runs the same isolated network/readout using the role-structured B1 encoder. */
+    @Synchronized
+    fun runStructuredTask(
+        taskId: String,
+        inputText: String,
+        trainingLabel: String? = null,
+        coldStart: Boolean = false,
+    ): TaskResult = runMeasuredTask(taskId, inputText, trainingLabel, coldStart, structuredInput = true)
+
+    private fun runMeasuredTask(
+        taskId: String,
+        inputText: String,
+        trainingLabel: String?,
+        coldStart: Boolean,
+        structuredInput: Boolean,
+    ): TaskResult {
         if (coldStart) network.close()
         val measured = ProcessMemoryPeakSampler.measure {
             if (coldStart) network = openNetwork()
-            runTaskInternal(taskId, inputText, trainingLabel)
+            runTaskInternal(taskId, inputText, trainingLabel, structuredInput)
         }
         return measured.value.copy(
             memoryBaselinePssMb = measured.baselinePssMb,
@@ -57,7 +78,12 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         )
     }
 
-    private fun runTaskInternal(taskId: String, inputText: String, trainingLabel: String?): TaskResult {
+    private fun runTaskInternal(
+        taskId: String,
+        inputText: String,
+        trainingLabel: String?,
+        structuredInput: Boolean,
+    ): TaskResult {
         require(taskId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")))
         val label = trainingLabel?.let {
             require(taskId.startsWith("development:")) {
@@ -72,11 +98,30 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         }
         val timestampNs = maxOf(System.nanoTime(), currentTime + MINIMUM_TURN_STEP_NS)
         val turnId = "benchmark-${taskId.take(40)}-${UUID.randomUUID()}"
-        val encoded = inputAdapter.createBatch(turnId, inputText, timestampNs)
-        if (encoded.batch.events.isEmpty()) {
-            throw AndroidNeuronNetworkException("benchmark input produced no lexical concept pulses")
+        val encodedBatch: AndroidHybridEvidenceInputAdapter.ActivationBatch
+        val encodedFeatureCount: Int
+        val activatedFeatureCount: Int
+        val slotCollisionCount: Int
+        val parsedFactCount: Int?
+        if (structuredInput) {
+            val encoded = structuredInputAdapter.createBatch(turnId, inputText, timestampNs)
+            encodedBatch = encoded.batch
+            encodedFeatureCount = encoded.encodedFeatureCount
+            activatedFeatureCount = encoded.activatedFeatureCount
+            slotCollisionCount = encoded.slotCollisionCount
+            parsedFactCount = encoded.parsedFactCount
+        } else {
+            val encoded = inputAdapter.createBatch(turnId, inputText, timestampNs)
+            encodedBatch = encoded.batch
+            encodedFeatureCount = encoded.encodedTokenCount
+            activatedFeatureCount = encoded.activatedTokenCount
+            slotCollisionCount = encoded.slotCollisionCount
+            parsedFactCount = null
         }
-        if (!network.beginHybridTurn(encoded.batch)) {
+        if (encodedBatch.events.isEmpty()) {
+            throw AndroidNeuronNetworkException("benchmark input produced no neural input pulses")
+        }
+        if (!network.beginHybridTurn(encodedBatch)) {
             throw AndroidNeuronNetworkException("benchmark network refused the isolated input turn")
         }
 
@@ -124,9 +169,9 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             answer = readout.answer?.wireValue,
             readoutStatus = readout.status.name,
             classSpikeCounts = readout.spikeCounts.mapKeys { it.key.wireValue },
-            encodedTokenCount = encoded.encodedTokenCount,
-            activatedTokenCount = encoded.activatedTokenCount,
-            slotCollisionCount = encoded.slotCollisionCount,
+            encodedTokenCount = encodedFeatureCount,
+            activatedTokenCount = activatedFeatureCount,
+            slotCollisionCount = slotCollisionCount,
             cleanSourceSpikeCount = cleanSourceSpikes.size,
             processedEvents = processed,
             inferenceDurationNs = (System.nanoTime() - startedAtNs).coerceAtLeast(0L),
@@ -134,6 +179,8 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             learnedSynapseCount = network.canonicalReadoutSynapseCount(),
             trainingApplied = trainingApplied,
             completed = completed,
+            inputEncoding = if (structuredInput) "role_structured_v1" else "lexical_hash",
+            parsedFactCount = parsedFactCount,
         )
     }
 
