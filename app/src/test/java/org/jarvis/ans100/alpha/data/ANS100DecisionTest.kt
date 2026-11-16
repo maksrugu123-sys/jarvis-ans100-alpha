@@ -141,6 +141,10 @@ class ANS100DecisionTest {
             secondConceptId = "concept:animal",
             secondLabel = "Животное",
             convergentNeuronIds = listOf(1_234),
+            activatedConnectionIds = listOf(
+                "ans100-v4-evidence-general-association-1062-1234",
+                "ans100-v4-evidence-general-association-1063-1234",
+            ),
             evidenceRefs = listOf(
                 "turn:decision:concept:concept:dog",
                 "turn:decision:concept:concept:animal",
@@ -168,6 +172,10 @@ class ANS100DecisionTest {
             secondConceptId = "concept:b",
             secondLabel = "B",
             convergentNeuronIds = listOf(1_234),
+            activatedConnectionIds = listOf(
+                "ans100-v4-evidence-general-association-1062-1234",
+                "ans100-v4-evidence-general-association-1063-1234",
+            ),
             evidenceRefs = listOf("ref:a", "ref:b", "ans100-neuron:1234"),
             activationHint = 1.0 / 3.0,
         )
