@@ -2946,7 +2946,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                 Text("Сначала установи Qwen3-0.6B INT4 в разделе «Языковая модель».", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
             Text(
-                "Измерения пикового RAM пока не собираются. При ошибке модели в JSONL записывается null и текст ошибки; реальные значения не подменяются оценками.",
+                "Пиковая память измеряется по PSS всего Android-процесса с интервалом 20 мс во время каждого инференса. В JSONL сохраняются baseline, peak и прирост PSS; это не точное выделение памяти одной модели. При ошибке модели значения памяти не выдумываются.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
