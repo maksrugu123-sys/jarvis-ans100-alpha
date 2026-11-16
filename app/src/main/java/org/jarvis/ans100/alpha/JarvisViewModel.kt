@@ -1001,10 +1001,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             hybridNetworkExecutor.submit<DialogueNeuralAnalysis?> {
                 val neuralPassStartedAtNs = System.nanoTime()
                 try {
-                    hybridNeuronNetwork.initializeHybridTopologyV2()
                     var prior = hybridNeuronNetwork.stats()
-                    // A previous budget-limited turn must be drained before state
-                    // isolation; otherwise beginHybridTurn would reject every later turn.
+                    // Drain a legacy V4 queue before the V4->V5 migration. Queued
+                    // legacy events may still target the range now reserved for
+                    // canonical outputs; migrating first would contaminate them.
                     var drainPasses = 0
                     while (prior.pendingEvents > 0 && drainPasses < MAX_HYBRID_DIALOGUE_MAX_PASSES) {
                         hybridNeuronNetwork.run(
@@ -1015,6 +1015,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         drainPasses++
                     }
                     if (prior.pendingEvents > 0) return@submit null
+                    hybridNeuronNetwork.initializeHybridTopologyV2()
+                    prior = hybridNeuronNetwork.stats()
                     if (prior.currentTimeNs > Long.MAX_VALUE - HYBRID_DIALOGUE_INPUT_STEP_NS) {
                         return@submit null
                     }
@@ -1353,7 +1355,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val before = mutableState.value
         if (before.conversation.isBusy || before.conversation.messages.isEmpty()) return
         mutableState.value = before.copy(
-            conversation = before.conversation.copy(isBusy = true, error = null),
+            conversation = before.conversation.copy(
+                isBusy = true,
+                error = null,
+                canonicalReadoutFeedback = null,
+                neuralAssociationFeedback = null,
+                hybridFeedbackAvailable = false,
+            ),
         )
         conversationExecutor.execute {
             try {
