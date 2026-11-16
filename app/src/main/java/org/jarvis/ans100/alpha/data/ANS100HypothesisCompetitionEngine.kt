@@ -20,6 +20,13 @@ class ANS100HypothesisCompetitionEngine {
         USER_ASSERTIONS_SUPPORT,
         USER_COUNTER_EVIDENCE,
         MIXED_USER_ASSERTIONS,
+        VERIFIED_TOOL_SUPPORT,
+        VERIFIED_TOOL_COUNTER_EVIDENCE,
+        MIXED_SOURCE_SUPPORT,
+        MIXED_SOURCE_COUNTER_EVIDENCE,
+        MIXED_EVIDENCE,
+        UNCLASSIFIED_SUPPORT,
+        UNCLASSIFIED_COUNTER_EVIDENCE,
     }
 
     enum class Direction {
@@ -35,6 +42,8 @@ class ANS100HypothesisCompetitionEngine {
         val premiseEvidenceCount: Int,
         val supportingEvidenceCount: Int,
         val contradictingEvidenceCount: Int,
+        val supportingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
+        val contradictingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
     )
 
     data class Comparison(
@@ -68,6 +77,8 @@ class ANS100HypothesisCompetitionEngine {
                     premiseEvidenceCount = report.premiseEvidenceRefs.size,
                     supportingEvidenceCount = report.supportingEvidenceRefs.size,
                     contradictingEvidenceCount = report.contradictingEvidenceRefs.size,
+                    supportingEvidenceSources = report.supportingEvidenceSources,
+                    contradictingEvidenceSources = report.contradictingEvidenceSources,
                 )
             }.sortedWith(compareBy<Explanation> { it.relationType.name }.thenBy { it.hypothesisId })
                 .take(MAX_EXPLANATIONS_PER_CANDIDATE)
@@ -80,11 +91,28 @@ class ANS100HypothesisCompetitionEngine {
                 it.verificationStatus == ANS100ConceptMemory.VerificationStatus.REFUTED ||
                     it.verificationStatus == ANS100ConceptMemory.VerificationStatus.CONFLICTING
             }
+            val supportSources = explanations.flatMap { it.supportingEvidenceSources }.toSet()
+            val counterSources = explanations.flatMap { it.contradictingEvidenceSources }.toSet()
+            val explicitUser = ANS100ConceptMemory.LearningSource.EXPLICIT_USER
+            val verifiedTool = ANS100ConceptMemory.LearningSource.VERIFIED_TOOL
             val status = when {
                 explanations.isEmpty() -> Status.NEURAL_ONLY
-                hasSupport && hasCounterEvidence -> Status.MIXED_USER_ASSERTIONS
-                hasSupport -> Status.USER_ASSERTIONS_SUPPORT
-                hasCounterEvidence -> Status.USER_COUNTER_EVIDENCE
+                hasSupport && hasCounterEvidence ->
+                    if ((supportSources + counterSources).isNotEmpty() &&
+                        (supportSources + counterSources).all { it == explicitUser }
+                    ) Status.MIXED_USER_ASSERTIONS else Status.MIXED_EVIDENCE
+                hasSupport -> when {
+                    supportSources.isEmpty() -> Status.UNCLASSIFIED_SUPPORT
+                    supportSources == setOf(explicitUser) -> Status.USER_ASSERTIONS_SUPPORT
+                    supportSources == setOf(verifiedTool) -> Status.VERIFIED_TOOL_SUPPORT
+                    else -> Status.MIXED_SOURCE_SUPPORT
+                }
+                hasCounterEvidence -> when {
+                    counterSources.isEmpty() -> Status.UNCLASSIFIED_COUNTER_EVIDENCE
+                    counterSources == setOf(explicitUser) -> Status.USER_COUNTER_EVIDENCE
+                    counterSources == setOf(verifiedTool) -> Status.VERIFIED_TOOL_COUNTER_EVIDENCE
+                    else -> Status.MIXED_SOURCE_COUNTER_EVIDENCE
+                }
                 else -> Status.MEMORY_PATH_UNRESOLVED
             }
             Comparison(candidate.candidateId, status, explanations)
