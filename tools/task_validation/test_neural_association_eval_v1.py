@@ -21,11 +21,11 @@ def sample_dataset():
     # Small deterministic fixture only for testing protocol behavior; these are
     # synthetic labels and must never be reported as model-performance evidence.
     rows = []
-    concepts = [f"c{i}" for i in range(12)]
+    concepts = [f"c{i}" for i in range(110)]
     for i in range(len(concepts)):
         for j in range(i + 1, len(concepts)):
             rows.append(PairExample(
-                concepts[i], concepts[j], (i + j) % 2 == 0,
+                concepts[i], concepts[j], (i * j + i) % 2 == 0,
                 "explicit_user", f"fixture:{i}:{j}",
             ))
     return tuple(rows)

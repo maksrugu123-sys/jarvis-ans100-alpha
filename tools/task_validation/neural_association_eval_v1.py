@@ -85,7 +85,7 @@ def parse_dataset_lines(lines: Iterable[str]) -> tuple[PairExample, ...]:
             raise DatasetError("line {} has invalid concept IDs".format(line_number))
         if type(related) is not bool:
             raise DatasetError("line {} related must be a JSON boolean".format(line_number))
-        if source not in TRUSTED_SOURCES:
+        if not isinstance(source, str) or source not in TRUSTED_SOURCES:
             raise DatasetError("line {} has an untrusted feedback source".format(line_number))
         if not isinstance(evidence_ref, str) or not evidence_ref.strip() or len(evidence_ref) > 256:
             raise DatasetError("line {} needs a bounded evidence_ref".format(line_number))
@@ -102,8 +102,8 @@ def parse_dataset_lines(lines: Iterable[str]) -> tuple[PairExample, ...]:
     if len(concepts) > TOPOLOGY_INPUT_CAPACITY:
         raise DatasetError("dataset has more concepts than the 138 reserved Android input slots")
     labels = Counter(item.related for item in examples)
-    if not labels[True] or not labels[False]:
-        raise DatasetError("both positive and negative concept-pair labels are required")
+    if labels[True] < 2 or labels[False] < 2:
+        raise DatasetError("at least two positive and two negative pairs are required for a held-out split")
     return tuple(examples)
 
 
@@ -166,9 +166,9 @@ def split_concept_disjoint(
             excluded += 1
     if not train or not held_out:
         raise DatasetError("concept-disjoint split produced an empty partition")
-    if {item.concept_a for item in train} | {item.concept_b for item in train} & (
-        {item.concept_a for item in held_out} | {item.concept_b for item in held_out}
-    ):
+    train_concepts = {item.concept_a for item in train} | {item.concept_b for item in train}
+    held_concepts = {item.concept_a for item in held_out} | {item.concept_b for item in held_out}
+    if train_concepts & held_concepts:
         raise AssertionError("concept leakage detected")
     for name, partition in (("training", train), ("held-out", held_out)):
         labels = {item.related for item in partition}
@@ -353,8 +353,10 @@ def evaluate(
             else split_concept_disjoint(examples, seed)
         )
         all_rows = split.train + split.held_out
-        slots = _concept_slots(all_rows)
-        initial = _initial_weights(all_rows)
+        # Slot assignment is deterministic over the full declared dataset, not
+        # separately rebuilt from the training subset.
+        slots = _concept_slots(examples)
+        initial = _initial_weights(examples)
         learned = _train_weights(split.train, slots, initial)
         fixed = dict(initial)
 
