@@ -87,3 +87,38 @@ Before production use:
 7. Keep the promotion gate closed until held-out performance, false-association rate, CPU, RAM, and latency are measured.
 
 No general understanding or autonomous reasoning claim is supported by this prototype.
+
+
+## V1.1 — persistent synapse lifecycle API
+
+The Android sparse-network SQLite store now has schema V6 and a
+\`structural_synapse_registry\` for grown synapses. The network exposes a
+separate structural-growth API, rather than routing these through unrestricted
+generic \`connect()\`.
+
+- \`addStructuralGrowthProposal\` inserts both directed edges and both registry
+  records in one SQLite transaction. It validates the concept-input and
+  association neuron ranges, the generated connection-ID namespace, source
+  neuron existence, total connection capacity, per-target in-degree, and
+  per-concept grown-edge degree. Replaying an already registered proposal is
+  idempotent.
+- \`adjustStructuralSynapseWeights\` changes only registered grown synapses,
+  clamps weights to [0.05, 1.0], limits each update to ±0.10, and requires
+  explicit-user or verified-external-outcome feedback. Both edges belonging
+  to a proposal must be supplied together, so one side of an association
+  cannot silently drift away from the other.
+- \`removeWeakStructuralSynapses\` removes a proposal only when both of its
+  synapses are supplied and both weights are at or below the caller's
+  conservative threshold (maximum 0.20). It removes both edges together.
+- \`structuralSynapseWeights\` reads weights only for registered grown edges.
+
+The generic runtime's ordinary fixed topology and existing learned weights are
+not rewritten by this API. The registry persists grown-edge ownership and
+proposal identity across process restarts.
+
+**Still not integrated:** the activity learner's in-memory observation traces
+are not persisted yet; there is no production call site observing completed
+neural turns and applying proposals; no evidence-verification workflow currently
+calls the reward API; the decoder does not yet enumerate grown targets. The
+new API therefore enables safe persistence and controlled mutation, but does
+not yet make live ANS-100 behavior change automatically.
