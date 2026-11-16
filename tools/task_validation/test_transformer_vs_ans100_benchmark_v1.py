@@ -68,6 +68,14 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             score_predictions(invalid, [], "invalid-gold")
 
+    def test_relation_status_family_contains_yes_no_and_unknown(self):
+        for split in ("development", "pair_disjoint"):
+            labels = {
+                task["expected_answer"] for task in self.tasks
+                if task["split"] == split and task["family"] == "relation_status"
+            }
+            self.assertEqual(labels, {"YES", "NO", "UNKNOWN"})
+
     def test_compositional_split_contains_two_hop_queries(self):
         rows=[t for t in self.tasks if t["split"]=="compositional"]
         self.assertTrue(rows)
