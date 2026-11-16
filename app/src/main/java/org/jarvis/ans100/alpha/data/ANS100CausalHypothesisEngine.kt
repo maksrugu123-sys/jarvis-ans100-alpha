@@ -29,6 +29,8 @@ class ANS100CausalHypothesisEngine {
         val status: Status,
         val supportingEvidenceRefs: List<String>,
         val contradictingEvidenceRefs: List<String>,
+        val supportingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
+        val contradictingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
     )
 
     /**
@@ -100,6 +102,8 @@ class ANS100CausalHypothesisEngine {
                             status = status,
                             supportingEvidenceRefs = verification.supportingEvidenceRefs,
                             contradictingEvidenceRefs = verification.contradictingEvidenceRefs,
+                            supportingEvidenceSources = verification.supportingSources,
+                            contradictingEvidenceSources = verification.contradictingSources,
                         )
                         if (output.size >= limit) return output.values.toList()
                     }
