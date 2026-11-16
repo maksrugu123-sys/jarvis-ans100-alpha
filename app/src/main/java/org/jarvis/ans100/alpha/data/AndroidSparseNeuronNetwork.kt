@@ -121,6 +121,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun adjustStructuralSynapseWeights(feedbackId: String, connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun removeStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int
     fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double>
+    fun structuralAssociationConnections(sourceNeuronIds: List<Int>): List<AndroidNeuronConnection>
     fun enqueue(event: AndroidNeuronEvent)
     fun enqueueAll(events: List<AndroidNeuronEvent>)
     fun nextTimestampEvents(maxEvents: Int): List<AndroidNeuronEvent>?
@@ -361,6 +362,14 @@ class AndroidSparseNeuronNetwork(
     fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double> {
         require(connectionIds.size <= MAX_STRUCTURAL_SYNAPSES_PER_UPDATE)
         return store.structuralSynapseWeights(connectionIds)
+    }
+
+    @Synchronized
+    fun structuralAssociationConnections(sourceNeuronIds: List<Int>): List<AndroidNeuronConnection> {
+        require(sourceNeuronIds.size <= ANS100ActivityDrivenStructuralPlasticity.MAX_ACTIVE_CONCEPTS_PER_TURN)
+        require(sourceNeuronIds.distinct().size == sourceNeuronIds.size)
+        require(sourceNeuronIds.all { it in 1_062 until 1_200 })
+        return store.structuralAssociationConnections(sourceNeuronIds)
     }
 
     @Synchronized
@@ -1319,6 +1328,28 @@ private class AndroidNeuronSqliteStore(
         } finally {
             db.endTransaction()
         }
+    }
+
+    override fun structuralAssociationConnections(sourceNeuronIds: List<Int>): List<AndroidNeuronConnection> {
+        if (sourceNeuronIds.isEmpty()) return emptyList()
+        val result = ArrayList<AndroidNeuronConnection>()
+        sourceNeuronIds.forEach { source ->
+            readableDatabase.rawQuery(
+                "SELECT c.connection_id, c.source_id, c.target_id, c.delay_ns, c.weight FROM connections c INNER JOIN structural_synapse_registry r ON r.connection_id=c.connection_id WHERE c.source_id=? ORDER BY c.connection_id LIMIT 8",
+                arrayOf(source.toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    result += AndroidNeuronConnection(
+                        connectionId = cursor.getString(0),
+                        sourceNeuronId = cursor.getInt(1),
+                        targetNeuronId = cursor.getInt(2),
+                        delayNs = cursor.getLong(3),
+                        weight = cursor.getDouble(4),
+                    )
+                }
+            }
+        }
+        return result
     }
 
     override fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double> {
