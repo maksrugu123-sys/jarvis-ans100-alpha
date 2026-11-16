@@ -16,6 +16,62 @@ class ANS100StructuredEvidenceVerifier {
         val examinedFactCount: Int,
     )
 
+    data class NeuralCandidateAudit(
+        val candidateId: String,
+        val status: String,
+        val forwardSupportingRefs: List<String>,
+        val forwardContradictingRefs: List<String>,
+        val reverseSupportingRefs: List<String>,
+        val reverseContradictingRefs: List<String>,
+    )
+
+    /**
+     * Cross-checks an unordered co-activation candidate against explicit typed
+     * benchmark facts in both directions. It does not promote the candidate to
+     * a truth claim and does not alter network learning or readout.
+     */
+    fun verifyCandidates(
+        input: ANS100StructuredBenchmarkInputAdapter.Result,
+        candidates: List<ANS100NeuralAssociationDecoder.Candidate>,
+    ): List<NeuralCandidateAudit> {
+        require(candidates.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
+        return candidates.map { candidate ->
+            fun matching(from: String, to: String, positive: Boolean): List<String> =
+                input.facts.filter {
+                    it.subject.equals(from, ignoreCase = true) &&
+                        it.objectValue.equals(to, ignoreCase = true) &&
+                        if (positive) {
+                            it.relation in setOf("connected_positive", "evidence_supports")
+                        } else {
+                            it.relation in setOf("connected_negative", "evidence_refutes")
+                        }
+                }.map { it.provenance }.distinct().sorted()
+            val forwardSupport = matching(candidate.firstLabel, candidate.secondLabel, true)
+            val forwardRefute = matching(candidate.firstLabel, candidate.secondLabel, false)
+            val reverseSupport = matching(candidate.secondLabel, candidate.firstLabel, true)
+            val reverseRefute = matching(candidate.secondLabel, candidate.firstLabel, false)
+            val status = when {
+                forwardSupport.isNotEmpty() && forwardRefute.isNotEmpty() -> "FORWARD_CONFLICT"
+                reverseSupport.isNotEmpty() && reverseRefute.isNotEmpty() -> "REVERSE_CONFLICT"
+                forwardSupport.isNotEmpty() && reverseSupport.isNotEmpty() -> "BOTH_DIRECTIONS_SUPPORTED"
+                forwardRefute.isNotEmpty() && reverseRefute.isNotEmpty() -> "BOTH_DIRECTIONS_REFUTED"
+                forwardSupport.isNotEmpty() -> "FORWARD_SUPPORTED"
+                forwardRefute.isNotEmpty() -> "FORWARD_REFUTED"
+                reverseSupport.isNotEmpty() -> "REVERSE_SUPPORTED"
+                reverseRefute.isNotEmpty() -> "REVERSE_REFUTED"
+                else -> "NO_MATCHING_TYPED_EVIDENCE"
+            }
+            NeuralCandidateAudit(
+                candidateId = candidate.candidateId,
+                status = status,
+                forwardSupportingRefs = forwardSupport,
+                forwardContradictingRefs = forwardRefute,
+                reverseSupportingRefs = reverseSupport,
+                reverseContradictingRefs = reverseRefute,
+            )
+        }
+    }
+
     fun verify(input: ANS100StructuredBenchmarkInputAdapter.Result): Audit {
         val query = input.query
         if (query.relation == "directed_path_at_most_two") {
