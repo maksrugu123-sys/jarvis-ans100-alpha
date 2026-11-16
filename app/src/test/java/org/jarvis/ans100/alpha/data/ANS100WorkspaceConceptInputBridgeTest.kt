@@ -113,4 +113,81 @@ class ANS100WorkspaceConceptInputBridgeTest {
         assertEquals(1, exact.activeConceptCount)
         assertEquals(0, reversed.activeConceptCount)
     }
+    @Test
+    fun approvedTypedRelationsBuildAssociationsAndScopedHypotheses() {
+        val records = listOf(
+            memory("concept-dog", "Собака", "понятие"),
+            memory("concept-mammal", "Млекопитающее", "понятие"),
+            memory("concept-animal", "Животное", "понятие"),
+            memory("relation-dog-mammal", "Собака | IS_A | Млекопитающее", "связь"),
+            memory("relation-mammal-animal", "Млекопитающее | IS_A | Животное", "relation"),
+        )
+        val result = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(), "Собака рядом", records,
+        )
+
+        assertEquals(2, result.eligibleRelationCount)
+        assertEquals(2, result.learnedRelationCount)
+        assertEquals(2, result.activeRelationCount)
+        assertEquals(1, result.hypotheses.size)
+        val hypothesis = result.hypotheses.single()
+        assertEquals(ANS100ConceptMemory.RelationType.IS_A, hypothesis.type)
+        assertEquals(2, hypothesis.premiseRelationIds.size)
+        assertEquals(ANS100ConceptMemory.VerificationStatus.UNRESOLVED,
+            result.hypothesisVerifications.single().status)
+        assertEquals(1, result.unresolvedHypothesisCount)
+    }
+
+    @Test
+    fun relationsWithMissingAmbiguousOrUnapprovedEndpointsAreRejected() {
+        val result = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(),
+            "Собака рядом",
+            listOf(
+                memory("dog-1", "Собака", "concept"),
+                memory("dog-2", "Собака", "concept"),
+                memory("animal", "Животное", "concept"),
+                memory("ambiguous", "Собака | IS_A | Животное", "relation"),
+                memory("missing", "Кот | IS_A | Животное", "relation"),
+                memory("unapproved", "Собака | IS_A | Животное", "relation", approved = false),
+            ),
+        )
+        assertEquals(2, result.eligibleRelationCount)
+        assertEquals(0, result.learnedRelationCount)
+        assertTrue(result.hypotheses.isEmpty())
+    }
+
+    @Test
+    fun causalRelationsAreStoredButNotTransitiveHypotheses() {
+        val result = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(),
+            "Собака рядом",
+            listOf(
+                memory("dog", "Собака", "concept"),
+                memory("mammal", "Млекопитающее", "concept"),
+                memory("animal", "Животное", "concept"),
+                memory("cause-1", "Собака | CAUSES | Млекопитающее", "relation"),
+                memory("cause-2", "Млекопитающее | CAUSES | Животное", "relation"),
+            ),
+        )
+        assertEquals(2, result.learnedRelationCount)
+        assertTrue(result.hypotheses.isEmpty())
+    }
+
+    @Test
+    fun relationSyntaxMustUseExactTypeAndThreeFields() {
+        val result = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(),
+            "Собака рядом",
+            listOf(
+                memory("dog", "Собака", "concept"),
+                memory("animal", "Животное", "concept"),
+                memory("bad-type", "Собака | IS-A | Животное", "relation"),
+                memory("bad-fields", "Собака | IS_A | Животное | питомец", "relation"),
+            ),
+        )
+        assertEquals(2, result.eligibleRelationCount)
+        assertEquals(0, result.learnedRelationCount)
+    }
+
 }

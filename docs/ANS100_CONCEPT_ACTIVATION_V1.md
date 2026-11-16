@@ -14,7 +14,6 @@ The adapter connects the neutral lexical input frame to explicit concepts alread
 - Concept slots are allocated lazily and remain stable for the lifetime of one in-memory concept store; at most 138 concepts can receive dedicated input neurons in that store. Slot exhaustion is explicit. The live workspace bridge rebuilds its concept store from the approved-memory snapshot on each turn, so slot assignments are not yet a persistent cross-turn identity contract.
 - The topology's existing general evidence projection carries these pulses into the shared association population. They do not yet have dedicated learned concept assemblies or independent neural readouts.
 
-
 ## Live dialogue integration
 
 The Android ViewModel now invokes `ANS100WorkspaceConceptInputBridge` during `runHybridDialoguePass`, after the ordinary typed-evidence batch is created and before `beginHybridTurn`. The bridge merges concept pulses into that same timestamped batch; the existing runtime validates the evidence trace and concept trace together.
@@ -32,3 +31,18 @@ This creates an auditable bridge from raw user-text observations to concept iden
 3. Have network activity produce hypothesis candidates and retain premise/evidence provenance.
 4. Evaluate ambiguous, paraphrased, multilingual, and held-out concepts separately.
 5. Prove transfer on unseen concept IDs and measure false activations, CPU, RAM, and latency before broad deployment.
+
+## Explicit associative relation memory (workspace bridge)
+
+Approved workspace entries in category `relation` or `связь` are parsed only in the strict three-field form:
+
+```text
+Собака | IS_A | Млекопитающее
+Млекопитающее | IS_A | Животное
+```
+
+The relation type must exactly match an `ANS100ConceptMemory.RelationType` enum name. Both endpoints must resolve to exactly one approved concept record (category `concept` or `понятие`); missing and ambiguous labels are rejected. The relation's source and evidence reference remain attached to the stored relation. No relation is extracted from ordinary prose, and no relation is accepted from model-generated or implicit behavior.
+
+During a dialogue turn, only hypotheses whose starting concept is lexically activated by that turn are considered. The current bounded composition rule chains two `IS_A` relations or two `PART_OF` relations; causal and other relation types are deliberately not transitively chained. Each candidate retains both premise relation IDs and their evidence references. The verifier reports `UNRESOLVED` unless a separate trusted direct observation supports or refutes the proposed relation. A chain of two stored relations is therefore a hypothesis, not silently promoted to a fact.
+
+The live route currently loads the explicit relation graph and computes auditable symbolic candidates alongside the hybrid network pass. Relation edges and hypothesis candidates are not yet independent neural outputs; the next stage must move candidate generation into network activity and measure it separately. This stage does not claim semantic understanding or autonomous reasoning.
