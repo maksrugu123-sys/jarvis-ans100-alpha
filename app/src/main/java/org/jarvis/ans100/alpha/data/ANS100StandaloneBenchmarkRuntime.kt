@@ -30,6 +30,10 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         val learnedSynapseCount: Int,
         val trainingApplied: Boolean,
         val completed: Boolean,
+        val memoryBaselinePssMb: Double? = null,
+        val peakMemoryPssMb: Double? = null,
+        val peakMemoryDeltaMb: Double? = null,
+        val memorySampleIntervalMs: Long? = null,
     )
 
     /**
@@ -38,6 +42,18 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
      */
     @Synchronized
     fun runTask(taskId: String, inputText: String, trainingLabel: String? = null): TaskResult {
+        val measured = ProcessMemoryPeakSampler.measure {
+            runTaskInternal(taskId, inputText, trainingLabel)
+        }
+        return measured.value.copy(
+            memoryBaselinePssMb = measured.baselinePssMb,
+            peakMemoryPssMb = measured.peakPssMb,
+            peakMemoryDeltaMb = measured.peakDeltaMb,
+            memorySampleIntervalMs = measured.sampleIntervalMs,
+        )
+    }
+
+    private fun runTaskInternal(taskId: String, inputText: String, trainingLabel: String?): TaskResult {
         require(taskId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")))
         val label = trainingLabel?.let {
             require(taskId.startsWith("development:")) {
