@@ -96,8 +96,9 @@ Question: What is the evidence status of 'connected' from alpha to beta? Answer 
             50L,
         )
         assertEquals(2, result.parsedFactCount)
-        assertTrue(result.slotCollisionCount >= 0)
-        assertTrue(result.activatedFeatureCount <= result.encodedFeatureCount)
+        assertEquals(6, result.encodedFeatureCount)
+        assertEquals(0, result.slotCollisionCount)
+        assertEquals(result.encodedFeatureCount, result.activatedFeatureCount)
     }
 
     @Test(expected = IllegalArgumentException::class)
