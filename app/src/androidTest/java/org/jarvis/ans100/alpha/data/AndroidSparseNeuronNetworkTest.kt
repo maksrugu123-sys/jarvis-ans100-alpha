@@ -895,9 +895,12 @@ class AndroidSparseNeuronNetworkTest {
             assertEquals(1, proposals.size)
             assertEquals(3, proposals.single().supportingDistinctTurns)
             assertEquals(2, reopened.addStructuralGrowthProposal(proposals.single()))
-            assertEquals(setOf("concept:alpha" to "concept:beta"), reopened.structuralPlasticityGraphSnapshot(
-                listOf(1_062, 1_063),
-            ).grownConceptPairs)
+            val grownGraph = reopened.structuralPlasticityGraphSnapshot(listOf(1_062, 1_063))
+            assertEquals(setOf("concept:alpha" to "concept:beta"), grownGraph.grownConceptPairs)
+            assertTrue(grownGraph.existingTargetsByConceptNeuron[1_062].orEmpty()
+                .contains(proposals.single().targetNeuronId))
+            assertTrue(grownGraph.existingTargetsByConceptNeuron[1_063].orEmpty()
+                .contains(proposals.single().targetNeuronId))
         }
 
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { afterGrowth ->
