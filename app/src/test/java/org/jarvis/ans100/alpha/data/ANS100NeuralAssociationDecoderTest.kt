@@ -134,4 +134,39 @@ class ANS100NeuralAssociationDecoderTest {
             connectionsFor(left, shared),
         )
     }
+
+    @Test
+    fun decodesNewGrownSynapsesEvenWhenFixedProjectionsDoNotConverge() {
+        val (left, right, _) = convergentPair()
+        val fixedTargets = AndroidHybridTopologyV2.conceptAssociationTargets(left) +
+            AndroidHybridTopologyV2.conceptAssociationTargets(right)
+        val grownTarget = (1_200 until 2_200).first { it !in fixedTargets }
+        val grown = listOf(
+            AndroidNeuronConnection(
+                "ans100-v5-grown-association-test-left",
+                left,
+                grownTarget,
+                1_000_000L,
+                0.25,
+            ),
+            AndroidNeuronConnection(
+                "ans100-v5-grown-association-test-right",
+                right,
+                grownTarget,
+                1_000_000L,
+                0.25,
+            ),
+        )
+        val result = ANS100NeuralAssociationDecoder().decode(
+            conceptTrace = listOf(trace("grown:a", left, "Понятие A"), trace("grown:b", right, "Понятие B")),
+            emittedSpikeNeuronIds = setOf(grownTarget),
+            activatedConnectionIds = grown.map { it.connectionId }.toSet(),
+            grownConnections = grown,
+        )
+
+        assertEquals(1, result.candidates.size)
+        assertEquals(listOf(grownTarget), result.candidates.single().convergentNeuronIds)
+        assertEquals(grown.map { it.connectionId }.sorted(), result.candidates.single().activatedConnectionIds)
+    }
+
 }
