@@ -10,27 +10,120 @@ import java.util.Locale
 
 data class AndroidWebSearchIntent(val query: String) {
     companion object {
+        private val politePrefixes = listOf(
+            "можешь ли ты",
+            "можете ли вы",
+            "можешь ты",
+            "можете вы",
+            "ты можешь",
+            "вы можете",
+            "можешь ли",
+            "можете ли",
+            "можешь",
+            "можете",
+            "could you",
+            "can you",
+            "please",
+        )
+
         private val prefixes = listOf(
+            "найди информацию в интернете",
+            "поищи информацию в интернете",
             "найди в интернете",
             "поищи в интернете",
+            "найти в интернете",
+            "поискать в интернете",
+            "искать в интернете",
             "найди информацию",
             "поищи информацию",
+            "найти",
             "найди",
+            "поискать",
             "поищи",
             "загугли",
+            "search the web for",
+            "search online for",
+            "find online",
+            "search for",
             "/search",
             "search:",
         )
 
+        private val capabilityPhrases = listOf(
+            "искать в интернете",
+            "искать в сети",
+            "поискать в интернете",
+            "поиск в интернете",
+            "поиск в сети",
+            "search the internet",
+            "search online",
+            "browse the web",
+        )
+
+        private val capabilityMarkers = setOf(
+            "можешь", "можете", "умеешь", "умеете", "может",
+            "способен", "способна", "способны", "can", "could", "able",
+        )
+
         fun extract(message: String): AndroidWebSearchIntent? {
             val clean = message.trim()
-            val normalized = clean.lowercase(Locale.ROOT)
-            val prefix = prefixes.firstOrNull { normalized == it || normalized.startsWith("$it ") }
+            if (clean.isEmpty()) return null
+            val command = stripPolitePrefix(clean)
+            val normalized = command.lowercase(Locale.ROOT)
+            val prefix = prefixes.firstOrNull { matchesPrefix(normalized, it) }
                 ?: return null
-            val query = clean.drop(prefix.length).trim().trimStart(':', '-', '—').trim()
+            var query = command.drop(prefix.length)
+                .trim()
+                .trimStart(':', '-', '—')
+                .trim()
+                .replace(TRAILING_WEB_SUFFIX, "")
+                .trim()
+                .trimEnd('?', '!', '.', ',', ';', ':')
+                .trim()
             if (query.isBlank() || query.length > AndroidWebSearchService.MAX_QUERY_CHARS) return null
             return AndroidWebSearchIntent(query)
         }
+
+        /**
+         * A capability question is not a search command: answer it directly instead
+         * of sending an empty query to the search provider or asking what "search" means.
+         */
+        fun isCapabilityQuestion(message: String): Boolean {
+            val clean = message.trim()
+            if (clean.isEmpty() || extract(clean) != null) return false
+            val tokens = ANDROID_SEARCH_TOKEN_REGEX.findAll(clean.lowercase(Locale.ROOT))
+                .map { it.value }
+                .toList()
+            val mentionsSearch = capabilityPhrases.any { phrase ->
+                val phraseTokens = ANDROID_SEARCH_TOKEN_REGEX.findAll(phrase).map { it.value }.toList()
+                phraseTokens.isNotEmpty() && tokens.windowed(phraseTokens.size).any { it == phraseTokens }
+            }
+            return mentionsSearch && tokens.any { it in capabilityMarkers }
+        }
+
+        fun capabilityReply(): String =
+            "Да. Я могу выполнить интернет-поиск и показать найденные заголовки, краткие описания и ссылки. " +
+                "Сами страницы я автоматически не открываю и не проверяю. Напиши, что именно найти."
+
+        private fun stripPolitePrefix(value: String): String {
+            val normalized = value.lowercase(Locale.ROOT)
+            val prefix = politePrefixes.firstOrNull { candidate ->
+                normalized.startsWith("$candidate ") || normalized.startsWith("$candidate,")
+            } ?: return value
+            return value.drop(prefix.length).trimStart(' ', ',', ':', '-', '—')
+        }
+
+        private fun matchesPrefix(normalized: String, prefix: String): Boolean =
+            normalized == prefix ||
+                normalized.startsWith("$prefix ") ||
+                normalized.startsWith("$prefix:") ||
+                normalized.startsWith("$prefix?") ||
+                normalized.startsWith("$prefix!")
+
+        private val TRAILING_WEB_SUFFIX = Regex(
+            "\\s+(?:в\\s+)?(?:интернете|сети)\\s*[?.!]*$",
+            RegexOption.IGNORE_CASE,
+        )
     }
 }
 
