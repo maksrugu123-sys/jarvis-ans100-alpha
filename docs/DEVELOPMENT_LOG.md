@@ -2936,3 +2936,22 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 - The chat send control now remains enabled when the local inference runtime is unavailable, but changes its label to **Команда браузера**.
 - Recognized local browser commands are routed before any model call. A non-browser chat message is rejected with a clear message explaining that LiteRT-LM is required.
 - Added static-asset regression assertions for this behavior. Tests remain NOT RUN.
+
+
+## Android ANS-100 neural co-activation candidates — 2026-11-16
+
+**Implemented on `experiment/jarvis-integrated-prototype-v1`:**
+- Added a topology-owned projection decoder for the three deterministic evidence-to-general-association synapses of each reserved concept input neuron. The decoder mapping uses the exact source-offset, fan-out, salt and target slice of the persisted v4 topology.
+- Added `ANS100NeuralAssociationDecoder`. It consumes the concept trace, actual emitted spike neuron IDs and the network's activated connection IDs. A pair is emitted only when both concept inputs have activated their corresponding synapses into at least one same association neuron, and that target neuron actually spiked during the turn.
+- Candidate output is bounded to three; at most 64 concept inputs and 2,016 unordered pairs are examined. Candidate identity is deterministic and retains the two concept provenance references, activated synapse IDs and convergent neuron IDs.
+- Wired candidates into the Android dialogue handoff. Qwen receives them as untrusted, unverified co-activation candidates and is explicitly prohibited from treating co-activation as semantic similarity, a typed relation, causality or truth. Qwen remains a language realizer; it does not generate the candidates or decide the response.
+- Added tests for exact mapping to persisted synapses, shared-spike convergence, missing spike, one-sided synapse activation, deterministic IDs, bounds, duplicate inputs and safe handoff behavior.
+- Made hypothesis handoff context allocation dynamic so long original user messages retain priority and optional hypothesis detail is clipped to the remaining context budget.
+
+**Verification and limitations:**
+- Tests were authored and source files were read back from GitHub; tests were NOT RUN. No Gradle build, APK, device inference, CI or GitHub Actions workflow was run.
+- Automatic Android and Windows builds remain disabled: both workflows contain only `workflow_dispatch`.
+- The association projection is still deterministic and unlearned; concept activation remains lexical. Same-turn co-activation is not evidence of meaning. The existing six-lane Core candidate competition remains unchanged, so neural association candidates are handed to the realizer as context but do not yet choose the final decision.
+- Next research stage: introduce a bounded, explicit-feedback learning rule for concept assemblies and test it against random/collision baselines and held-out concept pairs before connecting it to decision competition.
+
+**Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched.
