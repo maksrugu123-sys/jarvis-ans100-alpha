@@ -589,7 +589,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val results = ArrayList<Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>>(examples.size)
             examples.forEachIndexed { index, example ->
                 val result = runCatching {
-                    ans100BenchmarkRuntime.runTask(example.taskId, example.inputText, example.trainingLabel)
+                    val trained = ans100BenchmarkRuntime.runTask(
+                        example.taskId,
+                        example.inputText,
+                        example.trainingLabel,
+                    )
+                    check(trained.completed) {
+                        "${example.taskId}: ANS-100 did not drain the training event queue."
+                    }
+                    check(trained.trainingApplied) {
+                        "${example.taskId}: no canonical-readout synapse update was applied."
+                    }
+                    trained
                 }
                 results.add(result)
                 mainHandler.post { onProgress(index + 1, examples.size, result) }
