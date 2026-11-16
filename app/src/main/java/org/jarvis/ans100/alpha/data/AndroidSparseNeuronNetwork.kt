@@ -1184,6 +1184,18 @@ private class AndroidNeuronSqliteStore(
                 }
             ) throw AndroidNeuronNetworkException("structural growth proposal is outside approved bounds")
 
+            val firstSlot = db.rawQuery(
+                "SELECT neuron_id FROM neural_concept_input_slots WHERE concept_id=?",
+                arrayOf(proposal.firstConceptId),
+            ).use { if (it.moveToFirst()) it.getInt(0) else null }
+            val secondSlot = db.rawQuery(
+                "SELECT neuron_id FROM neural_concept_input_slots WHERE concept_id=?",
+                arrayOf(proposal.secondConceptId),
+            ).use { if (it.moveToFirst()) it.getInt(0) else null }
+            if (firstSlot != proposal.firstNeuronId || secondSlot != proposal.secondNeuronId) {
+                throw AndroidNeuronNetworkException("structural proposal concept IDs do not match persistent neuron slots")
+            }
+
             val already = db.rawQuery(
                 "SELECT COUNT(*) FROM structural_synapse_registry WHERE proposal_id=?",
                 arrayOf(proposal.proposalId),
