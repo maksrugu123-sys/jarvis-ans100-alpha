@@ -531,6 +531,20 @@ class AndroidSparseNeuronNetworkTest {
         val candidateId = "neural-association:" + "b".repeat(32)
 
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            val unrelatedEvidenceEdge = AndroidHybridTopologyV2.connections().first {
+                it.sourceNeuronId < start &&
+                    it.connectionId.startsWith("ans100-v4-evidence-general-association-")
+            }
+            var rejectedForeignEdge = false
+            try {
+                network.recordNeuralAssociationEligibility(
+                    turnId, candidateId, listOf(unrelatedEvidenceEdge.connectionId), 0.5,
+                )
+            } catch (_: AndroidNeuronNetworkException) {
+                rejectedForeignEdge = true
+            }
+            assertTrue(rejectedForeignEdge)
+
             network.recordNeuralAssociationEligibility(turnId, candidateId, candidateEdges, 0.5)
             val before = network.neuralAssociationWeights(candidateEdges)
             assertEquals(0, network.applyNeuralAssociationFeedback(
