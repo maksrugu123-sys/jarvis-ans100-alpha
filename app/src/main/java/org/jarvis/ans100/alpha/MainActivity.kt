@@ -2493,13 +2493,22 @@ private fun ConversationPanel(
                                             )
                                             Text("Какой класс правильный? Эта оценка обучит отдельные синапсы.",
                                                 style = MaterialTheme.typography.bodySmall)
-                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                listOf("YES" to "Да", "NO" to "Нет", "UNKNOWN" to "Неизвестно", "CONFLICT" to "Конфликт")
-                                                    .forEach { (answer, label) ->
+                                            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    listOf("YES" to "Да", "NO" to "Нет").forEach { (answer, label) ->
                                                         TextButton(onClick = { onRateCanonicalReadout(answer) }) {
                                                             Text(label)
                                                         }
                                                     }
+                                                }
+                                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    listOf("UNKNOWN" to "Неизвестно", "CONFLICT" to "Конфликт")
+                                                        .forEach { (answer, label) ->
+                                                            TextButton(onClick = { onRateCanonicalReadout(answer) }) {
+                                                                Text(label)
+                                                            }
+                                                        }
+                                                }
                                             }
                                         }
                                     }
