@@ -46,7 +46,7 @@ object ANS100BenchmarkTraceAdapter {
         require(telemetry.topologyVersion == AndroidHybridTopologyV2.TOPOLOGY_VERSION)
         require(emittedSpikeNeuronIds.size <= AndroidHybridTopologyV2.NEURON_COUNT)
         require(emittedSpikeNeuronIds.all { it in 0 until AndroidHybridTopologyV2.NEURON_COUNT })
-        require(activatedConnectionIds.size <= AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT)
+        require(activatedConnectionIds.size <= AndroidHybridTopologyV2.MAX_CONNECTION_COUNT)
         require(associationResult.candidates.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
         require(neuralHypotheses.size <= ANS100NeuralHypothesisEngine.MAX_HYPOTHESES_HARD_LIMIT)
         require(memoryHypothesisReports.size <= ANS100ConceptMemory.MAX_HYPOTHESES)
