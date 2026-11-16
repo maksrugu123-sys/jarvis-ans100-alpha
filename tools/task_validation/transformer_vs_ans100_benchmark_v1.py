@@ -188,6 +188,9 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             raise ValueError(f"unknown benchmark family: {family!r}")
         if not isinstance(expected, str) or expected not in ANSWERS:
             raise ValueError(f"{task.get('task_id')}: invalid canonical expected answer")
+        seed = task.get("seed")
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise ValueError(f"{task.get('task_id')}: seed must be an integer")
 
     # Development examples are training-only and must never affect held-out scores.
     evaluation_tasks = [task for task in tasks if task.get("split") != "development"]
@@ -203,6 +206,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             raise ValueError(f"{system_label}: duplicate prediction for {task_id}")
         prediction_by_id[task_id] = row
     groups: dict[tuple[str, str], list[bool]] = defaultdict(list)
+    seed_groups: dict[int, list[bool]] = defaultdict(list)
     latencies, memories, memory_deltas, correct_by_id = [], [], [], {}
     cold_warm = {True: {"latencies": [], "peaks": [], "deltas": []}, False: {"latencies": [], "peaks": [], "deltas": []}}
     for task in evaluation_tasks:
@@ -211,6 +215,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         correct = canonical_answer(row.get("answer")) == task["expected_answer"] if row else False
         correct_by_id[task_id] = correct
         groups[(task["split"], task["family"])].append(correct)
+        seed_groups[task["seed"]].append(correct)
         if row:
             latency, memory = row.get("latency_ms"), row.get("peak_memory_mb")
             memory_delta = row.get("peak_memory_delta_mb")
@@ -249,6 +254,14 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         "accuracy_over_all_tasks":correct_count/len(evaluation_tasks),
         "accuracy_when_answered":correct_count/answered_count if answered_count else 0.0,
         "groups":grouped,
+        "per_seed": {
+            str(seed): {
+                "tasks": len(outcomes),
+                "correct": sum(outcomes),
+                "accuracy": sum(outcomes) / len(outcomes) if outcomes else 0.0,
+            }
+            for seed, outcomes in sorted(seed_groups.items())
+        },
         "latency_ms":{"count":len(latencies),"median":statistics.median(latencies) if latencies else None,"p95":_percentile(latencies,0.95)},
         "peak_memory_mb":{"count":len(memories),"max":max(memories) if memories else None,"median":statistics.median(memories) if memories else None},
         "peak_memory_delta_mb":{"count":len(memory_deltas),"max":max(memory_deltas) if memory_deltas else None,"median":statistics.median(memory_deltas) if memory_deltas else None},
