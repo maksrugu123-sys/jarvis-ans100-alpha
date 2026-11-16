@@ -784,4 +784,43 @@ class AndroidSparseNeuronNetworkTest {
         }
     }
 
+
+    @Test
+    fun grownAssociationCanBeExplicitlyRatedThroughExistingNeuralFeedbackPath() {
+        val proposal = grownProposalForTest()
+        val ids = proposal.connections.map { it.connectionId }.sorted()
+        val turnId = "grown-rating-turn"
+        val candidateId = "neural-association:" + "d".repeat(32)
+        var expected = emptyMap<String, Double>()
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            network.resolveConceptInputSlots(listOf("concept:alpha", "concept:beta"))
+            network.addStructuralGrowthProposal(proposal)
+            val before = network.structuralSynapseWeights(ids)
+            assertEquals(2, network.recordNeuralAssociationEligibility(turnId, candidateId, ids, 0.8))
+            assertEquals(2, network.applyNeuralAssociationFeedback(
+                "grown-rating-feedback",
+                turnId,
+                candidateId,
+                1.0,
+                ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            ))
+            val after = network.structuralSynapseWeights(ids)
+            assertTrue(after.values.all { it > before.values.first() })
+            assertEquals(0, network.applyNeuralAssociationFeedback(
+                "grown-rating-feedback",
+                turnId,
+                candidateId,
+                1.0,
+                ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            ))
+            expected = after
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
+            assertEquals(expected, reopened.structuralSynapseWeights(ids))
+        }
+    }
+
 }
