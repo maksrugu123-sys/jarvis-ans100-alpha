@@ -247,4 +247,38 @@ class ANS100BenchmarkTraceAdapterTest {
             inferenceDurationNs = -1L,
         )
     }
+
+    @Test
+    fun exportsCanonicalNeuralReadoutAsUncalibratedObservationNotBenchmarkAnswer() {
+        val (evidence, decision, telemetry) = fixture()
+        val yes = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.YES)
+        val no = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.NO)
+        val readout = ANS100CanonicalReadoutDecoder().decode(
+            setOf(yes.startInclusive, yes.startInclusive + 1, no.startInclusive),
+        )
+        val trace = ANS100BenchmarkTraceAdapter.create(
+            taskId = "pair_disjoint:relation_status:s104729:001",
+            inputText = "A is B. Is A B?",
+            evidence = evidence,
+            decision = decision,
+            telemetry = telemetry,
+            emittedSpikeNeuronIds = setOf(
+                yes.startInclusive,
+                yes.startInclusive + 1,
+                no.startInclusive,
+            ),
+            activatedConnectionIds = emptySet(),
+            associationResult = ANS100NeuralAssociationDecoder.Result(0, 0, 0, emptyList()),
+            canonicalReadout = readout,
+        )
+        val observed = trace.getJSONObject("neural_canonical_readout")
+        assertEquals("YES", observed.getString("answer"))
+        assertEquals("UNCALIBRATED_WINNER", observed.getString("status"))
+        assertFalse(observed.getBoolean("production_decision"))
+        assertEquals("NOT_CALIBRATED", observed.getString("calibration_status"))
+        assertTrue(trace.isNull("answer"))
+        assertEquals("NOT_SUPPORTED_BY_CURRENT_ANS100_PIPELINE", trace.getString("answer_emission"))
+        assertEquals("HYBRID_POPULATION_CONTROLLER_V1", trace.getJSONObject("decision").getString("producer"))
+    }
+
 }
