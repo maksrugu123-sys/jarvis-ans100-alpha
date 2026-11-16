@@ -127,7 +127,7 @@ class ANS100NeuralAssociationDecoder {
                 val left = active[leftIndex]
                 val right = active[rightIndex]
                 // Both source synapses must have reached the same spiking target.
-                val convergent = left.spikingTargets.intersect(right.spikingTargets).sorted()
+                val convergent = left.spikingTargets.intersect(right.spikingTargets).sorted().take(MAX_CONVERGENT_TARGETS)
                 if (convergent.isEmpty()) continue
 
                 val activatedSynapses = convergent.flatMap { targetId ->
