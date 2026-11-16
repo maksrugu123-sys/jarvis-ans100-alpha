@@ -456,4 +456,82 @@ class AndroidSparseNeuronNetworkTest {
             assertTrue(rejected)
         }
     }
+
+    @Test
+    fun neuralAssociationFeedbackIsPersistedAndDuplicateEventIsIdempotent() {
+        val start = ANS100ConceptMemory.NEURAL_INPUT_START
+        val end = start + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS
+        var candidateEdges: List<String>? = null
+        loop@ for (left in start until end) {
+            val leftProjection = AndroidHybridTopologyV2.conceptAssociationProjection(left)
+            for (right in left + 1 until end) {
+                val rightProjection = AndroidHybridTopologyV2.conceptAssociationProjection(right)
+                val shared = leftProjection.keys.intersect(rightProjection.keys).sorted()
+                if (shared.isNotEmpty()) {
+                    candidateEdges = shared.flatMap { target ->
+                        listOf(leftProjection.getValue(target), rightProjection.getValue(target))
+                    }.distinct()
+                    break@loop
+                }
+            }
+        }
+        val edges = requireNotNull(candidateEdges)
+        val turnId = "neural-feedback-turn"
+        val candidateId = "neural-association:" + "a".repeat(32)
+        val feedbackId = "neural-feedback-event-1"
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            val saved = network.recordNeuralAssociationEligibility(turnId, candidateId, edges, 0.8)
+            assertEquals(edges.size, saved)
+            val before = network.neuralAssociationWeights(edges)
+            assertEquals(edges.size, before.size)
+            assertTrue(before.values.all { it in 0.0..1.0 })
+
+            val updated = network.applyNeuralAssociationFeedback(
+                feedbackId, turnId, candidateId, 1.0,
+                ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            )
+            assertEquals(edges.size, updated)
+            val after = network.neuralAssociationWeights(edges)
+            assertTrue(edges.all { after.getValue(it) > before.getValue(it) })
+
+            // A retried tap with the same event ID must not train a second time.
+            assertEquals(0, network.applyNeuralAssociationFeedback(
+                feedbackId, turnId, candidateId, 1.0,
+                ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            ))
+            assertEquals(after, network.neuralAssociationWeights(edges))
+        }
+
+        // The learned connection weights survive closing and reopening SQLite.
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
+            assertEquals(edges.size, reopened.neuralAssociationWeights(edges).size)
+            assertTrue(edges.all { reopened.neuralAssociationWeights(edges).getValue(it) > 0.0 })
+        }
+    }
+
+    @Test
+    fun neuralAssociationRejectsUntrustedFeedbackAndOutOfProjectionSynapses() {
+        val start = ANS100ConceptMemory.NEURAL_INPUT_START
+        val left = AndroidHybridTopologyV2.conceptAssociationProjection(start)
+        val right = AndroidHybridTopologyV2.conceptAssociationProjection(start + 1)
+        val shared = left.keys.intersect(right.keys).first()
+        val edges = listOf(left.getValue(shared), right.getValue(shared))
+        val turnId = "neural-feedback-rejected"
+        val candidateId = "neural-association:" + "b".repeat(32)
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.recordNeuralAssociationEligibility(turnId, candidateId, edges, 0.5)
+            val before = network.neuralAssociationWeights(edges)
+            assertEquals(0, network.applyNeuralAssociationFeedback(
+                "model-generated-feedback", turnId, candidateId, 1.0,
+                ANS100CandidateFeedbackLearner.FeedbackSource.MODEL_GENERATED,
+            ))
+            assertEquals(before, network.neuralAssociationWeights(edges))
+            assertEquals(0, network.applyNeuralAssociationFeedback(
+                "no-eligibility-feedback", turnId, candidateId, -1.0,
+                ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            ))
+        }
+    }
 }
