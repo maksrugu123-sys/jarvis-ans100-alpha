@@ -122,3 +122,27 @@ neural turns and applying proposals; no evidence-verification workflow currently
 calls the reward API; the decoder does not yet enumerate grown targets. The
 new API therefore enables safe persistence and controlled mutation, but does
 not yet make live ANS-100 behavior change automatically.
+
+
+### Safety refinements in V1.1
+
+- The SQLite store is schema V6. A registry associates every grown edge
+  with its proposal and concept IDs; a separate feedback ledger records
+  feedback ID, proposal ID, delta, source and timestamp.
+- Weight adjustment requires a unique feedback ID. Duplicate feedback IDs
+  are ignored transactionally, preventing replay from applying reinforcement
+  twice.
+- Reinforcement/penalty accepts only \`EXPLICIT_USER\` or
+  \`VERIFIED_EXTERNAL_OUTCOME\`; model-generated and implicit behavior are
+  rejected at the public network API.
+- Both edges of a proposal must be supplied together for weight changes.
+  Weak-edge removal also requires both edges and removes the pair only when
+  both weights are below the threshold. This prevents half-associations.
+- The initial insertion and subsequent pairwise mutations are SQLite
+  transactions. New links are visible to the ordinary sparse runtime because
+  it reads outgoing connections from the same connections table.
+
+This still does not mean that a new association is automatically decoded as a
+semantic fact. The co-activation decoder and production turn pipeline need
+explicit support for registered grown proposals, and independent validation
+must precede any influence on reasoning.
