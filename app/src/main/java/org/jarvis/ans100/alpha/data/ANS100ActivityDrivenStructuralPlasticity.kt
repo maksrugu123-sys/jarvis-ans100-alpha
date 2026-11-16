@@ -72,7 +72,7 @@ class ANS100ActivityDrivenStructuralPlasticity(
     )
 
     private data class PairKey(val firstId: String, val secondId: String) {
-        val stableText: String get() = "\${firstId}|\${secondId}"
+        val stableText: String get() = "${firstId}|${secondId}"
     }
 
     private data class PairTrace(
@@ -218,11 +218,11 @@ class ANS100ActivityDrivenStructuralPlasticity(
     private fun createProposal(trace: PairTrace, target: Int, turnId: String): GrowthProposal {
         val first = trace.first
         val second = trace.second
-        val pairDigest = digest("\${first.conceptId}|\${second.conceptId}")
-        val proposalId = "ans100-growth:\${pairDigest}"
+        val pairDigest = digest("${first.conceptId}|${second.conceptId}")
+        val proposalId = "ans100-growth:${pairDigest}"
         val connections = listOf(first, second).map { concept ->
             AndroidNeuronConnection(
-                connectionId = "ans100-v5-grown-association-\${pairDigest}-\${concept.neuronId}-\${target}",
+                connectionId = "ans100-v5-grown-association-${pairDigest}-${concept.neuronId}-${target}",
                 sourceNeuronId = concept.neuronId,
                 targetNeuronId = target,
                 delayNs = GROWN_CONNECTION_DELAY_NS,
