@@ -118,6 +118,45 @@ class ANS100ConceptMemory(
         return output.values.toList()
     }
 
+    /**
+     * Generates hypotheses reachable from concepts activated by the current input.
+     *
+     * This is bounded symbolic graph composition, not neural inference. Restricting
+     * the starting concepts prevents unrelated memories from entering the turn.
+     */
+    @Synchronized
+    fun generateHypothesesFor(
+        activeConceptIds: Set<String>,
+        limit: Int = DEFAULT_HYPOTHESIS_LIMIT,
+    ): List<Hypothesis> {
+        require(limit in 0..MAX_HYPOTHESES)
+        require(activeConceptIds.size <= MAX_CONCEPTS)
+        require(activeConceptIds.all { it in concepts }) {
+            "active concept IDs must already exist in concept memory"
+        }
+        if (limit == 0 || activeConceptIds.isEmpty()) return emptyList()
+
+        val transitiveTypes = setOf(RelationType.IS_A, RelationType.PART_OF)
+        val byStart = relations.values
+            .filter { it.type in transitiveTypes }
+            .groupBy { it.fromConceptId }
+        val output = LinkedHashMap<String, Hypothesis>()
+        for (first in relations.values.sortedBy { it.id }) {
+            if (first.fromConceptId !in activeConceptIds || first.type !in transitiveTypes) continue
+            for (second in byStart[first.toConceptId].orEmpty().sortedBy { it.id }) {
+                if (second.type != first.type || second.toConceptId == first.fromConceptId) continue
+                val id = "hyp:${first.id}:${second.id}"
+                output.putIfAbsent(id, Hypothesis(
+                    id, first.fromConceptId, first.type, second.toConceptId,
+                    listOf(first.id, second.id), listOf(first.evidenceRef, second.evidenceRef),
+                    (first.strength * second.strength).coerceIn(0.0, 1.0),
+                ))
+                if (output.size >= limit) return output.values.toList()
+            }
+        }
+        return output.values.toList()
+    }
+
     /** Checks a candidate against direct stored relations and separately supplied evidence. */
     @Synchronized
     fun verify(hypothesis: Hypothesis, observations: List<RelationEvidence> = emptyList()): Verification {
