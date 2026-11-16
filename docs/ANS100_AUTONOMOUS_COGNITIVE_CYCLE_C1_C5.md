@@ -47,7 +47,9 @@ Existing components:
 - `ANS100HypothesisCompetitionEngine` compares neural candidates with independently prepared memory hypotheses and preserves direction.
 - The causal engine adds direct-evidence checks for composed causal candidates.
 
-A reproduced co-activation is only a repeatable neural signal. It is not proof of semantic truth or causality. Workspace assertions remain user assertions unless supported by independently verified evidence.
+A reproduced co-activation is only a repeatable neural signal. It is not proof of semantic truth or causality.
+
+**Evidence provenance is preserved end-to-end:** each support/refutation report now carries the originating `LearningSource`. Competition distinguishes `EXPLICIT_USER` assertions from `VERIFIED_TOOL` evidence; mixed-source evidence and unclassified evidence are not silently relabelled as user claims or verified facts. The workspace bridge currently imports its approved relation records as `EXPLICIT_USER`, so its support/refutation remains user assertion evidence unless a future trusted-tool ingestion path is explicitly added. The trace exports source categories, never raw evidence references.
 
 ## C5 — integrated turn cycle
 
@@ -70,6 +72,8 @@ The current decision controller still receives typed Core-produced intent/task h
 - direct refutation and conflicting evidence remain distinct;
 - `PREVENTS` chains are not composed;
 - active-start filtering and output bounds.
+
+Additional provenance tests cover user assertions, verified-tool support/refutation, mixed-source evidence and trace export.
 
 **Test state:** AUTHORED, NOT RUN.
 
