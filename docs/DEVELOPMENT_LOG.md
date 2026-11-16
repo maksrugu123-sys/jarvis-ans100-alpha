@@ -3270,3 +3270,10 @@ Benchmark traces include hashed cross-source comparison summaries. The ViewModel
 - `780166fe4bd1308c796b3cf49eb8019b14521ebc` / `e5e079b64d161f7a5d0a1ff7908123f72f33d9f8` — contract note and untrusted-feedback test.
 
 **Next step:** run the newly authored regression tests when execution is authorized, then build held-out pair/concept/compositional evaluation and compare with shuffled-label and frozen-weight baselines before considering any production readout routing.
+
+
+### Post-review correction — canonical readout learning-rate contract
+
+Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (`0.01`) and made `MAX_WEIGHT_DELTA_PER_EVENT` reference that constant. Renamed the Android instrumentation test to describe the four-class synapse set accurately. No runtime behavior changed beyond removing the stale unused `0.02` constant value.
+
+**Verification:** source edits fetched from GitHub after publication. Tests/builds/CI remain **NOT RUN**.
