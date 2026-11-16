@@ -57,6 +57,7 @@ class ANS100NeuralHypothesisEngine(
         activeConceptIds: Set<String>,
         candidates: List<ANS100NeuralAssociationDecoder.Candidate>,
         completed: Boolean,
+        pairScanComplete: Boolean = true,
     ): List<Hypothesis> {
         require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")))
         require(activeConceptIds.size <= ANS100ConceptNeuralInputAdapter.MAX_CONCEPTS_PER_TURN)
@@ -95,7 +96,7 @@ class ANS100NeuralHypothesisEngine(
         // in a later completed turn. Absence of convergence is recorded separately
         // and never converted into a factual contradiction.
         states.forEach { (key, state) ->
-            if (key !in byPair && key in activePairs &&
+            if (pairScanComplete && key !in byPair && key in activePairs &&
                 turnId !in state.supportingTurns && turnId !in state.nonReproducingTurns
             ) {
                 state.nonReproducingTurns.add(turnId)
