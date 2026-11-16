@@ -2967,7 +2967,15 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                                 runCatching { ANS100BenchmarkJsonl.encodeStructuredPredictions(results, heldOutRows) }
                                                     .onSuccess {
                                                         pendingFiles = it
-                                                        status = "Эксперимент завершён. Сохраняю прогнозы…"
+                                                        val safetyStopped = results.any { row ->
+                                                            row.transformer.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true ||
+                                                                row.ans100Structured.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true
+                                                        }
+                                                        status = if (safetyStopped) {
+                                                            "Тест остановлен защитой устройства. Сохраняю выполненные результаты и отметки пропущенных задач…"
+                                                        } else {
+                                                            "Эксперимент завершён. Сохраняю прогнозы…"
+                                                        }
                                                         transformerExportLauncher.launch("transformer_predictions.jsonl")
                                                     }
                                                     .onFailure {
