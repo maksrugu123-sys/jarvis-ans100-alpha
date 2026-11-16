@@ -91,6 +91,7 @@ class ANS100BenchmarkTraceAdapterTest {
         assertEquals(3, trace.getJSONObject("neural_outputs").getInt("unique_spiking_neurons"))
         assertEquals(2, trace.getJSONObject("neural_outputs").getInt("activated_synapses"))
         assertEquals(12_345L, trace.getJSONObject("measurement").getLong("inference_duration_ns"))
+        assertFalse(trace.getBoolean("neural_hypothesis_state_persisted"))
         assertTrue(trace.getJSONObject("measurement").isNull("peak_memory_mb"))
         assertFalse(trace.toString().contains("private synthetic input"))
         assertFalse(trace.has("expected_answer"))
@@ -98,6 +99,23 @@ class ANS100BenchmarkTraceAdapterTest {
         assertTrue(ANS100BenchmarkTraceAdapter.toJsonLine(trace).endsWith("}"))
     }
 
+
+    @Test
+    fun recordsOnlyTheCheckpointStatusWhenExplicitlyProvided() {
+        val (evidence, decision, telemetry) = fixture()
+        val trace = ANS100BenchmarkTraceAdapter.create(
+            taskId = null,
+            inputText = "test input",
+            evidence = evidence,
+            decision = decision,
+            telemetry = telemetry,
+            emittedSpikeNeuronIds = emptySet(),
+            activatedConnectionIds = emptySet(),
+            associationResult = ANS100NeuralAssociationDecoder.Result(0, 0, 0, emptyList()),
+            hypothesisStatePersisted = true,
+        )
+        assertTrue(trace.getBoolean("neural_hypothesis_state_persisted"))
+    }
 
     @Test
     fun exportsMemoryExplanationsSeparatelyAndHashesLabels() {
