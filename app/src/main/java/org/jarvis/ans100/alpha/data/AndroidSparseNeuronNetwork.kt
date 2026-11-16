@@ -1055,6 +1055,7 @@ private class AndroidNeuronSqliteStore(
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_eval_age_idx ON neural_association_task_evaluations(candidate_id, created_at_ms)")
         db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_weight_history (feedback_id TEXT NOT NULL, connection_id TEXT NOT NULL, turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, previous_weight REAL NOT NULL, next_weight REAL NOT NULL, reward REAL NOT NULL, source TEXT NOT NULL, changed_at_ms INTEGER NOT NULL, PRIMARY KEY(feedback_id, connection_id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_weight_history_candidate_idx ON neural_association_weight_history(candidate_id, changed_at_ms)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_feedback_candidate_idx ON neural_association_feedback_events(candidate_id, created_at_ms)")
     }
 
     private fun createStructuralSynapseRegistry(db: SQLiteDatabase) {
@@ -2296,15 +2297,21 @@ private class AndroidNeuronSqliteStore(
 
     override fun recordNeuralAssociationEvaluation(candidateId: String, observation: ANS100NeuralAssociationAssessment.Observation): Int {
         val db = writableDatabase
-        val values = ContentValues().apply {
-            put("candidate_id", candidateId); put("task_id", observation.taskId)
-            put("independence_key", observation.independenceKey); put("outcome", observation.outcome.name)
-            put("evidence_source", observation.source.name); put("created_at_ms", System.currentTimeMillis())
+        db.beginTransaction()
+        try {
+            val values = ContentValues().apply {
+                put("candidate_id", candidateId); put("task_id", observation.taskId)
+                put("independence_key", observation.independenceKey); put("outcome", observation.outcome.name)
+                put("evidence_source", observation.source.name); put("created_at_ms", System.currentTimeMillis())
+            }
+            val inserted = db.insertWithOnConflict("neural_association_task_evaluations", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+            val excess = scalar(db, "SELECT COUNT(*) FROM neural_association_task_evaluations") - MAX_NEURAL_ASSOCIATION_EVALUATIONS
+            if (excess > 0L) db.execSQL("DELETE FROM neural_association_task_evaluations WHERE rowid IN (SELECT rowid FROM neural_association_task_evaluations ORDER BY created_at_ms ASC, rowid ASC LIMIT ?)", arrayOf(excess))
+            db.setTransactionSuccessful()
+            return if (inserted == -1L) 0 else 1
+        } finally {
+            db.endTransaction()
         }
-        val inserted = db.insertWithOnConflict("neural_association_task_evaluations", null, values, SQLiteDatabase.CONFLICT_IGNORE)
-        val excess = scalar(db, "SELECT COUNT(*) FROM neural_association_task_evaluations") - MAX_NEURAL_ASSOCIATION_EVALUATIONS
-        if (excess > 0L) db.execSQL("DELETE FROM neural_association_task_evaluations WHERE rowid IN (SELECT rowid FROM neural_association_task_evaluations ORDER BY created_at_ms ASC, rowid ASC LIMIT ?)", arrayOf(excess))
-        return if (inserted == -1L) 0 else 1
     }
 
     override fun neuralAssociationEvaluations(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.PersistedObservation> {
