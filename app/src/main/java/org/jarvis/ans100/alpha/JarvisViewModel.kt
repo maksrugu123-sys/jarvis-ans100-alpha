@@ -732,7 +732,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val turnStartedAtNs = System.nanoTime()
             conversationResponseEngine.resetTurnMetrics()
             try {
-                // The seven-population ANS-100 graph is the only dialogue neural network.
+                // The eight-population ANS-100 graph is the only dialogue neural network.
                 val hybridDialogueAnalysis = if (!clean.startsWith("/")) {
                     runHybridDialoguePass(clean, before.conversation.messages)
                 } else null
@@ -987,7 +987,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Runs the seven-population graph, applies a conservative population gate,
+     * Runs the eight-population graph, applies a conservative population gate,
      * and prepares the evidence-bound decision package consumed by Qwen.
      * Core still proposes the candidate; neural activity can only validate a
      * complete bounded path or force abstention, not claim semantic certainty.
