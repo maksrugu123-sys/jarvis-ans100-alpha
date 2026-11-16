@@ -51,7 +51,13 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
 
     def test_generator_rejects_custom_count_that_breaks_pair_disjoint_contract(self):
         with self.assertRaises(ValueError):
-            build_tasks(seeds=SEEDS[:1], tasks_per_split=4)
+            build_tasks(seeds=SEEDS[:1], tasks_per_split=17)
+
+    def test_query_pairs_are_unique_within_each_evaluation_split(self):
+        for split in ("development", "pair_disjoint"):
+            rows = [task for task in self.tasks if task["split"] == split]
+            pairs = [tuple(task["query_pair"]) for task in rows]
+            self.assertEqual(len(pairs), len(set(pairs)))
 
     def test_scorer_rejects_duplicate_or_invalid_source_tasks(self):
         duplicate = self.tasks + [dict(self.tasks[0])]
