@@ -100,6 +100,7 @@ object AndroidHybridTopologyV2 {
             fanOut = EVIDENCE_GENERAL_FAN_OUT,
             salt = EVIDENCE_GENERAL_SALT.toInt(),
             feedForwardWeight = CONCEPT_ASSOCIATION_INITIAL_WEIGHT,
+            sourceOffsetBase = ANS100ConceptMemory.NEURAL_INPUT_START - evidence.startInclusive,
         )
         ANS100CandidateSlotContract.Slot.values().forEach { slot ->
             ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
@@ -224,6 +225,7 @@ object AndroidHybridTopologyV2 {
         recurrent: Boolean = false,
         excludedSourceIds: Set<Int> = emptySet(),
         feedForwardWeight: Double = FEED_FORWARD_WEIGHT,
+        sourceOffsetBase: Int = 0,
     ) {
         require(fanOut in 1..8)
         for (sourceOffset in 0 until source.size) {
@@ -231,7 +233,8 @@ object AndroidHybridTopologyV2 {
             if (sourceId in excludedSourceIds) continue
             val usedTargets = HashSet<Int>(fanOut)
             for (slot in 0 until fanOut) {
-                var targetOffset = (sourceOffset.toLong() * 37L + slot.toLong() * 113L + salt) % target.size
+                val topologySourceOffset = sourceOffset.toLong() + sourceOffsetBase
+                var targetOffset = (topologySourceOffset * 37L + slot.toLong() * 113L + salt) % target.size
                 var targetId = target.startInclusive + targetOffset.toInt()
                 if (recurrent && targetId == sourceId) {
                     targetOffset = (targetOffset + 1L) % target.size
