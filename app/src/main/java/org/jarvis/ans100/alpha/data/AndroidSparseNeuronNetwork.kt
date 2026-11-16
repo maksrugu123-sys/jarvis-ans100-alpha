@@ -187,7 +187,7 @@ internal interface AndroidNeuronStateStore : Closeable {
  */
 class AndroidSparseNeuronNetwork(
     context: Context,
-    databaseName: String = DEFAULT_DATABASE_NAME,
+    private val databaseName: String = DEFAULT_DATABASE_NAME,
     private val hotSetCapacity: Int = DEFAULT_HOT_SET_CAPACITY,
 ) : Closeable {
     private val store: AndroidNeuronStateStore
@@ -445,6 +445,29 @@ class AndroidSparseNeuronNetwork(
         require(source == ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER ||
             source == ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME)
         return store.applyCanonicalReadoutFeedback(feedbackId, turnId, answer, source)
+    }
+
+    /**
+     * Benchmark labels may train only the dedicated benchmark database. The
+     * normal app network cannot opt into this synthetic supervised-learning path.
+     */
+    @Synchronized
+    fun applyCanonicalReadoutBenchmarkFeedback(
+        feedbackId: String,
+        turnId: String,
+        answer: ANS100CanonicalReadoutContract.Answer,
+    ): Int {
+        if (databaseName != AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME) {
+            throw AndroidNeuronNetworkException("benchmark labels are forbidden outside the isolated benchmark database")
+        }
+        require(feedbackId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        return store.applyCanonicalReadoutFeedback(
+            feedbackId,
+            turnId,
+            answer,
+            ANS100CandidateFeedbackLearner.FeedbackSource.CONTROLLED_BENCHMARK_LABEL,
+        )
     }
 
     @Synchronized
@@ -2023,7 +2046,8 @@ private class AndroidNeuronSqliteStore(
         source: ANS100CandidateFeedbackLearner.FeedbackSource,
     ): Int {
         if (source != ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER &&
-            source != ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME
+            source != ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME &&
+            source != ANS100CandidateFeedbackLearner.FeedbackSource.CONTROLLED_BENCHMARK_LABEL
         ) return 0
         val db = writableDatabase
         val nowMs = System.currentTimeMillis()
