@@ -1117,6 +1117,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             associationResult = neuralAssociationResult,
                             inferenceDurationNs = (System.nanoTime() - neuralPassStartedAtNs).coerceAtLeast(0L),
                             neuralHypotheses = neuralHypotheses,
+                            memoryHypothesisReports = conceptInput.hypothesisReports,
                         )
                         benchmarkTraceStore.append(ANS100BenchmarkTraceAdapter.toJsonLine(trace))
                     }.getOrDefault(false)
