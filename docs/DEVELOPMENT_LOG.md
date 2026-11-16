@@ -3072,3 +3072,31 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 - Qwen remains a language realizer and is not used to generate associations.
 
 **Verification:** tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, GitHub Actions workflow, or device inference was run. Automatic workflows remain manual-only (\`workflow_dispatch\`). \`main\` was not modified.
+
+
+## 2026-11-16 — Activity-driven structural plasticity prototype
+
+**Objective:** remove the fixed-three-edge coverage ceiling as an experimental capability, without hard-coded concept pairs or language-model-generated associations.
+
+**Added:**
+- \`app/src/main/java/org/jarvis/ans100/alpha/data/ANS100ActivityDrivenStructuralPlasticity.kt\` — bounded activity-driven proposal engine. It observes active concept assemblies, skips pairs already sharing an association target, accumulates distinct turn IDs, and after three observations proposes two directed synapses to a competitively selected shared target. The target is selected by a deterministic pair-hash scan with least-incoming-load competition, excluding both sources' existing targets.
+- \`app/src/test/java/org/jarvis/ans100/alpha/data/ANS100ActivityDrivenStructuralPlasticityTest.kt\` — regression coverage for thresholding, replay idempotency, existing shared targets, target exclusion/load competition, capacity, expiry, degree bounds, deterministic proposals and duplicate inputs.
+- \`docs/ANS100_ACTIVITY_DRIVEN_STRUCTURAL_PLASTICITY_V1.md\` — mechanism, limits, epistemic boundaries and integration/evaluation gates.
+
+**Changed:**
+- Corrected the least-loaded-target test fixture so every target except the deliberately empty target has non-zero incoming load; this makes the expected winner independent of the pair-hash starting offset.
+
+**Architecture / safety decisions:**
+- No predefined concept-pair list or semantic relation catalogue is used.
+- Repeated co-activation is only a structural-growth signal, not proof of semantic relation, causality or truth.
+- The learner returns auditable proposals; it does not write SQLite, mutate the live network, alter the decoder, enter answer selection, or change Qwen's role.
+- In-memory eligibility is not durable across process restart yet.
+- Conservative initial weight is 0.25; growth, per-concept degree, target in-degree, tracked-pair count and observation window are bounded.
+
+**Tests:** AUTHORED / NOT RUN. No test command was executed in this environment.
+
+**Builds / APK / CI / GitHub Actions / device inference:** NOT RUN. Automatic workflows remain manual-only; no workflow was dispatched.
+
+**Limitations:** persistence and atomic synapse insertion, runtime integration, decoder support, restart/replay migration tests, and held-out evaluation against fixed-topology, shuffled-activity and random-growth controls remain outstanding. No claim of autonomous semantic understanding is supported.
+
+**Next stage:** implement durable SQLite eligibility and atomic validation/insertion of proposed synapse pairs, then exercise those synapses in the actual Android LIF runtime behind a disabled-by-default experimental gate.
