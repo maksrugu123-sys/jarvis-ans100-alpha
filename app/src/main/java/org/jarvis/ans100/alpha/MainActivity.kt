@@ -298,6 +298,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 state = ui.conversation,
                                 onClear = viewModel::clearConversation,
                                 onRateLatestAnswer = viewModel::rateLatestHybridAnswer,
+                                onRateNeuralAssociation = viewModel::rateNeuralAssociationCandidate,
                                 feedbackAvailable = ui.conversation.hybridFeedbackAvailable,
                                 feedbackMessage = ui.conversation.hybridFeedbackMessage,
                                 glowEnabled = glowEnabled,
@@ -2352,6 +2353,7 @@ private fun ConversationPanel(
     state: LocalConversationUiState,
     onClear: () -> Unit,
     onRateLatestAnswer: (Boolean) -> Unit,
+    onRateNeuralAssociation: (String, Boolean) -> Unit,
     feedbackAvailable: Boolean,
     feedbackMessage: String?,
     glowEnabled: Boolean,
@@ -2427,6 +2429,39 @@ private fun ConversationPanel(
                                     color = if (userMessage) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.primary)
                                 MessageBodyText(message.text)
+                                if (!userMessage && message.id == latestAssistantId &&
+                                    state.neuralAssociationFeedback != null
+                                ) {
+                                    val association = state.neuralAssociationFeedback
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text(
+                                                "Проверка ассоциации ANS-100",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                            Text(
+                                                "Связаны ли понятия «${association.firstLabel}» и «${association.secondLabel}»?",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                TextButton(onClick = {
+                                                    onRateNeuralAssociation(association.candidateId, true)
+                                                }) { Text("Связаны") }
+                                                TextButton(onClick = {
+                                                    onRateNeuralAssociation(association.candidateId, false)
+                                                }) { Text("Не связаны") }
+                                            }
+                                        }
+                                    }
+                                }
                                 if (!userMessage && message.id == latestAssistantId && feedbackAvailable) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         TextButton(onClick = { onRateLatestAnswer(true) }) { Text("Полезно 👍") }
