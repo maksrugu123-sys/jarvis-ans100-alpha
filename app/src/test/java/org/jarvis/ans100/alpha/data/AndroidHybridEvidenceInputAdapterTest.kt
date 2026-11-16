@@ -59,6 +59,41 @@ class AndroidHybridEvidenceInputAdapterTest {
 
 
     @Test
+    fun conceptInputsCanShareTheHybridBatchWithoutLosingTrace() {
+        val base = AndroidHybridEvidenceInputAdapter.createBatch(
+            TypedEvidenceBundle(
+                turnId = "turn-input-1",
+                records = listOf(record(
+                    EvidenceFeature.USER_MESSAGE_TEXT,
+                    source = EvidenceSourceKind.USER_MESSAGE,
+                    status = EvidenceStatus.USER_PROVIDED,
+                    value = EvidenceValue.Text("Собака"),
+                )),
+            ),
+            40L,
+        )
+        val memory = ANS100ConceptMemory()
+        assertTrue(memory.learnConcept(
+            ANS100ConceptMemory.Concept("dog", "Собака"),
+            ANS100ConceptMemory.LearningSource.EXPLICIT_USER,
+        ))
+        val frame = ANS100NeuralInputAdapter().encode("turn-input-1", "Собака")
+        val activations = ANS100ConceptActivationAdapter().activate(frame, memory)
+        val concepts = ANS100ConceptNeuralInputAdapter().createBatch(activations, memory, 40L)
+        val merged = ANS100ConceptNeuralInputAdapter().merge(base, concepts)
+
+        assertEquals(2, merged.events.size)
+        assertEquals(1, merged.trace.size)
+        assertEquals(1, merged.conceptTrace.size)
+        assertEquals("dog", merged.conceptTrace.single().conceptId)
+        assertEquals(ANS100ConceptMemory.NEURAL_INPUT_START, merged.conceptTrace.single().neuronId)
+        assertEquals(
+            merged.events.map { it.targetNeuronId },
+            merged.trace.map { it.neuronId } + merged.conceptTrace.map { it.neuronId },
+        )
+    }
+
+    @Test
     fun mapsSixCandidateSupportConflictFeaturesToReservedInputIds() {
         ANS100CandidateSlotContract.Slot.values().forEach { slot ->
             ANS100CandidateSlotContract.Polarity.values().forEach { polarity ->
