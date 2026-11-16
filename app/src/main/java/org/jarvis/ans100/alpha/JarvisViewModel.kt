@@ -1009,28 +1009,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         emittedSpikeNeuronIds = emittedSpikeNeuronIds,
                         activatedConnectionIds = activatedConnectionIds,
                     )
-                    // Save one bounded neural-association trace for explicit rating of this answer.
-                    // The model's generated wording is never used as a teaching signal.
-                    latestNeuralAssociationFeedback = null
-                    pendingNeuralAssociationFeedbackUi = null
-                    neuralAssociationResult.candidates.firstOrNull()?.let { candidate ->
-                        val saved = hybridNeuronNetwork.recordNeuralAssociationEligibility(
-                            turnId = turnId,
-                            candidateId = candidate.candidateId,
-                            connectionIds = candidate.activatedConnectionIds,
-                            eligibility = candidate.activationHint,
-                        )
-                        if (saved == candidate.activatedConnectionIds.size) {
-                            latestNeuralAssociationFeedback = Triple(
-                                turnId, candidate.candidateId, "na-feedback-" + UUID.randomUUID(),
-                            )
-                            pendingNeuralAssociationFeedbackUi = NeuralAssociationFeedbackUi(
-                                candidateId = candidate.candidateId,
-                                firstLabel = candidate.firstLabel,
-                                secondLabel = candidate.secondLabel,
-                            )
-                        }
-                    }
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
                         understanding = understanding,
@@ -1068,6 +1046,28 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         relationHypotheses = conceptInput.hypothesisReports,
                         neuralAssociations = neuralAssociationResult.candidates,
                     )
+                    // Save one bounded neural-association trace for explicit concept-pair rating.
+                    // The model's generated wording is never used as a teaching signal.
+                    latestNeuralAssociationFeedback = null
+                    pendingNeuralAssociationFeedbackUi = null
+                    neuralAssociationResult.candidates.firstOrNull()?.let { candidate ->
+                        val saved = hybridNeuronNetwork.recordNeuralAssociationEligibility(
+                            turnId = turnId,
+                            candidateId = candidate.candidateId,
+                            connectionIds = candidate.activatedConnectionIds,
+                            eligibility = candidate.activationHint,
+                        )
+                        if (saved == candidate.activatedConnectionIds.size) {
+                            latestNeuralAssociationFeedback = Triple(
+                                turnId, candidate.candidateId, "na-feedback-" + UUID.randomUUID(),
+                            )
+                            pendingNeuralAssociationFeedbackUi = NeuralAssociationFeedbackUi(
+                                candidateId = candidate.candidateId,
+                                firstLabel = candidate.firstLabel,
+                                secondLabel = candidate.secondLabel,
+                            )
+                        }
+                    }
                     val telemetrySummary = buildString {
                         append("topology=").append(telemetry.topologyId)
                         append(" v").append(telemetry.topologyVersion)
