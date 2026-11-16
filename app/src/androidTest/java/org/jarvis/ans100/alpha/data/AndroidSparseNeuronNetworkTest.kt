@@ -978,7 +978,10 @@ class AndroidSparseNeuronNetworkTest {
 
     @Test
     fun canonicalReadoutFeedbackPersistsFourRealLifSynapsesAndProducesOnlyTrainedClassSpikes() {
-        val sources = listOf(1_062, 1_200, 4_000)
+        // A dense, deterministic source set exercises convergence into all 150
+        // output buckets. One labelled example must separate the target class
+        // from the three just-below-threshold negative classes.
+        val sources = (1_062..1_573).toList()
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
             network.initializeHybridTopologyV2()
             assertEquals(sources.size, network.recordCanonicalReadoutEligibility("canonical-turn-1", sources))
@@ -990,31 +993,42 @@ class AndroidSparseNeuronNetworkTest {
             )
             assertTrue(updated > 0)
             assertEquals(sources.size * 4, network.canonicalReadoutSynapseCount())
-            assertEquals(
-                sources.size,
-                network.recordCanonicalReadoutEligibility("canonical-turn-1", sources),
-            )
+
+            // A completed turn is consumable exactly once, even if a caller
+            // attempts to recreate its eligibility with a fresh feedback ID.
+            assertEquals(0, network.recordCanonicalReadoutEligibility("canonical-turn-1", sources))
             assertEquals(0, network.applyCanonicalReadoutFeedback(
-                feedbackId = "canonical-feedback-1",
+                feedbackId = "canonical-feedback-replay",
                 turnId = "canonical-turn-1",
                 answer = ANS100CanonicalReadoutContract.Answer.NO,
                 source = ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
             ))
+            assertEquals(sources.size * 4, network.canonicalReadoutSynapseCount())
         }
 
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
             reopened.initializeHybridTopologyV2()
             assertEquals(sources.size * 4, reopened.canonicalReadoutSynapseCount())
-            reopened.scheduleInputs(sources.map { neuronId ->
+            reopened.scheduleInputs(sources.mapIndexed { index, neuronId ->
                 AndroidNeuronEvent(
-                    eventId = "canonical-replay-$neuronId",
+                    eventId = "canonical-replay-$index",
                     timeNs = 1_000_000L,
                     targetNeuronId = neuronId,
                     strength = 1.0,
                 )
             })
-            val run = reopened.run(maxEvents = 2_000, maxTimestamps = 2_000)
+            val run = reopened.run(maxEvents = 100_000, maxTimestamps = 10_000)
             assertEquals(0, run.pendingEvents)
+            assertFalse(run.budgetExhausted)
+
+            val canonicalActivations = run.activatedConnectionIds.filter {
+                it.startsWith("ans100-v9-canonical-readout-")
+            }
+            assertTrue("learned canonical output synapses must be traced", canonicalActivations.isNotEmpty())
+            assertTrue(
+                "only the explicitly trained YES class should cross the LIF threshold",
+                canonicalActivations.all { it.startsWith("ans100-v9-canonical-readout-yes-") },
+            )
             val decoded = ANS100CanonicalReadoutDecoder().decode(
                 run.emittedSpikes.map { it.first }.toSet(),
             )
@@ -1023,6 +1037,10 @@ class AndroidSparseNeuronNetworkTest {
                 ANS100CanonicalReadoutDecoder.Result.Status.UNCALIBRATED_WINNER,
                 decoded.status,
             )
+            assertTrue(decoded.spikeCounts.getValue(ANS100CanonicalReadoutContract.Answer.YES) >= 2)
+            assertEquals(0, decoded.spikeCounts.getValue(ANS100CanonicalReadoutContract.Answer.NO))
+            assertEquals(0, decoded.spikeCounts.getValue(ANS100CanonicalReadoutContract.Answer.UNKNOWN))
+            assertEquals(0, decoded.spikeCounts.getValue(ANS100CanonicalReadoutContract.Answer.CONFLICT))
         }
     }
 
