@@ -487,6 +487,7 @@ class AndroidSparseNeuronNetworkTest {
             val before = network.neuralAssociationWeights(edges)
             assertEquals(edges.size, before.size)
             assertTrue(before.values.all { it in 0.0..1.0 })
+            assertTrue(before.values.all { kotlin.math.abs(it - AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT) < 0.000001 })
 
             val updated = network.applyNeuralAssociationFeedback(
                 feedbackId, turnId, candidateId, 1.0,
@@ -541,6 +542,31 @@ class AndroidSparseNeuronNetworkTest {
                 "no-eligibility-feedback", turnId, candidateId, -1.0,
                 ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
             ))
+        }
+    }
+
+    @Test
+    fun schemaThreeUpgradeAddsLearningTablesWithoutRebuildingTopology() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            assertEquals(AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT, network.stats().connectionCount)
+        }
+        val legacy = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            legacy.execSQL("DROP TABLE IF EXISTS neural_association_eligibility")
+            legacy.execSQL("DROP TABLE IF EXISTS neural_association_feedback_events")
+            legacy.version = 3
+        } finally {
+            legacy.close()
+        }
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { upgraded ->
+            assertEquals(AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT, upgraded.stats().connectionCount)
+            val projection = AndroidHybridTopologyV2.conceptAssociationProjection(ANS100ConceptMemory.NEURAL_INPUT_START)
+            val connectionIds = projection.values.take(2)
+            val weights = upgraded.neuralAssociationWeights(connectionIds)
+            assertEquals(2, weights.size)
+            assertTrue(weights.values.all {
+                kotlin.math.abs(it - AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT) < 0.000001
+            })
         }
     }
 }
