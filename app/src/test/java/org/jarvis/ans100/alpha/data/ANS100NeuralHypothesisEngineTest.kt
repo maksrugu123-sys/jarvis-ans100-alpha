@@ -44,6 +44,20 @@ class ANS100NeuralHypothesisEngineTest {
         assertTrue(row.nonReproducingTurnIds.contains("turn-2"))
     }
 
+    @Test fun truncatedPairScanCannotCreateNegativeVerification() {
+        val engine = ANS100NeuralHypothesisEngine()
+        engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true)
+        val row = engine.observeTurn(
+            "turn-2",
+            setOf("concept.alpha", "concept.beta"),
+            emptyList(),
+            completed = true,
+            pairScanComplete = false,
+        ).single()
+        assertEquals(ANS100NeuralHypothesisEngine.Status.GENERATED, row.status)
+        assertEquals(0, row.nonReproducingTurnIds.size)
+    }
+
     @Test fun incompleteAndDuplicateTurnsCannotProvideVerification() {
         val engine = ANS100NeuralHypothesisEngine()
         engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), false)
