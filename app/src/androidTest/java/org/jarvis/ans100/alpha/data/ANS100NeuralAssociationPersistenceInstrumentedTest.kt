@@ -24,28 +24,50 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
         var networkClosed = false
         try {
             network.initializeHybridTopologyV2()
+            val candidate = ANS100NeuralAssociationDecoder.Candidate(
+                candidateId = candidateId,
+                firstConceptId = "concept:alpha",
+                firstLabel = "alpha",
+                secondConceptId = "concept:beta",
+                secondLabel = "beta",
+                convergentNeuronIds = listOf(1_200),
+                activatedConnectionIds = listOf(
+                    "ans100-v4-evidence-general-association-1",
+                    "ans100-v4-evidence-general-association-2",
+                ),
+                evidenceRefs = listOf("turn:alpha", "turn:beta"),
+                activationHint = 1.0 / 3.0,
+            )
             repeat(3) { index ->
                 assertEquals(
                     1,
-                    network.recordNeuralAssociationEvaluation(
-                        candidateId,
-                        ANS100NeuralAssociationAssessment.Observation(
+                    network.recordNeuralAssociationBenchmarkOutcome(
+                        candidate,
+                        ANS100NeuralAssociationBenchmarkAssessmentAdapter.HeldOutTask(
                             taskId = "heldout-task-$index",
                             independenceKey = "independent-unit-$index",
-                            outcome = ANS100NeuralAssociationAssessment.Outcome.REPRODUCED,
+                            split = "pair_disjoint",
+                            family = "relation_status",
+                            queryPair = "alpha" to "beta",
+                            expectedAnswer = "YES",
                         ),
+                        candidateReproduced = true,
                     ),
                 )
             }
             assertEquals(
                 0,
-                network.recordNeuralAssociationEvaluation(
-                    candidateId,
-                    ANS100NeuralAssociationAssessment.Observation(
+                network.recordNeuralAssociationBenchmarkOutcome(
+                    candidate,
+                    ANS100NeuralAssociationBenchmarkAssessmentAdapter.HeldOutTask(
                         taskId = "heldout-task-duplicate",
                         independenceKey = "independent-unit-0",
-                        outcome = ANS100NeuralAssociationAssessment.Outcome.REPRODUCED,
+                        split = "pair_disjoint",
+                        family = "relation_status",
+                        queryPair = "alpha" to "beta",
+                        expectedAnswer = "YES",
                     ),
+                    candidateReproduced = true,
                 ),
             )
             network.close()
