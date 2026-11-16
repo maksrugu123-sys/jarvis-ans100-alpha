@@ -48,6 +48,12 @@ class AndroidWebSearchTest {
         assertTrue(AndroidWebSearchIntent.isCapabilityQuestion(capabilityQuestion))
         assertTrue(AndroidWebSearchIntent.isCapabilityQuestion("Ты умеешь искать в интернете?"))
         assertTrue(AndroidWebSearchIntent.isCapabilityQuestion("Ты можешь искать информацию в интернете?"))
+        assertTrue(AndroidWebSearchIntent.isCapabilityQuestion("Ты можешь найти в интернете?"))
+        assertTrue(AndroidWebSearchIntent.isCapabilityQuestion("Ты можешь найти информацию в интернете?"))
+        assertEquals(
+            "новости Android",
+            AndroidWebSearchIntent.extract("Ты можешь найти информацию в интернете новости Android?")?.query,
+        )
         assertFalse(AndroidWebSearchIntent.isCapabilityQuestion("Ты можешь искать в интернете новости Android?"))
         assertTrue(AndroidWebSearchIntent.capabilityReply().startsWith("Да."))
         assertFalse(AndroidWebSearchIntent.isCapabilityQuestion("Как искать в интернете?"))
