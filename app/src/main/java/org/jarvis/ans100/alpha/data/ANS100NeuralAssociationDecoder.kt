@@ -50,13 +50,24 @@ class ANS100NeuralAssociationDecoder {
         val associationSpikeCount: Int,
         val consideredPairCount: Int,
         val candidates: List<Candidate>,
+        val inputConceptCount: Int = activeConceptCount,
+        val observedConceptIds: List<String> = emptyList(),
+        val candidateCountBeforeLimit: Int = candidates.size,
+        val candidateSetComplete: Boolean = candidateCountBeforeLimit == candidates.size,
+        val pairScanComplete: Boolean = true,
     ) {
         init {
             require(activeConceptCount >= 0)
+            require(inputConceptCount >= activeConceptCount)
             require(associationSpikeCount >= 0)
             require(consideredPairCount >= 0)
             require(candidates.size <= MAX_CANDIDATES)
             require(candidates.map { it.candidateId }.distinct().size == candidates.size)
+            require(observedConceptIds.size <= ANS100ConceptNeuralInputAdapter.MAX_CONCEPTS_PER_TURN)
+            require(observedConceptIds.distinct().size == observedConceptIds.size)
+            require(observedConceptIds.all { it.isNotBlank() && it.length <= 128 })
+            require(candidateCountBeforeLimit >= candidates.size)
+            require(candidateSetComplete == (candidateCountBeforeLimit == candidates.size))
         }
     }
 
@@ -104,16 +115,21 @@ class ANS100NeuralAssociationDecoder {
         }
         val grownBySource = grownConnections.groupBy { it.sourceNeuronId }
         val active = conceptTrace.sortedBy { it.conceptId }.mapNotNull { trace ->
+            // A concept must emit its own input spike; a downstream spike is not a substitute.
+            if (trace.neuronId !in emittedSpikeNeuronIds) return@mapNotNull null
             val projection = AndroidHybridTopologyV2.conceptAssociationProjection(trace.neuronId)
                 .mapValues { listOf(it.value) }.toMutableMap()
             grownBySource[trace.neuronId].orEmpty().forEach { connection ->
                 projection[connection.targetNeuronId] =
                     (projection[connection.targetNeuronId].orEmpty() + connection.connectionId).distinct().sorted()
             }
-            val spiking = projection.filter { (targetId, connectionIds) ->
-                targetId in associationSpikes && connectionIds.any { it in activatedConnectionIds }
+            val propagatedTargets = projection.filterValues { connectionIds ->
+                connectionIds.any { it in activatedConnectionIds }
             }.keys
-            if (spiking.isEmpty()) null else ActiveConcept(trace, projection, spiking)
+            if (propagatedTargets.isEmpty()) null else {
+                val spiking = propagatedTargets.filterTo(LinkedHashSet()) { it in associationSpikes }
+                ActiveConcept(trace, projection, spiking)
+            }
         }
 
         val candidates = ArrayList<Candidate>()
@@ -163,11 +179,17 @@ class ANS100NeuralAssociationDecoder {
             compareByDescending<Candidate> { it.convergentNeuronIds.size }
                 .thenBy { it.candidateId },
         ).take(maxCandidates)
+        val expectedPairs = active.size * (active.size - 1) / 2
         return Result(
             activeConceptCount = active.size,
             associationSpikeCount = associationSpikes.size,
             consideredPairCount = consideredPairs,
             candidates = bounded,
+            inputConceptCount = conceptTrace.size,
+            observedConceptIds = active.map { it.trace.conceptId },
+            candidateCountBeforeLimit = candidates.size,
+            candidateSetComplete = candidates.size <= maxCandidates,
+            pairScanComplete = consideredPairs == expectedPairs,
         )
     }
 
