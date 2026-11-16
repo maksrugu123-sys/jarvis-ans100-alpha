@@ -40,8 +40,8 @@ object ANS100CanonicalReadoutContract {
     const val INITIAL_SYNAPSE_WEIGHT = 0.25
     const val MIN_SYNAPSE_WEIGHT = 0.05
     const val MAX_SYNAPSE_WEIGHT = 1.0
-    const val LEARNING_RATE = 0.02
-    const val MAX_WEIGHT_DELTA_PER_EVENT = 0.01
+    const val LEARNING_RATE = 0.01
+    const val MAX_WEIGHT_DELTA_PER_EVENT = LEARNING_RATE
     const val SYNAPSE_DELAY_NS = AndroidHybridTopologyV2.CONNECTION_DELAY_NS
 
     val outputGroups: List<OutputGroup> = Answer.values().mapIndexed { index, answer ->
