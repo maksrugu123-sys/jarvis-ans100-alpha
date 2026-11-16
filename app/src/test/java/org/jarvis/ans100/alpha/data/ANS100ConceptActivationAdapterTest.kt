@@ -21,7 +21,7 @@ class ANS100ConceptActivationAdapterTest {
 
     @Test
     fun groundsCanonicalLabelsAndExplicitAliasesToConceptIds() {
-        val frame = ANS100NeuralInputAdapter().encode("turn-1", "Пёс изучает солнечную систему")
+        val frame = ANS100NeuralInputAdapter().encode("turn-1", "Пёс: Солнечная система")
         val result = ANS100ConceptActivationAdapter().activate(frame, memory())
         assertEquals("turn-1", result.turnId)
         assertEquals(setOf("dog", "solar_system"), result.activations.map { it.conceptId }.toSet())
@@ -32,8 +32,8 @@ class ANS100ConceptActivationAdapterTest {
     fun multiwordAliasRequiresItsObservedAdjacentBigram() {
         val adapter = ANS100ConceptActivationAdapter()
         val memory = memory()
-        val exact = ANS100NeuralInputAdapter().encode("exact", "Я изучаю планетную систему")
-        val reversed = ANS100NeuralInputAdapter().encode("reversed", "Я изучаю систему планетную")
+        val exact = ANS100NeuralInputAdapter().encode("exact", "Планетная система")
+        val reversed = ANS100NeuralInputAdapter().encode("reversed", "Система планетная")
         assertTrue(adapter.activate(exact, memory).activations.any { it.conceptId == "solar_system" })
         assertTrue(adapter.activate(reversed, memory).activations.none { it.conceptId == "solar_system" })
     }
