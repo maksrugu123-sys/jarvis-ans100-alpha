@@ -45,7 +45,14 @@ Missing predictions count as wrong in overall accuracy. Duplicate or unknown tas
 
 The repository currently contains a 10k sparse LIF network, concept activation and associative/structural experiments, but the full app still has heuristic Core logic that prepares some evidence and candidate signals. A benchmark adapter must identify those signals and report them. It must not silently label the current integrated pipeline as pure neural reasoning.
 
-This benchmark tool currently generates tasks and scores prediction JSONL files. It does not invoke the Android app, load a Transformer, call Qwen, or export ANS-100 decisions. A future integration stage is required to collect real predictions. Until then there is no empirical winner.
+The shared Python tool still generates tasks and scores prediction JSONL files; it does not itself invoke Android. The Android app now exposes an isolated Qwen-only inference entry point:
+- `JarvisViewModel.runTransformerOnlyBenchmark(inputText, onComplete)` serializes execution on the conversation executor;
+- `LiteRtLmResponseEngine.benchmarkTransformerOnly(inputText)` uses the installed local Qwen3-0.6B INT4 model directly;
+- the path bypasses ANS-100 handoff, Core understanding, chat history, workspace memory, fallback responses, and tool calling;
+- output is parsed strictly as one canonical label; explanations and ambiguous generations are unscorable;
+- generation and initialization time are returned; peak memory is not measured by this path.
+
+This is a real Transformer-only inference entry point, but it is not yet a batch runner and has not been executed on-device. The ANS-100 path still exports telemetry and an experimental readout separately; it does not yet provide a validated benchmark answer for each task. Therefore a paired Transformer-vs-ANS-100 result is still unavailable, and no empirical winner can be declared.
 
 ## Files and commands
 
@@ -67,3 +74,10 @@ python3 -m tools.task_validation.transformer_vs_ans100_benchmark_v1 score --task
 ```
 
 Do not commit private user data or real conversation text into benchmark fixtures. The current fixture contains only synthetic symbols and facts.
+
+
+## Android Transformer-only entry point
+
+The app-side API is intended for a future benchmark screen or instrumentation harness. Call `runTransformerOnlyBenchmark` once per exported input row, persist the returned `answer` (including null when parsing fails), `generationMs`, and task ID in a prediction JSONL file. Do not pass the expected answer or any ANS-100 output to this method. The current API handles one input per call; batch orchestration and app-side JSONL import/export remain future work.
+
+A null parsed answer is an abstention/unscorable output, not a guessed label. Do not treat a missing local model or inference exception as a model answer. Record failures separately and keep the same task set for both systems.
