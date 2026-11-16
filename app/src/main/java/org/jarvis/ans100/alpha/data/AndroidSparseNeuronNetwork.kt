@@ -1207,6 +1207,142 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
+    override fun recordStructuralPlasticityTurn(
+        turnId: String,
+        activeConcepts: List<ANS100ActivityDrivenStructuralPlasticity.ActiveConcept>,
+    ): List<ANS100ActivityDrivenStructuralPlasticity.TurnSnapshot> {
+        if (!turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")) ||
+            activeConcepts.size > ANS100ActivityDrivenStructuralPlasticity.MAX_ACTIVE_CONCEPTS_PER_TURN ||
+            activeConcepts.map { it.conceptId }.distinct().size != activeConcepts.size ||
+            activeConcepts.map { it.neuronId }.distinct().size != activeConcepts.size
+        ) throw AndroidNeuronNetworkException("structural-plasticity observation is outside bounds")
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            activeConcepts.forEach { concept ->
+                val assignedNeuron = db.rawQuery(
+                    "SELECT neuron_id FROM neural_concept_input_slots WHERE concept_id=?",
+                    arrayOf(concept.conceptId),
+                ).use { if (it.moveToFirst()) it.getInt(0) else null }
+                if (assignedNeuron != concept.neuronId) {
+                    throw AndroidNeuronNetworkException("structural observation does not match persistent concept slot")
+                }
+            }
+            val alreadyRecorded = db.rawQuery(
+                "SELECT 1 FROM structural_plasticity_turns WHERE turn_id=?",
+                arrayOf(turnId),
+            ).use { it.moveToFirst() }
+            if (!alreadyRecorded) {
+                db.insertOrThrow(
+                    "structural_plasticity_turns",
+                    null,
+                    ContentValues().apply {
+                        put("turn_id", turnId)
+                        put("created_at_ms", System.currentTimeMillis())
+                    },
+                )
+                activeConcepts.forEach { concept ->
+                    db.insertOrThrow(
+                        "structural_plasticity_turn_concepts",
+                        null,
+                        ContentValues().apply {
+                            put("turn_id", turnId)
+                            put("concept_id", concept.conceptId)
+                            put("neuron_id", concept.neuronId)
+                            put("label", concept.label)
+                            put("provenance_ref", concept.provenanceRef)
+                        },
+                    )
+                }
+                db.delete(
+                    "structural_plasticity_turn_concepts",
+                    "turn_id IN (SELECT turn_id FROM structural_plasticity_turns ORDER BY sequence DESC LIMIT -1 OFFSET ?)",
+                    arrayOf(MAX_PERSISTED_STRUCTURAL_TURNS.toString()),
+                )
+                db.delete(
+                    "structural_plasticity_turns",
+                    "sequence NOT IN (SELECT sequence FROM structural_plasticity_turns ORDER BY sequence DESC LIMIT ?)",
+                    arrayOf(MAX_PERSISTED_STRUCTURAL_TURNS.toString()),
+                )
+            }
+
+            val turnIds = mutableListOf<String>()
+            db.rawQuery(
+                "SELECT turn_id FROM structural_plasticity_turns ORDER BY sequence DESC LIMIT ?",
+                arrayOf(STRUCTURAL_OBSERVATION_WINDOW_TURNS.toString()),
+            ).use { cursor -> while (cursor.moveToNext()) turnIds += cursor.getString(0) }
+            turnIds.reverse()
+            val snapshots = turnIds.map { storedTurnId ->
+                val concepts = mutableListOf<ANS100ActivityDrivenStructuralPlasticity.ActiveConcept>()
+                db.rawQuery(
+                    "SELECT concept_id, neuron_id, label, provenance_ref FROM structural_plasticity_turn_concepts WHERE turn_id=? ORDER BY concept_id",
+                    arrayOf(storedTurnId),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        concepts += ANS100ActivityDrivenStructuralPlasticity.ActiveConcept(
+                            conceptId = cursor.getString(0),
+                            neuronId = cursor.getInt(1),
+                            label = cursor.getString(2),
+                            provenanceRef = cursor.getString(3),
+                        )
+                    }
+                }
+                ANS100ActivityDrivenStructuralPlasticity.TurnSnapshot(storedTurnId, concepts)
+            }
+            db.setTransactionSuccessful()
+            return snapshots
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun structuralPlasticityGraphSnapshot(
+        sourceNeuronIds: List<Int>,
+    ): ANS100ActivityDrivenStructuralPlasticity.GraphSnapshot {
+        if (sourceNeuronIds.size > ANS100ActivityDrivenStructuralPlasticity.MAX_ACTIVE_CONCEPTS_PER_TURN ||
+            sourceNeuronIds.distinct().size != sourceNeuronIds.size ||
+            sourceNeuronIds.any { it !in 1_062 until 1_200 }
+        ) throw AndroidNeuronNetworkException("structural graph snapshot source list is outside bounds")
+        val db = readableDatabase
+        val targets = LinkedHashMap<Int, Set<Int>>()
+        sourceNeuronIds.forEach { source ->
+            val found = LinkedHashSet<Int>()
+            db.rawQuery(
+                "SELECT target_id FROM connections WHERE source_id=? AND target_id BETWEEN 1200 AND 2199",
+                arrayOf(source.toString()),
+            ).use { cursor -> while (cursor.moveToNext()) found += cursor.getInt(0) }
+            targets[source] = found
+        }
+        val incoming = LinkedHashMap<Int, Int>()
+        db.rawQuery(
+            "SELECT target_id, COUNT(*) FROM connections WHERE target_id BETWEEN 1200 AND 2199 GROUP BY target_id",
+            null,
+        ).use { cursor -> while (cursor.moveToNext()) incoming[cursor.getInt(0)] = cursor.getInt(1) }
+
+        val grownPairs = LinkedHashSet<Pair<String, String>>()
+        val grownEdges = HashMap<String, Int>()
+        db.rawQuery(
+            "SELECT proposal_id, first_concept_id, second_concept_id FROM structural_synapse_registry GROUP BY proposal_id, first_concept_id, second_concept_id ORDER BY proposal_id",
+            null,
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val first = cursor.getString(1)
+                val second = cursor.getString(2)
+                if (first >= second) throw AndroidNeuronNetworkException("persisted structural concept pair is not canonical")
+                grownPairs += first to second
+                grownEdges[first] = (grownEdges[first] ?: 0) + 1
+                grownEdges[second] = (grownEdges[second] ?: 0) + 1
+            }
+        }
+        return ANS100ActivityDrivenStructuralPlasticity.GraphSnapshot(
+            existingTargetsByConceptNeuron = targets,
+            targetIncomingEdgeCounts = incoming,
+            grownConceptPairs = grownPairs,
+            grownEdgesByConcept = grownEdges,
+        )
+    }
+
     override fun addStructuralGrowthProposal(
         proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal,
     ): Int {
@@ -1243,6 +1379,9 @@ private class AndroidNeuronSqliteStore(
             if (already > 0) {
                 db.setTransactionSuccessful()
                 return 0
+            }
+            if (scalar(db, "SELECT COUNT(DISTINCT proposal_id) FROM structural_synapse_registry") >= MAX_STRUCTURAL_GROWN_PAIRS) {
+                throw AndroidNeuronNetworkException("structural grown-pair capacity reached")
             }
             if (scalar(db, "SELECT COUNT(*) FROM connections") + 2 > AndroidSparseNeuronNetwork.MAX_CONNECTIONS) {
                 throw AndroidNeuronNetworkException("global connection capacity reached")
@@ -2127,6 +2266,9 @@ private class AndroidNeuronSqliteStore(
 
     companion object {
         private const val DATABASE_VERSION = 8
+        private const val MAX_PERSISTED_STRUCTURAL_TURNS = 64
+        private const val STRUCTURAL_OBSERVATION_WINDOW_TURNS = 16
+        private const val MAX_STRUCTURAL_GROWN_PAIRS = 512
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
