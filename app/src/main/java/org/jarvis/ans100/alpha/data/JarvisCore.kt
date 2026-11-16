@@ -246,6 +246,26 @@ internal object LocalDialogueFastPaths {
             ?: userMessages.asSequence().mapNotNull { introducedProject(it.text) }.firstOrNull()
         val normalized = normalize(prompt)
 
+        // Deterministic replies for tiny, unambiguous commands must not be delegated
+        // to a small language model that may reinterpret them as open questions.
+        if (normalized in setOf("тебя зовут джарвис", "ты джарвис", "твое имя джарвис", "твое имя jarvis")) {
+            return "Да, меня зовут JARVIS."
+        }
+
+        val asksSearchCapability = listOf(
+            "можешь искать в интернете", "можешь ли искать в интернете",
+            "умеешь искать в интернете", "ты умеешь искать в интернете",
+            "можешь искать информацию в интернете",
+        ).any { normalized.contains(it) }
+        if (asksSearchCapability) {
+            return "Да. Я могу выполнять интернет-поиск, когда есть подключение. Напиши, например: «Найди в интернете последние новости о нейросетях»."
+        }
+
+        val sayMatch = Regex("^(?:скажи|произнеси|назови)\\s+([а-яёa-z])$").find(normalized)
+        if (sayMatch != null) {
+            return sayMatch.groupValues[1].uppercase(Locale.ROOT)
+        }
+
         val asksIdentity = normalized.contains("а тебя") ||
             normalized == "а ты" ||
             normalized.contains("как тебя зовут") ||
