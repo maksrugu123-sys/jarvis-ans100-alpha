@@ -16,6 +16,10 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     private val inputAdapter = ANS100BenchmarkNeuralInputAdapter()
     private val structuredInputAdapter = ANS100StructuredBenchmarkInputAdapter()
     private val decoder = ANS100CanonicalReadoutDecoder()
+    private val associationDecoder = ANS100NeuralAssociationDecoder()
+    private val evidenceVerifier = ANS100StructuredEvidenceVerifier()
+    private var hypothesisLedger = openHypothesisLedger(structuredInput = false)
+    private var hypothesisEngine = loadHypothesisEngine(hypothesisLedger)
 
     data class TaskResult(
         val taskId: String,
@@ -39,6 +43,13 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         val coldStart: Boolean = false,
         val inputEncoding: String = "lexical_hash",
         val parsedFactCount: Int? = null,
+        val neuralAssociationCandidateCount: Int = 0,
+        val neuralHypothesisCount: Int = 0,
+        val reproducedNeuralHypothesisCount: Int = 0,
+        val neuralHypothesisStatusCounts: Map<String, Int> = emptyMap(),
+        val evidenceAuditAnswer: String? = null,
+        val evidenceAuditMethod: String? = null,
+        val neuralEvidenceAgreement: Boolean? = null,
     )
 
     /**
@@ -65,8 +76,10 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         coldStart: Boolean,
         structuredInput: Boolean,
     ): TaskResult {
-        val reopenNetwork = coldStart || activeStructuredInput != structuredInput
+        val modeChanged = activeStructuredInput != structuredInput
+        val reopenNetwork = coldStart || modeChanged
         if (reopenNetwork) network.close()
+        if (modeChanged) switchHypothesisStore(structuredInput)
         activeStructuredInput = structuredInput
         val measured = ProcessMemoryPeakSampler.measure {
             if (reopenNetwork) network = openNetwork(activeStructuredInput)
@@ -106,8 +119,10 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         val activatedFeatureCount: Int
         val slotCollisionCount: Int
         val parsedFactCount: Int?
+        var structuredParse: ANS100StructuredBenchmarkInputAdapter.Result? = null
         if (structuredInput) {
             val encoded = structuredInputAdapter.createBatch(turnId, inputText, timestampNs)
+            structuredParse = encoded
             encodedBatch = encoded.batch
             encodedFeatureCount = encoded.encodedFeatureCount
             activatedFeatureCount = encoded.activatedFeatureCount
@@ -130,6 +145,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
 
         val spikes = LinkedHashSet<Int>()
         val tainted = LinkedHashSet<Int>()
+        val activatedConnections = LinkedHashSet<String>()
         var processed = 0
         var pending: Int
         var passes = 0
@@ -138,6 +154,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             processed += pass.processedEvents
             spikes.addAll(pass.emittedSpikes.map { it.first })
             tainted.addAll(pass.coreTaintedNeuronIds)
+            activatedConnections.addAll(pass.activatedConnectionIds)
             pending = pass.pendingEvents
             passes++
         } while (pending > 0 && passes < MAX_RUN_PASSES)
@@ -167,6 +184,42 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
 
         val readout = if (completed) decoder.decode(spikes, tainted)
             else decoder.decode(emptySet(), tainted)
+
+        // B2: candidates are decoded only from actual input/association spikes and
+        // synapses observed on this turn. No Core or Qwen hypotheses enter here.
+        val conceptTrace = encodedBatch.conceptTrace
+        val grownConnections = if (completed && conceptTrace.isNotEmpty()) {
+            network.structuralAssociationConnections(conceptTrace.map { it.neuronId }.distinct())
+        } else emptyList()
+        val associationResult = if (completed && conceptTrace.isNotEmpty()) {
+            associationDecoder.decode(
+                conceptTrace = conceptTrace,
+                emittedSpikeNeuronIds = spikes,
+                activatedConnectionIds = activatedConnections,
+                grownConnections = grownConnections,
+            )
+        } else null
+        val activeConceptIds = conceptTrace.asSequence()
+            .filter { it.neuronId in spikes && it.neuronId !in tainted }
+            .map { it.conceptId }
+            .toSet()
+        val hypotheses = hypothesisEngine.observeTurn(
+            turnId = turnId,
+            activeConceptIds = activeConceptIds,
+            candidates = associationResult?.candidates.orEmpty(),
+            completed = completed,
+            pairScanComplete = associationResult?.pairScanComplete ?: completed,
+        )
+        if (completed) hypothesisLedger.save(hypothesisEngine.exportSnapshot())
+        val hypothesisSnapshot = hypothesisEngine.snapshot()
+        val hypothesisStatusCounts = hypothesisSnapshot.groupingBy { it.status.name }.eachCount()
+        val reproducedCount = hypothesisSnapshot.count {
+            it.status == ANS100NeuralHypothesisEngine.Status.REPRODUCED_ON_INDEPENDENT_TURN
+        }
+
+        // B3: this audit is transparent benchmark instrumentation only. It is
+        // never injected into the network and never replaces its canonical readout.
+        val evidenceAudit = structuredParse?.let(evidenceVerifier::verify)
         return TaskResult(
             taskId = taskId,
             answer = readout.answer?.wireValue,
@@ -184,6 +237,15 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             completed = completed,
             inputEncoding = if (structuredInput) "role_structured_v1" else "lexical_hash",
             parsedFactCount = parsedFactCount,
+            neuralAssociationCandidateCount = associationResult?.candidates?.size ?: 0,
+            neuralHypothesisCount = hypothesisSnapshot.size,
+            reproducedNeuralHypothesisCount = reproducedCount,
+            neuralHypothesisStatusCounts = hypothesisStatusCounts,
+            evidenceAuditAnswer = evidenceAudit?.answer,
+            evidenceAuditMethod = evidenceAudit?.method,
+            neuralEvidenceAgreement = if (readout.answer != null && evidenceAudit != null) {
+                readout.answer.wireValue == evidenceAudit.answer
+            } else null,
         )
     }
 
@@ -197,12 +259,37 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
 
     private fun resetDatabase(structuredInput: Boolean) {
         network.close()
+        hypothesisLedger.close()
         activeStructuredInput = structuredInput
         if (!appContext.deleteDatabase(databaseName(structuredInput))) {
             throw AndroidNeuronNetworkException("unable to reset isolated ANS-100 benchmark database")
         }
+        val hypothesisDb = hypothesisDatabaseName(structuredInput)
+        if (!appContext.deleteDatabase(hypothesisDb)) {
+            throw AndroidNeuronNetworkException("unable to reset isolated ANS-100 hypothesis database")
+        }
+        hypothesisLedger = openHypothesisLedger(structuredInput)
+        hypothesisEngine = ANS100NeuralHypothesisEngine()
         network = openNetwork(structuredInput)
     }
+
+    private fun switchHypothesisStore(structuredInput: Boolean) {
+        hypothesisLedger.close()
+        hypothesisLedger = openHypothesisLedger(structuredInput)
+        hypothesisEngine = loadHypothesisEngine(hypothesisLedger)
+    }
+
+    private fun openHypothesisLedger(structuredInput: Boolean) =
+        ANS100NeuralHypothesisLedger(appContext, hypothesisDatabaseName(structuredInput))
+
+    private fun hypothesisDatabaseName(structuredInput: Boolean): String =
+        if (structuredInput) "ans100_structured_neural_hypotheses_v1.db"
+        else "ans100_lexical_neural_hypotheses_v1.db"
+
+    private fun loadHypothesisEngine(ledger: ANS100NeuralHypothesisLedger) =
+        ANS100NeuralHypothesisEngine().apply {
+            runCatching { ledger.load()?.let { restoreSnapshot(it) } }
+        }
 
     private fun databaseName(structuredInput: Boolean): String =
         if (structuredInput) STRUCTURED_BENCHMARK_DATABASE_NAME
@@ -220,7 +307,10 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         }
     }
 
-    override fun close() = network.close()
+    override fun close() {
+        network.close()
+        hypothesisLedger.close()
+    }
 
     companion object {
         const val STRUCTURED_BENCHMARK_DATABASE_NAME = "jarvis_ans100_structured_benchmark_v1.db"
