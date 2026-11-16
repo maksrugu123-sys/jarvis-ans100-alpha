@@ -947,4 +947,28 @@ class AndroidSparseNeuronNetworkTest {
         }
     }
 
+
+    @Test
+    fun structuralObservationHistoryHasHardRetentionAndReplayWindows() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            var latest = emptyList<ANS100ActivityDrivenStructuralPlasticity.TurnSnapshot>()
+            repeat(70) { index ->
+                latest = network.recordStructuralPlasticityTurn("bounded-turn-$index", emptyList())
+            }
+            assertEquals(16, latest.size)
+            assertEquals("bounded-turn-54", latest.first().turnId)
+            assertEquals("bounded-turn-69", latest.last().turnId)
+
+            val db = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+            try {
+                val count = db.rawQuery("SELECT COUNT(*) FROM structural_plasticity_turns", null)
+                    .use { it.moveToFirst(); it.getInt(0) }
+                assertEquals(64, count)
+            } finally {
+                db.close()
+            }
+        }
+    }
+
 }
