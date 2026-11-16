@@ -65,7 +65,7 @@ def audit_readout(row: object) -> dict:
 
     inputs = readout.get("decision_inputs")
     if (not isinstance(inputs, list) or not inputs
-            or any(item not in ALLOWED_DECISION_INPUTS for item in inputs)
+            or any(not isinstance(item, str) or item not in ALLOWED_DECISION_INPUTS for item in inputs)
             or len(inputs) != len(set(inputs))):
         errors.append("decision_inputs are missing, duplicated, or include non-neural inputs")
 
