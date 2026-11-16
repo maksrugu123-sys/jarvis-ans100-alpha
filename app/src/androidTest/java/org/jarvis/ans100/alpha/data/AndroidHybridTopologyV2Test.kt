@@ -309,6 +309,40 @@ class AndroidHybridTopologyV2Test {
     }
 
     @Test
+    fun rejectsCoreHeuristicBatchWhoseProvenanceFlagWasStripped() {
+        val bundle = TypedEvidenceBundle(
+            turnId = "taint-contract-turn",
+            records = listOf(
+                TypedEvidenceRecord(
+                    recordId = "${EvidenceFeature.CORE_INTENT_HINT.stableId}:0",
+                    turnId = "taint-contract-turn",
+                    feature = EvidenceFeature.CORE_INTENT_HINT,
+                    source = EvidenceSourceKind.CORE_UNDERSTANDING,
+                    status = EvidenceStatus.HEURISTIC,
+                    value = EvidenceValue.Category("greeting"),
+                    activation = 1.0,
+                    provenanceRef = "turn:taint-contract-turn:core.intent",
+                ),
+            ),
+        )
+        val honest = AndroidHybridEvidenceInputAdapter.createBatch(bundle, timestampNs = 1L)
+        assertTrue(honest.events.single().coreTainted)
+        val forged = honest.copy(events = honest.events.map { it.copy(coreTainted = false) })
+
+        AndroidHybridTopologyV2.open(context, databaseName).use { network ->
+            network.initializeHybridTopologyV2()
+            var rejected = false
+            try {
+                network.scheduleHybridEvidence(forged)
+            } catch (_: AndroidNeuronNetworkException) {
+                rejected = true
+            }
+            assertTrue("Core provenance cannot be stripped before neural scheduling", rejected)
+            assertEquals(0, network.stats().pendingEvents)
+        }
+    }
+
+    @Test
     fun schedulesOnlyVerifiedV2EvidenceAndRequiresPreviousTurnToDrain() {
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 16).use { network ->
             fun batch(turnId: String, timestampNs: Long): AndroidHybridEvidenceInputAdapter.ActivationBatch {
