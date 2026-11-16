@@ -32,6 +32,7 @@ object ANS100BenchmarkTraceAdapter {
         memoryHypothesisReports: List<ANS100WorkspaceConceptInputBridge.HypothesisReport> = emptyList(),
         hypothesisComparisons: List<ANS100HypothesisCompetitionEngine.Comparison> = emptyList(),
         hypothesisStatePersisted: Boolean = false,
+        canonicalReadout: ANS100CanonicalReadoutDecoder.Result? = null,
     ): JSONObject {
         require(inputText.isNotBlank() && inputText.length <= MAX_INPUT_CHARS)
         require(taskId == null || (
@@ -173,6 +174,19 @@ object ANS100BenchmarkTraceAdapter {
             .put("neural_hypothesis_state_persisted", hypothesisStatePersisted)
             .put("memory_hypothesis_explanations", memoryExplanations)
             .put("hypothesis_competition", comparisons)
+            .put("neural_canonical_readout", canonicalReadout?.let { readout ->
+                JSONObject()
+                    .put("answer", readout.answer?.wireValue ?: JSONObject.NULL)
+                    .put("status", readout.status.name)
+                    .put("calibration_status", readout.calibrationStatus)
+                    .put("winning_spike_count", readout.winningSpikeCount)
+                    .put("margin_spike_count", readout.marginSpikeCount)
+                    .put("class_spike_counts", JSONObject().apply {
+                        readout.spikeCounts.forEach { (answer, count) -> put(answer.wireValue, count) }
+                    })
+                    .put("decision_producer", "NEURAL_CANONICAL_READOUT_EXPERIMENT")
+                    .put("production_decision", false)
+            } ?: JSONObject.NULL)
             .put("measurement", JSONObject()
                 .put("inference_duration_ns", inferenceDurationNs ?: JSONObject.NULL)
                 .put("peak_memory_mb", JSONObject.NULL)
