@@ -154,4 +154,28 @@ class ANS100ActivityDrivenStructuralPlasticityTest {
         assertEquals(1, learner.grownPairCount())
     }
 
+
+    @Test
+    fun sameTurnGrowthDoesNotReuseTargetAlreadyConnectedToEitherConcept() {
+        val learner = ANS100ActivityDrivenStructuralPlasticity(
+            maxGrownPairs = 3,
+            maxGrownEdgesPerConcept = 4,
+        )
+        val concepts = listOf(
+            concept("alpha", 1_062),
+            concept("beta", 1_063),
+            concept("gamma", 1_064),
+        )
+        val loads = (1_200 until 2_200).associateWith { 12 }.toMutableMap().apply {
+            this[1_500] = 0
+        }
+        observe(learner, "unique-target-1", concepts, loads = loads)
+        observe(learner, "unique-target-2", concepts, loads = loads)
+        val result = observe(learner, "unique-target-3", concepts, loads = loads)
+
+        assertEquals(1, result.emittedProposals.size)
+        assertEquals(2, result.capacityBlockedPairCount)
+        assertEquals(1_500, result.emittedProposals.single().targetNeuronId)
+    }
+
 }
