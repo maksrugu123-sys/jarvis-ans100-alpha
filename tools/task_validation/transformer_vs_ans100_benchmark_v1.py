@@ -200,12 +200,24 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         raise ValueError("benchmark contains no held-out evaluation tasks")
     task_by_id = {task["task_id"]: task for task in evaluation_tasks}
     prediction_by_id = {}
+    verified_input_hashes = 0
     for row in predictions:
         task_id = row.get("task_id")
         if not isinstance(task_id, str) or task_id not in task_by_id:
             raise ValueError(f"{system_label}: unknown or missing task_id: {task_id!r}")
         if task_id in prediction_by_id:
             raise ValueError(f"{system_label}: duplicate prediction for {task_id}")
+        answer = row.get("answer")
+        if answer is not None and canonical_answer(answer) not in ANSWERS:
+            raise ValueError(f"{system_label}: non-canonical prediction for {task_id}")
+        if "input_sha256" in row:
+            supplied_hash = row.get("input_sha256")
+            source_text = task_by_id[task_id].get("input_text")
+            if not isinstance(source_text, str) or not isinstance(supplied_hash, str):
+                raise ValueError(f"{system_label}: input hash cannot be verified for {task_id}")
+            if supplied_hash != _digest(source_text):
+                raise ValueError(f"{system_label}: input hash mismatch for {task_id}")
+            verified_input_hashes += 1
         prediction_by_id[task_id] = row
     groups: dict[tuple[str, str], list[bool]] = defaultdict(list)
     seed_groups: dict[int, list[bool]] = defaultdict(list)
@@ -263,6 +275,8 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         "system":system_label,"tasks":len(evaluation_tasks),"submitted":submitted_count,
         "answered":answered_count,"abstentions":abstention_count,
         "missing":len(evaluation_tasks)-submitted_count,"correct":correct_count,
+        "input_integrity":{"verified_hashes":verified_input_hashes,
+            "missing_hashes":submitted_count-verified_input_hashes},
         "coverage":answered_count/len(evaluation_tasks),
         "accuracy_over_all_tasks":correct_count/len(evaluation_tasks),
         "accuracy_when_answered":correct_count/answered_count if answered_count else 0.0,
