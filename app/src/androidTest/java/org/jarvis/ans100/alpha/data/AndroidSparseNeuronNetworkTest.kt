@@ -479,6 +479,7 @@ class AndroidSparseNeuronNetworkTest {
         val turnId = "neural-feedback-turn"
         val candidateId = "neural-association:" + "a".repeat(32)
         val feedbackId = "neural-feedback-event-1"
+        var persistedExpected: Map<String, Double> = emptyMap()
 
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
             val saved = network.recordNeuralAssociationEligibility(turnId, candidateId, edges, 0.8)
@@ -501,33 +502,41 @@ class AndroidSparseNeuronNetworkTest {
                 ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
             ))
             assertEquals(after, network.neuralAssociationWeights(edges))
+            persistedExpected = after
         }
 
         // The learned connection weights survive closing and reopening SQLite.
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
-            assertEquals(edges.size, reopened.neuralAssociationWeights(edges).size)
-            assertTrue(edges.all { reopened.neuralAssociationWeights(edges).getValue(it) > 0.0 })
+            assertEquals(persistedExpected, reopened.neuralAssociationWeights(edges))
         }
     }
 
     @Test
     fun neuralAssociationRejectsUntrustedFeedbackAndOutOfProjectionSynapses() {
         val start = ANS100ConceptMemory.NEURAL_INPUT_START
-        val left = AndroidHybridTopologyV2.conceptAssociationProjection(start)
-        val right = AndroidHybridTopologyV2.conceptAssociationProjection(start + 1)
-        val shared = left.keys.intersect(right.keys).first()
-        val edges = listOf(left.getValue(shared), right.getValue(shared))
+        val end = start + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS
+        var edges: List<String>? = null
+        loop@ for (source in start until end) {
+            val left = AndroidHybridTopologyV2.conceptAssociationProjection(source)
+            for (other in source + 1 until end) {
+                val right = AndroidHybridTopologyV2.conceptAssociationProjection(other)
+                val shared = left.keys.intersect(right.keys).firstOrNull() ?: continue
+                edges = listOf(left.getValue(shared), right.getValue(shared))
+                break@loop
+            }
+        }
+        val candidateEdges = requireNotNull(edges)
         val turnId = "neural-feedback-rejected"
         val candidateId = "neural-association:" + "b".repeat(32)
 
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
-            network.recordNeuralAssociationEligibility(turnId, candidateId, edges, 0.5)
-            val before = network.neuralAssociationWeights(edges)
+            network.recordNeuralAssociationEligibility(turnId, candidateId, candidateEdges, 0.5)
+            val before = network.neuralAssociationWeights(candidateEdges)
             assertEquals(0, network.applyNeuralAssociationFeedback(
                 "model-generated-feedback", turnId, candidateId, 1.0,
                 ANS100CandidateFeedbackLearner.FeedbackSource.MODEL_GENERATED,
             ))
-            assertEquals(before, network.neuralAssociationWeights(edges))
+            assertEquals(before, network.neuralAssociationWeights(candidateEdges))
             assertEquals(0, network.applyNeuralAssociationFeedback(
                 "no-eligibility-feedback", turnId, candidateId, -1.0,
                 ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
