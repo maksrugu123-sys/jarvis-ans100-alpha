@@ -107,6 +107,16 @@ class ANS100HypothesisCompetitionEngineTest {
         assertEquals(ANS100HypothesisCompetitionEngine.Status.VERIFIED_TOOL_COUNTER_EVIDENCE, result.status)
     }
 
+    @Test fun unclassifiedEvidenceCannotBeSilentlyRelabelledAsAUserAssertion() {
+        val partiallyUnclassified = report(ANS100ConceptMemory.VerificationStatus.CONFLICTING).copy(
+            supportingEvidenceSources = emptySet(),
+        )
+        val result = ANS100HypothesisCompetitionEngine().compare(
+            listOf(candidate()), listOf(partiallyUnclassified),
+        ).single()
+        assertEquals(ANS100HypothesisCompetitionEngine.Status.MIXED_EVIDENCE, result.status)
+    }
+
     @Test fun reversedTypedPathIsRetainedAsDifferentExplanationDirection() {
         val result = ANS100HypothesisCompetitionEngine().compare(
             listOf(candidate()),
