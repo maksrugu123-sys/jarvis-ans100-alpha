@@ -100,6 +100,18 @@ object ANS100BenchmarkJsonl {
     }
 
 
+    fun encodeStructuredPredictions(
+        results: List<JarvisViewModel.StructuredPairedBenchmarkTaskResult>,
+    ): PredictionFiles = encodePredictions(
+        results.map {
+            JarvisViewModel.PairedBenchmarkTaskResult(
+                taskId = it.taskId,
+                transformer = it.transformer,
+                ans100 = it.ans100Structured,
+            )
+        },
+    )
+
     /** Exports paired lexical-versus-structured ANS results without mixing their predictions. */
     fun encodeEncodingComparisons(
         results: List<JarvisViewModel.Ans100EncodingComparisonResult>,
