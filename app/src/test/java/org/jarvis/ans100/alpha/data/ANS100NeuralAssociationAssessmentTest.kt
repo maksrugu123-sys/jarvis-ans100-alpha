@@ -17,7 +17,9 @@ class ANS100NeuralAssociationAssessmentTest {
                 item(3, ANS100NeuralAssociationAssessment.Outcome.REPRODUCED),
             ),
             ANS100NeuralAssociationAssessment.ExplicitFeedback.POSITIVE,
+            ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
         )
+        assertEquals(ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER, result.explicitFeedbackSource)
         assertEquals(3, result.successfulReproductions)
         assertEquals(ANS100NeuralAssociationAssessment.Stability.STABLE, result.stability)
         assertEquals(ANS100NeuralAssociationAssessment.FeedbackAgreement.ALIGNED, result.feedbackAgreement)
