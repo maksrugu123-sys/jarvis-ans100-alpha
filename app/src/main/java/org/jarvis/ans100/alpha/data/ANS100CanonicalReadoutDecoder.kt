@@ -24,12 +24,21 @@ class ANS100CanonicalReadoutDecoder {
         }
     }
 
-    fun decode(emittedSpikeNeuronIds: Set<Int>): Result {
+    fun decode(
+        emittedSpikeNeuronIds: Set<Int>,
+        coreTaintedSpikingNeuronIds: Set<Int> = emptySet(),
+    ): Result {
         require(emittedSpikeNeuronIds.size <= AndroidHybridTopologyV2.NEURON_COUNT)
         require(emittedSpikeNeuronIds.all { it in 0 until AndroidHybridTopologyV2.NEURON_COUNT })
+        require(coreTaintedSpikingNeuronIds.all { it in emittedSpikeNeuronIds }) {
+            "tainted spike set must be a subset of emitted spikes"
+        }
+        // A readout spike is not admissible if any Core-tainted event or prior
+        // tainted membrane state contributed to that output neuron's activity.
+        val admissibleSpikes = emittedSpikeNeuronIds - coreTaintedSpikingNeuronIds
         val counts = ANS100CanonicalReadoutContract.Answer.values().associateWith { answer ->
             val group = ANS100CanonicalReadoutContract.outputGroup(answer)
-            emittedSpikeNeuronIds.count(group::contains)
+            admissibleSpikes.count(group::contains)
         }
         val ranked = counts.entries.sortedWith(
             compareByDescending<Map.Entry<ANS100CanonicalReadoutContract.Answer, Int>> { it.value }
