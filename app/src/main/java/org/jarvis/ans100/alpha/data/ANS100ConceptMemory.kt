@@ -41,6 +41,8 @@ class ANS100ConceptMemory(
     data class Verification(
         val hypothesisId: String, val status: VerificationStatus,
         val supportingEvidenceRefs: List<String>, val contradictingEvidenceRefs: List<String>,
+        val supportingSources: Set<LearningSource> = emptySet(),
+        val contradictingSources: Set<LearningSource> = emptySet(),
     )
 
     private val concepts = LinkedHashMap<String, Concept>()
@@ -173,15 +175,24 @@ class ANS100ConceptMemory(
                     it.toConceptId == hypothesis.toConceptId
             }.forEach { add(Triple(it.evidenceRef, it.supports, it.source)) }
         }
-        val support = matching.filter { it.second && it.third.isTrustedLearningSource() }.map { it.first }.distinct().sorted()
-        val conflict = matching.filter { !it.second && it.third.isTrustedLearningSource() }.map { it.first }.distinct().sorted()
+        val supporting = matching.filter { it.second && it.third.isTrustedLearningSource() }
+        val contradicting = matching.filter { !it.second && it.third.isTrustedLearningSource() }
+        val support = supporting.map { it.first }.distinct().sorted()
+        val conflict = contradicting.map { it.first }.distinct().sorted()
         val status = when {
             support.isNotEmpty() && conflict.isNotEmpty() -> VerificationStatus.CONFLICTING
             conflict.isNotEmpty() -> VerificationStatus.REFUTED
             support.isNotEmpty() -> VerificationStatus.SUPPORTED
             else -> VerificationStatus.UNRESOLVED
         }
-        return Verification(hypothesis.id, status, support, conflict)
+        return Verification(
+            hypothesisId = hypothesis.id,
+            status = status,
+            supportingEvidenceRefs = support,
+            contradictingEvidenceRefs = conflict,
+            supportingSources = supporting.map { it.third }.toSet(),
+            contradictingSources = contradicting.map { it.third }.toSet(),
+        )
     }
 
     /** Stable bounded snapshot for read-only concept activation; callers cannot mutate memory. */
