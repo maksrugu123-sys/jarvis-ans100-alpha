@@ -61,6 +61,17 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             export_ans100_training_rows([development])
 
+    def test_shared_input_limit_matches_android_neural_encoder(self):
+        oversized = dict(self.task, input_text="x" * 2049)
+        with self.assertRaises(ValueError):
+            export_model_inputs([oversized])
+        development = {
+            "task_id": "development:oversized", "input_text": "x" * 2049,
+            "expected_answer": "YES", "split": "development",
+        }
+        with self.assertRaises(ValueError):
+            export_ans100_training_rows([development])
+
     def test_duplicate_or_empty_input_rejected(self):
         with self.assertRaises(ValueError): export_model_inputs([self.task,self.task])
         with self.assertRaises(ValueError): export_model_inputs([{"task_id":"x","input_text":" "}])
