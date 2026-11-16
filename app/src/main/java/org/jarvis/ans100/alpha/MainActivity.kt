@@ -655,6 +655,11 @@ private fun LocalMemoryPanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                "Для нейронной активации понятия укажите категорию «понятие» и короткое название (до 96 символов). Обычные заметки не считаются понятиями.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = content,
                 onValueChange = { content = it.take(700) },
