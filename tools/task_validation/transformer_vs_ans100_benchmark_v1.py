@@ -179,9 +179,9 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             "correct":sum(outcomes),"accuracy":sum(outcomes)/len(outcomes) if outcomes else 0.0}
     correct_count, answered_count = sum(correct_by_id.values()), len(prediction_by_id)
     return {
-        "system":system_label,"tasks":len(tasks),"answered":answered_count,
-        "missing":len(tasks)-answered_count,"correct":correct_count,
-        "accuracy_over_all_tasks":correct_count/len(tasks) if tasks else 0.0,
+        "system":system_label,"tasks":len(evaluation_tasks),"answered":answered_count,
+        "missing":len(evaluation_tasks)-answered_count,"correct":correct_count,
+        "accuracy_over_all_tasks":correct_count/len(evaluation_tasks),
         "accuracy_when_answered":correct_count/answered_count if answered_count else 0.0,
         "groups":grouped,
         "latency_ms":{"count":len(latencies),"median":statistics.median(latencies) if latencies else None,"p95":_percentile(latencies,0.95)},
