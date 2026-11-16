@@ -588,6 +588,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val results = ArrayList<Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>>(examples.size)
             examples.forEachIndexed { index, example ->
                 val result = runCatching {
+                    benchmarkSafetyStopReason()?.let { error("BENCHMARK_SAFETY_STOP: $it") }
                     val trained = ans100BenchmarkRuntime.runStructuredTask(
                         example.taskId, example.inputText, example.trainingLabel,
                     )
@@ -597,6 +598,20 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 results.add(result)
                 mainHandler.post { onProgress(index + 1, examples.size, result) }
+                if (result.isFailure) {
+                    val failure = result.exceptionOrNull()
+                    if (failure?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true) {
+                        for (remaining in examples.drop(index + 1)) {
+                            results.add(Result.failure(IllegalStateException(failure.message)))
+                        }
+                        mainHandler.post { onComplete(results) }
+                        return@execute
+                    }
+                }
+                if (index + 1 < examples.size) {
+                    Thread.sleep(300L)
+                    if ((index + 1) % 8 == 0) Thread.sleep(10_000L)
+                }
             }
             mainHandler.post { onComplete(results) }
         }
@@ -719,6 +734,34 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Conservative device guard for the on-device paired benchmark.
+     * PSS is process-wide (not model-specific); the thresholds are stop limits,
+     * not performance targets.
+     */
+    private fun benchmarkSafetyStopReason(): String? {
+        val manager = appContext.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+            as? android.app.ActivityManager
+        val memory = android.app.ActivityManager.MemoryInfo()
+        manager?.getMemoryInfo(memory)
+        if (memory.lowMemory) return "Android reported low memory."
+        if (memory.availMem in 1L until (256L * 1024L * 1024L)) {
+            return "Available system memory fell below 256 MiB."
+        }
+        val processPssMb = android.os.Debug.getPss().toLong() / 1024L
+        if (processPssMb >= 1_800L) {
+            return "JARVIS process PSS reached 1800 MiB."
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val power = appContext.getSystemService(android.content.Context.POWER_SERVICE)
+                as? android.os.PowerManager
+            if (power != null && power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_SEVERE) {
+                return "Android thermal status is severe or worse."
+            }
+        }
+        return null
+    }
+
     fun runStructuredPairedBenchmarkBatch(
         inputs: List<ANS100BenchmarkBatchInput>,
         onProgress: (completed: Int, total: Int, result: StructuredPairedBenchmarkTaskResult) -> Unit,
@@ -734,7 +777,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute {
             val results = ArrayList<StructuredPairedBenchmarkTaskResult>(inputs.size)
             inputs.forEachIndexed { index, input ->
-                val result = if (pairedBenchmarkSequence++ % 2L == 0L) {
+                val stopReason = benchmarkSafetyStopReason()
+                val result = if (stopReason != null) {
+                    val stopped = Result.failure<Nothing>(
+                        IllegalStateException("BENCHMARK_SAFETY_STOP: $stopReason"),
+                    )
+                    StructuredPairedBenchmarkTaskResult(input.taskId, stopped, stopped)
+                } else if (pairedBenchmarkSequence++ % 2L == 0L) {
                     val transformer = runCatching {
                         conversationResponseEngine.benchmarkTransformerOnly(input.inputText, true)
                     }
@@ -753,6 +802,33 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 results.add(result)
                 mainHandler.post { onProgress(index + 1, inputs.size, result) }
+                if (result.transformer.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true) {
+                    for (remaining in inputs.drop(index + 1)) {
+                        val stopped = Result.failure<Nothing>(
+                            IllegalStateException(result.transformer.exceptionOrNull()?.message ?: "BENCHMARK_SAFETY_STOP"),
+                        )
+                        results.add(StructuredPairedBenchmarkTaskResult(remaining.taskId, stopped, stopped))
+                    }
+                    mainHandler.post { onComplete(results) }
+                    return@execute
+                }
+                if (index + 1 < inputs.size) {
+                    Thread.sleep(1_000L)
+                    val completed = index + 1
+                    val cooldownMs = when {
+                        completed == 2 -> 30_000L
+                        completed == 6 -> 30_000L
+                        completed == 14 -> 45_000L
+                        completed == 30 || (completed > 30 && (completed - 30) % 8 == 0) -> 60_000L
+                        else -> 0L
+                    }
+                    if (cooldownMs > 0L) {
+                        mainHandler.post {
+                            onProgress(completed, inputs.size, result)
+                        }
+                        Thread.sleep(cooldownMs)
+                    }
+                }
             }
             mainHandler.post { onComplete(results) }
         }
