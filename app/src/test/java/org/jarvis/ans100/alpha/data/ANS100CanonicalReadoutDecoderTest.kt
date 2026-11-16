@@ -143,6 +143,21 @@ class ANS100CanonicalReadoutDecoderTest {
     }
 
     @Test
+    fun anEarlierSpikeIsInvalidatedIfItsNeuronBecomesTaintedLaterInTheTurn() {
+        val yes = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.YES)
+        val earlierSpikes = setOf(yes.startInclusive, yes.startInclusive + 1)
+        // The tainted neuron need not be in the set of newly emitted spikes:
+        // it may have fired cleanly in an earlier partial run before contamination.
+        val result = ANS100CanonicalReadoutDecoder().decode(
+            earlierSpikes,
+            setOf(yes.startInclusive),
+        )
+        assertEquals(null, result.answer)
+        assertEquals(1, result.spikeCounts[ANS100CanonicalReadoutContract.Answer.YES])
+        assertEquals(ANS100CanonicalReadoutDecoder.Result.Status.BELOW_MINIMUM_ACTIVITY, result.status)
+    }
+
+    @Test
     fun onlyCoreTaintedCanonicalSpikesProduceNoLearnedSignal() {
         val yes = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.YES)
         val result = ANS100CanonicalReadoutDecoder().decode(
