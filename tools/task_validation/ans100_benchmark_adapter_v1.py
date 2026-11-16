@@ -44,8 +44,8 @@ def export_ans100_training_rows(tasks):
         if task.get("split") != "development":
             continue
         task_id, text, label = task.get("task_id"), task.get("input_text"), task.get("expected_answer")
-        if not isinstance(task_id, str) or not task_id or task_id in seen:
-            raise ValueError("training task IDs must be unique non-empty strings")
+        if not isinstance(task_id, str) or not task_id.startswith("development:") or task_id in seen:
+            raise ValueError("training task IDs must be unique and use the development: prefix")
         if not isinstance(text, str) or not text.strip():
             raise ValueError(f"{task_id}: empty input_text")
         if len(text) > MAX_SHARED_INPUT_CHARS:
@@ -63,8 +63,19 @@ def export_ans100_training_rows(tasks):
     return result
 
 def export_evaluation_inputs(tasks):
-    """Export held-out task inputs without labels or split metadata."""
-    held_out = [task for task in tasks if task.get("split") != "development"]
+    """Export only the three declared held-out splits, without labels or split metadata."""
+    held_out = []
+    allowed = {"pair_disjoint", "concept_disjoint", "compositional"}
+    for task in tasks:
+        split = task.get("split")
+        if split == "development":
+            continue
+        if split not in allowed:
+            raise ValueError(f"{task.get('task_id')}: unsupported evaluation split {split!r}")
+        task_id = task.get("task_id")
+        if not isinstance(task_id, str) or not task_id.startswith(split + ":"):
+            raise ValueError(f"{task_id!r}: task ID must match its {split} split")
+        held_out.append(task)
     return export_model_inputs(held_out)
 
 def validate_trace(row):
@@ -109,6 +120,21 @@ def predictions_from_traces(traces, inputs):
         if memory is not None:
             if isinstance(memory, bool) or not isinstance(memory, (int, float)) or memory < 0: raise ValueError(f"{task_id}: invalid peak memory")
             item["peak_memory_mb"] = memory
+        memory_delta = measured.get("peak_memory_delta_mb")
+        if memory_delta is not None:
+            if isinstance(memory_delta, bool) or not isinstance(memory_delta, (int, float)) or memory_delta < 0:
+                raise ValueError(f"{task_id}: invalid peak memory delta")
+            item["peak_memory_delta_mb"] = memory_delta
+        cold_start = row.get("cold_start", measured.get("cold_start"))
+        if cold_start is not None:
+            if not isinstance(cold_start, bool):
+                raise ValueError(f"{task_id}: invalid cold_start flag")
+            item["cold_start"] = cold_start
+        sample_interval = measured.get("memory_sample_interval_ms")
+        if sample_interval is not None:
+            if isinstance(sample_interval, bool) or not isinstance(sample_interval, (int, float)) or sample_interval <= 0:
+                raise ValueError(f"{task_id}: invalid memory sample interval")
+            item["memory_sample_interval_ms"] = sample_interval
         output.append(item)
     return output
 
@@ -130,6 +156,12 @@ def main():
         print(json.dumps({"status":"HELD_OUT_INPUTS_EXPORTED","count":len(rows),"gold_fields_removed":True,"development_excluded":True}, indent=2))
     else:
         inputs, traces = read_jsonl(args.inputs), read_jsonl(args.traces); rows = predictions_from_traces(traces, inputs); write_jsonl(args.output, rows)
-        print(json.dumps({"status":"TRACES_VALIDATED","trace_count":len(traces),"scorable_neural_predictions":len(rows),"unscored_without_neural_answer":len(traces)-len(rows),"heuristic_statuses_promoted":False}, indent=2))
+        answered = sum(1 for row in rows if row.get("answer") is not None)
+        abstentions = len(rows) - answered
+        print(json.dumps({"status":"TRACES_VALIDATED","trace_count":len(traces),
+            "prediction_rows":len(rows),"answered_neural_predictions":answered,
+            "explicit_neural_abstentions":abstentions,
+            "missing_trace_rows":len(inputs)-len(traces),
+            "heuristic_statuses_promoted":False}, indent=2))
 
 if __name__ == "__main__": main()
