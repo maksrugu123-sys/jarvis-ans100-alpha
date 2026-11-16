@@ -26,6 +26,12 @@ class ANS100NeuralAssociationAssessment {
         val recordedAtMs: Long,
     )
 
+    data class FeedbackRecord(
+        val reward: Double,
+        val source: ANS100CandidateFeedbackLearner.FeedbackSource,
+        val recordedAtMs: Long,
+    )
+
     data class WeightChange(
         val feedbackId: String,
         val turnId: String,
@@ -47,11 +53,13 @@ class ANS100NeuralAssociationAssessment {
         val stability: Stability,
         val explicitFeedback: ExplicitFeedback,
         val feedbackAgreement: FeedbackAgreement,
+        val explicitFeedbackSource: ANS100CandidateFeedbackLearner.FeedbackSource? = null,
     )
 
     fun assess(
         observations: List<Observation>,
         feedback: ExplicitFeedback = ExplicitFeedback.NONE,
+        feedbackSource: ANS100CandidateFeedbackLearner.FeedbackSource? = null,
     ): Assessment {
         require(observations.size <= MAX_OBSERVATIONS)
         require(observations.all {
@@ -93,6 +101,7 @@ class ANS100NeuralAssociationAssessment {
             stability = stability,
             explicitFeedback = feedback,
             feedbackAgreement = agreement,
+            explicitFeedbackSource = feedbackSource,
         )
     }
 
