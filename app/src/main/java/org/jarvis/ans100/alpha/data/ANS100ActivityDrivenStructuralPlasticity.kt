@@ -72,12 +72,12 @@ class ANS100ActivityDrivenStructuralPlasticity(
     )
 
     private data class PairKey(val firstId: String, val secondId: String) {
-        val stableText: String get() = "$"+"{firstId}|$"+"{secondId}"
+        val stableText: String get() = "\${firstId}|\${secondId}"
     }
 
     private data class PairTrace(
-        val first: ActiveConcept,
-        val second: ActiveConcept,
+        var first: ActiveConcept,
+        var second: ActiveConcept,
         val seenTurns: LinkedHashSet<String> = LinkedHashSet(),
         var lastSequence: Long = 0L,
     )
@@ -118,7 +118,7 @@ class ANS100ActivityDrivenStructuralPlasticity(
         require(existingTargetsByConceptNeuron.keys.all { it in CONCEPT_INPUT_START until CONCEPT_INPUT_END })
         require(existingTargetsByConceptNeuron.values.flatten().all { it in ASSOCIATION_START until ASSOCIATION_END })
         require(targetIncomingEdgeCounts.all { (target, count) ->
-            target in ASSOCIATION_START until ASSOCIATION_END && count in 0..maxIncomingEdgesPerTarget
+            target in ASSOCIATION_START until ASSOCIATION_END && count >= 0
         })
 
         if (!processedTurns.add(turnId)) {
@@ -143,14 +143,16 @@ class ANS100ActivityDrivenStructuralPlasticity(
                 considered++
                 val left = ordered[leftIndex]
                 val right = ordered[rightIndex]
-                val shared = existingTargetsByConceptNeuron[left.neuronId].orEmpty()
-                    .intersect(existingTargetsByConceptNeuron[right.neuronId].orEmpty())
-                if (shared.isNotEmpty()) continue
+                val leftTargets = existingTargetsByConceptNeuron[left.neuronId].orEmpty()
+                val rightTargets = existingTargetsByConceptNeuron[right.neuronId].orEmpty()
+                if (leftTargets.intersect(rightTargets).isNotEmpty()) continue
 
                 val key = PairKey(left.conceptId, right.conceptId)
                 if (key in grownPairs) continue
                 val trace = traces.getOrPut(key) { PairTrace(left, right) }
                 if (sequence - trace.lastSequence > observationWindowTurns) trace.seenTurns.clear()
+                trace.first = left
+                trace.second = right
                 trace.lastSequence = sequence
                 if (trace.seenTurns.add(turnId)) {
                     while (trace.seenTurns.size > minDistinctTurns) {
@@ -159,7 +161,7 @@ class ANS100ActivityDrivenStructuralPlasticity(
                 }
                 if (trace.seenTurns.size < minDistinctTurns) continue
 
-                if (grownPairs.size + proposals.size >= maxGrownPairs ||
+                if (grownPairs.size >= maxGrownPairs ||
                     (grownEdgesByConcept[left.conceptId] ?: 0) + 1 > maxGrownEdgesPerConcept ||
                     (grownEdgesByConcept[right.conceptId] ?: 0) + 1 > maxGrownEdgesPerConcept
                 ) {
@@ -167,7 +169,8 @@ class ANS100ActivityDrivenStructuralPlasticity(
                     continue
                 }
 
-                val target = selectLeastLoadedTarget(key, localLoads)
+                val excludedTargets = leftTargets + rightTargets
+                val target = selectLeastLoadedTarget(key, localLoads, excludedTargets)
                 if (target == null) {
                     blocked++
                     continue
@@ -191,12 +194,17 @@ class ANS100ActivityDrivenStructuralPlasticity(
     @Synchronized
     fun grownPairCount(): Int = grownPairs.size
 
-    private fun selectLeastLoadedTarget(key: PairKey, loads: Map<Int, Int>): Int? {
+    private fun selectLeastLoadedTarget(
+        key: PairKey,
+        loads: Map<Int, Int>,
+        excludedTargets: Set<Int>,
+    ): Int? {
         val start = digest(key.stableText).take(8).toLong(16).rem(ASSOCIATION_SIZE).toInt()
         var bestTarget: Int? = null
         var bestLoad = Int.MAX_VALUE
         for (offset in 0 until ASSOCIATION_SIZE) {
             val target = ASSOCIATION_START + ((start + offset) % ASSOCIATION_SIZE)
+            if (target in excludedTargets) continue
             val load = loads[target] ?: 0
             if (load < maxIncomingEdgesPerTarget && load < bestLoad) {
                 bestTarget = target
@@ -210,11 +218,11 @@ class ANS100ActivityDrivenStructuralPlasticity(
     private fun createProposal(trace: PairTrace, target: Int, turnId: String): GrowthProposal {
         val first = trace.first
         val second = trace.second
-        val pairDigest = digest("${first.conceptId}|${second.conceptId}")
-        val proposalId = "ans100-growth:$"+"{pairDigest}"
+        val pairDigest = digest("\${first.conceptId}|\${second.conceptId}")
+        val proposalId = "ans100-growth:\${pairDigest}"
         val connections = listOf(first, second).map { concept ->
             AndroidNeuronConnection(
-                connectionId = "ans100-v5-grown-association-$"+"{pairDigest}-$"+"{concept.neuronId}-$"+"{target}",
+                connectionId = "ans100-v5-grown-association-\${pairDigest}-\${concept.neuronId}-\${target}",
                 sourceNeuronId = concept.neuronId,
                 targetNeuronId = target,
                 delayNs = GROWN_CONNECTION_DELAY_NS,
