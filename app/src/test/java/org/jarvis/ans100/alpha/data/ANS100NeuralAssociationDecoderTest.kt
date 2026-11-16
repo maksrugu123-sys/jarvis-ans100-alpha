@@ -81,6 +81,19 @@ class ANS100NeuralAssociationDecoderTest {
     }
 
     @Test
+    fun aSpikingTargetWithoutBothActivatedInputSynapsesDoesNotCreateCandidate() {
+        val (left, right, shared) = convergentPair()
+        val bothConnections = connectionsFor(left, shared) + connectionsFor(right, shared)
+        val missingOneInputSynapse = bothConnections.drop(1).toSet()
+        val result = ANS100NeuralAssociationDecoder().decode(
+            conceptTrace = listOf(trace("a", left, "A"), trace("b", right, "B")),
+            emittedSpikeNeuronIds = shared,
+            activatedConnectionIds = missingOneInputSynapse,
+        )
+        assertTrue(result.candidates.isEmpty())
+    }
+
+    @Test
     fun separateConceptProjectionsDoNotCreatePairWithoutConvergence() {
         val (left, right, shared) = convergentPair()
         val leftOnly = AndroidHybridTopologyV2.conceptAssociationTargets(left) - shared
@@ -109,7 +122,7 @@ class ANS100NeuralAssociationDecoderTest {
         assertEquals(1, first.candidates.size)
         assertTrue(first.candidates.single().candidateId.startsWith("neural-association:"))
         assertTrue(disabled.candidates.isEmpty())
-        assertEquals(ANS100NeuralAssociationDecoder.MAX_CANDIDATES, 8)
+        assertEquals(3, ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
     }
 
     @Test(expected = IllegalArgumentException::class)
