@@ -763,7 +763,20 @@ private class AndroidNeuronSqliteStore(
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) createDialogueEligibilityTable(db)
         if (oldVersion < 3) createHybridCandidateEligibilityTable(db)
-        if (oldVersion < 4) createNeuralAssociationLearningTables(db)
+        if (oldVersion < 4) {
+            createNeuralAssociationLearningTables(db)
+            // Reserve headroom for positive explicit reinforcement of concept
+            // input synapses; other evidence and all non-concept weights are untouched.
+            db.execSQL(
+                "UPDATE connections SET weight=? WHERE source_id BETWEEN ? AND ? AND connection_id LIKE ? AND weight>=1.0",
+                arrayOf(
+                    AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT,
+                    ANS100ConceptMemory.NEURAL_INPUT_START,
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS - 1,
+                    "ans100-v4-evidence-general-association-%",
+                ),
+            )
+        }
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
