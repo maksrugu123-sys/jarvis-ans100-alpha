@@ -667,4 +667,118 @@ class AndroidSparseNeuronNetworkTest {
             })
         }
     }
+
+    private fun grownProposalForTest(): ANS100ActivityDrivenStructuralPlasticity.GrowthProposal {
+        val learner = ANS100ActivityDrivenStructuralPlasticity()
+        fun active(id: String, neuron: Int) =
+            ANS100ActivityDrivenStructuralPlasticity.ActiveConcept(
+                conceptId = "concept:$id",
+                neuronId = neuron,
+                label = "Понятие $id",
+                provenanceRef = "verified-turn:$id",
+            )
+        val pair = listOf(active("alpha", 1_062), active("beta", 1_063))
+        learner.observeTurn("growth-turn-1", pair, emptyMap(), emptyMap())
+        learner.observeTurn("growth-turn-2", pair, emptyMap(), emptyMap())
+        return learner.observeTurn("growth-turn-3", pair, emptyMap(), emptyMap())
+            .emittedProposals.single()
+    }
+
+    @Test
+    fun structuralGrowthPersistsBothSynapsesAndFeedbackIsIdempotent() {
+        val proposal = grownProposalForTest()
+        val ids = proposal.connections.map { it.connectionId }.sorted()
+        var persisted = emptyMap<String, Double>()
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            assertEquals(2, network.addStructuralGrowthProposal(proposal))
+            assertEquals(0, network.addStructuralGrowthProposal(proposal))
+            assertEquals(2, network.structuralSynapseWeights(ids).size)
+            val before = network.structuralSynapseWeights(ids)
+            assertEquals(setOf(0.25), before.values.toSet())
+
+            assertEquals(
+                2,
+                network.adjustStructuralSynapseWeights(
+                    "structural-feedback-1",
+                    ids,
+                    0.10,
+                    ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+                ),
+            )
+            val after = network.structuralSynapseWeights(ids)
+            assertTrue(after.values.all { it > before.values.first() })
+
+            // Replaying the same feedback event cannot reinforce twice.
+            assertEquals(
+                0,
+                network.adjustStructuralSynapseWeights(
+                    "structural-feedback-1",
+                    ids,
+                    0.10,
+                    ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+                ),
+            )
+            assertEquals(after, network.structuralSynapseWeights(ids))
+            persisted = after
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
+            assertEquals(persisted, reopened.structuralSynapseWeights(ids))
+        }
+    }
+
+    @Test
+    fun structuralWeightChangesRequireTrustedFeedbackAndWholePair() {
+        val proposal = grownProposalForTest()
+        val ids = proposal.connections.map { it.connectionId }.sorted()
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            network.addStructuralGrowthProposal(proposal)
+
+            var rejected = false
+            try {
+                network.adjustStructuralSynapseWeights(
+                    "model-feedback",
+                    ids,
+                    0.10,
+                    ANS100CandidateFeedbackLearner.FeedbackSource.MODEL_GENERATED,
+                )
+            } catch (_: IllegalArgumentException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+            assertEquals(0, network.adjustStructuralSynapseWeights(
+                "half-pair-feedback",
+                ids.take(1),
+                0.10,
+                ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+            ))
+            assertEquals(setOf(0.25), network.structuralSynapseWeights(ids).values.toSet())
+        }
+    }
+
+    @Test
+    fun weakStructuralAssociationIsRemovedOnlyAsAnEntirePair() {
+        val proposal = grownProposalForTest()
+        val ids = proposal.connections.map { it.connectionId }.sorted()
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            network.addStructuralGrowthProposal(proposal)
+            repeat(2) { index ->
+                assertEquals(2, network.adjustStructuralSynapseWeights(
+                    "negative-feedback-$index",
+                    ids,
+                    -0.10,
+                    ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+                ))
+            }
+            assertEquals(0, network.removeWeakStructuralSynapses(ids.take(1), 0.10))
+            assertEquals(2, network.removeWeakStructuralSynapses(ids, 0.10))
+            assertTrue(network.structuralSynapseWeights(ids).isEmpty())
+            assertEquals(25_500, network.stats().connectionCount)
+        }
+    }
+
 }
