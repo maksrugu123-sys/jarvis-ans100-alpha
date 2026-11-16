@@ -535,7 +535,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         onComplete: (PairedBenchmarkTaskResult) -> Unit,
     ) {
         require(
-            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(taskId::startsWith),
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any { prefix -> taskId.startsWith(prefix) },
         ) {
             "paired benchmark evaluation accepts only held-out split task IDs"
         }
