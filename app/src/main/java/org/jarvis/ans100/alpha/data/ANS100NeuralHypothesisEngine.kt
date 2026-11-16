@@ -17,6 +17,8 @@ class ANS100NeuralHypothesisEngine(
         GENERATED,
         REPRODUCED_ON_INDEPENDENT_TURN,
         NOT_REPRODUCED_ON_INDEPENDENT_TURN,
+        /** Both convergence and non-convergence were observed on complete turns. */
+        MIXED_REPRODUCTION_SIGNAL,
     }
 
     data class Hypothesis(
@@ -31,6 +33,22 @@ class ANS100NeuralHypothesisEngine(
         val supportingTurnIds: List<String>,
         val nonReproducingTurnIds: List<String>,
         val sharedTargetCount: Int,
+    )
+
+    data class PersistedHypothesis(
+        val hypothesisId: String,
+        val firstConceptId: String,
+        val firstLabel: String,
+        val secondConceptId: String,
+        val secondLabel: String,
+        val supportingTurnIds: List<String>,
+        val nonReproducingTurnIds: List<String>,
+        val sharedTargetCount: Int,
+    )
+
+    data class Snapshot(
+        val hypotheses: List<PersistedHypothesis>,
+        val observedTurnIds: List<String>,
     )
 
     private data class State(
@@ -89,6 +107,7 @@ class ANS100NeuralHypothesisEngine(
                 secondLabel = candidate.secondLabel,
             ).also { states[key] = it }
             state.supportingTurns.add(turnId)
+            trimOldest(state.supportingTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
             state.sharedTargetCount = maxOf(state.sharedTargetCount, candidate.convergentNeuronIds.size)
         }
 
@@ -100,6 +119,7 @@ class ANS100NeuralHypothesisEngine(
                 turnId !in state.supportingTurns && turnId !in state.nonReproducingTurns
             ) {
                 state.nonReproducingTurns.add(turnId)
+                trimOldest(state.nonReproducingTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
             }
         }
 
@@ -112,8 +132,72 @@ class ANS100NeuralHypothesisEngine(
     @Synchronized
     fun snapshot(): List<Hypothesis> = states.values.map(::snapshot)
 
+    /** Export a bounded checkpoint suitable for private local persistence. */
+    @Synchronized
+    fun exportSnapshot(): Snapshot = Snapshot(
+        hypotheses = states.values.map { state ->
+            PersistedHypothesis(
+                hypothesisId = state.hypothesisId,
+                firstConceptId = state.firstConceptId,
+                firstLabel = state.firstLabel,
+                secondConceptId = state.secondConceptId,
+                secondLabel = state.secondLabel,
+                supportingTurnIds = state.supportingTurns.toList(),
+                nonReproducingTurnIds = state.nonReproducingTurns.toList(),
+                sharedTargetCount = state.sharedTargetCount,
+            )
+        },
+        observedTurnIds = observedTurns.toList(),
+    )
+
+    /** Restore only internally consistent, bounded state; malformed checkpoints are rejected. */
+    @Synchronized
+    fun restoreSnapshot(snapshot: Snapshot) {
+        require(snapshot.hypotheses.size <= maxHypotheses)
+        require(snapshot.observedTurnIds.size <= MAX_REMEMBERED_TURNS)
+        require(snapshot.observedTurnIds.distinct().size == snapshot.observedTurnIds.size)
+        require(snapshot.observedTurnIds.all(::isValidTurnId))
+        val restored = LinkedHashMap<String, State>()
+        snapshot.hypotheses.forEach { item ->
+            require(item.firstConceptId.isNotBlank() && item.firstConceptId.length <= 128)
+            require(item.secondConceptId.isNotBlank() && item.secondConceptId.length <= 128)
+            require(item.firstConceptId != item.secondConceptId)
+            require(item.firstLabel.isNotBlank() && item.firstLabel.length <= 96)
+            require(item.secondLabel.isNotBlank() && item.secondLabel.length <= 96)
+            require(item.supportingTurnIds.size <= MAX_OBSERVATIONS_PER_HYPOTHESIS)
+            require(item.nonReproducingTurnIds.size <= MAX_OBSERVATIONS_PER_HYPOTHESIS)
+            require(item.supportingTurnIds.distinct().size == item.supportingTurnIds.size)
+            require(item.nonReproducingTurnIds.distinct().size == item.nonReproducingTurnIds.size)
+            require((item.supportingTurnIds + item.nonReproducingTurnIds).distinct().size ==
+                item.supportingTurnIds.size + item.nonReproducingTurnIds.size)
+            require((item.supportingTurnIds + item.nonReproducingTurnIds).all(::isValidTurnId))
+            require(item.sharedTargetCount in 0..MAX_SHARED_TARGETS)
+            val key = pairKey(item.firstConceptId, item.secondConceptId)
+            require(item.hypothesisId == "ans100-hypothesis:${digest(key)}")
+            require(restored.put(
+                key,
+                State(
+                    hypothesisId = item.hypothesisId,
+                    firstConceptId = item.firstConceptId,
+                    firstLabel = item.firstLabel,
+                    secondConceptId = item.secondConceptId,
+                    secondLabel = item.secondLabel,
+                    supportingTurns = LinkedHashSet(item.supportingTurnIds),
+                    nonReproducingTurns = LinkedHashSet(item.nonReproducingTurnIds),
+                    sharedTargetCount = item.sharedTargetCount,
+                ),
+            ) == null)
+        }
+        states.clear()
+        states.putAll(restored)
+        observedTurns.clear()
+        observedTurns.addAll(snapshot.observedTurnIds)
+    }
+
     private fun snapshot(state: State): Hypothesis {
         val status = when {
+            state.supportingTurns.isNotEmpty() && state.nonReproducingTurns.isNotEmpty() ->
+                Status.MIXED_REPRODUCTION_SIGNAL
             state.supportingTurns.size >= 2 -> Status.REPRODUCED_ON_INDEPENDENT_TURN
             state.nonReproducingTurns.isNotEmpty() -> Status.NOT_REPRODUCED_ON_INDEPENDENT_TURN
             else -> Status.GENERATED
@@ -136,6 +220,13 @@ class ANS100NeuralHypothesisEngine(
     private fun pairKey(first: String, second: String): String =
         listOf(first, second).sorted().joinToString("|")
 
+    private fun isValidTurnId(value: String): Boolean =
+        value.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"))
+
+    private fun <T> trimOldest(values: LinkedHashSet<T>, maximum: Int) {
+        while (values.size > maximum) values.remove(values.first())
+    }
+
     private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))
         .take(16)
@@ -144,6 +235,8 @@ class ANS100NeuralHypothesisEngine(
     companion object {
         const val DEFAULT_MAX_HYPOTHESES = 128
         const val MAX_HYPOTHESES_HARD_LIMIT = 256
+        const val MAX_OBSERVATIONS_PER_HYPOTHESIS = 8
+        const val MAX_SHARED_TARGETS = 6
         private const val MAX_REMEMBERED_TURNS = 512
     }
 }
