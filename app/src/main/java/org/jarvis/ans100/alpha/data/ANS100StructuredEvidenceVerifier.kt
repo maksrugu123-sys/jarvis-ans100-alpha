@@ -37,14 +37,15 @@ class ANS100StructuredEvidenceVerifier {
         require(candidates.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
         return candidates.map { candidate ->
             fun matching(from: String, to: String, positive: Boolean): List<String> =
-                input.facts.filter {
-                    it.subject.equals(from, ignoreCase = true) &&
-                        it.objectValue.equals(to, ignoreCase = true) &&
-                        if (positive) {
-                            it.relation in setOf("connected_positive", "evidence_supports")
-                        } else {
-                            it.relation in setOf("connected_negative", "evidence_refutes")
-                        }
+                input.facts.filter { fact ->
+                    val sameDirection = fact.subject.equals(from, ignoreCase = true) &&
+                        fact.objectValue.equals(to, ignoreCase = true)
+                    val polarityMatches = if (positive) {
+                        fact.relation == "connected_positive" || fact.relation == "evidence_supports"
+                    } else {
+                        fact.relation == "connected_negative" || fact.relation == "evidence_refutes"
+                    }
+                    sameDirection && polarityMatches
                 }.map { it.provenance }.distinct().sorted()
             val forwardSupport = matching(candidate.firstLabel, candidate.secondLabel, true)
             val forwardRefute = matching(candidate.firstLabel, candidate.secondLabel, false)
