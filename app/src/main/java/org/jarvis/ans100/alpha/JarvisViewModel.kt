@@ -905,6 +905,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         passes++
                     }
                     val telemetry = result.hybridTelemetry ?: return@submit null
+                    // Decode only associations supported by actual shared spikes
+                    // in the general association population; no symbolic relation
+                    // hypotheses are fed into this neural candidate path.
+                    val neuralAssociationResult = ANS100NeuralAssociationDecoder().decode(
+                        conceptTrace = batch.conceptTrace,
+                        emittedSpikeNeuronIds = emittedSpikeNeuronIds,
+                    )
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
                         understanding = understanding,
@@ -940,6 +947,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         evidence = evidence,
                         decision = decision,
                         relationHypotheses = conceptInput.hypothesisReports,
+                        neuralAssociations = neuralAssociationResult.candidates,
                     )
                     val telemetrySummary = buildString {
                         append("topology=").append(telemetry.topologyId)
@@ -956,6 +964,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         append("; active_relations=").append(conceptInput.activeRelationCount)
                         append("; relation_hypotheses=").append(conceptInput.hypotheses.size)
                         append("; unresolved_relation_hypotheses=").append(conceptInput.unresolvedHypothesisCount)
+                        append("; neural_association_active_concepts=").append(neuralAssociationResult.activeConceptCount)
+                        append("; neural_association_spikes=").append(neuralAssociationResult.associationSpikeCount)
+                        append("; neural_association_pairs_examined=").append(neuralAssociationResult.consideredPairCount)
+                        append("; neural_association_candidates=").append(neuralAssociationResult.candidates.size)
                         append("; budgetExhausted=").append(result.budgetExhausted)
                         append("; populations=")
                         append(telemetry.populations.joinToString(" | ") { activity ->
