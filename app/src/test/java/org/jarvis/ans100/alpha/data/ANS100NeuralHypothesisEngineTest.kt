@@ -66,4 +66,59 @@ class ANS100NeuralHypothesisEngineTest {
         assertEquals(ANS100NeuralHypothesisEngine.Status.GENERATED, row.status)
         assertEquals(1, row.observationCount)
     }
+
+    @Test fun checkpointRestorePreservesIndependentTurnVerification() {
+        val original = ANS100NeuralHypothesisEngine()
+        original.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true)
+        val checkpoint = original.exportSnapshot()
+        val restored = ANS100NeuralHypothesisEngine()
+        restored.restoreSnapshot(checkpoint)
+        val row = restored.observeTurn(
+            "turn-2", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true,
+        ).single()
+        assertEquals(ANS100NeuralHypothesisEngine.Status.REPRODUCED_ON_INDEPENDENT_TURN, row.status)
+        assertEquals(2, row.observationCount)
+    }
+
+    @Test fun alternatingConvergenceAndNonConvergenceRemainsMixedSignal() {
+        val engine = ANS100NeuralHypothesisEngine()
+        engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true)
+        engine.observeTurn("turn-2", setOf("concept.alpha", "concept.beta"), emptyList(), true)
+        val row = engine.observeTurn(
+            "turn-3", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true,
+        ).single()
+        assertEquals(ANS100NeuralHypothesisEngine.Status.MIXED_REPRODUCTION_SIGNAL, row.status)
+        assertEquals(2, row.observationCount)
+        assertEquals(listOf("turn-2"), row.nonReproducingTurnIds)
+    }
+
+    @Test fun perHypothesisObservationHistoryRemainsBounded() {
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(ANS100NeuralHypothesisEngine.MAX_OBSERVATIONS_PER_HYPOTHESIS + 2) { index ->
+            engine.observeTurn(
+                "turn-$index",
+                setOf("concept.alpha", "concept.beta"),
+                listOf(candidate()),
+                true,
+            )
+        }
+        val saved = engine.exportSnapshot().hypotheses.single()
+        assertEquals(ANS100NeuralHypothesisEngine.MAX_OBSERVATIONS_PER_HYPOTHESIS, saved.supportingTurnIds.size)
+        assertEquals(ANS100NeuralHypothesisEngine.MAX_OBSERVATIONS_PER_HYPOTHESIS + 2, engine.exportSnapshot().observedTurnIds.size)
+    }
+
+    @Test fun restoreRejectsDuplicateTurnIds() {
+        val engine = ANS100NeuralHypothesisEngine()
+        val invalid = ANS100NeuralHypothesisEngine.Snapshot(
+            hypotheses = emptyList(),
+            observedTurnIds = listOf("turn-1", "turn-1"),
+        )
+        var rejected = false
+        try {
+            engine.restoreSnapshot(invalid)
+        } catch (_: IllegalArgumentException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+    }
 }
