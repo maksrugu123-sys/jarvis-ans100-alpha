@@ -22,9 +22,9 @@ class AndroidHybridTopologyV2Test {
     }
 
     @Test
-    fun definesSevenStableContiguousPopulationsWithinTenThousandNeuronLimit() {
+    fun definesEightStableContiguousPopulationsWithinTenThousandNeuronLimit() {
         val populations = AndroidHybridTopologyV2.populations
-        assertEquals(7, populations.size)
+        assertEquals(8, populations.size)
         assertEquals(10_000, populations.sumOf { it.size })
         assertEquals(0, populations.first().startInclusive)
         assertEquals(10_000, populations.last().endExclusive)
@@ -32,7 +32,7 @@ class AndroidHybridTopologyV2Test {
             assertEquals(left.endExclusive, right.startInclusive)
         }
         assertEquals(
-            listOf(1_200, 2_800, 1_800, 1_500, 1_200, 900, 600),
+            listOf(1_200, 2_800, 1_800, 1_500, 1_200, 300, 600, 600),
             populations.map { it.size },
         )
     }
@@ -68,9 +68,9 @@ class AndroidHybridTopologyV2Test {
     }
 
     @Test
-    fun typedEvidenceAndCandidateSignalsPropagateThroughAllSevenPopulations() {
+    fun typedEvidenceAndCandidateSignalsPropagateThroughEightDisjointPopulations() {
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
-            val turnId = "seven-population-propagation"
+            val turnId = "eight-population-propagation"
             val message = "hello"
             val understanding = LocalUnderstandingPipeline().analyze(message)
             val evidence = TypedEvidenceEncoder().encode(
@@ -94,19 +94,27 @@ class AndroidHybridTopologyV2Test {
                 ?: throw AssertionError("hybrid topology run must expose population telemetry")
             assertEquals(AndroidHybridTopologyV2.TOPOLOGY_ID, telemetry.topologyId)
             assertEquals(AndroidHybridTopologyV2.TOPOLOGY_VERSION, telemetry.topologyVersion)
-            assertEquals(7, telemetry.populations.size)
+            assertEquals(8, telemetry.populations.size)
             assertEquals(
                 firstPass.processedEvents + result.processedEvents,
                 telemetry.populations.sumOf { it.receivedEventCount },
             )
             telemetry.populations.forEach { activity ->
-                assertTrue("no processed neuron in " + activity.populationId, activity.uniqueNeuronsProcessed > 0)
-                assertTrue("no spiking neuron in " + activity.populationId, activity.uniqueSpikingNeurons > 0)
-                assertTrue("no spike count in " + activity.populationId, activity.spikeCount > 0)
-                assertTrue(
-                    "spike count smaller than unique spiking count in " + activity.populationId,
-                    activity.spikeCount >= activity.uniqueSpikingNeurons,
-                )
+                if (activity.populationId == "canonical_readout") {
+                    // Learned readout has no incoming synapses before explicit feedback.
+                    assertEquals(0, activity.receivedEventCount)
+                    assertEquals(0, activity.uniqueNeuronsProcessed)
+                    assertEquals(0, activity.uniqueSpikingNeurons)
+                    assertEquals(0, activity.spikeCount)
+                } else {
+                    assertTrue("no processed neuron in " + activity.populationId, activity.uniqueNeuronsProcessed > 0)
+                    assertTrue("no spiking neuron in " + activity.populationId, activity.uniqueSpikingNeurons > 0)
+                    assertTrue("no spike count in " + activity.populationId, activity.spikeCount > 0)
+                    assertTrue(
+                        "spike count smaller than unique spiking count in " + activity.populationId,
+                        activity.spikeCount >= activity.uniqueSpikingNeurons,
+                    )
+                }
             }
             assertEquals(
                 0,
@@ -114,12 +122,14 @@ class AndroidHybridTopologyV2Test {
             )
 
             val spikedIds = (firstPass.emittedSpikes + result.emittedSpikes).map { it.first }.toSet()
-            AndroidHybridTopologyV2.populations.forEach { population ->
-                assertTrue(
-                    "no spike observed in population " + population.id,
-                    spikedIds.any(population::contains),
-                )
-            }
+            AndroidHybridTopologyV2.populations
+                .filterNot { it.id == "canonical_readout" }
+                .forEach { population ->
+                    assertTrue(
+                        "no spike observed in population " + population.id,
+                        spikedIds.any(population::contains),
+                    )
+                }
             // A drained queue and bounded event count guard against an accidental
             // candidate<->critic or recurrent self-sustaining spike cycle.
             assertTrue(result.processedEvents < 4_096)
