@@ -2932,13 +2932,13 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                 onClick = {
                     busy = true
                     status = "Сброс изолированной памяти ANS-100…"
-                    viewModel.resetAns100OnlyBenchmark { reset ->
+                    viewModel.resetAns100StructuredBenchmark { reset ->
                         reset.onFailure {
                             busy = false
-                            status = "Не удалось сбросить ANS-100: ${it.message}"
+                            status = "Не удалось сбросить структурированный ANS-100: ${it.message}"
                         }.onSuccess {
-                            status = "Обучение ANS-100: 0 / ${developmentRows.size}"
-                            viewModel.trainAns100DevelopmentBatch(
+                            status = "Обучение структурированного ANS-100: 0 / ${developmentRows.size}"
+                            viewModel.trainAns100StructuredDevelopmentBatch(
                                 developmentRows,
                                 onProgress = { done, total, result ->
                                     status = "Обучение ANS-100: $done / $total" +
@@ -2950,14 +2950,14 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                         busy = false
                                         status = "Обучение прервано: ${failure.message}"
                                     } else {
-                                        status = "Проверка: 0 / ${heldOutRows.size}"
-                                        viewModel.runPairedBenchmarkBatch(
+                                        status = "Проверка Qwen и структурированного ANS-100: 0 / ${heldOutRows.size}"
+                                        viewModel.runStructuredPairedBenchmarkBatch(
                                             heldOutRows,
                                             onProgress = { done, total, result ->
                                                 status = "Проверка обеих моделей: $done / $total · ${result.taskId}"
                                             },
                                             onComplete = { results ->
-                                                runCatching { ANS100BenchmarkJsonl.encodePredictions(results) }
+                                                runCatching { ANS100BenchmarkJsonl.encodeStructuredPredictions(results) }
                                                     .onSuccess {
                                                         pendingFiles = it
                                                         status = "Эксперимент завершён. Сохраняю прогнозы…"
