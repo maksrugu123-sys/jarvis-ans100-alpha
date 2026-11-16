@@ -7,6 +7,7 @@ package org.jarvis.ans100.alpha.data
  */
 class ANS100NeuralAssociationAssessment {
     enum class Outcome { REPRODUCED, CONTRADICTED, INCONCLUSIVE }
+    enum class EvidenceSource { CONTROLLED_BENCHMARK_LABEL, VERIFIED_EXTERNAL_OUTCOME }
     enum class Stability { INSUFFICIENT_EVIDENCE, STABLE, UNSTABLE, MIXED }
     enum class ExplicitFeedback { POSITIVE, NEGATIVE, NONE }
     enum class FeedbackAgreement { NO_FEEDBACK, ALIGNED, CONFLICTS, NOT_YET_DECIDABLE }
@@ -16,6 +17,25 @@ class ANS100NeuralAssociationAssessment {
         /** Same value means tasks share a source/template and are not independent samples. */
         val independenceKey: String,
         val outcome: Outcome,
+        val source: EvidenceSource = EvidenceSource.CONTROLLED_BENCHMARK_LABEL,
+    )
+
+    data class PersistedObservation(
+        val candidateId: String,
+        val observation: Observation,
+        val recordedAtMs: Long,
+    )
+
+    data class WeightChange(
+        val feedbackId: String,
+        val turnId: String,
+        val candidateId: String,
+        val connectionId: String,
+        val previousWeight: Double,
+        val nextWeight: Double,
+        val reward: Double,
+        val source: String,
+        val changedAtMs: Long,
     )
 
     data class Assessment(
