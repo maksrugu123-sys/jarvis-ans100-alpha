@@ -136,6 +136,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     ): AndroidDialogueRewardResult
     fun recordHybridCandidateEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
     fun applyHybridCandidateFeedback(turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
+    fun resolveConceptInputSlots(conceptIds: List<String>): Map<String, Int>
     fun recordNeuralAssociationEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
     fun neuralAssociationWeights(connectionIds: List<String>): Map<String, Double>
     fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
@@ -557,6 +558,19 @@ class AndroidSparseNeuronNetwork(
         return store.applyHybridCandidateFeedback(turnId, candidateId, reward, source)
     }
 
+    /**
+     * Resolve stable concept input neurons in one SQLite transaction. Existing
+     * assignments are permanent; new concepts receive the lowest unused slot.
+     * A removed workspace record never frees/reassigns its old neural identity.
+     */
+    @Synchronized
+    fun resolveConceptInputSlots(conceptIds: List<String>): Map<String, Int> {
+        require(conceptIds.size <= ANS100ConceptMemory.MAX_CONCEPTS)
+        require(conceptIds.distinct().size == conceptIds.size)
+        require(conceptIds.all { it.matches(Regex("^[a-z][a-z0-9_.:-]{0,95}$")) })
+        return store.resolveConceptInputSlots(conceptIds)
+    }
+
     /** Persist eligibility for actual concept-to-association synapses. */
     @Synchronized
     fun recordNeuralAssociationEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int {
@@ -752,6 +766,7 @@ private class AndroidNeuronSqliteStore(
         createDialogueEligibilityTable(db)
         createHybridCandidateEligibilityTable(db)
         createNeuralAssociationLearningTables(db)
+        createConceptInputSlotTable(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
         )
@@ -777,6 +792,22 @@ private class AndroidNeuronSqliteStore(
                 ),
             )
         }
+        if (oldVersion < 5) {
+            createConceptInputSlotTable(db)
+            // V4 slot identities were ephemeral per turn. Old association
+            // weights cannot be safely attributed to stable concept IDs.
+            db.execSQL(
+                "UPDATE connections SET weight=? WHERE source_id BETWEEN ? AND ? AND connection_id LIKE ?",
+                arrayOf(
+                    AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT,
+                    ANS100ConceptMemory.NEURAL_INPUT_START,
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS - 1,
+                    "ans100-v4-evidence-general-association-%",
+                ),
+            )
+            db.delete("neural_association_eligibility", null, null)
+            db.delete("neural_association_feedback_events", null, null)
+        }
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -794,6 +825,13 @@ private class AndroidNeuronSqliteStore(
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_eligibility_age_idx ON neural_association_eligibility(created_at_ms)")
         db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_feedback_events (feedback_id TEXT PRIMARY KEY, turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, reward REAL NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_feedback_age_idx ON neural_association_feedback_events(created_at_ms)")
+    }
+
+    private fun createConceptInputSlotTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS neural_concept_input_slots (concept_id TEXT PRIMARY KEY, neuron_id INTEGER NOT NULL UNIQUE, created_at_ms INTEGER NOT NULL, CHECK(neuron_id BETWEEN 1062 AND 1199))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS neural_concept_input_slots_neuron_idx ON neural_concept_input_slots(neuron_id)")
     }
 
     private fun createDialogueEligibilityTable(db: SQLiteDatabase) {
@@ -1297,6 +1335,51 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
+    override fun resolveConceptInputSlots(conceptIds: List<String>): Map<String, Int> {
+        if (conceptIds.isEmpty()) return emptyMap()
+        val db = writableDatabase
+        val nowMs = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            val assigned = LinkedHashMap<String, Int>()
+            val occupied = BooleanArray(ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS)
+            db.rawQuery("SELECT concept_id, neuron_id FROM neural_concept_input_slots ORDER BY neuron_id", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val conceptId = cursor.getString(0)
+                    val neuronId = cursor.getInt(1)
+                    if (neuronId !in ANS100ConceptMemory.NEURAL_INPUT_START until
+                        ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS) {
+                        throw AndroidNeuronNetworkException("persisted concept input slot is outside its reserved population")
+                    }
+                    val slot = neuronId - ANS100ConceptMemory.NEURAL_INPUT_START
+                    if (occupied[slot]) throw AndroidNeuronNetworkException("duplicate persisted concept input slot")
+                    occupied[slot] = true
+                    assigned[conceptId] = neuronId
+                }
+            }
+            var nextSlot = 0
+            for (conceptId in conceptIds.sorted()) {
+                if (assigned.containsKey(conceptId)) continue
+                while (nextSlot < occupied.size && occupied[nextSlot]) nextSlot++
+                if (nextSlot >= occupied.size) continue
+                val neuronId = ANS100ConceptMemory.NEURAL_INPUT_START + nextSlot
+                val values = ContentValues().apply {
+                    put("concept_id", conceptId)
+                    put("neuron_id", neuronId)
+                    put("created_at_ms", nowMs)
+                }
+                db.insertOrThrow("neural_concept_input_slots", null, values)
+                occupied[nextSlot] = true
+                assigned[conceptId] = neuronId
+                nextSlot++
+            }
+            db.setTransactionSuccessful()
+            return conceptIds.distinct().sorted().mapNotNull { id -> assigned[id]?.let { id to it } }.toMap(LinkedHashMap())
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     override fun recordNeuralAssociationEligibility(turnId: String, candidateId: String,
         connectionIds: List<String>, eligibility: Double): Int {
         if (connectionIds.size !in 2..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE || connectionIds.size % 2 != 0 ||
@@ -1697,7 +1780,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 4
+        private const val DATABASE_VERSION = 5
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02

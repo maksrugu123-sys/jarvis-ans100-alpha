@@ -63,6 +63,32 @@ class ANS100WorkspaceConceptInputBridgeTest {
     }
 
     @Test
+    fun persistentSlotResolverReceivesAllApprovedConceptsAndControlsNeuronIds() {
+        val concepts = listOf(
+            memory("concept-a", "Собака", "concept"),
+            memory("concept-b", "Животное", "concept"),
+        )
+        var requestedIds: List<String> = emptyList()
+        var assigned: Map<String, Int> = emptyMap()
+        val result = ANS100WorkspaceConceptInputBridge().merge(
+            evidenceBatch(),
+            "Собака рядом",
+            concepts,
+            neuralInputSlotResolver = { ids ->
+                requestedIds = ids
+                assigned = ids.sorted().mapIndexed { index, id ->
+                    id to (ANS100ConceptMemory.NEURAL_INPUT_START + if (index == 0) 9 else 4)
+                }.toMap()
+                assigned
+            },
+        )
+        assertEquals(2, requestedIds.size)
+        assertEquals(1, result.activeConceptCount)
+        assertEquals(assigned[result.batch.conceptTrace.single().conceptId],
+            result.batch.conceptTrace.single().neuronId)
+    }
+
+    @Test
     fun ordinaryWorkspaceNotesDoNotActivateConceptNeurons() {
         val result = ANS100WorkspaceConceptInputBridge().merge(
             evidenceBatch(),

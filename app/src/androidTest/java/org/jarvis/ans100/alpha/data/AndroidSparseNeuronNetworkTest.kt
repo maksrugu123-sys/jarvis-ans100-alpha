@@ -458,6 +458,83 @@ class AndroidSparseNeuronNetworkTest {
     }
 
     @Test
+    fun conceptInputSlotsPersistAcrossReopenAndNewConceptsNeverMoveOldAssignments() {
+        val initialIds = listOf("memory:beta", "memory:alpha")
+        var firstAssignments: Map<String, Int> = emptyMap()
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            firstAssignments = network.resolveConceptInputSlots(initialIds)
+            assertEquals(2, firstAssignments.size)
+            assertEquals(ANS100ConceptMemory.NEURAL_INPUT_START, firstAssignments.getValue("memory:alpha"))
+            assertEquals(ANS100ConceptMemory.NEURAL_INPUT_START + 1, firstAssignments.getValue("memory:beta"))
+            val extended = network.resolveConceptInputSlots(listOf("memory:gamma", "memory:alpha"))
+            assertEquals(firstAssignments.getValue("memory:alpha"), extended.getValue("memory:alpha"))
+            assertEquals(ANS100ConceptMemory.NEURAL_INPUT_START + 2, extended.getValue("memory:gamma"))
+        }
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
+            assertEquals(firstAssignments, reopened.resolveConceptInputSlots(initialIds))
+            assertEquals(ANS100ConceptMemory.NEURAL_INPUT_START + 2,
+                reopened.resolveConceptInputSlots(listOf("memory:gamma")).getValue("memory:gamma"))
+        }
+    }
+
+    @Test
+    fun schemaFourUpgradeResetsUnstableConceptWeightsAndClearsOldAssociationCredit() {
+        val projection = AndroidHybridTopologyV2.conceptAssociationProjection(
+            ANS100ConceptMemory.NEURAL_INPUT_START,
+        )
+        val edge = AndroidHybridTopologyV2.connections().first { it.connectionId == projection.values.first() }
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+        }
+        val legacy = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            val weight = ContentValues().apply { put("weight", 0.91) }
+            legacy.update("connections", weight, "connection_id=?", arrayOf(edge.connectionId))
+            val eligibility = ContentValues().apply {
+                put("turn_id", "legacy-turn")
+                put("candidate_id", "neural-association:" + "c".repeat(32))
+                put("connection_id", edge.connectionId)
+                put("eligibility", 0.5)
+                put("created_at_ms", System.currentTimeMillis())
+            }
+            legacy.insertOrThrow("neural_association_eligibility", null, eligibility)
+            val feedback = ContentValues().apply {
+                put("feedback_id", "legacy-feedback")
+                put("turn_id", "legacy-turn")
+                put("candidate_id", "neural-association:" + "c".repeat(32))
+                put("reward", 1.0)
+                put("source", "EXPLICIT_USER")
+                put("created_at_ms", System.currentTimeMillis())
+            }
+            legacy.insertOrThrow("neural_association_feedback_events", null, feedback)
+            legacy.version = 4
+        } finally {
+            legacy.close()
+        }
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { upgraded ->
+            assertEquals(AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT, upgraded.stats().connectionCount)
+            assertEquals(
+                AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT,
+                upgraded.neuralAssociationWeights(listOf(edge.connectionId)).getValue(edge.connectionId),
+                0.000001,
+            )
+            val assigned = upgraded.resolveConceptInputSlots(listOf("memory:after-migration"))
+            assertEquals(ANS100ConceptMemory.NEURAL_INPUT_START, assigned.getValue("memory:after-migration"))
+        }
+        val migrated = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            fun count(table: String) = migrated.rawQuery("SELECT COUNT(*) FROM $table", null).use {
+                it.moveToFirst()
+                it.getInt(0)
+            }
+            assertEquals(0, count("neural_association_eligibility"))
+            assertEquals(0, count("neural_association_feedback_events"))
+        } finally {
+            migrated.close()
+        }
+    }
+
+    @Test
     fun neuralAssociationFeedbackIsPersistedAndDuplicateEventIsIdempotent() {
         val start = ANS100ConceptMemory.NEURAL_INPUT_START
         val end = start + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS

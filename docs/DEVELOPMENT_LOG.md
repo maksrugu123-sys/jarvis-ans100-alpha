@@ -3025,3 +3025,20 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Interpretation / gate:** the score is an offline topology/weight proxy, not an Android LIF replay or calibrated probability. The promotion gate remains CLOSED; learned weights remain excluded from live answer/decision competition. A real dataset and a separate Android runtime replay/ablation are still required.
 
 **Branch:** `experiment/jarvis-integrated-prototype-v1`; `main` untouched. Automatic workflows remain `workflow_dispatch` only.
+
+
+## Persistent concept-to-neuron identity — 2026-11-16
+
+**Objective:** eliminate cross-turn concept/synapse reassignment before collecting more explicit association feedback.
+
+**Implementation on `experiment/jarvis-integrated-prototype-v1`:**
+- Android sparse-network schema advances from V4 to V5 with `neural_concept_input_slots`, a SQLite registry with a unique concept ID and unique neuron ID.
+- `resolveConceptInputSlots` reserves the complete approved concept inventory in one transaction. Existing mappings never move; new concepts receive the lowest unused reserved input neuron; removed concepts do not release/reassign their slot.
+- The workspace bridge passes the persistent mapping into `ANS100ConceptNeuralInputAdapter`. Concepts without a reserved slot are skipped and counted; they do not abort the dialogue pass.
+- The ViewModel now uses the SQLite-backed resolver in the production hybrid path.
+- V4-to-V5 migration intentionally resets only concept-to-association projection weights to the 0.75 initial value and clears their eligibility/feedback records. Previous V4 weights cannot be safely migrated because their source concept-to-slot assignments were ephemeral and could shift between turns. Other evidence weights, topology, and unrelated state are preserved.
+- Added Android instrumented tests for persistent mappings across reopen, append-only allocation and V4 migration reset/cleanup, plus unit tests for adapter mapping and bridge wiring.
+
+**Research status:** the held-out evaluator remains an offline topology/weight proxy; it does not replay historical SQLite allocation. Its promotion gate remains CLOSED. No real human-verified dataset is present.
+
+**Verification:** tests authored but NOT RUN. No Gradle build, APK, CI, GitHub Actions workflow, or device inference was run.

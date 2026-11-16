@@ -44,6 +44,7 @@ class ANS100WorkspaceConceptInputBridge {
         evidenceBatch: AndroidHybridEvidenceInputAdapter.ActivationBatch,
         rawUserMessage: String,
         workspaceMemories: List<LocalWorkspaceMemory>,
+        neuralInputSlotResolver: ((List<String>) -> Map<String, Int>)? = null,
     ): Result {
         require(evidenceBatch.turnId.isNotBlank())
         require(evidenceBatch.timestampNs > 0L)
@@ -110,10 +111,16 @@ class ANS100WorkspaceConceptInputBridge {
 
         val frame = ANS100NeuralInputAdapter().encode(evidenceBatch.turnId, rawUserMessage)
         val activations = ANS100ConceptActivationAdapter().activate(frame, memory)
+        // Reserve the complete approved inventory once, not just concepts
+        // active in this message. SQLite preserves these IDs across later turns.
+        val persistentNeuronIds = neuralInputSlotResolver?.invoke(
+            memory.conceptsSnapshot().map { it.id },
+        )
         val conceptBatch = ANS100ConceptNeuralInputAdapter().createBatch(
             activations = activations,
             memory = memory,
             timestampNs = evidenceBatch.timestampNs,
+            neuronIdsByConceptId = persistentNeuronIds,
         )
         val merged = ANS100ConceptNeuralInputAdapter().merge(evidenceBatch, conceptBatch)
         val activeConceptIds = activations.activations.map { it.conceptId }.toSet()
@@ -144,8 +151,9 @@ class ANS100WorkspaceConceptInputBridge {
         return Result(
             batch = merged,
             eligibleConceptCount = learnedConceptCount,
-            activeConceptCount = activations.activations.size,
-            skippedConceptCount = approved.size - learnedConceptCount - learnedRelationCount,
+            activeConceptCount = conceptBatch.trace.size,
+            skippedConceptCount = approved.size - learnedConceptCount - learnedRelationCount +
+                conceptBatch.skippedSlotCount,
             eligibleRelationCount = eligibleRelations.size,
             learnedRelationCount = learnedRelationCount,
             activeRelationCount = activeRelations.size,

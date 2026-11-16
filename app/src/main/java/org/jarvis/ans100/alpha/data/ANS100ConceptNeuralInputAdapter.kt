@@ -22,26 +22,44 @@ class ANS100ConceptNeuralInputAdapter {
         val timestampNs: Long,
         val events: List<AndroidNeuronEvent>,
         val trace: List<TraceEntry>,
+        val skippedSlotCount: Int = 0,
     )
 
     fun createBatch(
         activations: ANS100ConceptActivationAdapter.Result,
         memory: ANS100ConceptMemory,
         timestampNs: Long,
+        neuronIdsByConceptId: Map<String, Int>? = null,
     ): ActivationBatch {
         require(timestampNs > 0L)
         require(activations.turnId.isNotBlank())
         require(activations.activations.size <= MAX_CONCEPTS_PER_TURN)
         require(activations.activations.map { it.conceptId }.distinct().size == activations.activations.size)
 
+        neuronIdsByConceptId?.let { resolved ->
+            require(resolved.size <= ANS100ConceptMemory.MAX_CONCEPTS)
+            require(resolved.values.distinct().size == resolved.size)
+            require(resolved.values.all {
+                it in ANS100ConceptMemory.NEURAL_INPUT_START until
+                    ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS
+            })
+        }
         val turnToken = digest(activations.turnId).take(16)
         val events = ArrayList<AndroidNeuronEvent>(activations.activations.size)
         val trace = ArrayList<TraceEntry>(activations.activations.size)
         val usedNeurons = HashSet<Int>()
+        var skippedSlotCount = 0
 
         activations.activations.sortedBy { it.conceptId }.forEachIndexed { index, activation ->
-            val neuronId = memory.neuralInputNeuronId(activation.conceptId)
-                ?: throw IllegalStateException("concept neural input slots are exhausted")
+            val neuronId = if (neuronIdsByConceptId != null) {
+                neuronIdsByConceptId[activation.conceptId]
+            } else {
+                memory.neuralInputNeuronId(activation.conceptId)
+            }
+            if (neuronId == null) {
+                skippedSlotCount++
+                return@forEachIndexed
+            }
             require(neuronId in ANS100ConceptMemory.NEURAL_INPUT_START until
                 ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS)
             require(usedNeurons.add(neuronId)) { "two active concepts share a neural input slot" }
@@ -62,7 +80,7 @@ class ANS100ConceptNeuralInputAdapter {
                     .take(TypedEvidenceRecord.MAX_PROVENANCE_CHARS),
             )
         }
-        return ActivationBatch(activations.turnId, timestampNs, events.toList(), trace.toList())
+        return ActivationBatch(activations.turnId, timestampNs, events.toList(), trace.toList(), skippedSlotCount)
     }
 
     /** Merges concept pulses into the existing hybrid batch without altering Core evidence. */

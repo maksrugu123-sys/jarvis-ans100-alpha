@@ -38,7 +38,7 @@ Metrics include accuracy, balanced accuracy, precision, recall, specificity, F1,
 
 ## Faithfulness and limits
 
-The script mirrors the Android v4 concept projection formula (three outgoing edges, multiplier 37, slot step 113, salt 11, 1,000 association targets) and the bounded reward update (learning rate 0.02, per-event delta cap 0.01, weight range 0.05..1.0).
+The script mirrors the Android v4 concept projection formula (three outgoing edges, multiplier 37, slot step 113, salt 11, 1,000 association targets) and the bounded reward update (learning rate 0.02, per-event delta cap 0.01, weight range 0.05..1.0). Its sorted concept-ID slot assignment models a fresh V5 registry populated from the complete approved concept inventory. Android now persists mappings across later inventory changes; this offline proxy does not replay historical SQLite allocation chronology, so reports remain topology/weight proxies rather than exact database replays.
 
 The pair score is an **offline topology/weight proxy**: the average weight of both input synapses for shared association targets, normalized by the three possible targets. It is not the Android LIF membrane equation, actual spike scheduling, SQLite feedback transaction, app's concept activation, or on-device runtime. Results cannot be presented as Android performance or semantic understanding.
 

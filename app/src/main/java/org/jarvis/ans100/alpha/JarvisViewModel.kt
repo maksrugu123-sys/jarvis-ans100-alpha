@@ -974,6 +974,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         evidenceBatch = evidenceBatch,
                         rawUserMessage = message,
                         workspaceMemories = workspaceMemoryCache.snapshot().records,
+                        neuralInputSlotResolver = hybridNeuronNetwork::resolveConceptInputSlots,
                     )
                     val batch = conceptInput.batch
                     if (!hybridNeuronNetwork.beginHybridTurn(batch)) return@submit null
