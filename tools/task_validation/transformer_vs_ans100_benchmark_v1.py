@@ -159,7 +159,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             raise ValueError(f"{system_label}: duplicate prediction for {task_id}")
         prediction_by_id[task_id] = row
     groups: dict[tuple[str, str], list[bool]] = defaultdict(list)
-    latencies, memories, correct_by_id = [], [], {}
+    latencies, memories, memory_deltas, correct_by_id = [], [], [], {}
     for task in evaluation_tasks:
         task_id = task["task_id"]
         row = prediction_by_id.get(task_id)
@@ -168,10 +168,13 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         groups[(task["split"], task["family"])].append(correct)
         if row:
             latency, memory = row.get("latency_ms"), row.get("peak_memory_mb")
+            memory_delta = row.get("peak_memory_delta_mb")
             if isinstance(latency, (int,float)) and not isinstance(latency,bool) and latency >= 0:
                 latencies.append(float(latency))
             if isinstance(memory, (int,float)) and not isinstance(memory,bool) and memory >= 0:
                 memories.append(float(memory))
+            if isinstance(memory_delta, (int,float)) and not isinstance(memory_delta,bool) and memory_delta >= 0:
+                memory_deltas.append(float(memory_delta))
     grouped = {}
     for (split, family), outcomes in sorted(groups.items()):
         submitted = sum(1 for task in evaluation_tasks if task["split"] == split and task["family"] == family and task["task_id"] in prediction_by_id)
@@ -194,6 +197,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         "groups":grouped,
         "latency_ms":{"count":len(latencies),"median":statistics.median(latencies) if latencies else None,"p95":_percentile(latencies,0.95)},
         "peak_memory_mb":{"count":len(memories),"max":max(memories) if memories else None,"median":statistics.median(memories) if memories else None},
+        "peak_memory_delta_mb":{"count":len(memory_deltas),"max":max(memory_deltas) if memory_deltas else None,"median":statistics.median(memory_deltas) if memory_deltas else None},
         "correct_by_task":correct_by_id,
     }
 
