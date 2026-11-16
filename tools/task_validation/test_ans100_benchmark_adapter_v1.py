@@ -9,7 +9,7 @@ from tools.task_validation.ans100_benchmark_adapter_v1 import (
 
 class AdapterTests(unittest.TestCase):
     def setUp(self):
-        self.task={"task_id":"heldout:001","input_text":"Facts: A -> B. Question: Is A linked to B?",
+        self.task={"task_id":"concept_disjoint:001","input_text":"Facts: A -> B. Question: Is A linked to B?",
                    "expected_answer":"YES","split":"concept_disjoint","facts":[{"gold":"secret"}]}
         self.inputs=export_model_inputs([self.task])
         self.digest=hashlib.sha256(self.task["input_text"].encode()).hexdigest()
@@ -49,7 +49,7 @@ class AdapterTests(unittest.TestCase):
             "split": "development",
         }
         rows = export_evaluation_inputs([development, self.task])
-        self.assertEqual([row["task_id"] for row in rows], ["heldout:001"])
+        self.assertEqual([row["task_id"] for row in rows], ["concept_disjoint:001"])
         self.assertNotIn("expected_answer", rows[0])
         self.assertNotIn("split", rows[0])
 
@@ -94,14 +94,14 @@ class AdapterTests(unittest.TestCase):
 
     def test_null_neural_trace_is_preserved_as_explicit_abstention(self):
         self.assertEqual(predictions_from_traces([self.trace()],self.inputs),
-            [{"task_id":"heldout:001","answer":None}])
+            [{"task_id":"concept_disjoint:001","answer":None}])
 
     def test_dedicated_neural_readout_is_scorable(self):
         row=self.trace(answer="YES",answer_emission=NEURAL_ORIGIN,
             decision={"producer":NEURAL_ORIGIN,"status":"SELECTED"},
             measurement={"inference_duration_ns":12_500_000,"peak_memory_mb":73})
         self.assertEqual(predictions_from_traces([row],self.inputs),
-            [{"task_id":"heldout:001","answer":"YES","latency_ms":12.5,"peak_memory_mb":73}])
+            [{"task_id":"concept_disjoint:001","answer":"YES","latency_ms":12.5,"peak_memory_mb":73}])
 
     def test_trace_adapter_preserves_cold_start_and_memory_delta(self):
         row = self.trace(
