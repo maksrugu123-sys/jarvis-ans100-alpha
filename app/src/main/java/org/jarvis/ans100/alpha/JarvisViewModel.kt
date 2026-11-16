@@ -538,17 +538,19 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             "paired benchmark evaluation accepts held-out tasks only"
         }
         conversationExecutor.execute {
-            val transformerFirst = pairedBenchmarkSequence++ % 2L == 0L
-            lateinit var transformer: Result<org.jarvis.ans100.alpha.data.LiteRtLmBenchmarkResult>
-            lateinit var ans100: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>
-            if (transformerFirst) {
-                transformer = runCatching { conversationResponseEngine.benchmarkTransformerOnly(inputText) }
-                ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+            val paired = if (pairedBenchmarkSequence++ % 2L == 0L) {
+                val transformer = runCatching {
+                    conversationResponseEngine.benchmarkTransformerOnly(inputText)
+                }
+                val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+                PairedBenchmarkTaskResult(taskId, transformer, ans100)
             } else {
-                ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
-                transformer = runCatching { conversationResponseEngine.benchmarkTransformerOnly(inputText) }
+                val ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+                val transformer = runCatching {
+                    conversationResponseEngine.benchmarkTransformerOnly(inputText)
+                }
+                PairedBenchmarkTaskResult(taskId, transformer, ans100)
             }
-            val paired = PairedBenchmarkTaskResult(taskId, transformer, ans100)
             mainHandler.post { onComplete(paired) }
         }
     }
