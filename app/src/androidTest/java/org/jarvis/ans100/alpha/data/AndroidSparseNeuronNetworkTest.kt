@@ -852,4 +852,97 @@ class AndroidSparseNeuronNetworkTest {
         }
     }
 
+
+    @Test
+    fun structuralObservationHistorySurvivesRestartAndRebuildsGrowthEligibility() {
+        fun active(id: String, neuronId: Int) =
+            ANS100ActivityDrivenStructuralPlasticity.ActiveConcept(
+                conceptId = "concept:$id",
+                neuronId = neuronId,
+                label = "Понятие $id",
+                provenanceRef = "verified-turn:$id",
+            )
+        val pair = listOf(active("alpha", 1_062), active("beta", 1_063))
+        var snapshots = emptyList<ANS100ActivityDrivenStructuralPlasticity.TurnSnapshot>()
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+            network.resolveConceptInputSlots(listOf("concept:alpha", "concept:beta"))
+            assertEquals(1, network.recordStructuralPlasticityTurn("growth-turn-1", pair).size)
+            assertEquals(1, network.recordStructuralPlasticityTurn("growth-turn-1", pair).size)
+            assertEquals(2, network.recordStructuralPlasticityTurn("growth-turn-2", pair).size)
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
+            snapshots = reopened.recordStructuralPlasticityTurn("growth-turn-3", pair)
+            assertEquals(listOf("growth-turn-1", "growth-turn-2", "growth-turn-3"), snapshots.map { it.turnId })
+            val graph = reopened.structuralPlasticityGraphSnapshot(listOf(1_062, 1_063))
+            val learner = ANS100ActivityDrivenStructuralPlasticity(
+                maxGrownPairs = ANS100ActivityDrivenStructuralPlasticity.MAX_GROWN_PAIRS_HARD_LIMIT,
+                maxGrownEdgesPerConcept = ANS100ActivityDrivenStructuralPlasticity.MAX_GROWN_EDGES_PER_CONCEPT_HARD_LIMIT,
+            )
+            learner.restoreGrownState(graph.grownConceptPairs, graph.grownEdgesByConcept)
+            val proposals = snapshots.flatMap { snapshot ->
+                learner.observeTurn(
+                    snapshot.turnId,
+                    snapshot.activeConcepts,
+                    graph.existingTargetsByConceptNeuron,
+                    graph.targetIncomingEdgeCounts,
+                ).emittedProposals
+            }
+            assertEquals(1, proposals.size)
+            assertEquals(3, proposals.single().supportingDistinctTurns)
+            assertEquals(2, reopened.addStructuralGrowthProposal(proposals.single()))
+            assertEquals(setOf("concept:alpha" to "concept:beta"), reopened.structuralPlasticityGraphSnapshot(
+                listOf(1_062, 1_063),
+            ).grownConceptPairs)
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { afterGrowth ->
+            assertEquals(0, afterGrowth.addStructuralGrowthProposal(
+                ANS100ActivityDrivenStructuralPlasticity().let { learner ->
+                    learner.observeTurn("replay-1", snapshots[0].activeConcepts, emptyMap(), emptyMap())
+                    learner.observeTurn("replay-2", snapshots[1].activeConcepts, emptyMap(), emptyMap())
+                    learner.observeTurn("replay-3", snapshots[2].activeConcepts, emptyMap(), emptyMap())
+                        .emittedProposals.single()
+                },
+            ))
+            val graph = afterGrowth.structuralPlasticityGraphSnapshot(listOf(1_062, 1_063))
+            assertEquals(1, graph.grownConceptPairs.size)
+            assertEquals(mapOf("concept:alpha" to 1, "concept:beta" to 1), graph.grownEdgesByConcept)
+        }
+    }
+
+    @Test
+    fun schemaSevenUpgradeAddsStructuralObservationTablesWithoutRebuildingTopology() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+        }
+        val legacy = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            legacy.execSQL("DROP TABLE IF EXISTS structural_plasticity_turn_concepts")
+            legacy.execSQL("DROP TABLE IF EXISTS structural_plasticity_turns")
+            legacy.version = 7
+        } finally {
+            legacy.close()
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { upgraded ->
+            assertEquals(AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT, upgraded.stats().connectionCount)
+            val db = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+            try {
+                val tables = db.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'structural_plasticity_%'",
+                    null,
+                ).use { cursor ->
+                    buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
+                }
+                assertTrue(tables.contains("structural_plasticity_turns"))
+                assertTrue(tables.contains("structural_plasticity_turn_concepts"))
+            } finally {
+                db.close()
+            }
+        }
+    }
+
 }
