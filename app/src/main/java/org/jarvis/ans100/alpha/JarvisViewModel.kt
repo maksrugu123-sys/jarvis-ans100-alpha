@@ -623,7 +623,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.execute {
             val results = ArrayList<PairedBenchmarkTaskResult>(inputs.size)
             inputs.forEachIndexed { index, input ->
-                val result = runPairedBenchmarkTaskBlocking(input.taskId, input.inputText, coldStart = index == 0)
+                val result = runPairedBenchmarkTaskBlocking(input.taskId, input.inputText, coldStart = true)
                 results.add(result)
                 mainHandler.post { onProgress(index + 1, inputs.size, result) }
             }
