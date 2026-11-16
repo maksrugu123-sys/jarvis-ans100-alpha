@@ -34,6 +34,7 @@ class ANS100WorkspaceConceptInputBridge {
         val hypothesisVerifications: List<ANS100ConceptMemory.Verification>,
         val hypothesisReports: List<HypothesisReport>,
         val relationEvidenceCount: Int,
+        val causalChainHypotheses: List<ANS100CausalHypothesisEngine.Candidate> = emptyList(),
     ) {
         val unresolvedHypothesisCount: Int
             get() = hypothesisVerifications.count {
@@ -172,6 +173,37 @@ class ANS100WorkspaceConceptInputBridge {
                 contradictingEvidenceRefs = verification.contradictingEvidenceRefs,
             )
         }
+        // C3: causal chains are separate, explicitly unresolved candidates until
+        // direct A->C evidence exists. Their premise edges are not confirmation.
+        val causalChainHypotheses = ANS100CausalHypothesisEngine().generate(
+            memory = memory,
+            activeConceptIds = activeConceptIds,
+            observations = relationObservations,
+            limit = MAX_CAUSAL_HYPOTHESES_PER_TURN,
+        )
+        val causalReports = causalChainHypotheses.map { candidate ->
+            HypothesisReport(
+                hypothesisId = candidate.hypothesisId,
+                fromLabel = memory.recallConcept(candidate.fromConceptId)?.label ?: candidate.fromConceptId,
+                relationType = candidate.relationType,
+                toLabel = memory.recallConcept(candidate.toConceptId)?.label ?: candidate.toConceptId,
+                premiseEvidenceRefs = candidate.premiseEvidenceRefs,
+                verificationStatus = when (candidate.status) {
+                    ANS100CausalHypothesisEngine.Status.UNRESOLVED ->
+                        ANS100ConceptMemory.VerificationStatus.UNRESOLVED
+                    ANS100CausalHypothesisEngine.Status.SUPPORTED_BY_STORED_RECORDS ->
+                        ANS100ConceptMemory.VerificationStatus.SUPPORTED
+                    ANS100CausalHypothesisEngine.Status.REFUTED_BY_STORED_RECORDS ->
+                        ANS100ConceptMemory.VerificationStatus.REFUTED
+                    ANS100CausalHypothesisEngine.Status.CONFLICTING_STORED_RECORDS ->
+                        ANS100ConceptMemory.VerificationStatus.CONFLICTING
+                },
+                supportingEvidenceRefs = candidate.supportingEvidenceRefs,
+                contradictingEvidenceRefs = candidate.contradictingEvidenceRefs,
+            )
+        }
+        val allHypothesisReports = (hypothesisReports + causalReports)
+            .take(MAX_REPORTED_HYPOTHESES + MAX_CAUSAL_HYPOTHESES_PER_TURN)
 
         return Result(
             batch = merged,
@@ -184,8 +216,9 @@ class ANS100WorkspaceConceptInputBridge {
             activeRelationCount = activeRelations.size,
             hypotheses = hypotheses,
             hypothesisVerifications = verifications,
-            hypothesisReports = hypothesisReports,
+            hypothesisReports = allHypothesisReports,
             relationEvidenceCount = relationObservations.size,
+            causalChainHypotheses = causalChainHypotheses,
         )
     }
 
@@ -270,6 +303,7 @@ class ANS100WorkspaceConceptInputBridge {
         private const val MAX_ACTIVE_RELATIONS_PER_TURN = 64
         private const val MAX_HYPOTHESES_PER_TURN = 64
         private const val MAX_REPORTED_HYPOTHESES = 12
+        private const val MAX_CAUSAL_HYPOTHESES_PER_TURN = 32
         private val CONCEPT_CATEGORIES = setOf("concept", "понятие")
         private val RELATION_CATEGORIES = setOf("relation", "связь")
         private val RELATION_EVIDENCE_CATEGORIES = setOf("relation_evidence", "свидетельство_связи")
