@@ -118,7 +118,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
     fun addStructuralGrowthProposal(proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal): Int
-    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double): Int
+    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun removeStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int
     fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double>
     fun enqueue(event: AndroidNeuronEvent)
@@ -340,11 +340,12 @@ class AndroidSparseNeuronNetwork(
         store.addStructuralGrowthProposal(proposal)
 
     @Synchronized
-    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double): Int {
+    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
         require(connectionIds.isNotEmpty() && connectionIds.size <= MAX_STRUCTURAL_SYNAPSES_PER_UPDATE)
         require(connectionIds.distinct().size == connectionIds.size)
         require(delta.isFinite() && delta in -MAX_STRUCTURAL_WEIGHT_DELTA..MAX_STRUCTURAL_WEIGHT_DELTA)
-        return store.adjustStructuralSynapseWeights(connectionIds, delta)
+        require(source == ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER || source == ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME)
+        return store.adjustStructuralSynapseWeights(connectionIds, delta, source)
     }
 
     @Synchronized
@@ -1222,7 +1223,7 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
-    override fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double): Int {
+    override fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -1936,6 +1937,9 @@ private class AndroidNeuronSqliteStore(
         refractoryUntilNs = cursor.getLong(4),
         spikeSequence = cursor.getLong(5),
     )
+
+    private fun scalar(db: SQLiteDatabase, sql: String, args: Array<String>): Long =
+        db.rawQuery(sql, args).use { cursor -> if (!cursor.moveToFirst()) 0L else cursor.getLong(0) }
 
     private fun scalar(db: SQLiteDatabase, sql: String): Long =
         db.rawQuery(sql, null).use { cursor ->
