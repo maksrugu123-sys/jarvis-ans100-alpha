@@ -53,6 +53,7 @@ import org.jarvis.ans100.alpha.data.LocalUnderstandingPipeline
 import org.jarvis.ans100.alpha.data.ANS100WorkspaceConceptInputBridge
 import org.jarvis.ans100.alpha.data.ANS100NeuralAssociationDecoder
 import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisEngine
+import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisLedger
 import org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceAdapter
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceStore
