@@ -23,14 +23,26 @@ This stage adds a bounded learning adapter for the exact concept-to-association 
 - It does not learn new topology, create edges, persist weights, restore weights, or alter the active dialogue decision.
 - The caller must still persist returned weights atomically and expose a deliberate user feedback action. Until that integration exists, this is a tested learning kernel, not an active production learning loop.
 
-## Required next integration
+## Android SQLite and explicit feedback integration
 
-- Add an explicit feedback action to the Android UI/Core path.
-- Store candidate eligibility and apply the returned deltas to the SQLite `connections.weight` rows in one bounded transaction.
-- Make the persistence operation idempotent per feedback event to prevent duplicate taps/retries from repeatedly training the same candidate.
-- Add restart/restore tests and an evaluation that compares trained synapses against shuffled-pair and random-weight baselines on held-out concept pairs.
-- Only then connect learned association strength to neural competition; do not let Qwen author rewards or choose the winning candidate.
+The Android integration now provides a separate, concept-specific learning path:
+
+- The conversation UI displays a separate question asking whether the two concepts are related. This is deliberately distinct from the generic "helpful answer" rating; answer quality must not be misattributed to an unrelated co-activation pair.
+- Only the first bounded neural association candidate is offered for feedback in V1.
+- The candidate's exact activated concept-to-association synapses and activation hint are saved as a short-lived eligibility trace.
+- The user action receives a stable feedback event ID before the write is attempted. SQLite inserts that ID and updates the affected `connections.weight` rows in one transaction. A duplicate event ID is ignored, so retrying the same action cannot train twice.
+- Learned weights live in the existing `connections` table and are naturally restored when the network database is reopened.
+- Schema version 4 adds bounded eligibility and feedback-event tables. The v3-to-v4 migration leaves topology and unrelated synapses intact and gives only reserved concept-input projection edges room for positive learning.
+- Concept projection synapses start at 0.75 (instead of the general feed-forward ceiling 1.0); explicit positive feedback can strengthen them and negative feedback can weaken them. Weights remain bounded to 0.05..1.0, with per-event delta at most 0.01.
+- The UI explicitly asks about the concept pair. Qwen output and generic answer feedback are not used as labels.
+
+## Remaining research work
+
+- The association candidate still does not participate in final answer/decision competition. The explicit pair label trains only the observed concept-to-association synapses.
+- Add held-out evaluation against shuffled-pair and random-weight baselines before using learned strengths to influence decision competition.
+- Add multi-turn calibration and check whether lexical concept activation and deterministic projection collisions produce false associations.
+- Do not claim semantic understanding from this feedback mechanism alone.
 
 ## Verification
 
-Tests were added for positive/negative reward, untrusted feedback rejection, candidate mismatch, missing weights, and weight bounds. Tests were authored but not run in this stage. No Gradle build, APK, CI, or device inference was run.
+Instrumented Android tests were added for persistent weights across reopen, duplicate-event idempotency, rejection of model-generated feedback, and v3-to-v4 schema migration without topology rebuild. Topology tests now assert concept-specific initial weights. Tests were authored but not run. No Gradle build, APK, CI, or device inference was run.
