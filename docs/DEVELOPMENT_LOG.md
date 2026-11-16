@@ -3313,3 +3313,19 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 **Interpretation limits:** PSS is process-wide and includes app/runtime/model/network/shared allocations; it is not a precise per-model heap measurement. The 20 ms sampler can miss shorter spikes. Baseline and delta are both recorded because persistent model/runtime allocations differ between runs. Failed inferences do not receive fabricated memory values.
 
 **Verification:** source edits only. Kotlin compilation, Android tests, Python tests, APK builds, CI, and on-device measurements: **NOT RUN** by project policy. No measured peak values exist until the experiment is run on the phone.
+
+
+## 2026-11-16 — Separate cold-start and warm benchmark measurements
+
+**Objective:** distinguish the first model/network initialization cost from steady-state inference without claiming a force-stopped process measurement.
+
+**Changed:**
+- Added a `coldStart` option to both benchmark subjects.
+- The first held-out pair closes the loaded Qwen LiteRT engine before the PSS baseline, then measures its reinitialization and inference.
+- The first held-out ANS-100 task closes and reopens the isolated SQLite-backed network inside the PSS sampling window, preserving the learned benchmark database.
+- Later held-out rows reuse initialized engines/networks and are marked as warm.
+- Both JSONL outputs now include `cold_start` so the scorer/report can separate the first row from warm rows.
+
+**Limitations:** this is a cold engine/network initialization inside the existing Android app process, not a force-stop/relaunch or a separate process. PSS remains process-wide; co-resident app/runtime allocations can affect absolute values. The ANS database contents are preserved across network reopen.
+
+**Verification:** source-only edits. No Kotlin compilation, Android/Python tests, builds, CI, or device measurements were run.
