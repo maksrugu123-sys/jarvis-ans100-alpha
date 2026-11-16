@@ -308,8 +308,17 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
 
 def compare_prediction_files(task_path: Path, transformer_path: Path, ans100_path: Path) -> dict[str, Any]:
     tasks = _load_jsonl(task_path)
-    transformer = score_predictions(tasks,_load_jsonl(transformer_path),"transformer")
-    ans100 = score_predictions(tasks,_load_jsonl(ans100_path),"ANS-100")
+    transformer_rows = _load_jsonl(transformer_path)
+    ans100_rows = _load_jsonl(ans100_path)
+    for system_label, rows in (("transformer", transformer_rows), ("ANS-100", ans100_rows)):
+        missing_hashes = [row.get("task_id", "<missing>") for row in rows if "input_sha256" not in row]
+        if missing_hashes:
+            raise ValueError(
+                f"{system_label}: every submitted prediction must include input_sha256; "
+                f"missing for {len(missing_hashes)} row(s)"
+            )
+    transformer = score_predictions(tasks,transformer_rows,"transformer")
+    ans100 = score_predictions(tasks,ans100_rows,"ANS-100")
     evaluation_tasks = [task for task in tasks if task.get("split") != "development"]
     paired = [(transformer["correct_by_task"][t["task_id"]],ans100["correct_by_task"][t["task_id"]]) for t in evaluation_tasks]
     transformer_wins = sum(t and not a for t,a in paired)
