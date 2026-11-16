@@ -104,7 +104,7 @@ data class AndroidNeuronRunResult(
 )
 
 private fun connectionIdFromPropagatedEvent(eventId: String): String? =
-    Regex("^spike-\\d+-\\d+-(ans100-v4-[A-Za-z0-9._:-]+|ans100-v9-canonical-readout-[A-Za-z0-9._:-]+)$")
+    Regex("^spike-\\d+-\\d+-(ans100-v4-[A-Za-z0-9._:-]+|ans100-v5-grown-association-[A-Za-z0-9._:-]+|ans100-v9-canonical-readout-[A-Za-z0-9._:-]+)$")
         .matchEntire(eventId)?.groupValues?.get(1)
 
 open class AndroidNeuronNetworkException(message: String) : IllegalStateException(message)
