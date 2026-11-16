@@ -977,7 +977,7 @@ class AndroidSparseNeuronNetworkTest {
 
 
     @Test
-    fun canonicalReadoutFeedbackPersistsFourRealLifSynapsesAndProducesOnlyTrainedClassSpikes() {
+    fun canonicalReadoutFeedbackPersistsFourClassLifSynapsesAndProducesOnlyTrainedClassSpikes() {
         // A dense, deterministic source set exercises convergence into all 150
         // output buckets. One labelled example must separate the target class
         // from the three just-below-threshold negative classes.
