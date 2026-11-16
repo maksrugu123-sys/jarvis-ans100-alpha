@@ -168,6 +168,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun recordNeuralAssociationEvaluation(candidateId: String, observation: ANS100NeuralAssociationAssessment.Observation): Int
     fun neuralAssociationEvaluations(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.PersistedObservation>
     fun neuralAssociationWeightHistory(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.WeightChange>
+    fun latestNeuralAssociationFeedback(candidateId: String): ANS100NeuralAssociationAssessment.FeedbackRecord?
     fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double
     fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double>
@@ -772,7 +773,12 @@ class AndroidSparseNeuronNetwork(
     ): ANS100NeuralAssociationAssessment.Assessment {
         val observations = neuralAssociationEvaluations(candidateId, ANS100NeuralAssociationAssessment.MAX_OBSERVATIONS)
             .map { it.observation }
-        return ANS100NeuralAssociationAssessment().assess(observations, feedback)
+        val latest = store.latestNeuralAssociationFeedback(candidateId)
+        val effectiveFeedback = latest?.let {
+            if (it.reward > 0.0) ANS100NeuralAssociationAssessment.ExplicitFeedback.POSITIVE
+            else ANS100NeuralAssociationAssessment.ExplicitFeedback.NEGATIVE
+        } ?: feedback
+        return ANS100NeuralAssociationAssessment().assess(observations, effectiveFeedback, latest?.source)
     }
 
     /** Applies a stable user-feedback event at most once, atomically with weight updates. */
@@ -2301,6 +2307,16 @@ private class AndroidNeuronSqliteStore(
             )
         }
         return result
+    }
+
+    override fun latestNeuralAssociationFeedback(candidateId: String): ANS100NeuralAssociationAssessment.FeedbackRecord? {
+        return readableDatabase.rawQuery("SELECT reward, source, created_at_ms FROM neural_association_feedback_events WHERE candidate_id=? ORDER BY created_at_ms DESC, rowid DESC LIMIT 1", arrayOf(candidateId)).use { cursor ->
+            if (!cursor.moveToFirst()) null else ANS100NeuralAssociationAssessment.FeedbackRecord(
+                reward = cursor.getDouble(0),
+                source = ANS100CandidateFeedbackLearner.FeedbackSource.valueOf(cursor.getString(1)),
+                recordedAtMs = cursor.getLong(2),
+            )
+        }
     }
 
     override fun neuralAssociationWeightHistory(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.WeightChange> {
