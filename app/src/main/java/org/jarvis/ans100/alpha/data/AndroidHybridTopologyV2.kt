@@ -167,7 +167,7 @@ object AndroidHybridTopologyV2 {
      * projection for a concept input neuron. This mirrors addProjection() below;
      * it does not create edges or infer a relation.
      */
-    fun conceptAssociationTargets(neuronId: Int): Set<Int> {
+    fun conceptAssociationProjection(neuronId: Int): Map<Int, String> {
         val evidence = populations[0]
         require(neuronId in ANS100ConceptMemory.NEURAL_INPUT_START until
             ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS) {
@@ -176,15 +176,20 @@ object AndroidHybridTopologyV2 {
         require(evidence.contains(neuronId))
         val associationStart = populations[1].startInclusive
         val associationSize = GENERAL_ASSOCIATION_SIZE
-        return (0 until EVIDENCE_GENERAL_FAN_OUT).map { slot ->
+        return (0 until EVIDENCE_GENERAL_FAN_OUT).associate { slot ->
+            val sourceOffset = neuronId - evidence.startInclusive
             val targetOffset = (
-                neuronId.toLong() * EVIDENCE_GENERAL_MULTIPLIER +
+                sourceOffset.toLong() * EVIDENCE_GENERAL_MULTIPLIER +
                     slot.toLong() * EVIDENCE_GENERAL_SLOT_STEP +
                     EVIDENCE_GENERAL_SALT
                 ) % associationSize
-            associationStart + targetOffset.toInt()
-        }.toSet()
+            val targetId = associationStart + targetOffset.toInt()
+            targetId to "ans100-v4-evidence-general-association-$neuronId-$targetId"
+        }
     }
+
+    fun conceptAssociationTargets(neuronId: Int): Set<Int> =
+        conceptAssociationProjection(neuronId).keys
 
     private fun slice(
         population: Population,
