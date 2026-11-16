@@ -1140,6 +1140,29 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         }
                     }
 
+                    val canonicalReadout = ANS100CanonicalReadoutDecoder().decode(emittedSpikeNeuronIds)
+                    latestCanonicalReadoutFeedback = null
+                    pendingCanonicalReadoutFeedbackUi = null
+                    val canonicalSourceSpikes = emittedSpikeNeuronIds
+                        .filter(ANS100CanonicalReadoutContract::isEligibleSourceNeuron)
+                        .sorted()
+                        .take(ANS100CanonicalReadoutContract.MAX_SOURCE_NEURONS_PER_TURN)
+                    val canonicalTraceSaved = if (!result.budgetExhausted && result.pendingEvents == 0 &&
+                        canonicalSourceSpikes.isNotEmpty()
+                    ) runCatching {
+                        hybridNeuronNetwork.recordCanonicalReadoutEligibility(turnId, canonicalSourceSpikes)
+                    }.getOrDefault(0) else 0
+                    if (canonicalTraceSaved > 0) {
+                        latestCanonicalReadoutFeedback = turnId to "canonical-feedback-" + UUID.randomUUID()
+                        val classCounts = canonicalReadout.spikeCounts.entries
+                            .sortedBy { it.key.ordinal }
+                            .joinToString(" · ") { "${it.key.wireValue}=${it.value}" }
+                        pendingCanonicalReadoutFeedbackUi = CanonicalReadoutFeedbackUi(
+                            predictedAnswer = canonicalReadout.answer?.wireValue ?: canonicalReadout.status.name,
+                            spikeCountsSummary = classCounts,
+                        )
+                    }
+
                     val neuralAssociationResult = ANS100NeuralAssociationDecoder().decode(
                         conceptTrace = batch.conceptTrace,
                         emittedSpikeNeuronIds = emittedSpikeNeuronIds,
@@ -1188,6 +1211,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             memoryHypothesisReports = conceptInput.hypothesisReports,
                             hypothesisComparisons = hypothesisComparisons,
                             hypothesisStatePersisted = neuralHypothesisStatePersisted,
+                            canonicalReadout = canonicalReadout,
                         )
                         benchmarkTraceStore.append(ANS100BenchmarkTraceAdapter.toJsonLine(trace))
                     }.getOrDefault(false)
