@@ -4,7 +4,7 @@
 
 **Shared task generator and offline scorer implemented. Focused tests authored, not run. No model has been executed.**
 
-This stage establishes a common comparison contract; it does not claim ANS-100 beats a Transformer or vice versa. The benchmark is intentionally small and synthetic so the expected answers are known and repeatable. A later stage must connect real model adapters and collect prediction files before any performance conclusion.
+This stage establishes a common comparison contract; it does not claim ANS-100 beats a Transformer or vice versa. The benchmark is intentionally small and synthetic so the expected answers are known and repeatable. The Qwen-only inference adapter is now present, but both model prediction files must be collected before any performance conclusion.
 
 ## Systems to compare
 
