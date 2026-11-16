@@ -3,6 +3,7 @@ import hashlib
 import unittest
 from tools.task_validation.ans100_benchmark_adapter_v1 import (
     INPUT_SCHEMA, TRACE_SCHEMA, NEURAL_ORIGIN, export_model_inputs,
+    export_ans100_training_rows, export_evaluation_inputs,
     predictions_from_traces, validate_trace,
 )
 
@@ -28,6 +29,37 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(row["schema"],INPUT_SCHEMA)
         self.assertEqual(set(row),{"schema","task_id","input_text","input_sha256"})
         self.assertNotIn("expected_answer",row)
+
+    def test_ans_training_export_contains_labels_only_from_development(self):
+        development = {
+            "task_id": "dev:001", "input_text": "A is B", "expected_answer": "YES",
+            "split": "development",
+        }
+        held_out = dict(self.task, task_id="held:002")
+        rows = export_ans100_training_rows([development, held_out])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["task_id"], "dev:001")
+        self.assertEqual(rows[0]["training_label"], "YES")
+        self.assertNotIn("expected_answer", rows[0])
+        self.assertNotIn("split", rows[0])
+
+    def test_held_out_export_excludes_development_and_all_gold_fields(self):
+        development = {
+            "task_id": "dev:001", "input_text": "A is B", "expected_answer": "YES",
+            "split": "development",
+        }
+        rows = export_evaluation_inputs([development, self.task])
+        self.assertEqual([row["task_id"] for row in rows], ["heldout:001"])
+        self.assertNotIn("expected_answer", rows[0])
+        self.assertNotIn("split", rows[0])
+
+    def test_invalid_development_training_label_rejected(self):
+        development = {
+            "task_id": "dev:bad", "input_text": "A is B", "expected_answer": "LEAK",
+            "split": "development",
+        }
+        with self.assertRaises(ValueError):
+            export_ans100_training_rows([development])
 
     def test_duplicate_or_empty_input_rejected(self):
         with self.assertRaises(ValueError): export_model_inputs([self.task,self.task])
