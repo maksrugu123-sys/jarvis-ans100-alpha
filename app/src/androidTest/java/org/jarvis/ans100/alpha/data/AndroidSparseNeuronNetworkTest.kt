@@ -823,4 +823,33 @@ class AndroidSparseNeuronNetworkTest {
         }
     }
 
+
+    @Test
+    fun schemaSixUpgradeAddsStructuralFeedbackLedgerWithoutRebuildingNetwork() {
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
+            network.initializeHybridTopologyV2()
+        }
+        val legacy = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            legacy.execSQL("DROP TABLE IF EXISTS structural_synapse_feedback_events")
+            legacy.version = 6
+        } finally {
+            legacy.close()
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { upgraded ->
+            assertEquals(AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT, upgraded.stats().connectionCount)
+            val db = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+            try {
+                val tableExists = db.rawQuery(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='structural_synapse_feedback_events'",
+                    null,
+                ).use { it.moveToFirst() }
+                assertTrue(tableExists)
+            } finally {
+                db.close()
+            }
+        }
+    }
+
 }
