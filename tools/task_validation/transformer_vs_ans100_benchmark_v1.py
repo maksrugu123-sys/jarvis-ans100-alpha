@@ -160,6 +160,7 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         prediction_by_id[task_id] = row
     groups: dict[tuple[str, str], list[bool]] = defaultdict(list)
     latencies, memories, memory_deltas, correct_by_id = [], [], [], {}
+    cold_warm = {True: {"latencies": [], "peaks": [], "deltas": []}, False: {"latencies": [], "peaks": [], "deltas": []}}
     for task in evaluation_tasks:
         task_id = task["task_id"]
         row = prediction_by_id.get(task_id)
@@ -169,12 +170,21 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         if row:
             latency, memory = row.get("latency_ms"), row.get("peak_memory_mb")
             memory_delta = row.get("peak_memory_delta_mb")
+            cold_start = row.get("cold_start")
             if isinstance(latency, (int,float)) and not isinstance(latency,bool) and latency >= 0:
                 latencies.append(float(latency))
             if isinstance(memory, (int,float)) and not isinstance(memory,bool) and memory >= 0:
                 memories.append(float(memory))
             if isinstance(memory_delta, (int,float)) and not isinstance(memory_delta,bool) and memory_delta >= 0:
                 memory_deltas.append(float(memory_delta))
+            if isinstance(cold_start, bool):
+                bucket = cold_warm[cold_start]
+                if isinstance(latency, (int,float)) and not isinstance(latency,bool) and latency >= 0:
+                    bucket["latencies"].append(float(latency))
+                if isinstance(memory, (int,float)) and not isinstance(memory,bool) and memory >= 0:
+                    bucket["peaks"].append(float(memory))
+                if isinstance(memory_delta, (int,float)) and not isinstance(memory_delta,bool) and memory_delta >= 0:
+                    bucket["deltas"].append(float(memory_delta))
     grouped = {}
     for (split, family), outcomes in sorted(groups.items()):
         submitted = sum(1 for task in evaluation_tasks if task["split"] == split and task["family"] == family and task["task_id"] in prediction_by_id)
@@ -198,6 +208,14 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         "latency_ms":{"count":len(latencies),"median":statistics.median(latencies) if latencies else None,"p95":_percentile(latencies,0.95)},
         "peak_memory_mb":{"count":len(memories),"max":max(memories) if memories else None,"median":statistics.median(memories) if memories else None},
         "peak_memory_delta_mb":{"count":len(memory_deltas),"max":max(memory_deltas) if memory_deltas else None,"median":statistics.median(memory_deltas) if memory_deltas else None},
+        "cold_vs_warm": {
+            ("cold_start" if cold else "warm_steady_state"): {
+                "count": max(len(values["latencies"]), len(values["peaks"]), len(values["deltas"])),
+                "latency_ms_median": statistics.median(values["latencies"]) if values["latencies"] else None,
+                "peak_memory_mb_max": max(values["peaks"]) if values["peaks"] else None,
+                "peak_memory_delta_mb_max": max(values["deltas"]) if values["deltas"] else None,
+            } for cold, values in cold_warm.items()
+        },
         "correct_by_task":correct_by_id,
     }
 
