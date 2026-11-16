@@ -41,6 +41,7 @@ data class AndroidWebSearchIntent(val query: String) {
 
         private val prefixes = listOf(
             "найди информацию в интернете",
+            "найти информацию в интернете",
             "поищи информацию в интернете",
             "искать информацию в интернете",
             "поискать информацию в интернете",
@@ -68,6 +69,8 @@ data class AndroidWebSearchIntent(val query: String) {
         )
 
         private val capabilityPhrases = listOf(
+            "найти информацию в интернете",
+            "найти в интернете",
             "искать информацию в интернете",
             "поискать информацию в интернете",
             "искать в интернете",
