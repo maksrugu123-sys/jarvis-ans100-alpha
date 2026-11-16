@@ -1918,6 +1918,191 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
+    override fun recordCanonicalReadoutEligibility(turnId: String, sourceNeuronIds: List<Int>): Int {
+        val validated = try {
+            ANS100CanonicalReadoutContract.validateSourceNeuronIds(sourceNeuronIds)
+        } catch (failure: IllegalArgumentException) {
+            throw AndroidNeuronNetworkException("canonical readout source set is invalid: ${failure.message}")
+        }
+        if (validated.isEmpty()) return 0
+        val db = writableDatabase
+        val nowMs = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            val version = scalar(db, "SELECT value FROM metadata WHERE key='ans100_topology_version'")
+            if (version != 5L) throw AndroidNeuronNetworkException("canonical readout requires topology V5")
+            db.delete(
+                "canonical_readout_eligibility",
+                "created_at_ms<?",
+                arrayOf((nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()),
+            )
+            var inserted = 0
+            for (sourceNeuronId in validated) {
+                requireNeuron(db, sourceNeuronId)
+                val values = ContentValues().apply {
+                    put("turn_id", turnId)
+                    put("source_neuron_id", sourceNeuronId)
+                    put("created_at_ms", nowMs)
+                }
+                if (db.insertWithOnConflict(
+                        "canonical_readout_eligibility",
+                        null,
+                        values,
+                        SQLiteDatabase.CONFLICT_IGNORE,
+                    ) != -1L
+                ) inserted++
+            }
+            val excess = scalar(db, "SELECT COUNT(*) FROM canonical_readout_eligibility") -
+                MAX_CANONICAL_READOUT_ELIGIBILITY_ROWS
+            if (excess > 0L) db.execSQL(
+                "DELETE FROM canonical_readout_eligibility WHERE rowid IN (SELECT rowid FROM canonical_readout_eligibility ORDER BY created_at_ms ASC, rowid ASC LIMIT ?)",
+                arrayOf(excess),
+            )
+            db.setTransactionSuccessful()
+            return inserted
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun applyCanonicalReadoutFeedback(
+        feedbackId: String,
+        turnId: String,
+        answer: ANS100CanonicalReadoutContract.Answer,
+        source: ANS100CandidateFeedbackLearner.FeedbackSource,
+    ): Int {
+        if (source != ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER &&
+            source != ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME
+        ) return 0
+        val db = writableDatabase
+        val nowMs = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            val sourceIds = mutableListOf<Int>()
+            db.rawQuery(
+                "SELECT source_neuron_id FROM canonical_readout_eligibility WHERE turn_id=? AND created_at_ms>=? ORDER BY source_neuron_id",
+                arrayOf(turnId, (nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()),
+            ).use { cursor -> while (cursor.moveToNext()) sourceIds += cursor.getInt(0) }
+            if (sourceIds.isEmpty()) {
+                db.delete("canonical_readout_eligibility", "turn_id=?", arrayOf(turnId))
+                db.setTransactionSuccessful()
+                return 0
+            }
+            val validated = try {
+                ANS100CanonicalReadoutContract.validateSourceNeuronIds(sourceIds)
+            } catch (failure: IllegalArgumentException) {
+                throw AndroidNeuronNetworkException("persisted canonical readout eligibility is invalid")
+            }
+            val feedback = ContentValues().apply {
+                put("feedback_id", feedbackId)
+                put("turn_id", turnId)
+                put("answer", answer.wireValue)
+                put("source", source.name)
+                put("created_at_ms", nowMs)
+            }
+            if (db.insertWithOnConflict(
+                    "canonical_readout_feedback_events",
+                    null,
+                    feedback,
+                    SQLiteDatabase.CONFLICT_IGNORE,
+                ) == -1L
+            ) {
+                db.setTransactionSuccessful()
+                return 0
+            }
+
+            val existingReadoutSynapses = scalar(
+                db,
+                "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v9-canonical-readout-%'",
+            )
+            val existingSourceIds = mutableSetOf<Int>()
+            db.rawQuery(
+                "SELECT DISTINCT source_id FROM connections WHERE connection_id LIKE 'ans100-v9-canonical-readout-%'",
+                null,
+            ).use { cursor -> while (cursor.moveToNext()) existingSourceIds += cursor.getInt(0) }
+            val newSourceCount = validated.count { it !in existingSourceIds }
+            if (existingReadoutSynapses + newSourceCount.toLong() * 4L >
+                ANS100CanonicalReadoutContract.MAX_PERSISTED_SYNAPSES.toLong()
+            ) {
+                throw AndroidNeuronNetworkException("canonical readout learned-synapse capacity reached")
+            }
+            if (scalar(db, "SELECT COUNT(*) FROM connections") + newSourceCount.toLong() * 4L >
+                AndroidNeuronSparseLimits.MAX_CONNECTIONS.toLong()
+            ) {
+                throw AndroidNeuronNetworkException("global sparse synapse capacity reached")
+            }
+
+            var updated = 0
+            val negativeDelta = ANS100CanonicalReadoutContract.MAX_WEIGHT_DELTA_PER_EVENT / 3.0
+            for (sourceNeuronId in validated) {
+                for (classAnswer in ANS100CanonicalReadoutContract.Answer.values()) {
+                    val connectionId = ANS100CanonicalReadoutContract.connectionId(classAnswer, sourceNeuronId)
+                    val targetNeuronId = ANS100CanonicalReadoutContract.outputNeuronId(classAnswer, sourceNeuronId)
+                    val currentWeight = db.rawQuery(
+                        "SELECT weight, source_id, target_id FROM connections WHERE connection_id=?",
+                        arrayOf(connectionId),
+                    ).use { cursor ->
+                        if (!cursor.moveToFirst()) null else {
+                            if (cursor.getInt(1) != sourceNeuronId || cursor.getInt(2) != targetNeuronId) {
+                                throw AndroidNeuronNetworkException("canonical readout synapse endpoints changed")
+                            }
+                            cursor.getDouble(0)
+                        }
+                    }
+                    val weight = currentWeight ?: ANS100CanonicalReadoutContract.INITIAL_SYNAPSE_WEIGHT.also {
+                        requireNeuron(db, sourceNeuronId)
+                        requireNeuron(db, targetNeuronId)
+                        insertConnection(
+                            db,
+                            AndroidNeuronConnection(
+                                connectionId = connectionId,
+                                sourceNeuronId = sourceNeuronId,
+                                targetNeuronId = targetNeuronId,
+                                delayNs = ANS100CanonicalReadoutContract.SYNAPSE_DELAY_NS,
+                                weight = it,
+                            ),
+                        )
+                    }
+                    val delta = if (classAnswer == answer) {
+                        ANS100CanonicalReadoutContract.MAX_WEIGHT_DELTA_PER_EVENT
+                    } else {
+                        -negativeDelta
+                    }
+                    val nextWeight = (weight + delta).coerceIn(
+                        ANS100CanonicalReadoutContract.MIN_SYNAPSE_WEIGHT,
+                        ANS100CanonicalReadoutContract.MAX_SYNAPSE_WEIGHT,
+                    )
+                    if (nextWeight != weight) {
+                        if (db.update(
+                                "connections",
+                                ContentValues().apply { put("weight", nextWeight) },
+                                "connection_id=?",
+                                arrayOf(connectionId),
+                            ) != 1
+                        ) throw AndroidNeuronNetworkException("canonical readout synapse update was not atomic")
+                        updated++
+                    }
+                }
+            }
+            db.delete("canonical_readout_eligibility", "turn_id=?", arrayOf(turnId))
+            val excess = scalar(db, "SELECT COUNT(*) FROM canonical_readout_feedback_events") -
+                MAX_CANONICAL_READOUT_FEEDBACK_EVENTS
+            if (excess > 0L) db.execSQL(
+                "DELETE FROM canonical_readout_feedback_events WHERE feedback_id IN (SELECT feedback_id FROM canonical_readout_feedback_events ORDER BY created_at_ms ASC LIMIT ?)",
+                arrayOf(excess),
+            )
+            db.setTransactionSuccessful()
+            return updated
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun canonicalReadoutSynapseCount(): Int = scalar(
+        readableDatabase,
+        "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v9-canonical-readout-%'",
+    ).toInt()
+
     override fun recordNeuralAssociationEligibility(turnId: String, candidateId: String,
         connectionIds: List<String>, eligibility: Double): Int {
         if (connectionIds.size !in 2..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE || connectionIds.size % 2 != 0 ||
@@ -2396,6 +2581,8 @@ private class AndroidNeuronSqliteStore(
         private const val MAX_STRUCTURAL_GROWN_PAIRS = 512
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
+        private const val MAX_CANONICAL_READOUT_ELIGIBILITY_ROWS = 20_000L
+        private const val MAX_CANONICAL_READOUT_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
         private const val NEURAL_ASSOCIATION_MAX_DELTA = 0.01
         private const val NEURAL_ASSOCIATION_MIN_WEIGHT = 0.05
