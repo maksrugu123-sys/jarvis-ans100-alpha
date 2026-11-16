@@ -1,4 +1,4 @@
-"""Leakage-safe ANS-100 benchmark input and trace adapter."""
+"""Leakage-safe ANS-100 benchmark input and Android trace adapter."""
 from __future__ import annotations
 import argparse, hashlib, json
 from pathlib import Path
@@ -31,24 +31,26 @@ def export_model_inputs(tasks):
         if not isinstance(task_id, str) or not task_id or task_id in seen: raise ValueError("task IDs must be unique non-empty strings")
         if not isinstance(text, str) or not text.strip(): raise ValueError(f"{task_id}: empty input_text")
         seen.add(task_id)
-        result.append({"schema": INPUT_SCHEMA, "task_id": task_id, "input_text": text, "input_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()})
+        result.append({"schema": INPUT_SCHEMA, "task_id": task_id, "input_text": text,
+                       "input_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()})
     return result
 
 def validate_trace(row):
     if row.get("schema") != TRACE_SCHEMA: raise ValueError("unsupported trace schema")
     task_id, digest, decision = row.get("task_id"), row.get("input_sha256"), row.get("decision")
-    if not isinstance(task_id, str) or not task_id: raise ValueError("trace requires task_id")
+    if not isinstance(task_id, str) or not task_id: raise ValueError("benchmark trace requires task_id")
     if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest): raise ValueError(f"{task_id}: invalid input hash")
-    if not isinstance(decision, dict) or not isinstance(decision.get("producer"), str) or not isinstance(decision.get("status"), str): raise ValueError(f"{task_id}: missing decision provenance")
-    sources = row.get("heuristic_sources", [])
-    if not isinstance(sources, list) or not all(isinstance(x, str) for x in sources): raise ValueError(f"{task_id}: invalid heuristic_sources")
-    neural = row.get("neural_readout", {})
-    if not isinstance(neural, dict): raise ValueError(f"{task_id}: invalid neural_readout")
-    answer, origin = neural.get("canonical_answer"), neural.get("answer_origin")
+    if not isinstance(decision, dict) or not isinstance(decision.get("producer"), str) or not isinstance(decision.get("status"), str):
+        raise ValueError(f"{task_id}: missing decision provenance")
+    core = row.get("core_input", {})
+    if core and not isinstance(core, dict): raise ValueError(f"{task_id}: invalid core_input provenance")
+    answer, origin = row.get("answer"), row.get("answer_emission")
     if answer is not None:
         if answer not in ANSWERS: raise ValueError(f"{task_id}: non-canonical answer")
-        if origin != NEURAL_ORIGIN or decision["producer"] != NEURAL_ORIGIN: raise ValueError(f"{task_id}: answer is not produced by a dedicated neural readout")
-    elif origin is not None: raise ValueError(f"{task_id}: origin without answer")
+        if origin != NEURAL_ORIGIN or decision["producer"] != NEURAL_ORIGIN:
+            raise ValueError(f"{task_id}: answer is not produced by a dedicated neural readout")
+    elif origin not in (None, "NOT_SUPPORTED_BY_CURRENT_ANS100_PIPELINE"):
+        raise ValueError(f"{task_id}: unsupported answer emission marker")
     return row
 
 def predictions_from_traces(traces, inputs):
@@ -61,16 +63,19 @@ def predictions_from_traces(traces, inputs):
         if task_id in seen: raise ValueError(f"duplicate trace: {task_id}")
         seen.add(task_id)
         if row["input_sha256"] != by_id[task_id]["input_sha256"]: raise ValueError(f"{task_id}: input hash mismatch")
-        answer = row.get("neural_readout", {}).get("canonical_answer")
+        answer = row.get("answer")
         if answer is None: continue
         item = {"task_id": task_id, "answer": answer}
-        measurements = row.get("measurements", {})
-        if not isinstance(measurements, dict): raise ValueError(f"{task_id}: invalid measurements")
-        for key in ("latency_ms", "peak_memory_mb"):
-            value = measurements.get(key)
-            if value is not None:
-                if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0: raise ValueError(f"{task_id}: invalid measured {key}")
-                item[key] = value
+        measured = row.get("measurement", {})
+        if not isinstance(measured, dict): raise ValueError(f"{task_id}: invalid measurement")
+        duration_ns = measured.get("inference_duration_ns")
+        if duration_ns is not None:
+            if isinstance(duration_ns, bool) or not isinstance(duration_ns, (int, float)) or duration_ns < 0: raise ValueError(f"{task_id}: invalid inference duration")
+            item["latency_ms"] = duration_ns / 1_000_000
+        memory = measured.get("peak_memory_mb")
+        if memory is not None:
+            if isinstance(memory, bool) or not isinstance(memory, (int, float)) or memory < 0: raise ValueError(f"{task_id}: invalid peak memory")
+            item["peak_memory_mb"] = memory
         output.append(item)
     return output
 
