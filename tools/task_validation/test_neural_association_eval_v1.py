@@ -107,6 +107,26 @@ class NeuralAssociationEvalV1Tests(unittest.TestCase):
         pair = next(x for x in examples if not _pair_shared_edges(x.concept_a, x.concept_b, slots))
         self.assertEqual(0.0, _score_pair(pair, slots, weights))
 
+    def test_projection_coverage_reports_pairs_the_decoder_cannot_compare(self):
+        examples = sample_dataset()
+        report = evaluate(examples, seeds=(11,), split_mode="pair_disjoint")
+        coverage = report["projection_coverage"]
+        self.assertEqual(len(examples), coverage["pairs"])
+        self.assertEqual(
+            coverage["pairs"],
+            coverage["projection_eligible_pairs"] + coverage["no_shared_projection_pairs"],
+        )
+        self.assertGreater(coverage["no_shared_projection_pairs"], 0)
+        self.assertEqual(
+            coverage["pairs"],
+            sum(coverage["shared_target_count_histogram"].values()),
+        )
+        split = report["splits"][0]
+        self.assertEqual(split["train_pairs"], split["train_projection_coverage"]["pairs"])
+        self.assertEqual(split["held_out_pairs"], split["held_out_projection_coverage"]["pairs"])
+        # Projection overlap is only a necessary condition; runtime spikes are not simulated.
+        self.assertEqual("CLOSED", report["promotion_gate"])
+
     def test_evaluation_is_deterministic_and_keeps_promotion_gate_closed(self):
         examples = sample_dataset()
         first = evaluate(examples, seeds=(11, 29), split_mode="pair_disjoint")
