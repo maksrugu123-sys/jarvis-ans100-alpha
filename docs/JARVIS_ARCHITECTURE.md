@@ -5066,3 +5066,11 @@ tools/task_validation/structural_plasticity_eval_v1.py воспроизводи�
 **Безопасность:** STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED = false остаётся неизменным. Результат не является основанием для включения автоматического роста. Перед продвижением нужны реальные независимо размеченные данные, более крупные pair-disjoint и concept-disjoint наборы, проверка actual LIF/decoder/SQLite replay и отдельные измерения RAM/CPU/latency на Android.
 
 **Тесты:** tools/task_validation/test_structural_plasticity_eval_v1.py AUTHORED / NOT RUN. Android/Windows build, Gradle, APK/AAB, CI и GitHub Actions не запускались.
+
+### 3.53. Transformer vs ANS-100 benchmark V1
+
+Добавлен общий offline benchmark contract: `tools/task_validation/transformer_vs_ans100_benchmark_v1.py` генерирует одинаковые входы и оценивает экспортированные предсказания Transformer-only и ANS-100-only. Отдельно предусмотрен ANS-100-led hybrid, где Transformer только вербализует уже принятое решение. Набор по умолчанию — 192 синтетические задачи: development, pair-disjoint, concept-disjoint и compositional; типы задач — статус отношения, двухшаговая достижимость и конфликт свидетельств.
+
+Обе системы должны получать одинаковый `input_text`; gold labels и expected answers остаются только у evaluator. Сравниваются точность по split/family, paired outcomes, latency и фактически измеренная peak memory. Неизмеренные ресурсы нельзя заполнять оценками. Текущая Android-система ещё содержит эвристический Core, который готовит часть сигналов; benchmark adapter обязан раскрывать это, а не выдавать pipeline за полностью автономное нейронное рассуждение.
+
+**Статус:** генератор и scorer IMPLEMENTED; тесты AUTHORED / NOT RUN. Реальные adapters/inference и предсказания ещё отсутствуют. Никакого вывода о победителе пока нет. Подробности: `docs/TRANSFORMER_VS_ANS100_BENCHMARK_V1.md`.
