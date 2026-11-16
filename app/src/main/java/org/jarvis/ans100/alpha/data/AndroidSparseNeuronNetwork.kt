@@ -994,7 +994,7 @@ private class AndroidNeuronSqliteStore(
             // input synapses; other evidence and all non-concept weights are untouched.
             db.execSQL(
                 "UPDATE connections SET weight=? WHERE source_id BETWEEN ? AND ? AND connection_id LIKE ? AND weight>=1.0",
-                arrayOf<Any?>(
+                arrayOf<Any>(
                     AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT,
                     ANS100ConceptMemory.NEURAL_INPUT_START,
                     ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS - 1,
@@ -1008,7 +1008,7 @@ private class AndroidNeuronSqliteStore(
             // weights cannot be safely attributed to stable concept IDs.
             db.execSQL(
                 "UPDATE connections SET weight=? WHERE source_id BETWEEN ? AND ? AND connection_id LIKE ?",
-                arrayOf<Any?>(
+                arrayOf<Any>(
                     AndroidHybridTopologyV2.CONCEPT_ASSOCIATION_INITIAL_WEIGHT,
                     ANS100ConceptMemory.NEURAL_INPUT_START,
                     ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS - 1,
