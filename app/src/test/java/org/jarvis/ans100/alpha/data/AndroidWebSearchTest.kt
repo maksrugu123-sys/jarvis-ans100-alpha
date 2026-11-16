@@ -16,6 +16,28 @@ class AndroidWebSearchTest {
     }
 
     @Test
+    fun recognizesNaturalSearchCommandsAndSeparatesCapabilityQuestions() {
+        assertEquals(
+            "погоду в Берлине",
+            AndroidWebSearchIntent.extract("Ты можешь найти в интернете погоду в Берлине?")?.query,
+        )
+        assertEquals(
+            "новости Android",
+            AndroidWebSearchIntent.extract("Можешь ли ты поискать в интернете новости Android?")?.query,
+        )
+        assertEquals(
+            "новости Android",
+            AndroidWebSearchIntent.extract("Найди новости Android в интернете")?.query,
+        )
+
+        val capabilityQuestion = "Ты можешь искать в интернете?"
+        assertNull(AndroidWebSearchIntent.extract(capabilityQuestion))
+        assertTrue(AndroidWebSearchIntent.isCapabilityQuestion(capabilityQuestion))
+        assertTrue(AndroidWebSearchIntent.capabilityReply().startsWith("Да."))
+        assertFalse(AndroidWebSearchIntent.isCapabilityQuestion("Как искать в интернете?"))
+    }
+
+    @Test
     fun parsesBoundedHttpsResultsAndDropsSearchEngineAndUnsafeLinks() {
         val html = """
             <ol>
