@@ -13,7 +13,7 @@ Each persisted observation names:
 - a unique task ID;
 - an independence key identifying the task source/template or evaluation unit;
 - one outcome: `REPRODUCED`, `CONTRADICTED`, or `INCONCLUSIVE`;
-- evidence origin: `CONTROLLED_BENCHMARK_LABEL` or `VERIFIED_EXTERNAL_OUTCOME`.
+- evidence origin: `CONTROLLED_BENCHMARK_LABEL`. No generic or model-generated outcome can be submitted as independent benchmark evidence.
 
 SQLite enforces uniqueness for both (candidate, task ID) and (candidate, independence key). A duplicate task or a correlated task presented under the same independence key is ignored rather than counted as another independent reproduction. Observation storage is bounded.
 
