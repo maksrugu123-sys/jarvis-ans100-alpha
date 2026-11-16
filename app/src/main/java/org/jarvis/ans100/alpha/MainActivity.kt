@@ -2942,7 +2942,8 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                 developmentRows,
                                 onProgress = { done, total, result ->
                                     status = "Обучение ANS-100: $done / $total" +
-                                        (result.exceptionOrNull()?.message?.let { " · ошибка: $it" } ?: "")
+                                        (result.exceptionOrNull()?.message?.let { " · ошибка: $it" } ?: "") +
+                                        if (done < total && done % 8 == 0) " · пауза для снижения нагрузки 10 сек" else ""
                                 },
                                 onComplete = { trained ->
                                     val failure = trained.firstOrNull { it.isFailure }?.exceptionOrNull()
@@ -2954,7 +2955,13 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                         viewModel.runStructuredPairedBenchmarkBatch(
                                             heldOutRows,
                                             onProgress = { done, total, result ->
-                                                status = "Проверка обеих моделей: $done / $total · ${result.taskId}"
+                                                val cooldown = when {
+                                                    done == 2 || done == 6 -> " · пауза 30 сек"
+                                                    done == 14 -> " · пауза 45 сек"
+                                                    done == 30 || (done > 30 && (done - 30) % 8 == 0) -> " · пауза 60 сек"
+                                                    else -> ""
+                                                }
+                                                status = "Проверка обеих моделей: $done / $total · ${result.taskId}$cooldown"
                                             },
                                             onComplete = { results ->
                                                 runCatching { ANS100BenchmarkJsonl.encodeStructuredPredictions(results, heldOutRows) }
