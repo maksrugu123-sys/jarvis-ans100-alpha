@@ -17,7 +17,7 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
     private fun databaseName() = "association-assessment-${UUID.randomUUID()}.db"
 
     @Test
-    fun independentAssessmentsAndWeightHistorySurviveDatabaseReopen() {
+    fun independentAssessmentsSurviveDatabaseReopen() {
         val name = databaseName()
         val candidateId = "neural-association:" + "c".repeat(32)
         val network = AndroidSparseNeuronNetwork(context, name)
@@ -68,6 +68,7 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
         val name = databaseName()
         val candidateId = "neural-association:" + "d".repeat(32)
         val network = AndroidSparseNeuronNetwork(context, name)
+        var networkClosed = false
         try {
             network.initializeHybridTopologyV2()
             val concepts = (0 until 96).map { "concept:test-$it" }
@@ -114,8 +115,18 @@ class ANS100NeuralAssociationPersistenceInstrumentedTest {
             assertTrue(history.all { it.nextWeight > it.previousWeight && it.reward == 1.0 })
             assertEquals(ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
                 network.assessNeuralAssociation(candidateId).explicitFeedbackSource)
-        } finally {
             network.close()
+            networkClosed = true
+            val reopened = AndroidSparseNeuronNetwork(context, name)
+            try {
+                assertEquals(2, reopened.neuralAssociationWeightHistory(candidateId).size)
+                assertEquals(ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER,
+                    reopened.assessNeuralAssociation(candidateId).explicitFeedbackSource)
+            } finally {
+                reopened.close()
+            }
+        } finally {
+            if (!networkClosed) network.close()
             context.deleteDatabase(name)
         }
     }
