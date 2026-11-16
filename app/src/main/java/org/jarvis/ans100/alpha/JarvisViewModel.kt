@@ -607,6 +607,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val searchIntent = AndroidWebSearchIntent.extract(clean)
+        val searchCapabilityQuestion = AndroidWebSearchIntent.isCapabilityQuestion(clean)
         val dialogueGeneration = conversationGeneration + 1L
         conversationGeneration = dialogueGeneration
         latestHybridFeedback = null
@@ -619,11 +620,15 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 hybridFeedbackMessage = null,
             ),
         )
-        if (searchIntent != null) {
+        if (searchIntent != null || searchCapabilityQuestion) {
             conversationExecutor.execute {
                 try {
-                    val results = androidWebSearch.search(searchIntent.query)
-                    val response = formatAndroidWebSearchReply(searchIntent.query, results)
+                    val response = if (searchIntent != null) {
+                        val results = androidWebSearch.search(searchIntent.query)
+                        formatAndroidWebSearchReply(searchIntent.query, results)
+                    } else {
+                        AndroidWebSearchIntent.capabilityReply()
+                    }
                     val messages = conversationCoordinator.sendWithExternalResult(clean, response)
                     mainHandler.post {
                         val current = mutableState.value
