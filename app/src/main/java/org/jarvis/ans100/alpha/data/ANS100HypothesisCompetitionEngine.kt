@@ -10,6 +10,10 @@ import java.util.Locale
  * counter-evidence remain EXPLICIT_USER assertions, not external verification.
  */
 class ANS100HypothesisCompetitionEngine {
+    companion object {
+        const val MAX_EXPLANATIONS_PER_CANDIDATE = 12
+    }
+
     enum class Status {
         NEURAL_ONLY,
         MEMORY_PATH_UNRESOLVED,
@@ -66,6 +70,7 @@ class ANS100HypothesisCompetitionEngine {
                     contradictingEvidenceCount = report.contradictingEvidenceRefs.size,
                 )
             }.sortedWith(compareBy<Explanation> { it.relationType.name }.thenBy { it.hypothesisId })
+                .take(MAX_EXPLANATIONS_PER_CANDIDATE)
 
             val hasSupport = explanations.any {
                 it.verificationStatus == ANS100ConceptMemory.VerificationStatus.SUPPORTED ||
