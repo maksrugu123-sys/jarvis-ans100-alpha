@@ -177,8 +177,8 @@ class ANS100WorkspaceConceptInputBridge {
             batch = merged,
             eligibleConceptCount = learnedConceptCount,
             activeConceptCount = conceptBatch.trace.size,
-            skippedConceptCount = approved.size - learnedConceptCount - learnedRelationCount +
-                conceptBatch.skippedSlotCount,
+            skippedConceptCount = approved.size - learnedConceptCount - learnedRelationCount -
+                relationObservations.size + conceptBatch.skippedSlotCount,
             eligibleRelationCount = eligibleRelations.size,
             learnedRelationCount = learnedRelationCount,
             activeRelationCount = activeRelations.size,
