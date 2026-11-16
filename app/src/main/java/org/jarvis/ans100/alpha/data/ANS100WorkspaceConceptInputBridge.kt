@@ -20,6 +20,8 @@ class ANS100WorkspaceConceptInputBridge {
         val verificationStatus: ANS100ConceptMemory.VerificationStatus,
         val supportingEvidenceRefs: List<String>,
         val contradictingEvidenceRefs: List<String>,
+        val supportingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
+        val contradictingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
     )
 
     data class Result(
@@ -171,6 +173,8 @@ class ANS100WorkspaceConceptInputBridge {
                 verificationStatus = verification.status,
                 supportingEvidenceRefs = verification.supportingEvidenceRefs,
                 contradictingEvidenceRefs = verification.contradictingEvidenceRefs,
+                supportingEvidenceSources = verification.supportingSources,
+                contradictingEvidenceSources = verification.contradictingSources,
             )
         }
         // C3: causal chains are separate, explicitly unresolved candidates until
@@ -200,6 +204,8 @@ class ANS100WorkspaceConceptInputBridge {
                 },
                 supportingEvidenceRefs = candidate.supportingEvidenceRefs,
                 contradictingEvidenceRefs = candidate.contradictingEvidenceRefs,
+                supportingEvidenceSources = candidate.supportingEvidenceSources,
+                contradictingEvidenceSources = candidate.contradictingEvidenceSources,
             )
         }
         val allHypothesisReports = (hypothesisReports + causalReports)
