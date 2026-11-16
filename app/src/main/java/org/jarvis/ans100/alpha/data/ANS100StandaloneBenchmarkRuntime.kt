@@ -11,7 +11,8 @@ import java.util.UUID
 class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     private val appContext = context.applicationContext
     private var lastNetworkInitializationNs = 0L
-    private var network = openNetwork()
+    private var activeStructuredInput = false
+    private var network = openNetwork(activeStructuredInput)
     private val inputAdapter = ANS100BenchmarkNeuralInputAdapter()
     private val structuredInputAdapter = ANS100StructuredBenchmarkInputAdapter()
     private val decoder = ANS100CanonicalReadoutDecoder()
@@ -64,9 +65,11 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         coldStart: Boolean,
         structuredInput: Boolean,
     ): TaskResult {
-        if (coldStart) network.close()
+        val reopenNetwork = coldStart || activeStructuredInput != structuredInput
+        if (reopenNetwork) network.close()
+        activeStructuredInput = structuredInput
         val measured = ProcessMemoryPeakSampler.measure {
-            if (coldStart) network = openNetwork()
+            if (reopenNetwork) network = openNetwork(activeStructuredInput)
             runTaskInternal(taskId, inputText, trainingLabel, structuredInput)
         }
         return measured.value.copy(
@@ -186,20 +189,31 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
 
     /** Close and recreate the isolated database before a fresh benchmark run. */
     @Synchronized
-    fun resetLearnedState() {
+    fun resetLearnedState() = resetDatabase(structuredInput = false)
+
+    /** Clears only the structured-input experiment; lexical baseline weights remain isolated. */
+    @Synchronized
+    fun resetStructuredLearnedState() = resetDatabase(structuredInput = true)
+
+    private fun resetDatabase(structuredInput: Boolean) {
         network.close()
-        if (!appContext.deleteDatabase(AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME)) {
+        activeStructuredInput = structuredInput
+        if (!appContext.deleteDatabase(databaseName(structuredInput))) {
             throw AndroidNeuronNetworkException("unable to reset isolated ANS-100 benchmark database")
         }
-        network = openNetwork()
+        network = openNetwork(structuredInput)
     }
 
-    private fun openNetwork(): AndroidSparseNeuronNetwork {
+    private fun databaseName(structuredInput: Boolean): String =
+        if (structuredInput) STRUCTURED_BENCHMARK_DATABASE_NAME
+        else AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME
+
+    private fun openNetwork(structuredInput: Boolean): AndroidSparseNeuronNetwork {
         val startedAtNs = System.nanoTime()
         return try {
             AndroidHybridTopologyV2.open(
                 appContext,
-                AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME,
+                databaseName(structuredInput),
             )
         } finally {
             lastNetworkInitializationNs = (System.nanoTime() - startedAtNs).coerceAtLeast(0L)
@@ -209,6 +223,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     override fun close() = network.close()
 
     companion object {
+        const val STRUCTURED_BENCHMARK_DATABASE_NAME = "jarvis_ans100_structured_benchmark_v1.db"
         private const val MINIMUM_TURN_STEP_NS = 1_000_000L
         private const val MAX_RUN_PASSES = 32
     }
