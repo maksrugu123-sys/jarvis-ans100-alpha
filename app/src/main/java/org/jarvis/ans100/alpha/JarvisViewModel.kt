@@ -199,7 +199,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
     private val hybridNetworkExecutor = Executors.newSingleThreadExecutor()
-    private val benchmarkExecutor = Executors.newSingleThreadExecutor()
+    private var pairedBenchmarkSequence = 0L
     private val ans100BenchmarkRuntimeDelegate = lazy {
         org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime(appContext)
     }
@@ -501,7 +501,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         trainingLabel: String? = null,
         onComplete: (Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>) -> Unit,
     ) {
-        benchmarkExecutor.execute {
+        conversationExecutor.execute {
             val result = runCatching {
                 ans100BenchmarkRuntime.runTask(taskId, inputText, trainingLabel)
             }
@@ -512,9 +512,44 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Starts the ANS-100 benchmark from an empty, isolated learning database. */
     fun resetAns100OnlyBenchmark(onComplete: (Result<Unit>) -> Unit) {
-        benchmarkExecutor.execute {
+        conversationExecutor.execute {
             val result = runCatching { ans100BenchmarkRuntime.resetLearnedState() }
             mainHandler.post { onComplete(result) }
+        }
+    }
+
+
+    data class PairedBenchmarkTaskResult(
+        val taskId: String,
+        val transformer: Result<org.jarvis.ans100.alpha.data.LiteRtLmBenchmarkResult>,
+        val ans100: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>,
+    )
+
+    /**
+     * Runs both models on identical held-out text, sequentially on one executor.
+     * Development tasks are rejected so evaluation cannot train on its own labels.
+     */
+    fun runPairedBenchmarkTask(
+        taskId: String,
+        inputText: String,
+        onComplete: (PairedBenchmarkTaskResult) -> Unit,
+    ) {
+        require(!taskId.startsWith("development:")) {
+            "paired benchmark evaluation accepts held-out tasks only"
+        }
+        conversationExecutor.execute {
+            val transformerFirst = pairedBenchmarkSequence++ % 2L == 0L
+            lateinit var transformer: Result<org.jarvis.ans100.alpha.data.LiteRtLmBenchmarkResult>
+            lateinit var ans100: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>
+            if (transformerFirst) {
+                transformer = runCatching { conversationResponseEngine.benchmarkTransformerOnly(inputText) }
+                ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+            } else {
+                ans100 = runCatching { ans100BenchmarkRuntime.runTask(taskId, inputText, null) }
+                transformer = runCatching { conversationResponseEngine.benchmarkTransformerOnly(inputText) }
+            }
+            val paired = PairedBenchmarkTaskResult(taskId, transformer, ans100)
+            mainHandler.post { onComplete(paired) }
         }
     }
 
@@ -2610,8 +2645,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         // A ViewModel can be cleared while the HTTP download is active.
         // Disconnect it first so the worker can finish and close the model engine.
         modelStore.cancelDownload()
-        conversationExecutor.execute { conversationResponseEngine.close() }
-        benchmarkExecutor.execute {
+        conversationExecutor.execute {
+            conversationResponseEngine.close()
             if (ans100BenchmarkRuntimeDelegate.isInitialized()) {
                 runCatching { ans100BenchmarkRuntime.close() }
             }
@@ -2623,7 +2658,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
         conversationExecutor.shutdown()
         hybridNetworkExecutor.shutdown()
-        benchmarkExecutor.shutdown()
         runtimeExecutor.shutdownNow()
         peerSyncExecutor.shutdownNow()
         super.onCleared()
