@@ -3008,56 +3008,6 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                 enabled = !busy && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Сравнить два механизма ANS-100") }
-            Button(
-                onClick = {
-                    busy = true
-                    status = "Сброс структурированной сети ANS-100…"
-                    viewModel.resetAns100StructuredBenchmark { reset ->
-                        reset.onFailure {
-                            busy = false
-                            status = "Не удалось сбросить structured ANS-100: ${it.message}"
-                        }.onSuccess {
-                            status = "Обучение structured ANS-100: 0 / ${developmentRows.size}"
-                            viewModel.trainAns100StructuredDevelopmentBatch(
-                                developmentRows,
-                                onProgress = { done, total, result ->
-                                    status = "Обучение structured ANS-100: $done / $total" +
-                                        (result.exceptionOrNull()?.message?.let { " · ошибка: $it" } ?: "")
-                                },
-                                onComplete = { trained ->
-                                    val failure = trained.firstOrNull { it.isFailure }?.exceptionOrNull()
-                                    if (failure != null) {
-                                        busy = false
-                                        status = "Обучение structured ANS-100 прервано: ${failure.message}"
-                                    } else {
-                                        status = "Сравнение Qwen и structured ANS-100: 0 / ${heldOutRows.size}"
-                                        viewModel.runStructuredPairedBenchmarkBatch(
-                                            heldOutRows,
-                                            onProgress = { done, total, result ->
-                                                status = "Qwen + structured ANS-100: $done / $total · ${result.taskId}"
-                                            },
-                                            onComplete = { results ->
-                                                runCatching { ANS100BenchmarkJsonl.encodeStructuredPredictions(results, heldOutRows) }
-                                                    .onSuccess {
-                                                        pendingFiles = it
-                                                        status = "Сравнение завершено. Сохраняю прогнозы…"
-                                                        transformerExportLauncher.launch("transformer_structured_predictions.jsonl")
-                                                    }
-                                                    .onFailure {
-                                                        busy = false
-                                                        status = "Не удалось подготовить structured результаты: ${it.message}"
-                                                    }
-                                            },
-                                        )
-                                    }
-                                },
-                            )
-                        }
-                    }
-                },
-                enabled = !busy && modelInstalled && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Сравнить Qwen с новым ANS-100") }
             if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (!modelInstalled) {
