@@ -212,4 +212,33 @@ class ANS100NeuralAssociationDecoderTest {
         assertTrue(result.candidates.isEmpty())
     }
 
+    @Test
+    fun candidateIdentitySurvivesDifferentConvergentTargetsAcrossTasks() {
+        val (left, right, shared) = convergentPair()
+        val traces = listOf(trace("stable:a", left, "A"), trace("stable:b", right, "B"))
+        val decoder = ANS100NeuralAssociationDecoder()
+        val fixed = decoder.decode(
+            conceptTrace = traces,
+            emittedSpikeNeuronIds = shared + setOf(left, right),
+            activatedConnectionIds = connectionsFor(left, shared) + connectionsFor(right, shared),
+        ).candidates.single()
+
+        val fixedTargets = AndroidHybridTopologyV2.conceptAssociationTargets(left) +
+            AndroidHybridTopologyV2.conceptAssociationTargets(right)
+        val grownTarget = (1_200 until 2_200).first { it !in fixedTargets }
+        val grown = listOf(
+            AndroidNeuronConnection("ans100-v5-grown-association-stable-left", left, grownTarget, 1_000_000L, 0.25),
+            AndroidNeuronConnection("ans100-v5-grown-association-stable-right", right, grownTarget, 1_000_000L, 0.25),
+        )
+        val reproduced = decoder.decode(
+            conceptTrace = traces,
+            emittedSpikeNeuronIds = setOf(left, right, grownTarget),
+            activatedConnectionIds = grown.map { it.connectionId }.toSet(),
+            grownConnections = grown,
+        ).candidates.single()
+
+        assertEquals(fixed.candidateId, reproduced.candidateId)
+        assertFalse(fixed.convergentNeuronIds == reproduced.convergentNeuronIds)
+    }
+
 }
