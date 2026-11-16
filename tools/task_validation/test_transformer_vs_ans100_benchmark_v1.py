@@ -52,11 +52,18 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
     def test_missing_predictions_count_as_wrong(self):
         report=score_predictions(self.tasks,[],"empty")
         self.assertEqual(report["answered"],0)
-        self.assertEqual(report["missing"],len(self.tasks))
+        held_out_count=sum(t["split"] != "development" for t in self.tasks)
+        self.assertEqual(report["missing"],held_out_count)
         self.assertEqual(report["accuracy_over_all_tasks"],0.0)
 
+    def test_development_predictions_are_rejected_from_held_out_scoring(self):
+        development=next(t for t in self.tasks if t["split"]=="development")
+        with self.assertRaises(ValueError):
+            score_predictions(self.tasks,[{"task_id":development["task_id"],"answer":development["expected_answer"]}],"leak")
+
     def test_duplicate_or_unknown_prediction_ids_are_rejected(self):
-        first={"task_id":self.tasks[0]["task_id"],"answer":self.tasks[0]["expected_answer"]}
+        first_task=next(t for t in self.tasks if t["split"] != "development")
+        first={"task_id":first_task["task_id"],"answer":first_task["expected_answer"]}
         with self.assertRaises(ValueError):
             score_predictions(self.tasks,[first,first],"duplicate")
         with self.assertRaises(ValueError):
@@ -69,12 +76,15 @@ class TransformerVsANS100BenchmarkV1Tests(unittest.TestCase):
             def dump(path,rows):
                 path.write_text("".join(json.dumps(row)+"\n" for row in rows),encoding="utf-8")
             dump(task_path,self.tasks)
-            dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"latency_ms":100,"peak_memory_mb":512} for t in self.tasks])
-            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","latency_ms":20,"peak_memory_mb":64} for t in self.tasks])
+            held_out=[t for t in self.tasks if t["split"] != "development"]
+            dump(transformer_path,[{"task_id":t["task_id"],"answer":t["expected_answer"],"latency_ms":100,"peak_memory_mb":512} for t in held_out])
+            dump(ans_path,[{"task_id":t["task_id"],"answer":"WRONG","latency_ms":20,"peak_memory_mb":64} for t in held_out])
             report=compare_prediction_files(task_path,transformer_path,ans_path)
             self.assertEqual(report["transformer"]["accuracy_over_all_tasks"],1.0)
             self.assertEqual(report["ans100"]["accuracy_over_all_tasks"],0.0)
-            self.assertEqual(report["paired_task_outcomes"]["transformer_only_correct"],len(self.tasks))
+            self.assertEqual(report["paired_task_outcomes"]["transformer_only_correct"],len(held_out))
+            self.assertEqual(report["task_count"],len(held_out))
+            self.assertEqual(report["excluded_training_splits"],["development"])
             self.assertEqual(report["ans100"]["peak_memory_mb"]["max"],64)
 
 if __name__ == "__main__":
