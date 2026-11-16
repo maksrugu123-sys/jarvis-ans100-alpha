@@ -16,6 +16,7 @@ class ANS100CandidateFeedbackLearner(
     enum class FeedbackSource {
         EXPLICIT_USER,
         VERIFIED_EXTERNAL_OUTCOME,
+        CONTROLLED_BENCHMARK_LABEL,
         MODEL_GENERATED,
         IMPLICIT_BEHAVIOR,
     }
