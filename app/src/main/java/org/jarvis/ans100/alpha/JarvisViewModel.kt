@@ -1055,8 +1055,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val emittedSpikeNeuronIds = LinkedHashSet<Int>().apply {
                         addAll(result.emittedSpikes.map { it.first })
                     }
-                    val coreTaintedSpikingNeuronIds = LinkedHashSet<Int>().apply {
-                        addAll(result.coreTaintedSpikingNeuronIds)
+                    val coreTaintedNeuronIds = LinkedHashSet<Int>().apply {
+                        addAll(result.coreTaintedNeuronIds)
                     }
                     val activatedConnectionIds = LinkedHashSet<String>().apply {
                         addAll(result.activatedConnectionIds)
@@ -1069,7 +1069,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         )
                         totalProcessedEvents += result.processedEvents
                         emittedSpikeNeuronIds.addAll(result.emittedSpikes.map { it.first })
-                        coreTaintedSpikingNeuronIds.addAll(result.coreTaintedSpikingNeuronIds)
+                        coreTaintedNeuronIds.addAll(result.coreTaintedNeuronIds)
                         activatedConnectionIds.addAll(result.activatedConnectionIds)
                         passes++
                     }
@@ -1148,12 +1148,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
                     val canonicalReadout = ANS100CanonicalReadoutDecoder().decode(
                         emittedSpikeNeuronIds,
-                        coreTaintedSpikingNeuronIds,
+                        coreTaintedNeuronIds,
                     )
                     latestCanonicalReadoutFeedback = null
                     pendingCanonicalReadoutFeedbackUi = null
                     val canonicalSourceSpikes = emittedSpikeNeuronIds
-                        .filterNot(coreTaintedSpikingNeuronIds::contains)
+                        .filterNot(coreTaintedNeuronIds::contains)
                         .filter(ANS100CanonicalReadoutContract::isEligibleSourceNeuron)
                         .sorted()
                         .take(ANS100CanonicalReadoutContract.MAX_SOURCE_NEURONS_PER_TURN)
