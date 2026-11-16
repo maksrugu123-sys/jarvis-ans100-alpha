@@ -209,7 +209,8 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         prediction_by_id[task_id] = row
     groups: dict[tuple[str, str], list[bool]] = defaultdict(list)
     seed_groups: dict[int, list[bool]] = defaultdict(list)
-    latencies, memories, memory_deltas, correct_by_id = [], [], [], {}
+    latencies, initializations, memories, memory_deltas, correct_by_id = [], [], [], [], {}
+    memory_scopes: set[str] = set()
     cold_warm = {True: {"latencies": [], "peaks": [], "deltas": []}, False: {"latencies": [], "peaks": [], "deltas": []}}
     for task in evaluation_tasks:
         task_id = task["task_id"]
@@ -220,6 +221,12 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         seed_groups[task["seed"]].append(correct)
         if row:
             latency, memory = row.get("latency_ms"), row.get("peak_memory_mb")
+            initialization = row.get("initialization_ms", row.get("network_initialization_ms"))
+            memory_scope = row.get("memory_measurement_scope")
+            if isinstance(memory_scope, str) and memory_scope:
+                memory_scopes.add(memory_scope)
+            if isinstance(initialization, (int, float)) and not isinstance(initialization, bool) and initialization >= 0:
+                initializations.append(float(initialization))
             memory_delta = row.get("peak_memory_delta_mb")
             cold_start = row.get("cold_start")
             if isinstance(latency, (int,float)) and not isinstance(latency,bool) and latency >= 0:
@@ -265,6 +272,8 @@ def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             for seed, outcomes in sorted(seed_groups.items())
         },
         "latency_ms":{"count":len(latencies),"median":statistics.median(latencies) if latencies else None,"p95":_percentile(latencies,0.95)},
+        "initialization_ms":{"count":len(initializations),"median":statistics.median(initializations) if initializations else None,"p95":_percentile(initializations,0.95)},
+        "memory_measurement_scope":sorted(memory_scopes),
         "peak_memory_mb":{"count":len(memories),"max":max(memories) if memories else None,"median":statistics.median(memories) if memories else None},
         "peak_memory_delta_mb":{"count":len(memory_deltas),"max":max(memory_deltas) if memory_deltas else None,"median":statistics.median(memory_deltas) if memory_deltas else None},
         "cold_vs_warm": {
@@ -296,7 +305,8 @@ def compare_prediction_files(task_path: Path, transformer_path: Path, ans100_pat
         "transformer":transformer,"ans100":ans100,
         "paired_task_outcomes":{"transformer_only_correct":transformer_wins,
             "ans100_only_correct":ans100_wins,"both_same_correctness":ties},
-        "interpretation":"Compare accuracy by split and family, then latency and peak memory. Do not declare a universal winner from this synthetic bounded benchmark."
+        "memory_interpretation":"ANDROID_PROCESS_TOTAL_PSS_NOT_PER_MODEL means the value includes the whole Android app process and must not be presented as isolated memory consumption of one model. Use separate cold-process runs for per-model RAM claims.",
+        "interpretation":"Compare accuracy by split and family, then latency, initialization and memory scope. Do not declare a universal winner from this synthetic bounded benchmark."
     }
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
