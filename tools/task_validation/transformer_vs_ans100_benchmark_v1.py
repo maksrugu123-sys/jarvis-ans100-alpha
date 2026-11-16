@@ -19,7 +19,10 @@ def _digest(text: str) -> str:
 
 def _symbol(seed: int, index: int, split: str) -> str:
     namespace = "shared" if split in ("development", "pair_disjoint") else split
-    return f"{namespace}_s{seed}_entity_{index:02d}"
+    # Development and pair-disjoint tasks draw from the same fixed vocabulary.
+    # A bounded pool makes the split test genuinely pair-disjoint rather than
+    # accidentally concept-disjoint because each split used fresh entity IDs.
+    return f"{namespace}_s{seed}_entity_{index % 32:02d}"
 
 def _render_fact(fact: dict[str, Any]) -> str:
     kind = fact["kind"]
@@ -34,14 +37,15 @@ def _render_fact(fact: dict[str, Any]) -> str:
     raise ValueError(f"unsupported fact kind: {kind}")
 
 def _task(seed: int, split: str, family: str, index: int,
-          facts: list[dict[str, Any]], question: str, expected: str) -> dict[str, Any]:
+          facts: list[dict[str, Any]], question: str, expected: str,
+          query_pair: tuple[str, str]) -> dict[str, Any]:
     facts_text = "\n".join(_render_fact(fact) for fact in facts) or "- No evidence."
     input_text = ("Use only the supplied facts. Do not assume unstated relations.\n\n"
                   f"Facts:\n{facts_text}\n\nQuestion: {question}")
     return {
         "task_id": f"{split}:{family}:s{seed}:{index:03d}",
         "seed": seed, "split": split, "family": family,
-        "facts": facts, "question": question,
+        "facts": facts, "question": question, "query_pair": list(query_pair),
         "input_text": input_text, "expected_answer": expected,
     }
 
@@ -56,7 +60,7 @@ def _make_relation_task(seed: int, index: int, split: str) -> dict[str, Any]:
     else:
         facts, qa, qb, expected = [{"kind":"relation","subject":a,"object":b,"polarity":1}], a, d, "UNKNOWN"
     question = f"What is the evidence status of 'connected' from {qa} to {qb}? Answer exactly YES, NO, or UNKNOWN."
-    return _task(seed, split, "relation_status", index, facts, question, expected)
+    return _task(seed, split, "relation_status", index, facts, question, expected, (qa, qb))
 
 def _make_two_hop_task(seed: int, index: int, split: str) -> dict[str, Any]:
     base = index * 5
@@ -68,7 +72,7 @@ def _make_two_hop_task(seed: int, index: int, split: str) -> dict[str, Any]:
         facts = [{"kind":"edge","subject":a,"object":b},{"kind":"edge","subject":d,"object":e}]
         start, end, expected = a, e, "NO"
     question = f"Is there a directed path of at most two links from {start} to {end}? Treat the listed graph as complete. Answer exactly YES or NO."
-    return _task(seed, split, "two_hop_reachability", index, facts, question, expected)
+    return _task(seed, split, "two_hop_reachability", index, facts, question, expected, (start, end))
 
 def _make_conflict_task(seed: int, index: int, split: str) -> dict[str, Any]:
     base = index * 3
@@ -83,7 +87,7 @@ def _make_conflict_task(seed: int, index: int, split: str) -> dict[str, Any]:
         facts.append({"kind":"evidence","subject":c,"object":b,"polarity":1})
     expected = ("YES", "NO", "CONFLICT", "UNKNOWN")[mode]
     question = f"Classify the evidence about the claim that {a} connects to {b}. Answer exactly YES, NO, CONFLICT, or UNKNOWN."
-    return _task(seed, split, "evidence_conflict", index, facts, question, expected)
+    return _task(seed, split, "evidence_conflict", index, facts, question, expected, (a, b))
 
 def build_tasks(seeds: Iterable[int] = SEEDS, tasks_per_split: int = 12) -> list[dict[str, Any]]:
     seed_list = tuple(seeds)
@@ -145,6 +149,21 @@ def _percentile(values: list[float], percentile: float) -> float | None:
 
 def score_predictions(tasks: list[dict[str, Any]], predictions: list[dict[str, Any]],
                       system_label: str) -> dict[str, Any]:
+    # Validate the evaluation source itself before building an ID map: duplicate
+    # IDs would otherwise silently overwrite one another and corrupt the denominator.
+    all_ids = [task.get("task_id") for task in tasks]
+    if any(not isinstance(task_id, str) or not task_id for task_id in all_ids):
+        raise ValueError("benchmark tasks require non-empty string task_id values")
+    if len(all_ids) != len(set(all_ids)):
+        raise ValueError("benchmark task IDs must be unique")
+    for task in tasks:
+        if task.get("split") not in SPLITS:
+            raise ValueError(f"unknown benchmark split: {task.get('split')!r}")
+        if task.get("family") not in FAMILIES:
+            raise ValueError(f"unknown benchmark family: {task.get('family')!r}")
+        if task.get("expected_answer") not in ANSWERS:
+            raise ValueError(f"{task.get('task_id')}: invalid canonical expected answer")
+
     # Development examples are training-only and must never affect held-out scores.
     evaluation_tasks = [task for task in tasks if task.get("split") != "development"]
     if not evaluation_tasks:
