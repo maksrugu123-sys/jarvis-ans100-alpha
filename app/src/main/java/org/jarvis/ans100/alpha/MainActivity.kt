@@ -581,6 +581,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onRunMemorySearch = viewModel::runRuntimeMemorySearch, onPreviewReasoning = viewModel::previewRuntimeReasoning,
                                 onSaveAccessToken = viewModel::saveRuntimeAccessToken, onForgetAccessToken = viewModel::forgetRuntimeAccessToken,
                                 onCheckExtension = viewModel::checkTermuxExtension, onOpenTermux = viewModel::openTermux,
+                                benchmarkViewModel = viewModel,
                             )
                         }
                     }
@@ -2597,6 +2598,7 @@ private fun SettingsPanel(
     onForgetAccessToken: () -> Unit,
     onCheckExtension: () -> Unit,
     onOpenTermux: () -> Unit,
+    benchmarkViewModel: JarvisViewModel,
 ) {
     val categories = listOf("appearance" to "Внешний вид", "model" to "Языковая модель",
         "speed" to "Скорость", "neural" to "ANS-100", "system" to "Система", "about" to "О приложении")
@@ -2771,6 +2773,7 @@ private fun SettingsPanel(
                         )
                     }
                 }
+                ANS100BenchmarkPanel(viewModel = benchmarkViewModel, modelInstalled = conversation.modelInstalled)
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         SectionHeading("Локальные сигналы", "низкоуровневый анализ формы сообщения")
@@ -2807,6 +2810,146 @@ private fun SettingsPanel(
                     }
                 }
             }
+        }
+    }
+}
+
+
+@Composable
+private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boolean) {
+    val context = LocalContext.current
+    var developmentRows by remember { mutableStateOf<List<ANS100BenchmarkDevelopmentExample>>(emptyList()) }
+    var heldOutRows by remember { mutableStateOf<List<ANS100BenchmarkBatchInput>>(emptyList()) }
+    var status by remember { mutableStateOf("Выбери два JSONL-файла, подготовленных Python-адаптером.") }
+    var busy by remember { mutableStateOf(false) }
+    var pendingFiles by remember { mutableStateOf<ANS100BenchmarkJsonl.PredictionFiles?>(null) }
+
+    val ansExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-ndjson"),
+    ) { uri: Uri? ->
+        val files = pendingFiles
+        if (uri != null && files != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(files.ans100Jsonl) }
+                    ?: error("Не удалось открыть файл ANS-100 для записи.")
+            }.onSuccess { status = "Оба файла прогнозов сохранены." }
+                .onFailure { status = "Ошибка сохранения ANS-100: ${it.message}" }
+        } else status = "Сохранение ANS-100 отменено."
+        pendingFiles = null
+        busy = false
+    }
+    val transformerExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-ndjson"),
+    ) { uri: Uri? ->
+        val files = pendingFiles
+        if (uri != null && files != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(files.transformerJsonl) }
+                    ?: error("Не удалось открыть файл Transformer для записи.")
+            }.onSuccess {
+                status = "Transformer сохранён. Выбери имя файла ANS-100."
+                ansExportLauncher.launch("ans100_predictions.jsonl")
+            }.onFailure {
+                status = "Ошибка сохранения Transformer: ${it.message}"
+                pendingFiles = null
+                busy = false
+            }
+        } else {
+            status = "Сохранение Transformer отменено."
+            pendingFiles = null
+            busy = false
+        }
+    }
+    val developmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) runCatching {
+            ANS100BenchmarkJsonl.readDevelopmentRows(context.contentResolver, uri)
+        }.onSuccess {
+            developmentRows = it
+            status = "Обучающих примеров загружено: ${it.size}."
+        }.onFailure { status = "Ошибка обучающего JSONL: ${it.message}" }
+    }
+    val heldOutPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) runCatching {
+            ANS100BenchmarkJsonl.readHeldOutRows(context.contentResolver, uri)
+        }.onSuccess {
+            heldOutRows = it
+            status = "Проверочных примеров загружено: ${it.size}."
+        }.onFailure { status = "Ошибка проверочного JSONL: ${it.message}" }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            SectionHeading("Сравнение Transformer и ANS-100", "одинаковые входы · обучение только на development")
+            Text(
+                "Загрузи JSONL обучения и проверочных входов, созданные Python-адаптером. Приложение сбросит отдельную базу ANS-100, обучит её только на development, затем запустит обе модели на одинаковых проверочных строках.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = { developmentPicker.launch(arrayOf("application/json", "application/x-ndjson", "text/plain", "*/*")) }, enabled = !busy) {
+                Text("Выбрать development JSONL (${developmentRows.size})")
+            }
+            OutlinedButton(onClick = { heldOutPicker.launch(arrayOf("application/json", "application/x-ndjson", "text/plain", "*/*")) }, enabled = !busy) {
+                Text("Выбрать held-out JSONL (${heldOutRows.size})")
+            }
+            Button(
+                onClick = {
+                    busy = true
+                    status = "Сброс изолированной памяти ANS-100…"
+                    viewModel.resetAns100OnlyBenchmark { reset ->
+                        reset.onFailure {
+                            busy = false
+                            status = "Не удалось сбросить ANS-100: ${it.message}"
+                        }.onSuccess {
+                            status = "Обучение ANS-100: 0 / ${developmentRows.size}"
+                            viewModel.trainAns100DevelopmentBatch(
+                                developmentRows,
+                                onProgress = { done, total, result ->
+                                    status = "Обучение ANS-100: $done / $total" +
+                                        (result.exceptionOrNull()?.message?.let { " · ошибка: $it" } ?: "")
+                                },
+                                onComplete = { trained ->
+                                    val failure = trained.firstOrNull { it.isFailure }?.exceptionOrNull()
+                                    if (failure != null) {
+                                        busy = false
+                                        status = "Обучение прервано: ${failure.message}"
+                                    } else {
+                                        status = "Проверка: 0 / ${heldOutRows.size}"
+                                        viewModel.runPairedBenchmarkBatch(
+                                            heldOutRows,
+                                            onProgress = { done, total, result ->
+                                                status = "Проверка обеих моделей: $done / $total · ${result.taskId}"
+                                            },
+                                            onComplete = { results ->
+                                                runCatching { ANS100BenchmarkJsonl.encodePredictions(results) }
+                                                    .onSuccess {
+                                                        pendingFiles = it
+                                                        status = "Эксперимент завершён. Сохраняю прогнозы…"
+                                                        transformerExportLauncher.launch("transformer_predictions.jsonl")
+                                                    }
+                                                    .onFailure {
+                                                        busy = false
+                                                        status = "Не удалось подготовить JSONL: ${it.message}"
+                                                    }
+                                            },
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+                },
+                enabled = !busy && modelInstalled && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (busy) "Эксперимент выполняется…" else "Начать честное сравнение") }
+            if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!modelInstalled) {
+                Text("Сначала установи Qwen3-0.6B INT4 в разделе «Языковая модель».", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            }
+            Text(
+                "Измерения пикового RAM пока не собираются. При ошибке модели в JSONL записывается null и текст ошибки; реальные значения не подменяются оценками.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
