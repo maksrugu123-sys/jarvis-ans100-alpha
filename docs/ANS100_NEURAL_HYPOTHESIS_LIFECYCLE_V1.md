@@ -67,3 +67,18 @@ These observations are passed to the existing typed concept-memory verifier. It 
 **Provenance limitation:** these workspace entries are user-entered assertions, classified as EXPLICIT_USER. They are not independent external verification and cannot be promoted to VERIFIED_TOOL merely by writing that label in the text. A future connector must supply authenticated tool provenance before an observation can be treated as externally verified.
 
 The live Android trace now exports a privacy-bounded summary of typed memory explanations beside neural co-activation hypotheses. Labels and memory IDs are hashed; only relation type, verification status and evidence counts are exported. The two streams remain separate and neither is converted into a canonical benchmark answer. This enables later analysis of where neural associations and typed memory explanations converge or disagree without pretending that either one is already a correct answer.
+
+
+## Cross-source hypothesis competition
+
+`ANS100HypothesisCompetitionEngine` compares each neural co-activation candidate with typed memory-graph explanations whose endpoint labels match the same concept pair. It preserves direction and relation type. The result is one of:
+
+- NEURAL_ONLY
+- MEMORY_PATH_UNRESOLVED
+- USER_ASSERTIONS_SUPPORT
+- USER_COUNTER_EVIDENCE
+- MIXED_USER_ASSERTIONS
+
+The engine does not select a winner or convert these states into truth. "Support" and "counter-evidence" refer only to explicit user-entered workspace assertions. A reversed typed path remains a separate directional explanation. Up to 12 explanations are retained per neural candidate.
+
+Android telemetry records the comparison status and hashed explanation IDs, relation types, direction, verification status and evidence counts. This allows benchmark analysis to ask whether a neural association is accompanied by a typed memory path, while keeping the two mechanisms separate.
