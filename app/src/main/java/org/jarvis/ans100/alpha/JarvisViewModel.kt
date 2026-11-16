@@ -650,10 +650,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private companion object {
-        const val MAX_BENCHMARK_BATCH_SIZE = 1000
-    }
-
     fun setGpuEnabled(enabled: Boolean) {
         val before = mutableState.value
         if (before.conversation.isBusy || before.conversation.gpuEnabled == enabled) return
@@ -2733,6 +2729,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     companion object {
+        private const val MAX_BENCHMARK_BATCH_SIZE = 1000
         private const val TERMUX_PACKAGE_NAME = "com.termux"
         private const val HYBRID_DIALOGUE_INPUT_STEP_NS = 10_000_000L
         private const val MAX_HYBRID_DIALOGUE_EVENTS_PER_PASS = 4_096
