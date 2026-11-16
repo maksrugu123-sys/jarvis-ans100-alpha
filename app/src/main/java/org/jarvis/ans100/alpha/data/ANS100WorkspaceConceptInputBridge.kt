@@ -33,6 +33,7 @@ class ANS100WorkspaceConceptInputBridge {
         val hypotheses: List<ANS100ConceptMemory.Hypothesis>,
         val hypothesisVerifications: List<ANS100ConceptMemory.Verification>,
         val hypothesisReports: List<HypothesisReport>,
+        val relationEvidenceCount: Int,
     ) {
         val unresolvedHypothesisCount: Int
             get() = hypothesisVerifications.count {
@@ -63,6 +64,13 @@ class ANS100WorkspaceConceptInputBridge {
             .filter { '\n' !in it.content && '\r' !in it.content }
             .sortedBy { it.id }
             .take(ANS100ConceptMemory.MAX_CONCEPTS)
+            .toList()
+        val eligibleRelationEvidence = approved.asSequence()
+            .filter { it.category.trim().lowercase(Locale.ROOT) in RELATION_EVIDENCE_CATEGORIES }
+            .filter { it.content.isNotBlank() && it.content.trim().length <= MAX_RELATION_EVIDENCE_CHARS }
+            .filter { '\n' !in it.content && '\r' !in it.content }
+            .sortedBy { it.id }
+            .take(ANS100ConceptMemory.MAX_VERIFICATION_EVIDENCE)
             .toList()
         val eligibleRelations = approved.asSequence()
             .filter { it.category.trim().lowercase(Locale.ROOT) in RELATION_CATEGORIES }
@@ -109,6 +117,23 @@ class ANS100WorkspaceConceptInputBridge {
             if (memory.learnRelation(relation)) learnedRelationCount++
         }
 
+        val relationObservations = eligibleRelationEvidence.mapNotNull { record ->
+            val parsed = parseRelationEvidence(record.content) ?: return@mapNotNull null
+            val fromIds = conceptIdsByLabel[labelKey(parsed.fromLabel)].orEmpty()
+            val toIds = conceptIdsByLabel[labelKey(parsed.toLabel)].orEmpty()
+            if (fromIds.size != 1 || toIds.size != 1 || fromIds.single() == toIds.single()) {
+                return@mapNotNull null
+            }
+            ANS100ConceptMemory.RelationEvidence(
+                fromConceptId = fromIds.single(),
+                type = parsed.type,
+                toConceptId = toIds.single(),
+                supports = parsed.supports,
+                source = ANS100ConceptMemory.LearningSource.EXPLICIT_USER,
+                evidenceRef = "workspace-memory-evidence:${record.id}",
+            )
+        }.take(ANS100ConceptMemory.MAX_VERIFICATION_EVIDENCE)
+
         val frame = ANS100NeuralInputAdapter().encode(evidenceBatch.turnId, rawUserMessage)
         val activations = ANS100ConceptActivationAdapter().activate(frame, memory)
         // Reserve the complete approved inventory once, not just concepts
@@ -134,7 +159,7 @@ class ANS100WorkspaceConceptInputBridge {
             activeConceptIds = activeConceptIds,
             limit = MAX_HYPOTHESES_PER_TURN,
         )
-        val verifications = hypotheses.map { memory.verify(it) }
+        val verifications = hypotheses.map { memory.verify(it, relationObservations) }
         val hypothesisReports = hypotheses.zip(verifications).take(MAX_REPORTED_HYPOTHESES).map { (hypothesis, verification) ->
             HypothesisReport(
                 hypothesisId = hypothesis.id,
@@ -160,6 +185,7 @@ class ANS100WorkspaceConceptInputBridge {
             hypotheses = hypotheses,
             hypothesisVerifications = verifications,
             hypothesisReports = hypothesisReports,
+            relationEvidenceCount = relationObservations.size,
         )
     }
 
@@ -167,6 +193,13 @@ class ANS100WorkspaceConceptInputBridge {
         val fromLabel: String,
         val type: ANS100ConceptMemory.RelationType,
         val toLabel: String,
+    )
+
+    private data class ParsedRelationEvidence(
+        val fromLabel: String,
+        val type: ANS100ConceptMemory.RelationType,
+        val toLabel: String,
+        val supports: Boolean,
     )
 
     private fun parseRelation(raw: String): ParsedRelation? {
@@ -183,6 +216,28 @@ class ANS100WorkspaceConceptInputBridge {
             ANS100ConceptMemory.RelationType.valueOf(typeText.uppercase(Locale.ROOT))
         }.getOrNull() ?: return null
         return ParsedRelation(from, type, to)
+    }
+
+    private fun parseRelationEvidence(raw: String): ParsedRelationEvidence? {
+        val fields = raw.split('|')
+        if (fields.size != 4) return null
+        val from = fields[0].trim()
+        val typeText = fields[1].trim()
+        val to = fields[2].trim()
+        val polarity = fields[3].trim().uppercase(Locale.ROOT)
+        if (from.isBlank() || to.isBlank() ||
+            from.length > ANS100ConceptMemory.MAX_LABEL_CHARS ||
+            to.length > ANS100ConceptMemory.MAX_LABEL_CHARS
+        ) return null
+        val type = runCatching {
+            ANS100ConceptMemory.RelationType.valueOf(typeText.uppercase(Locale.ROOT))
+        }.getOrNull() ?: return null
+        val supports = when (polarity) {
+            "SUPPORTS" -> true
+            "REFUTES" -> false
+            else -> return null
+        }
+        return ParsedRelationEvidence(from, type, to, supports)
     }
 
     private fun labelKey(value: String): String = value.trim().lowercase(Locale.ROOT)
@@ -206,14 +261,17 @@ class ANS100WorkspaceConceptInputBridge {
         hypotheses = emptyList(),
         hypothesisVerifications = emptyList(),
         hypothesisReports = emptyList(),
+        relationEvidenceCount = 0,
     )
 
     companion object {
         private const val MAX_RELATION_CHARS = 240
+        private const val MAX_RELATION_EVIDENCE_CHARS = 280
         private const val MAX_ACTIVE_RELATIONS_PER_TURN = 64
         private const val MAX_HYPOTHESES_PER_TURN = 64
         private const val MAX_REPORTED_HYPOTHESES = 12
         private val CONCEPT_CATEGORIES = setOf("concept", "понятие")
         private val RELATION_CATEGORIES = setOf("relation", "связь")
+        private val RELATION_EVIDENCE_CATEGORIES = setOf("relation_evidence", "свидетельство_связи")
     }
 }
