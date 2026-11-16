@@ -980,6 +980,7 @@ class AndroidSparseNeuronNetworkTest {
     fun coreHeuristicTaintPropagatesAcrossPersistedEventsAndBlocksCanonicalReadoutEligibility() {
         val edge = AndroidHybridTopologyV2.connections().first {
             it.sourceNeuronId == 1_200 &&
+                it.weight == AndroidHybridTopologyV2.FEED_FORWARD_WEIGHT &&
                 ANS100CanonicalReadoutContract.isEligibleSourceNeuron(it.targetNeuronId)
         }
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 16).use { network ->
