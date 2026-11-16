@@ -874,6 +874,8 @@ class AndroidSparseNeuronNetworkTest {
         }
 
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { reopened ->
+            // Replaying a previously committed turn remains idempotent after process/database reopen.
+            assertEquals(2, reopened.recordStructuralPlasticityTurn("growth-turn-2", pair).size)
             snapshots = reopened.recordStructuralPlasticityTurn("growth-turn-3", pair)
             assertEquals(listOf("growth-turn-1", "growth-turn-2", "growth-turn-3"), snapshots.map { it.turnId })
             val graph = reopened.structuralPlasticityGraphSnapshot(listOf(1_062, 1_063))
