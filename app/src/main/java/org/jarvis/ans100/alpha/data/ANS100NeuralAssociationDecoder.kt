@@ -91,9 +91,10 @@ class ANS100NeuralAssociationDecoder {
         require(emittedSpikeNeuronIds.size <= AndroidHybridTopologyV2.NEURON_COUNT)
         require(emittedSpikeNeuronIds.all { it in 0 until AndroidHybridTopologyV2.NEURON_COUNT })
         require(activatedConnectionIds.size <= AndroidHybridTopologyV2.MAX_CONNECTION_COUNT)
-        require(activatedConnectionIds.all {
-            it.startsWith("ans100-v4-evidence-general-association-") && it.length <= 128
-        })
+        val generalActivatedConnections = activatedConnectionIds.filterTo(LinkedHashSet()) {
+            it.startsWith("ans100-v4-evidence-general-association-")
+        }
+        require(generalActivatedConnections.all { it.length <= 128 })
 
         val associationSpikes = emittedSpikeNeuronIds.filterTo(LinkedHashSet()) {
             it in GENERAL_ASSOCIATION_START until GENERAL_ASSOCIATION_END
@@ -101,7 +102,7 @@ class ANS100NeuralAssociationDecoder {
         val active = conceptTrace.sortedBy { it.conceptId }.mapNotNull { trace ->
             val projection = AndroidHybridTopologyV2.conceptAssociationProjection(trace.neuronId)
             val spiking = projection.filter { (targetId, connectionId) ->
-                targetId in associationSpikes && connectionId in activatedConnectionIds
+                targetId in associationSpikes && connectionId in generalActivatedConnections
             }.keys
             if (spiking.isEmpty()) null else ActiveConcept(trace, projection, spiking)
         }
@@ -121,8 +122,8 @@ class ANS100NeuralAssociationDecoder {
                     listOf(left.projection.getValue(targetId), right.projection.getValue(targetId))
                 }.distinct().sorted()
                 val refs = buildList {
-                    add(left.trace.provenanceRef)
-                    add(right.trace.provenanceRef)
+                    add(left.trace.provenanceRef.substringBefore(":features:").take(160))
+                    add(right.trace.provenanceRef.substringBefore(":features:").take(160))
                     convergent.forEach { add("ans100-neuron:$it") }
                 }.distinct().take(5)
                 val digestInput = listOf(
