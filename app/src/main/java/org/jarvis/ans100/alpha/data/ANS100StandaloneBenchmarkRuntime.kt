@@ -97,7 +97,8 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             }
         }
 
-        val readout = decoder.decode(spikes, tainted)
+        val readout = if (completed) decoder.decode(spikes, tainted)
+            else decoder.decode(emptySet(), tainted)
         return TaskResult(
             taskId = taskId,
             answer = readout.answer?.wireValue,
