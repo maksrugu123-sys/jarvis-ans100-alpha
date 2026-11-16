@@ -14,7 +14,16 @@ The adapter connects the neutral lexical input frame to explicit concepts alread
 - Concept slots are allocated lazily and remain stable for the lifetime of one in-memory concept store; at most 138 concepts can receive dedicated input neurons in that store. Slot exhaustion is explicit. The live workspace bridge rebuilds its concept store from the approved-memory snapshot on each turn, so slot assignments are not yet a persistent cross-turn identity contract.
 - The topology's existing general evidence projection carries these pulses into the shared association population. They do not yet have dedicated learned concept assemblies or independent neural readouts.
 
-\n## Live dialogue integration\n\nThe Android ViewModel now invokes `ANS100WorkspaceConceptInputBridge` during `runHybridDialoguePass`, after the ordinary typed-evidence batch is created and before `beginHybridTurn`. The bridge merges concept pulses into that same timestamped batch; the existing runtime validates the evidence trace and concept trace together.\n\nOnly user-approved workspace records whose category is exactly `concept` or `понятие` (case-insensitive) are eligible. Their content is treated as one explicit canonical label, limited to 96 characters. Ordinary notes, unapproved entries, multiline content, and oversized labels are excluded. Matching remains exact token/adjacent-bigram grounding; no synonyms or inferred meanings are added. Messages longer than the lexical encoder's 2,048-character limit keep the evidence-only path rather than being silently truncated.\n\nThe network telemetry reports eligible approved concepts, active concept inputs, and skipped approved memory entries. A zero activation count is valid and leaves the original evidence batch unchanged. This is production-path wiring of a bounded experimental adapter, not proof that the network understands the concept or reasons independently.\n\n## Why this stage matters
+
+## Live dialogue integration
+
+The Android ViewModel now invokes `ANS100WorkspaceConceptInputBridge` during `runHybridDialoguePass`, after the ordinary typed-evidence batch is created and before `beginHybridTurn`. The bridge merges concept pulses into that same timestamped batch; the existing runtime validates the evidence trace and concept trace together.
+
+Only user-approved workspace records whose category is exactly `concept` or `понятие` (case-insensitive) are eligible. Their content is treated as one explicit canonical label, limited to 96 characters. Ordinary notes, unapproved entries, multiline content, and oversized labels are excluded. Matching remains exact token/adjacent-bigram grounding; no synonyms or inferred meanings are added. Messages longer than the lexical encoder's 2,048-character limit keep the evidence-only path rather than being silently truncated.
+
+The network telemetry reports eligible approved concepts, active concept inputs, and skipped approved memory entries. A zero activation count is valid and leaves the original evidence batch unchanged. This is production-path wiring of a bounded experimental adapter, not proof that the network understands the concept or reasons independently.
+
+## Why this stage matters
 This creates an auditable bridge from raw user-text observations to concept identities. Later stages can associate concept activations with learned assemblies in the sparse neural runtime, propose relation hypotheses, and evaluate them against evidence. The current implementation is exact lexical grounding only; it is not autonomous concept recognition.
 
 ## Next gates
@@ -22,4 +31,4 @@ This creates an auditable bridge from raw user-text observations to concept iden
 2. Map concept/relation activations to dedicated neural populations without colliding with persisted topology IDs.
 3. Have network activity produce hypothesis candidates and retain premise/evidence provenance.
 4. Evaluate ambiguous, paraphrased, multilingual, and held-out concepts separately.
-5. Prove transfer on unseen concept IDs and measure false activations, CPU, RAM, and latency before production integration.
+5. Prove transfer on unseen concept IDs and measure false activations, CPU, RAM, and latency before broad deployment.
