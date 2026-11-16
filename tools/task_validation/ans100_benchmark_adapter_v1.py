@@ -7,6 +7,7 @@ INPUT_SCHEMA = "ANS100_BENCHMARK_INPUT_V1"
 TRACE_SCHEMA = "ANS100_BENCHMARK_TRACE_V1"
 NEURAL_ORIGIN = "NEURAL_CANONICAL_READOUT"
 ANSWERS = {"YES", "NO", "UNKNOWN", "CONFLICT"}
+MAX_SHARED_INPUT_CHARS = 2048
 
 def read_jsonl(path):
     rows = []
@@ -30,6 +31,7 @@ def export_model_inputs(tasks):
         task_id, text = task.get("task_id"), task.get("input_text")
         if not isinstance(task_id, str) or not task_id or task_id in seen: raise ValueError("task IDs must be unique non-empty strings")
         if not isinstance(text, str) or not text.strip(): raise ValueError(f"{task_id}: empty input_text")
+        if len(text) > MAX_SHARED_INPUT_CHARS: raise ValueError(f"{task_id}: input exceeds shared 2048-character ANS-100 limit")
         seen.add(task_id)
         result.append({"schema": INPUT_SCHEMA, "task_id": task_id, "input_text": text,
                        "input_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()})
@@ -46,6 +48,8 @@ def export_ans100_training_rows(tasks):
             raise ValueError("training task IDs must be unique non-empty strings")
         if not isinstance(text, str) or not text.strip():
             raise ValueError(f"{task_id}: empty input_text")
+        if len(text) > MAX_SHARED_INPUT_CHARS:
+            raise ValueError(f"{task_id}: input exceeds shared 2048-character ANS-100 limit")
         if label not in ANSWERS:
             raise ValueError(f"{task_id}: invalid development training label")
         seen.add(task_id)
