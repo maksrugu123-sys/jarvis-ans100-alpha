@@ -45,7 +45,7 @@ class ANS100NeuralAssociationDecoderTest {
         val (left, right, shared) = convergentPair()
         val result = ANS100NeuralAssociationDecoder().decode(
             conceptTrace = listOf(trace("concept:a", left, "Собака"), trace("concept:b", right, "Животное")),
-            emittedSpikeNeuronIds = shared,
+            emittedSpikeNeuronIds = shared + setOf(left, right),
             activatedConnectionIds = connectionsFor(left, shared) + connectionsFor(right, shared),
         )
 
@@ -72,12 +72,14 @@ class ANS100NeuralAssociationDecoderTest {
         }
         val result = ANS100NeuralAssociationDecoder().decode(
             conceptTrace = listOf(trace("a", left, "A"), trace("b", right, "B")),
-            emittedSpikeNeuronIds = setOf(unrelated),
+            emittedSpikeNeuronIds = setOf(unrelated, left, right),
             activatedConnectionIds = connectionsFor(left, shared) + connectionsFor(right, shared),
         )
 
-        assertEquals(0, result.activeConceptCount)
+        assertEquals(2, result.activeConceptCount)
+        assertEquals(setOf("a", "b"), result.observedConceptIds.toSet())
         assertTrue(result.candidates.isEmpty())
+        assertTrue(result.candidateSetComplete)
     }
 
     @Test
@@ -86,7 +88,7 @@ class ANS100NeuralAssociationDecoderTest {
         val missingOneConceptPath = connectionsFor(left, shared)
         val result = ANS100NeuralAssociationDecoder().decode(
             conceptTrace = listOf(trace("a", left, "A"), trace("b", right, "B")),
-            emittedSpikeNeuronIds = shared,
+            emittedSpikeNeuronIds = shared + setOf(left, right),
             activatedConnectionIds = missingOneConceptPath,
         )
         assertTrue(result.candidates.isEmpty())
@@ -99,11 +101,14 @@ class ANS100NeuralAssociationDecoderTest {
         val rightOnly = AndroidHybridTopologyV2.conceptAssociationTargets(right) - shared
         val result = ANS100NeuralAssociationDecoder().decode(
             conceptTrace = listOf(trace("a", left, "A"), trace("b", right, "B")),
-            emittedSpikeNeuronIds = leftOnly + rightOnly,
+            emittedSpikeNeuronIds = leftOnly + rightOnly + setOf(left, right),
             activatedConnectionIds = connectionsFor(left, leftOnly) + connectionsFor(right, rightOnly),
         )
 
         assertTrue(result.candidates.isEmpty())
+        assertEquals(2, result.activeConceptCount)
+        assertTrue(result.pairScanComplete)
+        assertTrue(result.candidateSetComplete)
         assertFalse(result.associationSpikeCount < 0)
     }
 
@@ -113,9 +118,10 @@ class ANS100NeuralAssociationDecoderTest {
         val trace = listOf(trace("a", left, "A"), trace("b", right, "B"))
         val decoder = ANS100NeuralAssociationDecoder()
         val activated = connectionsFor(left, shared) + connectionsFor(right, shared)
-        val first = decoder.decode(trace, shared, activated)
-        val second = decoder.decode(trace, shared, activated)
-        val disabled = decoder.decode(trace, shared, activated, maxCandidates = 0)
+        val sourceSpikes = shared + setOf(left, right)
+        val first = decoder.decode(trace, sourceSpikes, activated)
+        val second = decoder.decode(trace, sourceSpikes, activated)
+        val disabled = decoder.decode(trace, sourceSpikes, activated, maxCandidates = 0)
 
         assertEquals(first.candidates, second.candidates)
         assertEquals(1, first.candidates.size)
@@ -159,7 +165,7 @@ class ANS100NeuralAssociationDecoderTest {
         )
         val result = ANS100NeuralAssociationDecoder().decode(
             conceptTrace = listOf(trace("grown:a", left, "Понятие A"), trace("grown:b", right, "Понятие B")),
-            emittedSpikeNeuronIds = setOf(grownTarget),
+            emittedSpikeNeuronIds = setOf(grownTarget, left, right),
             activatedConnectionIds = grown.map { it.connectionId }.toSet(),
             grownConnections = grown,
         )
@@ -167,6 +173,43 @@ class ANS100NeuralAssociationDecoderTest {
         assertEquals(1, result.candidates.size)
         assertEquals(listOf(grownTarget), result.candidates.single().convergentNeuronIds)
         assertEquals(grown.map { it.connectionId }.sorted(), result.candidates.single().activatedConnectionIds)
+    }
+
+    @Test
+    fun outputCapMarksCandidateSetIncomplete() {
+        val ids = (ANS100ConceptMemory.NEURAL_INPUT_START until
+            ANS100ConceptMemory.NEURAL_INPUT_START + 4).toList()
+        val target = 2_199
+        val traces = ids.mapIndexed { index, neuronId -> trace("cap.$index", neuronId, "C$index") }
+        val grown = ids.mapIndexed { index, neuronId ->
+            AndroidNeuronConnection("ans100-v5-grown-association-cap-$index", neuronId, target, 1_000_000L, 0.25)
+        }
+        val result = ANS100NeuralAssociationDecoder().decode(
+            conceptTrace = traces,
+            emittedSpikeNeuronIds = ids.toSet() + target,
+            activatedConnectionIds = grown.map { it.connectionId }.toSet(),
+            grownConnections = grown,
+        )
+        assertEquals(4, result.inputConceptCount)
+        assertEquals(4, result.activeConceptCount)
+        assertEquals(6, result.consideredPairCount)
+        assertEquals(6, result.candidateCountBeforeLimit)
+        assertEquals(3, result.candidates.size)
+        assertTrue(result.pairScanComplete)
+        assertFalse(result.candidateSetComplete)
+    }
+
+    @Test
+    fun conceptWithoutItsOwnInputSpikeIsNotEligibleForNegativeObservation() {
+        val (left, right, shared) = convergentPair()
+        val result = ANS100NeuralAssociationDecoder().decode(
+            conceptTrace = listOf(trace("a", left, "A"), trace("b", right, "B")),
+            emittedSpikeNeuronIds = shared + setOf(left),
+            activatedConnectionIds = connectionsFor(left, shared) + connectionsFor(right, shared),
+        )
+        assertEquals(listOf("a"), result.observedConceptIds)
+        assertEquals(1, result.activeConceptCount)
+        assertTrue(result.candidates.isEmpty())
     }
 
 }
