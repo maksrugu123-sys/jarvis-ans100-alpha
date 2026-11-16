@@ -140,9 +140,9 @@ class ANS100StructuredBenchmarkInputAdapter {
             )
         }
         val edge = EDGE_FACT.matchEntire(line)
-        if (edge != null) return ParsedFact(edge.groupValues[1], "directed_link", edge.groupValues[2], index)
+        if (edge != null) return Fact(edge.groupValues[1], "directed_link", edge.groupValues[2], index)
         val evidence = EVIDENCE_FACT.matchEntire(line)
-        if (evidence != null) return ParsedFact(
+        if (evidence != null) return Fact(
             evidence.groupValues[2],
             if (evidence.groupValues[1] == "supports") "evidence_supports" else "evidence_refutes",
             evidence.groupValues[3],
