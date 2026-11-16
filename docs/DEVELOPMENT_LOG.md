@@ -3188,3 +3188,14 @@ Benchmark telemetry now carries memory-derived typed explanations separately fro
 The same stage adds `ANS100HypothesisCompetitionEngine`, which cross-references actual neural association candidates with typed two-hop memory explanations for the same concept labels. It preserves relation type and direction and classifies the comparison as neural-only, unresolved memory path, user-assertion support, user counter-evidence, or mixed user assertions. It does not choose a winner or claim truth. Per-candidate alternatives are capped at 12.
 
 Benchmark traces include hashed cross-source comparison summaries. The ViewModel diagnostics now expose the number and status of neural-memory comparisons. Tests authored for directionality, unresolved paths, user support/counter-evidence, mixed assertions and privacy-safe trace export. Tests NOT RUN.
+
+
+## 2026-11-16 — Durable ANS-100 neural hypothesis lifecycle V1.1
+
+- Added an app-private SQLite checkpoint for the bounded neural hypothesis engine; the ViewModel restores it at startup and writes the state after each completed observation pass.
+- Added strict snapshot validation, atomic singleton replacement, 512 KiB payload bound, 128 default / 256 hard hypothesis limits, 512 remembered turn IDs, and eight recent observations of each polarity per hypothesis.
+- Added `MIXED_REPRODUCTION_SIGNAL` so completed convergence and non-convergence observations remain visible together instead of being collapsed into a simple positive or negative status.
+- Added a trace field reporting whether the current checkpoint save succeeded; failure is non-fatal to chat.
+- Added regression tests and persistence/semantics documentation.
+- This remains verification of repeatable neural co-activation only, not semantic truth or autonomous end-to-end reasoning. No canonical neural benchmark answer was introduced.
+- Tests, Gradle, APK/AAB, CI, GitHub Actions, and on-device inference were not run. Automatic builds remain disabled/manual-only.
