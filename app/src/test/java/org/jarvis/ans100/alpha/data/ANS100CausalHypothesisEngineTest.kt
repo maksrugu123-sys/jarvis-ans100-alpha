@@ -62,6 +62,10 @@ class ANS100CausalHypothesisEngineTest {
             candidate.status,
         )
         assertEquals(listOf("experiment:direct-support"), candidate.supportingEvidenceRefs)
+        assertEquals(
+            setOf(ANS100ConceptMemory.LearningSource.VERIFIED_TOOL),
+            candidate.supportingEvidenceSources,
+        )
     }
 
     @Test fun directCounterEvidenceAndConflictRemainExplicit() {
