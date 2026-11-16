@@ -186,6 +186,34 @@ class ANS100DecisionTest {
         )
     }
 
+    @Test
+    fun handoffPreservesMaximumLengthMessageWithinContextBudgetWithHypotheses() {
+        val longMessage = "x".repeat(TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS)
+        val longUnderstanding = LocalUnderstandingPipeline().analyze(longMessage)
+        val longEvidence = TypedEvidenceEncoder().encode(
+            TypedEvidenceInput("turn-decision-long", longMessage, longUnderstanding),
+        )
+        val report = ANS100WorkspaceConceptInputBridge.HypothesisReport(
+            hypothesisId = "hyp:long:a:b",
+            fromLabel = "A".repeat(ANS100ConceptMemory.MAX_LABEL_CHARS),
+            relationType = ANS100ConceptMemory.RelationType.IS_A,
+            toLabel = "B".repeat(ANS100ConceptMemory.MAX_LABEL_CHARS),
+            premiseEvidenceRefs = listOf("workspace-memory:" + "p".repeat(80), "workspace-memory:" + "q".repeat(80)),
+            verificationStatus = ANS100ConceptMemory.VerificationStatus.UNRESOLVED,
+            supportingEvidenceRefs = emptyList(),
+            contradictingEvidenceRefs = emptyList(),
+        )
+        val handoff = ANS100QwenHandoffBuilder().build(
+            originalUserMessage = longMessage,
+            understanding = longUnderstanding,
+            evidence = longEvidence,
+            decision = selectedDecision(longEvidence),
+            relationHypotheses = List(12) { report.copy(hypothesisId = "hyp:long:$it") },
+        )
+        assertTrue(handoff.promptContext.contains(longMessage))
+        assertTrue(handoff.promptContext.length <= ANS100QwenHandoff.MAX_CONTEXT_CHARS)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun handoffRejectsMismatchedOriginalMessage() {
         ANS100QwenHandoffBuilder().build(
