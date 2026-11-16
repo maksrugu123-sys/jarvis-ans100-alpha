@@ -39,7 +39,7 @@ Run both systems on the same target device and runtime conditions. Record the ex
 
 Use the same task order and repeat protocol. Report quality and resource use separately rather than pretending two different architectures have equal compute. If practical, run both an unrestricted-quality comparison and a fixed-device-resource comparison. Never infer RAM, CPU, or energy from parameter count alone.
 
-Missing predictions count as wrong in overall accuracy. Duplicate or unknown task IDs are rejected. The scorer reports per-split/per-family accuracy, latency median/p95, peak-memory max/median, and paired task outcomes (only Transformer correct / only ANS-100 correct / same correctness).
+Missing predictions count as wrong in overall accuracy. Duplicate or unknown task IDs are rejected. The scorer reports per-split/per-family accuracy, latency median/p95, peak-memory max/median, and paired task outcomes (only Transformer correct / only ANS-100 correct / same correctness). The `development` split is excluded from every score and paired outcome; predictions carrying development task IDs are rejected.
 
 ## Current implementation boundary
 
@@ -84,7 +84,7 @@ python3 -m tools.task_validation.transformer_vs_ans100_benchmark_v1 generate --o
 
 Each system must produce JSONL rows with `task_id`, `answer`, `latency_ms`, and `peak_memory_mb`. Resource fields may be omitted when not measured; do not invent values. The answer must be one of YES, NO, UNKNOWN, CONFLICT (or a documented canonical alias).
 
-Score both prediction files against the exact same task file:
+Score both prediction files against the exact same task file. Prediction files must contain one row for every held-out task (including explicit null answers for abstentions); development rows are training-only and must not appear:
 
 ```sh
 python3 -m tools.task_validation.transformer_vs_ans100_benchmark_v1 score --tasks benchmark/transformer_vs_ans100_tasks.jsonl --transformer benchmark/transformer_predictions.jsonl --ans100 benchmark/ans100_predictions.jsonl --report benchmark/transformer_vs_ans100_report.json
