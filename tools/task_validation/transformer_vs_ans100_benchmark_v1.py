@@ -50,8 +50,9 @@ def _task(seed: int, split: str, family: str, index: int,
     }
 
 def _make_relation_task(seed: int, index: int, split: str) -> dict[str, Any]:
-    base = index * 4
-    a, b, c, d = (_symbol(seed, base + n, split) for n in range(4))
+    # The task index selects a unique query subject within each split. Fixed
+    # offsets keep all roles distinct while reusing the shared 32-symbol pool.
+    a, b, c, d = (_symbol(seed, index + offset, split) for offset in (0, 8, 16, 24))
     mode = index % 3
     if mode == 0:
         facts, qa, qb, expected = [{"kind":"relation","subject":a,"object":b,"polarity":1}], a, b, "YES"
@@ -63,8 +64,7 @@ def _make_relation_task(seed: int, index: int, split: str) -> dict[str, Any]:
     return _task(seed, split, "relation_status", index, facts, question, expected, (qa, qb))
 
 def _make_two_hop_task(seed: int, index: int, split: str) -> dict[str, Any]:
-    base = index * 5
-    a, b, c, d, e = (_symbol(seed, base + n, split) for n in range(5))
+    a, b, c, d, e = (_symbol(seed, index + offset, split) for offset in (0, 5, 10, 15, 20))
     if index % 2 == 0:
         facts = [{"kind":"edge","subject":a,"object":b},{"kind":"edge","subject":b,"object":c},{"kind":"edge","subject":d,"object":e}]
         start, end, expected = a, c, "YES"
@@ -75,8 +75,7 @@ def _make_two_hop_task(seed: int, index: int, split: str) -> dict[str, Any]:
     return _task(seed, split, "two_hop_reachability", index, facts, question, expected, (start, end))
 
 def _make_conflict_task(seed: int, index: int, split: str) -> dict[str, Any]:
-    base = index * 3
-    a, b, c = (_symbol(seed, base + n, split) for n in range(3))
+    a, b, c = (_symbol(seed, index + offset, split) for offset in (0, 8, 16))
     mode = index % 4
     facts = []
     if mode in (0, 2):
@@ -122,6 +121,8 @@ def build_tasks(seeds: Iterable[int] = SEEDS, tasks_per_split: int = 12) -> list
         pair_held_out = [t for t in tasks if t["seed"] == seed and t["split"] == "pair_disjoint"]
         dev_pairs = {tuple(t["query_pair"]) for t in development}
         held_pairs = {tuple(t["query_pair"]) for t in pair_held_out}
+        if len(dev_pairs) != len(development) or len(held_pairs) != len(pair_held_out):
+            raise ValueError("each split must contain unique queried subject/object pairs")
         if dev_pairs.intersection(held_pairs):
             raise ValueError(
                 f"tasks_per_split={tasks_per_split} creates overlapping development/pair_disjoint query pairs"
