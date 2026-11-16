@@ -3114,6 +3114,6 @@ Added a focused regression test for coverage totals, histogram consistency, spli
 
 **Important:** the underlying sparse runtime reads the same SQLite connections table, so persisted grown edges can propagate signals once the proposal API is explicitly invoked. The production turn pipeline does not yet call it; the decoder does not yet enumerate learned proposals; no automatic reward or pruning policy is active. This is a controlled capability, not live autonomous learning.
 
-**Tests:** NOT RUN. No new instrumented test file was added in this substage. Build, APK, CI, GitHub Actions and device inference: NOT RUN.
+**Tests:** instrumented tests AUTHORED for proposal insertion/idempotency, feedback persistence across reopen, duplicate feedback replay, rejection of model-generated feedback, whole-pair mutation/removal, and preservation of base topology count. NOT RUN. Build, APK, CI, GitHub Actions and device inference: NOT RUN.
 
 **Next:** add restart/atomicity/idempotency instrumented tests; integrate the decoder with registered grown targets and evaluate new vs fixed topology on held-out combinations before enabling automatic proposal insertion.
