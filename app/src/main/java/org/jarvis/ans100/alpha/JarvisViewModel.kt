@@ -2,6 +2,8 @@ package org.jarvis.ans100.alpha
 
 import android.app.Application
 import android.content.Intent
+import android.content.ComponentCallbacks2
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.net.Uri
@@ -212,7 +214,42 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val mutableState = MutableStateFlow(JarvisUiState())
     val state: StateFlow<JarvisUiState> = mutableState.asStateFlow()
 
+    private val modelMemoryCallbacks = object : ComponentCallbacks2 {
+        override fun onTrimMemory(level: Int) {
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+                releaseModelForMemoryPressure()
+            }
+        }
+
+        override fun onLowMemory() {
+            releaseModelForMemoryPressure()
+        }
+
+        override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+        private fun releaseModelForMemoryPressure() {
+            if (!conversationResponseEngine.languageModelConfigured) return
+            // Engine access is serialized with inference, download, import and deletion.
+            conversationExecutor.execute {
+                val released = runCatching {
+                    conversationResponseEngine.releaseForMemoryPressure()
+                }.getOrDefault(false)
+                if (released) {
+                    mainHandler.post {
+                        val current = mutableState.value
+                        mutableState.value = current.copy(
+                            conversation = current.conversation.copy(
+                                backendLabel = conversationResponseEngine.backendLabel,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     init {
+        appContext.registerComponentCallbacks(modelMemoryCallbacks)
         val localMemorySnapshot = workspaceMemoryCache.snapshot()
         mutableState.value = mutableState.value.copy(
             localMemory = LocalMemoryUiState(
@@ -2207,6 +2244,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        appContext.unregisterComponentCallbacks(modelMemoryCallbacks)
         // A ViewModel can be cleared while the HTTP download is active.
         // Disconnect it first so the worker can finish and close the model engine.
         modelStore.cancelDownload()
