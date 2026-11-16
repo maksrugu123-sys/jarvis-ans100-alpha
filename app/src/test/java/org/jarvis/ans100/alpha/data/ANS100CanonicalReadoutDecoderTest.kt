@@ -131,6 +131,29 @@ class ANS100CanonicalReadoutDecoderTest {
     }
 
     @Test
+    fun coreTaintedOutputSpikesAreExcludedFromCanonicalDecision() {
+        val yes = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.YES)
+        val no = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.NO)
+        val spikes = setOf(yes.startInclusive, yes.startInclusive + 1, no.startInclusive, no.startInclusive + 1)
+        val tainted = setOf(no.startInclusive, no.startInclusive + 1)
+        val result = ANS100CanonicalReadoutDecoder().decode(spikes, tainted)
+        assertEquals(ANS100CanonicalReadoutContract.Answer.YES, result.answer)
+        assertEquals(2, result.spikeCounts[ANS100CanonicalReadoutContract.Answer.YES])
+        assertEquals(0, result.spikeCounts[ANS100CanonicalReadoutContract.Answer.NO])
+    }
+
+    @Test
+    fun onlyCoreTaintedCanonicalSpikesProduceNoLearnedSignal() {
+        val yes = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.YES)
+        val result = ANS100CanonicalReadoutDecoder().decode(
+            setOf(yes.startInclusive, yes.startInclusive + 1),
+            setOf(yes.startInclusive, yes.startInclusive + 1),
+        )
+        assertEquals(null, result.answer)
+        assertEquals(ANS100CanonicalReadoutDecoder.Result.Status.NO_LEARNED_SIGNAL, result.status)
+    }
+
+    @Test
     fun tiedCanonicalGroupsAbstainInsteadOfInventingConflict() {
         val yes = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.YES)
         val no = ANS100CanonicalReadoutContract.outputGroup(ANS100CanonicalReadoutContract.Answer.NO)
