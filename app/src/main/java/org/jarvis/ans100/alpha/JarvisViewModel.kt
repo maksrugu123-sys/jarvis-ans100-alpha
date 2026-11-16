@@ -1142,10 +1142,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         }
                     }
 
-                    val canonicalReadout = ANS100CanonicalReadoutDecoder().decode(emittedSpikeNeuronIds)
+                    val canonicalReadout = ANS100CanonicalReadoutDecoder().decode(
+                        emittedSpikeNeuronIds,
+                        result.coreTaintedSpikingNeuronIds,
+                    )
                     latestCanonicalReadoutFeedback = null
                     pendingCanonicalReadoutFeedbackUi = null
                     val canonicalSourceSpikes = emittedSpikeNeuronIds
+                        .filterNot(result.coreTaintedSpikingNeuronIds::contains)
                         .filter(ANS100CanonicalReadoutContract::isEligibleSourceNeuron)
                         .sorted()
                         .take(ANS100CanonicalReadoutContract.MAX_SOURCE_NEURONS_PER_TURN)
