@@ -912,6 +912,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val neuralAssociationResult = ANS100NeuralAssociationDecoder().decode(
                         conceptTrace = batch.conceptTrace,
                         emittedSpikeNeuronIds = emittedSpikeNeuronIds,
+                        activatedConnectionIds = activatedConnectionIds,
                     )
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
