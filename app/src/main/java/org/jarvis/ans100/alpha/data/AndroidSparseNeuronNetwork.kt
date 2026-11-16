@@ -118,6 +118,13 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
     fun addStructuralGrowthProposal(proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal): Int
+    fun recordStructuralPlasticityTurn(
+        turnId: String,
+        activeConcepts: List<ANS100ActivityDrivenStructuralPlasticity.ActiveConcept>,
+    ): List<ANS100ActivityDrivenStructuralPlasticity.TurnSnapshot>
+    fun structuralPlasticityGraphSnapshot(
+        sourceNeuronIds: List<Int>,
+    ): ANS100ActivityDrivenStructuralPlasticity.GraphSnapshot
     fun adjustStructuralSynapseWeights(feedbackId: String, connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun removeStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int
     fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double>
@@ -339,6 +346,17 @@ class AndroidSparseNeuronNetwork(
     @Synchronized
     fun addStructuralGrowthProposal(proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal): Int =
         store.addStructuralGrowthProposal(proposal)
+
+    fun recordStructuralPlasticityTurn(
+        turnId: String,
+        activeConcepts: List<ANS100ActivityDrivenStructuralPlasticity.ActiveConcept>,
+    ): List<ANS100ActivityDrivenStructuralPlasticity.TurnSnapshot> =
+        store.recordStructuralPlasticityTurn(turnId, activeConcepts)
+
+    fun structuralPlasticityGraphSnapshot(
+        sourceNeuronIds: List<Int>,
+    ): ANS100ActivityDrivenStructuralPlasticity.GraphSnapshot =
+        store.structuralPlasticityGraphSnapshot(sourceNeuronIds)
 
     @Synchronized
     fun adjustStructuralSynapseWeights(feedbackId: String, connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
@@ -817,6 +835,7 @@ private class AndroidNeuronSqliteStore(
         createConceptInputSlotTable(db)
         createStructuralSynapseRegistry(db)
         createStructuralSynapseFeedbackTable(db)
+        createStructuralPlasticityObservationTables(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL)",
         )
@@ -860,6 +879,7 @@ private class AndroidNeuronSqliteStore(
         }
         if (oldVersion < 6) createStructuralSynapseRegistry(db)
         if (oldVersion < 7) createStructuralSynapseFeedbackTable(db)
+        if (oldVersion < 8) createStructuralPlasticityObservationTables(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -882,6 +902,12 @@ private class AndroidNeuronSqliteStore(
     private fun createStructuralSynapseRegistry(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS structural_synapse_registry (connection_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, first_concept_id TEXT NOT NULL, second_concept_id TEXT NOT NULL, created_at_ms INTEGER NOT NULL, last_adjusted_at_ms INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX IF NOT EXISTS structural_synapse_proposal_idx ON structural_synapse_registry(proposal_id)")
+    }
+
+    private fun createStructuralPlasticityObservationTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS structural_plasticity_turns (sequence INTEGER PRIMARY KEY AUTOINCREMENT, turn_id TEXT NOT NULL UNIQUE, created_at_ms INTEGER NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS structural_plasticity_turn_concepts (turn_id TEXT NOT NULL, concept_id TEXT NOT NULL, neuron_id INTEGER NOT NULL, label TEXT NOT NULL, provenance_ref TEXT NOT NULL, PRIMARY KEY(turn_id, concept_id))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS structural_plasticity_concepts_turn_idx ON structural_plasticity_turn_concepts(turn_id)")
     }
 
     private fun createStructuralSynapseFeedbackTable(db: SQLiteDatabase) {
@@ -2100,7 +2126,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 7
+        private const val DATABASE_VERSION = 8
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
