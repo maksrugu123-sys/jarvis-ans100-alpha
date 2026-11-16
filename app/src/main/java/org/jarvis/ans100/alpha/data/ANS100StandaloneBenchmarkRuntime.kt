@@ -50,6 +50,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         val evidenceAuditAnswer: String? = null,
         val evidenceAuditMethod: String? = null,
         val neuralEvidenceAgreement: Boolean? = null,
+        val neuralCandidateEvidenceAuditCounts: Map<String, Int> = emptyMap(),
     )
 
     /**
@@ -224,6 +225,10 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         // B3: this audit is transparent benchmark instrumentation only. It is
         // never injected into the network and never replaces its canonical readout.
         val evidenceAudit = structuredParse?.let(evidenceVerifier::verify)
+        val candidateEvidenceAudits = if (structuredParse != null) {
+            evidenceVerifier.verifyCandidates(structuredParse, associationResult?.candidates.orEmpty())
+        } else emptyList()
+        val candidateEvidenceAuditCounts = candidateEvidenceAudits.groupingBy { it.status }.eachCount()
         return TaskResult(
             taskId = taskId,
             answer = readout.answer?.wireValue,
@@ -250,6 +255,7 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             neuralEvidenceAgreement = if (readout.answer != null && evidenceAudit != null) {
                 readout.answer.wireValue == evidenceAudit.answer
             } else null,
+            neuralCandidateEvidenceAuditCounts = candidateEvidenceAuditCounts,
         )
     }
 
