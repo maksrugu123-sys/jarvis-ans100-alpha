@@ -1300,7 +1300,7 @@ private class AndroidNeuronSqliteStore(
     override fun structuralPlasticityGraphSnapshot(
         sourceNeuronIds: List<Int>,
     ): ANS100ActivityDrivenStructuralPlasticity.GraphSnapshot {
-        if (sourceNeuronIds.size > ANS100ActivityDrivenStructuralPlasticity.MAX_ACTIVE_CONCEPTS_PER_TURN ||
+        if (sourceNeuronIds.size > ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS ||
             sourceNeuronIds.distinct().size != sourceNeuronIds.size ||
             sourceNeuronIds.any { it !in 1_062 until 1_200 }
         ) throw AndroidNeuronNetworkException("structural graph snapshot source list is outside bounds")
