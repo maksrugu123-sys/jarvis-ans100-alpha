@@ -138,6 +138,29 @@ class LocalDialogueFastPathsTest {
     }
 
     @Test
+    fun answersUnderstandingQuestionWithoutRepeatingWrongPronoun() {
+        val answer = LocalDialogueFastPaths.assistantIdentityReply("Ты понимаешь меня?")
+        assertTrue(answer!!.startsWith("Я стараюсь понимать смысл"))
+        assertTrue(answer.contains("могу ошибаться"))
+    }
+
+    @Test
+    fun listsCurrentAssistantCapabilitiesHonestly() {
+        val answer = LocalDialogueFastPaths.assistantIdentityReply("С чем ты можешь мне помочь?")
+        assertTrue(answer!!.contains("общаться с тобой локально"))
+        assertTrue(answer.contains("интернет-поиск"))
+        assertTrue(answer.contains("пока ограничены"))
+    }
+
+    @Test
+    fun explainsThatCurrentAndroidModelIsLocal() {
+        val answer = LocalDialogueFastPaths.assistantIdentityReply("Со мной сейчас разговаривает локальная языковая модель?")
+        assertTrue(answer!!.contains("Qwen3-0.6B INT4"))
+        assertTrue(answer.contains("CPU"))
+        assertTrue(answer.contains("интернет"))
+    }
+
+    @Test
     fun leavesUnrelatedQuestionsToTheLanguageModel() {
         assertNull(LocalDialogueFastPaths.assistantIdentityReply("Почему не работает сеть?"))
     }
