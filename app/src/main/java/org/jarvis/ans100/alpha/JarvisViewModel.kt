@@ -1094,6 +1094,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         pairScanComplete = neuralAssociationResult.activeConceptCount == batch.conceptTrace.size &&
                             neuralAssociationResult.consideredPairCount <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES,
                     )
+                    val hypothesisComparisons = ANS100HypothesisCompetitionEngine().compare(
+                        neuralCandidates = neuralAssociationResult.candidates,
+                        memoryHypotheses = conceptInput.hypothesisReports,
+                    )
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
                         understanding = understanding,
@@ -1118,6 +1122,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                             inferenceDurationNs = (System.nanoTime() - neuralPassStartedAtNs).coerceAtLeast(0L),
                             neuralHypotheses = neuralHypotheses,
                             memoryHypothesisReports = conceptInput.hypothesisReports,
+                            hypothesisComparisons = hypothesisComparisons,
                         )
                         benchmarkTraceStore.append(ANS100BenchmarkTraceAdapter.toJsonLine(trace))
                     }.getOrDefault(false)
@@ -1195,6 +1200,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         append("; neural_association_pairs_examined=").append(neuralAssociationResult.consideredPairCount)
                         append("; neural_association_candidates=").append(neuralAssociationResult.candidates.size)
                         append("; neural_hypotheses=").append(neuralHypotheses.size)
+                        append("; neural_memory_comparisons=").append(hypothesisComparisons.size)
+                        append("; comparison_memory_unresolved=").append(hypothesisComparisons.count { it.status == org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine.Status.MEMORY_PATH_UNRESOLVED })
+                        append("; comparison_user_support=").append(hypothesisComparisons.count { it.status == org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine.Status.USER_ASSERTIONS_SUPPORT })
+                        append("; comparison_user_counter=").append(hypothesisComparisons.count { it.status == org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine.Status.USER_COUNTER_EVIDENCE })
+                        append("; comparison_mixed_user_assertions=").append(hypothesisComparisons.count { it.status == org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine.Status.MIXED_USER_ASSERTIONS })
                         append("; benchmark_trace_saved=").append(benchmarkTraceStored)
                         append("; budgetExhausted=").append(result.budgetExhausted)
                         append("; populations=")
