@@ -84,7 +84,7 @@ object ANS100BenchmarkTraceAdapter {
 
         val root = JSONObject()
             .put("schema", SCHEMA)
-            .put("task_id", taskId?.let { JSONObject.NULL } ?: JSONObject.NULL)
+            .put("task_id", taskId ?: JSONObject.NULL)
             .put("record_kind", if (taskId == null) "LIVE_APP_TURN" else "BENCHMARK_TASK")
             .put("turn_id", evidence.turnId)
             .put("input_sha256", sha256(inputText))
