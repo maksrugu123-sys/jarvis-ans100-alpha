@@ -9,10 +9,8 @@ import java.util.UUID
  * It never reads or writes the production dialogue network.
  */
 class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
-    private val network = AndroidHybridTopologyV2.open(
-        context.applicationContext,
-        AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME,
-    )
+    private val appContext = context.applicationContext
+    private var network = openNetwork()
     private val inputAdapter = ANS100BenchmarkNeuralInputAdapter()
     private val decoder = ANS100CanonicalReadoutDecoder()
 
@@ -111,6 +109,21 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
             completed = completed,
         )
     }
+
+    /** Close and recreate the isolated database before a fresh benchmark run. */
+    @Synchronized
+    fun resetLearnedState() {
+        network.close()
+        if (!appContext.deleteDatabase(AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME)) {
+            throw AndroidNeuronNetworkException("unable to reset isolated ANS-100 benchmark database")
+        }
+        network = openNetwork()
+    }
+
+    private fun openNetwork() = AndroidHybridTopologyV2.open(
+        appContext,
+        AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME,
+    )
 
     override fun close() = network.close()
 
