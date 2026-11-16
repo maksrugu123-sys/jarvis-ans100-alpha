@@ -495,7 +495,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         conversationExecutor.execute {
             val result = runCatching {
-                conversationResponseEngine.benchmarkTransformerOnly(inputText, coldStart)
+                conversationResponseEngine.benchmarkTransformerOnly(inputText)
             }
             mainHandler.post { onComplete(result) }
         }
