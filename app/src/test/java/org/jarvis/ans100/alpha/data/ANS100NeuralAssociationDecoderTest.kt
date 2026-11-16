@@ -83,7 +83,6 @@ class ANS100NeuralAssociationDecoderTest {
     @Test
     fun aSpikingTargetWithoutBothActivatedInputSynapsesDoesNotCreateCandidate() {
         val (left, right, shared) = convergentPair()
-        val bothConnections = connectionsFor(left, shared) + connectionsFor(right, shared)
         val missingOneConceptPath = connectionsFor(left, shared)
         val result = ANS100NeuralAssociationDecoder().decode(
             conceptTrace = listOf(trace("a", left, "A"), trace("b", right, "B")),
