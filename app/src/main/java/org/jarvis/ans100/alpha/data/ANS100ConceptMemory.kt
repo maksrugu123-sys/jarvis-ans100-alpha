@@ -144,6 +144,13 @@ class ANS100ConceptMemory(
         return Verification(hypothesis.id, status, support, conflict)
     }
 
+    /** Stable bounded snapshot for read-only concept activation; callers cannot mutate memory. */
+    @Synchronized
+    fun conceptsSnapshot(limit: Int = MAX_CONCEPTS): List<Concept> {
+        require(limit in 0..MAX_CONCEPTS)
+        return concepts.values.sortedBy { it.id }.take(limit)
+    }
+
     @Synchronized fun conceptCount(): Int = concepts.size
     @Synchronized fun relationCount(): Int = relations.size
 
