@@ -1049,15 +1049,26 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 maxGrownEdgesPerConcept = org.jarvis.ans100.alpha.data.ANS100ActivityDrivenStructuralPlasticity.MAX_GROWN_EDGES_PER_CONCEPT_HARD_LIMIT,
                             )
                             learner.restoreGrownState(graph.grownConceptPairs, graph.grownEdgesByConcept)
+                            val knownTargets = graph.existingTargetsByConceptNeuron
+                                .mapValues { it.value.toMutableSet() }.toMutableMap()
+                            val incomingLoads = graph.targetIncomingEdgeCounts.toMutableMap()
                             snapshots.forEach { snapshot ->
                                 val observation = learner.observeTurn(
                                     turnId = snapshot.turnId,
                                     activeConcepts = snapshot.activeConcepts,
-                                    existingTargetsByConceptNeuron = graph.existingTargetsByConceptNeuron,
-                                    targetIncomingEdgeCounts = graph.targetIncomingEdgeCounts,
+                                    existingTargetsByConceptNeuron = knownTargets,
+                                    targetIncomingEdgeCounts = incomingLoads,
                                 )
                                 observation.emittedProposals.forEach { proposal ->
-                                    hybridNeuronNetwork.addStructuralGrowthProposal(proposal)
+                                    val inserted = hybridNeuronNetwork.addStructuralGrowthProposal(proposal)
+                                    if (inserted == 2) {
+                                        proposal.connections.forEach { connection ->
+                                            knownTargets.getOrPut(connection.sourceNeuronId) { LinkedHashSet() }
+                                                .add(connection.targetNeuronId)
+                                        }
+                                        incomingLoads[proposal.targetNeuronId] =
+                                            (incomingLoads[proposal.targetNeuronId] ?: 0) + 2
+                                    }
                                 }
                             }
                         }
