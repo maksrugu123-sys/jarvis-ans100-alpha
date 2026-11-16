@@ -6,6 +6,8 @@ This stage adds a bounded assessment layer for already decoded association candi
 
 ## Independent task evidence
 
+Association candidate IDs are now derived from the stable concept pair, not the specific convergent neuron IDs from one turn. This allows the same pair to accumulate evidence when different association paths reproduce it on later tasks.
+
 Each persisted observation names:
 - the stable association candidate ID;
 - a unique task ID;
