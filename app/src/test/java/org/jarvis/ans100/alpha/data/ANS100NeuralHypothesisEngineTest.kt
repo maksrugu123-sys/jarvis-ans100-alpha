@@ -107,6 +107,18 @@ class ANS100NeuralHypothesisEngineTest {
         assertEquals(ANS100NeuralHypothesisEngine.MAX_OBSERVATIONS_PER_HYPOTHESIS + 2, engine.exportSnapshot().observedTurnIds.size)
     }
 
+    @Test fun restoredTurnIdsCannotBeCountedTwice() {
+        val original = ANS100NeuralHypothesisEngine()
+        original.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true)
+        val restored = ANS100NeuralHypothesisEngine()
+        restored.restoreSnapshot(original.exportSnapshot())
+        val duplicate = restored.observeTurn(
+            "turn-1", setOf("concept.alpha", "concept.beta"), emptyList(), true,
+        )
+        assertTrue(duplicate.isEmpty())
+        assertEquals(1, restored.snapshot().single().observationCount)
+    }
+
     @Test fun restoreRejectsDuplicateTurnIds() {
         val engine = ANS100NeuralHypothesisEngine()
         val invalid = ANS100NeuralHypothesisEngine.Snapshot(
