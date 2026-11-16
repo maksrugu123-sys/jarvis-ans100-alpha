@@ -3042,3 +3042,10 @@ The combined Python authentication/API inventory is now **24 methods AUTHORED, N
 **Research status:** the held-out evaluator remains an offline topology/weight proxy; it does not replay historical SQLite allocation. Its promotion gate remains CLOSED. No real human-verified dataset is present.
 
 **Verification:** tests authored but NOT RUN. No Gradle build, APK, CI, GitHub Actions workflow, or device inference was run.
+
+
+### Neural association evaluation: projection-coverage diagnostics
+
+The held-out evaluator now reports deterministic topology projection coverage for the full dataset and for each training/held-out split. It counts pairs with at least one shared association target versus pairs that cannot share any target under the current three-edge concept projection. The report labels this as a necessary-condition upper bound only: an Android decoder candidate still requires both input synapses to activate and the common association neuron to spike in the same turn. Pairs with zero shared targets cannot become candidates through feedback or weight updates alone.
+
+Added a focused regression test for coverage totals, histogram consistency, split accounting, and the still-closed promotion gate. Updated the evaluation protocol documentation. **Tests NOT RUN; no Gradle build, APK, CI, or device inference.** This is a diagnostic improvement to the offline topology/weight proxy, not evidence of semantic understanding and not a promotion of learned weights into live decisions.
