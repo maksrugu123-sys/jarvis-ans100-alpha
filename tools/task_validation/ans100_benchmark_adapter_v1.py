@@ -22,7 +22,7 @@ def read_jsonl(path):
 def write_jsonl(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as stream:
-        for row in rows: stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\\n")
+        for row in rows: stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
 
 def export_model_inputs(tasks):
     result, seen = [], set()
