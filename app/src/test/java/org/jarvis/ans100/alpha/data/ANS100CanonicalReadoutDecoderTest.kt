@@ -68,6 +68,47 @@ class ANS100CanonicalReadoutDecoderTest {
     }
 
     @Test
+    fun coreCandidateSignalsCannotReachAnyCanonicalReadoutSourceThroughStaticTopology() {
+        val edges = AndroidHybridTopologyV2.connections()
+        val outgoing = edges.groupBy { it.sourceNeuronId }.mapValues { (_, values) ->
+            values.map { it.targetNeuronId }
+        }
+        val queue = java.util.ArrayDeque<Int>()
+        val reachable = HashSet<Int>()
+        repeat(ANS100CandidateSlotContract.INPUT_SIGNAL_COUNT) { offset ->
+            queue.add(ANS100CandidateSlotContract.INPUT_START + offset)
+        }
+        while (queue.isNotEmpty()) {
+            val source = queue.removeFirst()
+            if (!reachable.add(source)) continue
+            outgoing[source].orEmpty().forEach { target ->
+                if (target !in reachable) queue.addLast(target)
+            }
+        }
+        assertTrue(
+            "Core-labelled candidate lanes must not reach canonical readout input populations",
+            reachable.none(ANS100CanonicalReadoutContract::isEligibleSourceNeuron),
+        )
+        assertTrue(
+            "Core-labelled candidate lanes must not reach the four canonical output groups",
+            reachable.none { it in ANS100CanonicalReadoutContract.OUTPUT_START until ANS100CanonicalReadoutContract.OUTPUT_END },
+        )
+    }
+
+    @Test
+    fun denseSourceProjectionHasBoundedThreeOrFourWayFanInPerClass() {
+        val sources = (1_062..1_573).toList()
+        ANS100CanonicalReadoutContract.Answer.values().forEach { answer ->
+            val fanIn = sources.groupingBy {
+                ANS100CanonicalReadoutContract.outputNeuronId(answer, it)
+            }.eachCount().values
+            assertEquals(150, fanIn.size)
+            assertTrue(fanIn.all { it in 3..4 })
+            assertEquals(62, fanIn.count { it == 4 })
+        }
+    }
+
+    @Test
     fun noCanonicalOutputSpikesMeansNoSignalEvenIfLegacyCoreLaneSpikes() {
         val legacyOnly = setOf(9_400, 9_550, 9_999)
         val result = ANS100CanonicalReadoutDecoder().decode(legacyOnly)
