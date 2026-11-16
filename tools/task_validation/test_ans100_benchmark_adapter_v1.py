@@ -15,9 +15,11 @@ class AdapterTests(unittest.TestCase):
 
     def trace(self, **changes):
         row={"schema":TRACE_SCHEMA,"task_id":self.task["task_id"],"input_sha256":self.digest,
+             "answer":None,"answer_emission":"NOT_SUPPORTED_BY_CURRENT_ANS100_PIPELINE",
              "decision":{"producer":"HYBRID_POPULATION_CONTROLLER_V1","status":"SELECTED"},
-             "heuristic_sources":["CORE_INTENT_HINT","CORE_PLAN_GOAL_HINT"],
-             "neural_readout":{"canonical_answer":None,"answer_origin":None},"measurements":{}}
+             "core_input":{"heuristic_record_count":5,"heuristic_feature_ids":["CORE_INTENT_HINT"]},
+             "neural_outputs":{"unique_spiking_neurons":4},
+             "measurement":{"inference_duration_ns":None,"peak_memory_mb":None}}
         row.update(changes)
         return row
 
@@ -31,31 +33,33 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError): export_model_inputs([self.task,self.task])
         with self.assertRaises(ValueError): export_model_inputs([{"task_id":"x","input_text":" "}])
 
-    def test_heuristic_selected_status_is_not_scored(self):
+    def test_real_current_android_trace_is_valid_but_unscored(self):
         self.assertEqual(predictions_from_traces([self.trace()],self.inputs),[])
 
-    def test_explicit_neural_readout_is_scored(self):
-        row=self.trace(decision={"producer":NEURAL_ORIGIN,"status":"SELECTED"},
-            neural_readout={"canonical_answer":"YES","answer_origin":NEURAL_ORIGIN},
-            measurements={"latency_ms":12.5,"peak_memory_mb":73})
+    def test_dedicated_neural_readout_is_scorable(self):
+        row=self.trace(answer="YES",answer_emission=NEURAL_ORIGIN,
+            decision={"producer":NEURAL_ORIGIN,"status":"SELECTED"},
+            measurement={"inference_duration_ns":12_500_000,"peak_memory_mb":73})
         self.assertEqual(predictions_from_traces([row],self.inputs),
             [{"task_id":"heldout:001","answer":"YES","latency_ms":12.5,"peak_memory_mb":73}])
 
     def test_controller_cannot_claim_neural_answer(self):
-        row=self.trace(neural_readout={"canonical_answer":"YES","answer_origin":NEURAL_ORIGIN})
+        row=self.trace(answer="YES",answer_emission=NEURAL_ORIGIN)
         with self.assertRaises(ValueError): predictions_from_traces([row],self.inputs)
 
     def test_invalid_answer_and_provenance_rejected(self):
         with self.assertRaises(ValueError):
-            validate_trace(self.trace(neural_readout={"canonical_answer":"MAYBE","answer_origin":NEURAL_ORIGIN}))
+            validate_trace(self.trace(answer="MAYBE",answer_emission=NEURAL_ORIGIN,
+                decision={"producer":NEURAL_ORIGIN,"status":"SELECTED"}))
         with self.assertRaises(ValueError):
-            validate_trace(self.trace(neural_readout={"canonical_answer":"YES","answer_origin":"CORE"}))
+            validate_trace(self.trace(answer="YES",answer_emission="CORE",
+                decision={"producer":"CORE","status":"SELECTED"}))
 
     def test_hash_mismatch_rejected(self):
         with self.assertRaises(ValueError): predictions_from_traces([self.trace(input_sha256="0"*64)],self.inputs)
 
     def test_invalid_measurement_rejected(self):
         with self.assertRaises(ValueError):
-            predictions_from_traces([self.trace(measurements={"latency_ms":-1})],self.inputs)
+            predictions_from_traces([self.trace(measurement={"inference_duration_ns":-1})],self.inputs)
 
 if __name__ == "__main__": unittest.main()
