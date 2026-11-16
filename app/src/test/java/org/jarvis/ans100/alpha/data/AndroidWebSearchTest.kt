@@ -30,10 +30,16 @@ class AndroidWebSearchTest {
             "новости Android",
             AndroidWebSearchIntent.extract("Найди новости Android в интернете")?.query,
         )
+        assertEquals(
+            "погоду",
+            AndroidWebSearchIntent.extract("Ты умеешь искать в интернете погоду?")?.query,
+        )
 
         val capabilityQuestion = "Ты можешь искать в интернете?"
         assertNull(AndroidWebSearchIntent.extract(capabilityQuestion))
         assertTrue(AndroidWebSearchIntent.isCapabilityQuestion(capabilityQuestion))
+        assertTrue(AndroidWebSearchIntent.isCapabilityQuestion("Ты умеешь искать в интернете?"))
+        assertFalse(AndroidWebSearchIntent.isCapabilityQuestion("Ты можешь искать в интернете новости Android?"))
         assertTrue(AndroidWebSearchIntent.capabilityReply().startsWith("Да."))
         assertFalse(AndroidWebSearchIntent.isCapabilityQuestion("Как искать в интернете?"))
     }
