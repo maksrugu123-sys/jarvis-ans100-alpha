@@ -3199,3 +3199,16 @@ Benchmark traces include hashed cross-source comparison summaries. The ViewModel
 - Added regression tests and persistence/semantics documentation.
 - This remains verification of repeatable neural co-activation only, not semantic truth or autonomous end-to-end reasoning. No canonical neural benchmark answer was introduced.
 - Tests, Gradle, APK/AAB, CI, GitHub Actions, and on-device inference were not run. Automatic builds remain disabled/manual-only.
+
+
+## 2026-11-16 — Neural hypothesis observation integrity V1.2
+
+- Decoder eligibility now requires the concept input neuron's own spike and at least one propagated outgoing association synapse.
+- Decoder telemetry now distinguishes input concepts from actually observed concepts, reports exact observed IDs, exhaustive pair-scan status, candidate count before the output cap, and candidate-set completeness.
+- ViewModel sends only observed concept IDs to the temporal hypothesis engine. It suppresses negative/non-reproduction observations when the pair scan is incomplete or the output cap hides candidates.
+- Benchmark traces export bounded completeness counters and a hash of observed concept IDs; raw message text and fabricated canonical answers remain excluded.
+- Regression tests were authored for source-spike gating, non-convergence, and candidate truncation.
+
+**Verification:** edits and patch-anchor checks only. Kotlin tests are authored but **not run**. No Gradle test, Android/Windows build, APK/AAB, CI, GitHub Actions, or device inference was run. Changes target only `experiment/jarvis-integrated-prototype-v1`; `main` remains untouched and automatic builds remain manual-only.
+
+**Limitations:** the lifecycle verifies repeatability of network paths, not factual or semantic correctness. There is still no neural canonical answer readout, so the direct Transformer-vs-ANS-100 benchmark cannot yet score ANS-100 answers.
