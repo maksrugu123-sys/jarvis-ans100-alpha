@@ -3212,3 +3212,29 @@ Benchmark traces include hashed cross-source comparison summaries. The ViewModel
 **Verification:** edits and patch-anchor checks only. Kotlin tests are authored but **not run**. No Gradle test, Android/Windows build, APK/AAB, CI, GitHub Actions, or device inference was run. Changes target only `experiment/jarvis-integrated-prototype-v1`; `main` remains untouched and automatic builds remain manual-only.
 
 **Limitations:** the lifecycle verifies repeatability of network paths, not factual or semantic correctness. There is still no neural canonical answer readout, so the direct Transformer-vs-ANS-100 benchmark cannot yet score ANS-100 answers.
+
+## 2026-11-16 — Sparse four-class canonical readout learner reference V1
+
+**Objective:** create a trainable readout experiment that receives observed neuron activity at inference and accepts labels only through a separate, provenance-checked feedback path.
+
+**Added:**
+- `tools/neuron_runtime/canonical_readout.py` — bounded sparse one-vs-rest Hebbian reference learner for YES / NO / UNKNOWN / CONFLICT.
+- `tools/neuron_runtime/test_canonical_readout.py` — regression tests for four-class separation, abstention, ties, provenance rejection, Core candidate-input exclusion, duplicate feedback, weight bounds, and explicit calibration limitations.
+- `docs/ANS100_SPARSE_CANONICAL_READOUT_LEARNER_V1.md` — algorithm, data boundaries, limits, and Android integration gates.
+
+**Architecture decisions:**
+- Inference accepts only active neuron IDs; it has no expected-label argument.
+- Learning accepts only EXPLICIT_USER_FEEDBACK or VERIFIED_TOOL_OUTCOME events, with bounded event-ID deduplication.
+- Core candidate input neurons 1056–1061 and existing decision output neurons 9400–9999 are excluded from readout input features.
+- Four learned channels use sparse synaptic weights. Scores are not probabilities; no learned signal or a tied/low-margin result abstains.
+- This is a Python reference learner only. It is not integrated into Android, does not create physical LIF output spikes, and does not replace the current heuristic controller.
+
+**Tests:** AUTHORED — `tools/neuron_runtime/test_canonical_readout.py`.  
+**Execution:** NOT RUN — source-only development; no test execution was authorized.  
+**Android / Windows builds, APK/AAB, CI and GitHub Actions:** NOT RUN.  
+**Automatic workflows:** remain manual-only (`workflow_dispatch`).
+
+**Limitations:** no per-neuron provenance export from Android yet; the input hash is not proof against indirect label leakage; no independent held-out calibration; no measured accuracy, latency, RAM or energy. The learner is not evidence of autonomous language understanding.
+
+**Next step:** design a versioned physical four-class output population and a provenance-preserving Android adapter, without reinterpreting existing V4 SQLite databases. Before production routing, evaluate on pair-disjoint, concept-disjoint and compositional held-out data against shuffled-label and frozen/random-weight controls.
+
