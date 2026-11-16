@@ -48,3 +48,22 @@ Privacy and bounds:
 - It does not enable automatic structural-plasticity growth.
 - It does not persist hypothesis state across process restarts.
 - No tests, Gradle build, APK, CI, GitHub Actions, or on-device inference were run as part of this repository edit.
+
+
+## Typed support and counter-evidence V1
+
+The workspace bridge now accepts explicitly approved entries in category `relation_evidence` (or `свидетельство_связи`) with this exact four-field format:
+
+`source concept | RELATION_TYPE | target concept | SUPPORTS`
+
+or
+
+`source concept | RELATION_TYPE | target concept | REFUTES`
+
+Both concept labels must resolve to exactly one approved concept. Ambiguous, missing, malformed, unapproved, multiline, and overlong entries are ignored. At most 128 evidence observations are admitted per turn. Supported relation types are the existing exact enum values (IS_A, PART_OF, CAUSES, ENABLES, PREVENTS, HAS_PROPERTY, USED_FOR).
+
+These observations are passed to the existing typed concept-memory verifier. It can return SUPPORTED, REFUTED, CONFLICTING, or UNRESOLVED for a typed memory-graph hypothesis. A support and a counter-evidence record for the same typed relation yield CONFLICTING; a missing observation remains UNRESOLVED.
+
+**Provenance limitation:** these workspace entries are user-entered assertions, classified as EXPLICIT_USER. They are not independent external verification and cannot be promoted to VERIFIED_TOOL merely by writing that label in the text. A future connector must supply authenticated tool provenance before an observation can be treated as externally verified.
+
+The live Android trace now exports a privacy-bounded summary of typed memory explanations beside neural co-activation hypotheses. Labels and memory IDs are hashed; only relation type, verification status and evidence counts are exported. The two streams remain separate and neither is converted into a canonical benchmark answer. This enables later analysis of where neural associations and typed memory explanations converge or disagree without pretending that either one is already a correct answer.
