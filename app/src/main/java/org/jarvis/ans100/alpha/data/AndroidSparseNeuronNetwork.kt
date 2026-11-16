@@ -562,7 +562,7 @@ class AndroidSparseNeuronNetwork(
     fun recordNeuralAssociationEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int {
         require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
         require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
-        require(connectionIds.size in 2..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE)
+        require(connectionIds.size in 2..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE && connectionIds.size % 2 == 0)
         require(connectionIds.distinct().size == connectionIds.size)
         require(connectionIds.all { it.startsWith("ans100-v4-evidence-general-association-") })
         require(eligibility.isFinite() && eligibility in 0.0..1.0)
@@ -1299,7 +1299,7 @@ private class AndroidNeuronSqliteStore(
 
     override fun recordNeuralAssociationEligibility(turnId: String, candidateId: String,
         connectionIds: List<String>, eligibility: Double): Int {
-        if (connectionIds.isEmpty() || connectionIds.size > ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE ||
+        if (connectionIds.size !in 2..ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE || connectionIds.size % 2 != 0 ||
             connectionIds.distinct().size != connectionIds.size || !eligibility.isFinite() || eligibility !in 0.0..1.0)
             throw AndroidNeuronNetworkException("neural association eligibility is outside its bounds")
         val db = writableDatabase
@@ -1307,6 +1307,7 @@ private class AndroidNeuronSqliteStore(
         db.beginTransaction()
         try {
             db.delete("neural_association_eligibility", "created_at_ms<?", arrayOf((nowMs - MAX_DIALOGUE_ELIGIBILITY_AGE_MS).toString()))
+            val sourcesByTarget = LinkedHashMap<Int, MutableSet<Int>>()
             for (connectionId in connectionIds) {
                 val endpoints = db.rawQuery("SELECT source_id, target_id FROM connections WHERE connection_id=?",
                     arrayOf(connectionId)).use { cursor ->
@@ -1318,11 +1319,17 @@ private class AndroidNeuronSqliteStore(
                     endpoints.second !in 1_200 until 2_200 ||
                     !connectionId.startsWith("ans100-v4-evidence-general-association-"))
                     throw AndroidNeuronNetworkException("synapse is outside concept-association projection")
+                if (!sourcesByTarget.getOrPut(endpoints.second) { LinkedHashSet() }.add(endpoints.first)) {
+                    throw AndroidNeuronNetworkException("candidate repeats a concept input to the same association neuron")
+                }
                 val values = ContentValues().apply {
                     put("turn_id", turnId); put("candidate_id", candidateId); put("connection_id", connectionId)
                     put("eligibility", eligibility); put("created_at_ms", nowMs)
                 }
                 db.insertOrThrow("neural_association_eligibility", null, values)
+            }
+            if (sourcesByTarget.values.any { it.size != 2 }) {
+                throw AndroidNeuronNetworkException("each convergent association target must have exactly two concept inputs")
             }
             val excess = scalar(db, "SELECT COUNT(*) FROM neural_association_eligibility") - MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS
             if (excess > 0L) db.execSQL("DELETE FROM neural_association_eligibility WHERE rowid IN (SELECT rowid FROM neural_association_eligibility ORDER BY created_at_ms ASC, rowid ASC LIMIT ?)", arrayOf(excess))
