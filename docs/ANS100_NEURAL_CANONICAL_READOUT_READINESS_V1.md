@@ -2,55 +2,55 @@
 
 ## Purpose
 
-The app does not yet have a neural-native canonical answer readout. The existing six candidate lanes are populated from Core-generated labels (answer / clarification / abstain × support / conflict). The sparse network propagates those labels; it does not independently infer them. This stage deliberately does not rename that controller as a neural decision.
+This document began as a fail-closed readiness contract for a future neural-native readout. The active experiment now implements a first Android version of that contract, but it is not production-ready and does not establish autonomous semantic reasoning.
 
-The readiness auditor defines a fail-closed evidence contract for a future readout. It does not generate answers, train weights, alter Android runtime behavior, or claim that the current network understands natural language.
+The six legacy candidate lanes are still labelled by heuristic Core (answer / clarification / abstain × support / conflict). They remain separate from the four experimental canonical answer groups.
 
-## Required neural readout contract
+## Implemented experimental path
 
-A future implementation may emit one of YES, NO, UNKNOWN, CONFLICT only when it supplies all of the following:
+- Four dedicated canonical output groups: `YES`, `NO`, `UNKNOWN`, `CONFLICT`.
+- Output neuron range: `8800..9399`, 150 neurons per class.
+- Legacy Core-labelled output lanes remain at `9400..9999`.
+- Android hybrid topology V5 and SQLite schema V9.
+- Actual LIF synapses are created from allowlisted neural source spikes after a separate feedback event.
+- Synapses and feedback events persist in SQLite; feedback is transactional, bounded and idempotent.
+- The decoder uses actual spikes from the four canonical groups and abstains on ties or insufficient activity.
+- Canonical output synapse propagation IDs are included in run telemetry.
+- The six Core candidate input neurons `1056..1061` are rejected as sources. A static graph-reachability regression test checks that those inputs cannot reach the allowed source populations or canonical output range.
 
-- Dedicated canonical output neuron populations for all four classes.
-- Actual spiking neuron IDs from the completed ANS-100 run.
-- An exact, non-overlapping mapping from each class to its output neurons.
-- Per-class activity counts recomputed from those observed spikes.
-- A unique winning class; ties and zero-activity outputs are blocked until a separately specified abstention policy exists.
-- Explicit input provenance: RAW_NEURAL_INPUT_FRAME.
-- Explicit decision provenance: only neural runtime state fields; Core labels and heuristic candidate decisions are forbidden.
-- Producer exactly NEURAL_CANONICAL_READOUT.
-- A separate independent held-out calibration certificate before benchmark scoring.
+Allowed source populations:
 
-A spike count is not a probability. A unique winner is not evidence of correctness. The readout must be trained or adapted using disclosed supervision, evaluated on pair-disjoint, concept-disjoint and compositional held-out data, and compared with shuffled-label and fixed/random-weight controls. The calibration report must disclose class imbalance, abstention, confusion matrix, per-split results, and uncertainty.
+- `1062..1199`: persistent concept inputs.
+- `1200..2199`: general association.
+- `4000..4299`: general working state.
 
-## Auditor
+The static topology routes working state only to planning neurons `8500..8799`, not into the canonical output groups. Canonical output synapses are created only by the SQLite feedback learner.
 
-File: `tools/task_validation/neural_readout_readiness_v1.py`
+## Feedback and output safeguards
 
-The auditor distinguishes:
+Only `EXPLICIT_USER` and `VERIFIED_EXTERNAL_OUTCOME` feedback sources are accepted. Model-generated, inferred and implicit behavior are not training labels. Each turn can be consumed once; duplicate feedback IDs and repeated attempts to rate a consumed turn do not update weights again.
 
-1. `trace_valid`: the claimed answer is structurally supported by the actual dedicated output spikes and has no declared Core dependency.
-2. `benchmark_scorable`: the trace is structurally valid and carries an independent held-out calibration certificate.
+The current LIF readout uses bounded source sets (512 active source neurons per turn), 150 output buckets per class, initial synapse weight 0.25 and bounded reward updates. A dense 512-source fixture is designed so the target class crosses the LIF threshold while the three negative classes remain below it after one labelled example. This is a controlled regression fixture only: arbitrary source-set composition, collisions and sparse inputs may still produce abstention or errors.
 
-A missing or malformed readout is blocked. An uncalibrated trace may be structurally valid, but is not benchmark-scorable. The audit report never manufactures an answer from controller status, activation hints, memory assertions, or spike totals from unrelated populations.
+## What the readout does not prove
 
-Run locally when authorized:
+- A unique output-group winner is not proof of a correct answer.
+- Spike counts are not probabilities.
+- The readout has no independent held-out calibration certificate.
+- The current Core still prepares typed evidence and heuristic candidate signals for the wider dialogue pipeline.
+- The canonical readout is not the production decision producer and is not allowed to replace Core routing yet.
+- The static topology audit does not prevent a future developer from introducing an unsafe dynamic edge through the generic low-level connection API; such changes must be audited and tested.
+- No claim of natural-language understanding, general intelligence or autonomous reasoning is made.
 
-```sh
-python3 -m unittest tools.task_validation.test_neural_readout_readiness_v1 -v
-python3 -m tools.task_validation.neural_readout_readiness_v1 --traces benchmark/neural_readout_traces.jsonl --report benchmark/neural_readout_audit.json
-```
+## Remaining gates
 
-These commands were not run as part of this source-only stage.
+1. Run all new Kotlin JVM and Android instrumentation tests.
+2. Verify the actual SQLite V8→V9 migration and V4→V5 topology migration on representative persisted databases.
+3. Evaluate pair-disjoint, concept-disjoint and compositional held-out tasks.
+4. Compare against shuffled-label, frozen/random-weight and non-neural baselines.
+5. Report confusion matrix, per-class precision/recall, abstention coverage and uncertainty.
+6. Independently calibrate before any benchmark scoring.
+7. Measure RAM, CPU, latency, battery and database growth on the target Android device.
+8. Review all dynamic connection creation paths for Core-signal leakage.
 
-## Current blocker and next engineering work
-
-The existing output population (9,400–9,999) is partitioned into six heuristic candidate lanes, not four canonical answer classes. The current Core path also creates the support/conflict labels before the network runs. Therefore a genuine neural readout requires a topology/runtime revision and a disclosed training/evidence path; merely counting current readout-lane spikes cannot satisfy this contract.
-
-Next implementation work must:
-1. Allocate a versioned four-class output contract without reinterpreting existing persisted topology.
-2. Define how raw neural input and recurrent working state can drive those classes without importing Core's answer labels.
-3. Specify supervised/verified feedback, negative examples, class balance, and update bounds.
-4. Evaluate against held-out and shuffled/random controls before enabling production routing.
-5. Keep Qwen strictly downstream as verbalization of the already-decided canonical answer.
-
-No current benchmark result, autonomous-reasoning claim, or calibrated confidence is implied by this readiness contract.
+Tests, builds, CI and on-device measurements were **NOT RUN** in the latest source-only implementation stage.
