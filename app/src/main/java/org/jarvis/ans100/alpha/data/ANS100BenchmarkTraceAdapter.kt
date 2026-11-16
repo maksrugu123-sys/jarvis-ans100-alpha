@@ -30,6 +30,7 @@ object ANS100BenchmarkTraceAdapter {
         inferenceDurationNs: Long? = null,
         neuralHypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis> = emptyList(),
         memoryHypothesisReports: List<ANS100WorkspaceConceptInputBridge.HypothesisReport> = emptyList(),
+        hypothesisComparisons: List<ANS100HypothesisCompetitionEngine.Comparison> = emptyList(),
     ): JSONObject {
         require(inputText.isNotBlank() && inputText.length <= MAX_INPUT_CHARS)
         require(taskId == null || (
@@ -47,6 +48,7 @@ object ANS100BenchmarkTraceAdapter {
         require(associationResult.candidates.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
         require(neuralHypotheses.size <= ANS100NeuralHypothesisEngine.MAX_HYPOTHESES_HARD_LIMIT)
         require(memoryHypothesisReports.size <= ANS100ConceptMemory.MAX_HYPOTHESES)
+        require(hypothesisComparisons.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
 
         val heuristicRecords = evidence.records.filter { it.status == EvidenceStatus.HEURISTIC }
         val statusCounts = EvidenceStatus.values().associate { status ->
@@ -113,6 +115,25 @@ object ANS100BenchmarkTraceAdapter {
                 .put("contradicting_evidence_count", report.contradictingEvidenceRefs.size))
         }
 
+        val comparisons = JSONArray()
+        hypothesisComparisons.forEach { comparison ->
+            comparisons.put(JSONObject()
+                .put("neural_candidate_id_sha256", sha256(comparison.neuralCandidateId))
+                .put("status", comparison.status.name)
+                .put("explanations", JSONArray().apply {
+                    comparison.explanations.forEach { explanation ->
+                        put(JSONObject()
+                            .put("hypothesis_id_sha256", sha256(explanation.hypothesisId))
+                            .put("relation_type", explanation.relationType.name)
+                            .put("direction", explanation.direction.name)
+                            .put("verification_status", explanation.verificationStatus.name)
+                            .put("premise_evidence_count", explanation.premiseEvidenceCount)
+                            .put("supporting_evidence_count", explanation.supportingEvidenceCount)
+                            .put("contradicting_evidence_count", explanation.contradictingEvidenceCount))
+                    }
+                }))
+        }
+
         val root = JSONObject()
             .put("schema", SCHEMA)
             .put("task_id", taskId ?: JSONObject.NULL)
@@ -139,6 +160,7 @@ object ANS100BenchmarkTraceAdapter {
             .put("population_activity", populations)
             .put("neural_hypotheses", hypotheses)
             .put("memory_hypothesis_explanations", memoryExplanations)
+            .put("hypothesis_competition", comparisons)
             .put("measurement", JSONObject()
                 .put("inference_duration_ns", inferenceDurationNs ?: JSONObject.NULL)
                 .put("peak_memory_mb", JSONObject.NULL)
@@ -149,7 +171,8 @@ object ANS100BenchmarkTraceAdapter {
                 "Controller status is not a YES/NO/UNKNOWN/CONFLICT benchmark answer.",
                 "No expected answer or gold label is accepted or exported.",
                 "Hypothesis reproduction means repeated neural co-activation only; it does not establish factual truth.",
-                "Memory relation explanations are separate from neural hypotheses; user-entered support or counter-evidence is not independently tool-verified."
+                "Memory relation explanations are separate from neural hypotheses; user-entered support or counter-evidence is not independently tool-verified.",
+                "Hypothesis competition is a cross-reference between independent signal paths, not a calibrated winner or truth decision."
             )))
         return root
     }
