@@ -157,6 +157,30 @@ object AndroidHybridTopologyV2 {
         require(edges.map { it.connectionId }.toSet().size == edges.size)
     }
 
+    /**
+     * Returns the exact three targets used by the evidence-general-association
+     * projection for a concept input neuron. This mirrors addProjection() below;
+     * it does not create edges or infer a relation.
+     */
+    fun conceptAssociationTargets(neuronId: Int): Set<Int> {
+        val evidence = populations[0]
+        require(neuronId in ANS100ConceptMemory.NEURAL_INPUT_START until
+            ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS) {
+            "neuron is outside the reserved concept-input range"
+        }
+        require(evidence.contains(neuronId))
+        val associationStart = populations[1].startInclusive
+        val associationSize = GENERAL_ASSOCIATION_SIZE
+        return (0 until EVIDENCE_GENERAL_FAN_OUT).map { slot ->
+            val targetOffset = (
+                neuronId.toLong() * EVIDENCE_GENERAL_MULTIPLIER +
+                    slot.toLong() * EVIDENCE_GENERAL_SLOT_STEP +
+                    EVIDENCE_GENERAL_SALT
+                ) % associationSize
+            associationStart + targetOffset.toInt()
+        }.toSet()
+    }
+
     private fun slice(
         population: Population,
         offset: Int,
