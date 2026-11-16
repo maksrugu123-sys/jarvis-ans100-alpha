@@ -23,9 +23,9 @@ The deterministic generator creates 192 tasks by default (4 fixed seeds × 4 spl
 - **concept_disjoint:** symbols absent from development;
 - **compositional:** new symbol namespace and two-hop directed-path queries.
 
-Task families cover direct relation status (YES / NO / UNKNOWN), two-hop reachability (YES / NO), and evidence classification (YES / NO / CONFLICT / UNKNOWN). Each task has a single canonical expected answer.
+Task families cover direct relation status (YES / NO / UNKNOWN), two-hop reachability (YES / NO), and evidence classification (YES / NO / CONFLICT / UNKNOWN). Each task has a single canonical expected answer. The generator explicitly varies labels within each family; relation-status tasks include all three of YES, NO, and UNKNOWN in both development and pair-disjoint splits.
 
-The pair-disjoint split draws from the same bounded 32-symbol vocabulary as development while using disjoint queried subject/object pairs. The generator records each task's queried pair separately from its supporting fact edges and checks the pair-disjoint and shared-vocabulary invariants for every seed. It rejects custom task counts that would violate those guarantees instead of silently producing a weaker split. Supporting graph edges are not required to be globally disjoint: the contract is that the evaluated query pairs are new. The concept-disjoint split uses a separate symbol namespace and is checked for zero symbol overlap with development. The compositional split tests a two-link relation not supplied as a direct fact.
+The pair-disjoint split draws from the same bounded 32-symbol vocabulary as development while using disjoint queried subject/object pairs. The generator records each task's queried pair separately from its supporting fact edges and checks the pair-disjoint and shared-vocabulary invariants for every seed. It accepts 2–16 tasks per split and rejects counts outside that range or custom counts that would violate those guarantees instead of silently producing a weaker split. Supporting graph edges are not required to be globally disjoint: the contract is that the evaluated query pairs are new. The concept-disjoint split uses a separate symbol namespace and is checked for zero symbol overlap with development. The compositional split tests a two-link relation not supplied as a direct fact.
 
 ## Input fairness
 
