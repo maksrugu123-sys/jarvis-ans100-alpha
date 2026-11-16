@@ -9,6 +9,7 @@ This is the first concept-level memory substrate, distinct from lexical co-occur
 - Learning accepts only explicit user confirmation or verified tool evidence.
 - Deterministic bounded relation recall.
 - Candidate hypotheses from two-hop IS_A and PART_OF paths, retaining premise IDs and evidence references.
+- Input-scoped hypothesis generation (`generateHypothesesFor`) starts only from concept IDs activated in the current turn; unknown IDs are rejected and unrelated stored concepts are excluded.
 - Verification against direct trusted evidence: SUPPORTED, REFUTED, CONFLICTING, or UNRESOLVED.
 - CAUSES is deliberately not transitively chained; causal claims require intervention/counterfactual evaluation, not naïve graph composition.
 
