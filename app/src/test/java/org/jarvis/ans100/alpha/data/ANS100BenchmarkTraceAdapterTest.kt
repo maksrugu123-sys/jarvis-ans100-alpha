@@ -98,6 +98,41 @@ class ANS100BenchmarkTraceAdapterTest {
         assertTrue(ANS100BenchmarkTraceAdapter.toJsonLine(trace).endsWith("}"))
     }
 
+
+    @Test
+    fun exportsMemoryExplanationsSeparatelyAndHashesLabels() {
+        val (evidence, decision, telemetry) = fixture()
+        val report = ANS100WorkspaceConceptInputBridge.HypothesisReport(
+            hypothesisId = "hyp:private-memory-id",
+            fromLabel = "Private Concept A",
+            relationType = ANS100ConceptMemory.RelationType.IS_A,
+            toLabel = "Private Concept B",
+            premiseEvidenceRefs = listOf("workspace-memory:one", "workspace-memory:two"),
+            verificationStatus = ANS100ConceptMemory.VerificationStatus.CONFLICTING,
+            supportingEvidenceRefs = listOf("workspace-memory-evidence:support"),
+            contradictingEvidenceRefs = listOf("workspace-memory-evidence:counter"),
+        )
+        val trace = ANS100BenchmarkTraceAdapter.create(
+            taskId = null,
+            inputText = "test input",
+            evidence = evidence,
+            decision = decision,
+            telemetry = telemetry,
+            emittedSpikeNeuronIds = emptySet(),
+            activatedConnectionIds = emptySet(),
+            associationResult = ANS100NeuralAssociationDecoder.Result(0, 0, 0, emptyList()),
+            memoryHypothesisReports = listOf(report),
+        )
+        val explanation = trace.getJSONArray("memory_hypothesis_explanations").getJSONObject(0)
+        assertEquals("CONFLICTING", explanation.getString("verification_status"))
+        assertEquals("IS_A", explanation.getString("relation_type"))
+        assertEquals(1, explanation.getInt("supporting_evidence_count"))
+        assertEquals(1, explanation.getInt("contradicting_evidence_count"))
+        assertFalse(trace.toString().contains("Private Concept A"))
+        assertFalse(trace.toString().contains("workspace-memory:one"))
+        assertTrue(trace.toString().contains("memory_hypothesis_explanations"))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsDecisionFromAnotherTurn() {
         val (evidence, decision, telemetry) = fixture()
