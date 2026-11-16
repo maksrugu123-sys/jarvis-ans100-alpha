@@ -143,10 +143,14 @@ class ANS100ActivityDrivenStructuralPlasticityTest {
             grownConceptPairs = setOf("concept:alpha" to "concept:beta"),
             grownEdgesByConcept = mapOf("concept:alpha" to 1, "concept:beta" to 1),
         )
-        repeat(3) { index ->
-            val result = observe(learner, "restored-turn-$index")
+        val newPairSharingAlpha = listOf(concept("alpha", 1_062), concept("gamma", 1_064))
+        repeat(2) { index ->
+            val result = observe(learner, "restored-turn-$index", newPairSharingAlpha)
             assertTrue(result.emittedProposals.isEmpty())
         }
+        val blocked = observe(learner, "restored-turn-2", newPairSharingAlpha)
+        assertTrue(blocked.emittedProposals.isEmpty())
+        assertEquals(1, blocked.capacityBlockedPairCount)
         assertEquals(1, learner.grownPairCount())
     }
 
