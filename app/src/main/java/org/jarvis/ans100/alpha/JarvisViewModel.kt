@@ -937,9 +937,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         recentHistory: List<LocalConversationMessage>,
     ): DialogueNeuralAnalysis? {
         if (message.isBlank() || message.length > TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS) return null
-        val neuralPassStartedAtNs = System.nanoTime()
         return try {
             hybridNetworkExecutor.submit<DialogueNeuralAnalysis?> {
+                val neuralPassStartedAtNs = System.nanoTime()
                 try {
                     hybridNeuronNetwork.initializeHybridTopologyV2()
                     var prior = hybridNeuronNetwork.stats()
