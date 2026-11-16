@@ -2919,7 +2919,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             SectionHeading("Сравнение Transformer и ANS-100", "одинаковые входы · обучение только на development")
             Text(
-                "Загрузи JSONL обучения и проверочных входов, созданные Python-адаптером. Здесь доступны три независимых эксперимента: Qwen против лексического ANS-100, лексический против структурированного ANS-100, а также Qwen против структурированного ANS-100. В каждом варианте ANS-100 обучается только на development, а оценка проходит на одинаковых held-out заданиях.",
+                "Загрузи JSONL обучения и проверочных входов, созданные Python-адаптером. Основной эксперимент сравнивает Qwen3-0.6B INT4 со структурированным ANS-100: сеть обучается только на development, затем обе системы получают одинаковые held-out задания без ответов. Отдельный эксперимент ниже сравнивает лексический и структурированный способы подачи данных в ANS-100.",
                 style = MaterialTheme.typography.bodySmall,
             )
             OutlinedButton(onClick = { developmentPicker.launch(arrayOf("application/json", "application/x-ndjson", "text/plain", "*/*")) }, enabled = !busy) {
