@@ -56,6 +56,20 @@ class ANS100ConceptMemoryTest {
         memory().generateHypothesesFor(setOf("unknown"))
     }
 
+    @Test fun neuralInputSlotsAreStableUniqueAndBounded() {
+        val memory = memory()
+        val dogSlot = memory.neuralInputNeuronId("dog")
+        assertEquals(ANS100ConceptMemory.NEURAL_INPUT_START, dogSlot)
+        assertEquals(dogSlot, memory.neuralInputNeuronId("dog"))
+        assertTrue(memory.neuralInputNeuronId("animal") != dogSlot)
+        assertEquals(2, memory.neuralInputSlotCount())
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun neuralInputSlotCannotBeAssignedToUnknownConcept() {
+        memory().neuralInputNeuronId("unknown")
+    }
+
     @Test fun directEvidenceCanSupportRefuteOrConflictWithHypothesis() {
         val memory = memory()
         memory.learnRelation(relation("dog-mammal", "dog", ANS100ConceptMemory.RelationType.IS_A, "mammal"))
