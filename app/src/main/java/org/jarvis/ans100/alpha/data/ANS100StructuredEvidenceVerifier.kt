@@ -76,10 +76,9 @@ class ANS100StructuredEvidenceVerifier {
         val query = input.query
         if (query.relation == "directed_path_at_most_two") {
             val edges = input.facts.filter { it.relation == "directed_link" }
-            val adjacency = edges.groupBy { it.subject }.mapValues { (_, rows) -> rows.map { it.objectValue }.toSet() }
             val directPath = edges.firstOrNull {
                 it.subject == query.subject && it.objectValue == query.objectValue
-            }?.let(::listOf)
+            }?.let { listOf(it) }
             val twoHopPath = if (directPath == null) {
                 edges.asSequence()
                     .filter { it.subject == query.subject }
