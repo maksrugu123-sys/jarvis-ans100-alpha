@@ -3277,3 +3277,24 @@ Benchmark traces include hashed cross-source comparison summaries. The ViewModel
 Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (`0.01`) and made `MAX_WEIGHT_DELTA_PER_EVENT` reference that constant. Renamed the Android instrumentation test to describe the four-class synapse set accurately. No runtime behavior changed beyond removing the stale unused `0.02` constant value.
 
 **Verification:** source edits fetched from GitHub after publication. Tests/builds/CI remain **NOT RUN**.
+
+
+## 2026-11-16 — Android paired Transformer vs ANS-100 benchmark workflow
+
+**Objective:** complete the on-device JSONL path so the same held-out examples can be evaluated by Qwen-only Transformer and isolated ANS-100, with training labels confined to development.
+
+**Changed:**
+- Added `ANS100BenchmarkJsonl.kt` with strict import for `ANS100_BENCHMARK_TRAIN_V1` and `ANS100_BENCHMARK_INPUT_V1`, unique task IDs, 1,000-row and 2,048-character bounds, SHA-256 verification, held-out split allowlist, and rejection of gold-label/split fields in evaluation inputs.
+- Added an ANS-100 settings panel with Android document pickers. It imports development and held-out JSONL, resets the isolated benchmark database, trains only on development rows, executes the paired batch, and exports separate Transformer and ANS-100 prediction JSONL files.
+- Exported one row per held-out task, preserving explicit null answers and inference exceptions. Transformer rows include generation and initialization measurements; ANS-100 rows include inference time, readout status, event counts, collisions, spike counts, and network initialization time. Peak RAM is not measured and is not fabricated.
+- Updated the Python trace adapter to preserve null answers as explicit abstentions instead of dropping them.
+- Updated the scorer to report submitted rows, answered rows, abstentions, missing rows, and coverage separately. Development examples remain excluded from all evaluation scores and paired outcomes.
+- Added regression coverage for explicit null abstentions and documented the complete phone-side workflow.
+
+**Experiment protocol:** ANS-100 is reset before training. Only rows with `development:` IDs and canonical training labels are accepted. Held-out inputs are hash-checked and contain no expected answer, training label, or split field. Both models receive the same held-out text, sequentially, with alternating order. Each model's inference failure remains a separate null answer plus an error field.
+
+**Verification:** GitHub source files were fetched after updates and the Android UI/codec, JSONL schema checks, scoring coverage fields, and manual-only workflow triggers were inspected statically. Python tests, Kotlin tests, Android/Windows builds, GitHub Actions, and on-device inference: **NOT RUN**. No CI or build was triggered.
+
+**Limitations:** no pause/resume, persistent experiment history, peak-memory sampling, or automatic report generation inside the Android app yet. Use the Python scorer after exporting both prediction files. The benchmark remains synthetic and bounded; it does not establish general intelligence or a universal model winner.
+
+**Commits:** `a973453`, `4df64e5`, `830655e`, `e48f339`, `0fc653a`, `2aebc3a`, `6bff054`, `d25e6ce`, `73c51f`.
