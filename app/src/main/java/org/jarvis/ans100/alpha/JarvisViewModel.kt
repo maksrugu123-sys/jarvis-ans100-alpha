@@ -536,6 +536,154 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val ans100: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>,
     )
 
+    data class Ans100EncodingComparisonResult(
+        val taskId: String,
+        val lexical: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>,
+        val structured: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>,
+    )
+
+    data class StructuredPairedBenchmarkTaskResult(
+        val taskId: String,
+        val transformer: Result<org.jarvis.ans100.alpha.data.LiteRtLmBenchmarkResult>,
+        val ans100Structured: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>,
+    )
+
+    /** Runs the B1 role-structured encoder without changing the legacy lexical baseline. */
+    fun runAns100StructuredOnlyBenchmark(
+        taskId: String,
+        inputText: String,
+        trainingLabel: String? = null,
+        onComplete: (Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>) -> Unit,
+    ) {
+        conversationExecutor.execute {
+            val result = runCatching {
+                ans100BenchmarkRuntime.runStructuredTask(taskId, inputText, trainingLabel)
+            }
+            mainHandler.post { onComplete(result) }
+        }
+    }
+
+    fun resetAns100StructuredBenchmark(onComplete: (Result<Unit>) -> Unit) {
+        conversationExecutor.execute {
+            val result = runCatching { ans100BenchmarkRuntime.resetStructuredLearnedState() }
+            mainHandler.post { onComplete(result) }
+        }
+    }
+
+    /** Development labels are accepted only by the isolated structured database. */
+    fun trainAns100StructuredDevelopmentBatch(
+        examples: List<ANS100BenchmarkDevelopmentExample>,
+        onProgress: (completed: Int, total: Int, result: Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>) -> Unit,
+        onComplete: (List<Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>>) -> Unit,
+    ) {
+        require(examples.isNotEmpty() && examples.size <= MAX_BENCHMARK_BATCH_SIZE)
+        require(examples.map { it.taskId }.distinct().size == examples.size)
+        require(examples.all {
+            it.taskId.startsWith("development:") &&
+                it.inputText.isNotBlank() &&
+                it.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS &&
+                it.trainingLabel.uppercase() in setOf("YES", "NO", "UNKNOWN", "CONFLICT")
+        }) { "structured training accepts only valid development examples" }
+        conversationExecutor.execute {
+            val results = ArrayList<Result<org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime.TaskResult>>(examples.size)
+            examples.forEachIndexed { index, example ->
+                val result = runCatching {
+                    val trained = ans100BenchmarkRuntime.runStructuredTask(
+                        example.taskId, example.inputText, example.trainingLabel,
+                    )
+                    check(trained.completed) { "${example.taskId}: structured network did not drain its queue" }
+                    check(trained.trainingApplied) { "${example.taskId}: no structured readout synapse update was applied" }
+                    trained
+                }
+                results.add(result)
+                mainHandler.post { onProgress(index + 1, examples.size, result) }
+            }
+            mainHandler.post { onComplete(results) }
+        }
+    }
+
+    /** Direct paired comparison of lexical and role-structured ANS on identical held-out rows. */
+    fun runAns100EncodingComparisonBatch(
+        inputs: List<ANS100BenchmarkBatchInput>,
+        onProgress: (completed: Int, total: Int, result: Ans100EncodingComparisonResult) -> Unit,
+        onComplete: (List<Ans100EncodingComparisonResult>) -> Unit,
+    ) {
+        require(inputs.isNotEmpty() && inputs.size <= MAX_BENCHMARK_BATCH_SIZE)
+        require(inputs.map { it.taskId }.distinct().size == inputs.size)
+        require(inputs.all {
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(it.taskId::startsWith) &&
+                it.inputText.isNotBlank() &&
+                it.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS
+        }) { "encoding comparison accepts only valid held-out inputs" }
+        conversationExecutor.execute {
+            val results = ArrayList<Ans100EncodingComparisonResult>(inputs.size)
+            inputs.forEachIndexed { index, input ->
+                val lexical = runCatching {
+                    ans100BenchmarkRuntime.runTask(input.taskId, input.inputText, null, coldStart = true)
+                }
+                val structured = runCatching {
+                    ans100BenchmarkRuntime.runStructuredTask(input.taskId, input.inputText, null, coldStart = true)
+                }
+                val result = Ans100EncodingComparisonResult(input.taskId, lexical, structured)
+                results.add(result)
+                mainHandler.post { onProgress(index + 1, inputs.size, result) }
+            }
+            mainHandler.post { onComplete(results) }
+        }
+    }
+
+    /** Qwen versus structured ANS on exactly the same held-out input. */
+    fun runStructuredPairedBenchmarkTask(
+        taskId: String,
+        inputText: String,
+        onComplete: (StructuredPairedBenchmarkTaskResult) -> Unit,
+    ) {
+        require(listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(taskId::startsWith))
+        require(inputText.isNotBlank() &&
+            inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS)
+        conversationExecutor.execute {
+            val result = if (pairedBenchmarkSequence++ % 2L == 0L) {
+                val transformer = runCatching { conversationResponseEngine.benchmarkTransformerOnly(inputText, true) }
+                val structured = runCatching { ans100BenchmarkRuntime.runStructuredTask(taskId, inputText, null, true) }
+                StructuredPairedBenchmarkTaskResult(taskId, transformer, structured)
+            } else {
+                val structured = runCatching { ans100BenchmarkRuntime.runStructuredTask(taskId, inputText, null, true) }
+                val transformer = runCatching { conversationResponseEngine.benchmarkTransformerOnly(inputText, true) }
+                StructuredPairedBenchmarkTaskResult(taskId, transformer, structured)
+            }
+            mainHandler.post { onComplete(result) }
+        }
+    }
+
+    fun runStructuredPairedBenchmarkBatch(
+        inputs: List<ANS100BenchmarkBatchInput>,
+        onProgress: (completed: Int, total: Int, result: StructuredPairedBenchmarkTaskResult) -> Unit,
+        onComplete: (List<StructuredPairedBenchmarkTaskResult>) -> Unit,
+    ) {
+        require(inputs.isNotEmpty() && inputs.size <= MAX_BENCHMARK_BATCH_SIZE)
+        require(inputs.map { it.taskId }.distinct().size == inputs.size)
+        require(inputs.all {
+            listOf("pair_disjoint:", "concept_disjoint:", "compositional:").any(it.taskId::startsWith) &&
+                it.inputText.isNotBlank() &&
+                it.inputText.length <= org.jarvis.ans100.alpha.data.ANS100AssociativeFeatureEncoder.MAX_INPUT_CHARS
+        }) { "structured paired evaluation accepts only valid held-out inputs" }
+        conversationExecutor.execute {
+            val results = ArrayList<StructuredPairedBenchmarkTaskResult>(inputs.size)
+            inputs.forEachIndexed { index, input ->
+                val transformer = runCatching {
+                    conversationResponseEngine.benchmarkTransformerOnly(input.inputText, true)
+                }
+                val structured = runCatching {
+                    ans100BenchmarkRuntime.runStructuredTask(input.taskId, input.inputText, null, true)
+                }
+                val result = StructuredPairedBenchmarkTaskResult(input.taskId, transformer, structured)
+                results.add(result)
+                mainHandler.post { onProgress(index + 1, inputs.size, result) }
+            }
+            mainHandler.post { onComplete(results) }
+        }
+    }
+
     /**
      * Runs both models on identical held-out text, sequentially on one executor.
      * Development tasks are rejected so evaluation cannot train on its own labels.
