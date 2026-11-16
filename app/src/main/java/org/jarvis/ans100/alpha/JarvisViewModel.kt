@@ -745,7 +745,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val memory = android.app.ActivityManager.MemoryInfo()
         manager?.getMemoryInfo(memory)
         if (memory.lowMemory) return "Android reported low memory."
-        if (memory.availMem in 1L until (256L * 1024L * 1024L)) {
+        if (memory.availMem < 256L * 1024L * 1024L) {
             return "Available system memory fell below 256 MiB."
         }
         val processPssMb = android.os.Debug.getPss().toLong() / 1024L
