@@ -49,7 +49,7 @@ Existing components:
 
 A reproduced co-activation is only a repeatable neural signal. It is not proof of semantic truth or causality.
 
-**Evidence provenance is preserved end-to-end:** each support/refutation report now carries the originating `LearningSource`. Competition distinguishes `EXPLICIT_USER` assertions from `VERIFIED_TOOL` evidence; mixed-source evidence and unclassified evidence are not silently relabelled as user claims or verified facts. The workspace bridge currently imports its approved relation records as `EXPLICIT_USER`, so its support/refutation remains user assertion evidence unless a future trusted-tool ingestion path is explicitly added. The trace exports source categories, never raw evidence references.
+**Evidence provenance is preserved end-to-end:** each support/refutation report now carries the originating `LearningSource`. Competition distinguishes `EXPLICIT_USER` assertions from `VERIFIED_TOOL` evidence; mixed-source evidence and unclassified evidence are not silently relabelled as user claims or verified facts. The workspace bridge currently imports its approved relation records as `EXPLICIT_USER`, so its support/refutation remains user assertion evidence unless a future trusted-tool ingestion path is explicitly added. `VERIFIED_TOOL` is an origin category, not a cryptographic attestation or proof of source independence; a real tool-ingestion path must bind it to trusted execution and auditable provenance. The trace exports source categories, never raw evidence references.
 
 ## C5 — integrated turn cycle
 
