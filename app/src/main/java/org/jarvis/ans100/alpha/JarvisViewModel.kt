@@ -52,6 +52,9 @@ import org.jarvis.ans100.alpha.data.ANS100QwenHandoffBuilder
 import org.jarvis.ans100.alpha.data.LocalUnderstandingPipeline
 import org.jarvis.ans100.alpha.data.ANS100WorkspaceConceptInputBridge
 import org.jarvis.ans100.alpha.data.ANS100NeuralAssociationDecoder
+import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisEngine
+import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceAdapter
+import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceStore
 import java.util.UUID
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
 import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
@@ -205,6 +208,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         SharedPreferencesLocalWorkspaceMemoryStorage(application.applicationContext),
     )
     private val workspaceConceptInputBridge = ANS100WorkspaceConceptInputBridge()
+    private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine()
+    private val benchmarkTraceStore = ANS100BenchmarkTraceStore(appContext.filesDir)
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
@@ -932,6 +937,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         recentHistory: List<LocalConversationMessage>,
     ): DialogueNeuralAnalysis? {
         if (message.isBlank() || message.length > TypedEvidenceEncoder.MAX_RAW_MESSAGE_CHARS) return null
+        val neuralPassStartedAtNs = System.nanoTime()
         return try {
             hybridNetworkExecutor.submit<DialogueNeuralAnalysis?> {
                 try {
@@ -1080,6 +1086,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         activatedConnectionIds = activatedConnectionIds,
                         grownConnections = learnedAssociationConnections,
                     )
+                    val neuralHypotheses = neuralHypothesisEngine.observeTurn(
+                        turnId = turnId,
+                        activeConceptIds = batch.conceptTrace.map { it.conceptId }.toSet(),
+                        candidates = neuralAssociationResult.candidates,
+                        completed = !result.budgetExhausted && result.pendingEvents == 0,
+                    )
                     val decision = ANS100HybridPopulationController().decide(
                         evidence = evidence,
                         understanding = understanding,
@@ -1089,6 +1101,23 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         pendingEvents = result.pendingEvents,
                         budgetExhausted = result.budgetExhausted,
                     )
+                    // Capture the real Android pass. The trace adapter hashes the
+                    // message and never writes raw text, expected answers or labels.
+                    val benchmarkTraceStored = runCatching {
+                        val trace = ANS100BenchmarkTraceAdapter.create(
+                            taskId = null,
+                            inputText = message,
+                            evidence = evidence,
+                            decision = decision,
+                            telemetry = telemetry,
+                            emittedSpikeNeuronIds = emittedSpikeNeuronIds,
+                            activatedConnectionIds = activatedConnectionIds,
+                            associationResult = neuralAssociationResult,
+                            inferenceDurationNs = (System.nanoTime() - neuralPassStartedAtNs).coerceAtLeast(0L),
+                            neuralHypotheses = neuralHypotheses,
+                        )
+                        benchmarkTraceStore.append(ANS100BenchmarkTraceAdapter.toJsonLine(trace))
+                    }.getOrDefault(false)
                     // Persist eligibility only for the selected candidate and observed
                     // propagated events delivered to a target that itself spiked.
                     val selectedCandidateId = decision.selectedCandidateId
@@ -1158,6 +1187,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         append("; neural_association_spikes=").append(neuralAssociationResult.associationSpikeCount)
                         append("; neural_association_pairs_examined=").append(neuralAssociationResult.consideredPairCount)
                         append("; neural_association_candidates=").append(neuralAssociationResult.candidates.size)
+                        append("; neural_hypotheses=").append(neuralHypotheses.size)
+                        append("; benchmark_trace_saved=").append(benchmarkTraceStored)
                         append("; budgetExhausted=").append(result.budgetExhausted)
                         append("; populations=")
                         append(telemetry.populations.joinToString(" | ") { activity ->
