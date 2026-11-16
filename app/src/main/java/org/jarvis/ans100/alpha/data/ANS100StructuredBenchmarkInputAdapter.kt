@@ -61,7 +61,7 @@ class ANS100StructuredBenchmarkInputAdapter {
         var collisions = 0
         uniqueFeatures.forEach { feature ->
             val slot = neuronId(feature.role, feature.value)
-            if (slotOwners.putIfAbsent(slot, feature) != null) collisions++
+            if (slot in slotOwners) collisions++ else slotOwners[slot] = feature
         }
 
         val turnDigest = digest(turnId).take(16)
@@ -173,7 +173,7 @@ class ANS100StructuredBenchmarkInputAdapter {
         const val MAX_INPUT_CHARS = 2_048
         const val MAX_FACTS = 32
 
-        private val RELATION_FACT = Regex("""- ([A-Za-z0-9_:-]+) (is|is explicitly not) connected to ([A-Za-z0-9_:-]+)\.""")
+        private val RELATION_FACT = Regex("""- ([A-Za-z0-9_:-]+) (is explicitly not|is) connected to ([A-Za-z0-9_:-]+)\.""")
         private val EDGE_FACT = Regex("""- Directed link: ([A-Za-z0-9_:-]+) -> ([A-Za-z0-9_:-]+)\.""")
         private val EVIDENCE_FACT = Regex("""- Evidence (supports|refutes) the claim that ([A-Za-z0-9_:-]+) connects to ([A-Za-z0-9_:-]+)\.""")
         private val DIRECT_QUERY = Regex("""What is the evidence status of 'connected' from ([A-Za-z0-9_:-]+) to ([A-Za-z0-9_:-]+)\? Answer exactly YES, NO, or UNKNOWN\.""")
