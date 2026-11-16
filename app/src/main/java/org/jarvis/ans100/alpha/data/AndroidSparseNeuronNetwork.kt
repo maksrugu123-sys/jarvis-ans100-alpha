@@ -118,7 +118,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun registerNeuron(neuronId: Int)
     fun addConnection(connection: AndroidNeuronConnection)
     fun addStructuralGrowthProposal(proposal: ANS100ActivityDrivenStructuralPlasticity.GrowthProposal): Int
-    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
+    fun adjustStructuralSynapseWeights(feedbackId: String, connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun removeStructuralSynapses(connectionIds: List<String>, maximumWeight: Double): Int
     fun structuralSynapseWeights(connectionIds: List<String>): Map<String, Double>
     fun enqueue(event: AndroidNeuronEvent)
@@ -340,12 +340,13 @@ class AndroidSparseNeuronNetwork(
         store.addStructuralGrowthProposal(proposal)
 
     @Synchronized
-    fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
+    fun adjustStructuralSynapseWeights(feedbackId: String, connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
+        require(feedbackId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
         require(connectionIds.isNotEmpty() && connectionIds.size <= MAX_STRUCTURAL_SYNAPSES_PER_UPDATE)
         require(connectionIds.distinct().size == connectionIds.size)
         require(delta.isFinite() && delta in -MAX_STRUCTURAL_WEIGHT_DELTA..MAX_STRUCTURAL_WEIGHT_DELTA)
         require(source == ANS100CandidateFeedbackLearner.FeedbackSource.EXPLICIT_USER || source == ANS100CandidateFeedbackLearner.FeedbackSource.VERIFIED_EXTERNAL_OUTCOME)
-        return store.adjustStructuralSynapseWeights(connectionIds, delta, source)
+        return store.adjustStructuralSynapseWeights(feedbackId, connectionIds, delta, source)
     }
 
     @Synchronized
@@ -870,6 +871,7 @@ private class AndroidNeuronSqliteStore(
     private fun createStructuralSynapseRegistry(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS structural_synapse_registry (connection_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, first_concept_id TEXT NOT NULL, second_concept_id TEXT NOT NULL, created_at_ms INTEGER NOT NULL, last_adjusted_at_ms INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX IF NOT EXISTS structural_synapse_proposal_idx ON structural_synapse_registry(proposal_id)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS structural_synapse_feedback_events (feedback_id TEXT NOT NULL, proposal_id TEXT NOT NULL, delta REAL NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(feedback_id, proposal_id))")
     }
 
     private fun createConceptInputSlotTable(db: SQLiteDatabase) {
@@ -1223,7 +1225,7 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
-    override fun adjustStructuralSynapseWeights(connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
+    override fun adjustStructuralSynapseWeights(feedbackId: String, connectionIds: List<String>, delta: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int {
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -1241,6 +1243,14 @@ private class AndroidNeuronSqliteStore(
                     arrayOf(proposalId),
                 ).use { cursor -> while (cursor.moveToNext()) pairIds += cursor.getString(0) }
                 if (pairIds.size != 2 || !connectionIds.containsAll(pairIds)) return@forEach
+                val feedback = ContentValues().apply {
+                    put("feedback_id", feedbackId)
+                    put("proposal_id", proposalId)
+                    put("delta", delta)
+                    put("source", source.name)
+                    put("created_at_ms", System.currentTimeMillis())
+                }
+                if (db.insertWithOnConflict("structural_synapse_feedback_events", null, feedback, SQLiteDatabase.CONFLICT_IGNORE) == -1L) return@forEach
                 pairIds.forEach { id ->
                     val current = db.rawQuery(
                         "SELECT weight FROM connections WHERE connection_id=?",
