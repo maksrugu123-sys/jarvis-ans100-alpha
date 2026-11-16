@@ -100,7 +100,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
             maxOutputToken = MAX_BENCHMARK_OUTPUT_TOKENS,
         )
         val raw = generate(getEngine(file), config, clean).trim()
-        LiteRtLmBenchmarkResult(
+        return LiteRtLmBenchmarkResult(
             answer = ANS100BenchmarkCanonicalAnswerParser.parse(raw),
             rawOutput = raw.take(MAX_BENCHMARK_RAW_OUTPUT_CHARS),
             initializationMs = if (engineAlreadyLoaded) 0L else lastInitializationMs,
