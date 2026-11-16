@@ -692,6 +692,7 @@ class AndroidSparseNeuronNetworkTest {
 
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
             network.initializeHybridTopologyV2()
+            network.resolveConceptInputSlots(listOf("concept:alpha", "concept:beta"))
             assertEquals(2, network.addStructuralGrowthProposal(proposal))
             assertEquals(0, network.addStructuralGrowthProposal(proposal))
             assertEquals(2, network.structuralSynapseWeights(ids).size)
@@ -735,6 +736,7 @@ class AndroidSparseNeuronNetworkTest {
         val ids = proposal.connections.map { it.connectionId }.sorted()
         AndroidHybridTopologyV2.open(context, databaseName, hotSetCapacity = 32).use { network ->
             network.initializeHybridTopologyV2()
+            network.resolveConceptInputSlots(listOf("concept:alpha", "concept:beta"))
             network.addStructuralGrowthProposal(proposal)
 
             var rejected = false
