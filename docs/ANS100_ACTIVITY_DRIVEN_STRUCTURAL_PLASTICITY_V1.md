@@ -92,25 +92,25 @@ No general understanding or autonomous reasoning claim is supported by this prot
 ## V1.1 — persistent synapse lifecycle API
 
 The Android sparse-network SQLite store now has schema V7 and a
-\`structural_synapse_registry\` for grown synapses. The network exposes a
+`structural_synapse_registry` for grown synapses. The network exposes a
 separate structural-growth API, rather than routing these through unrestricted
-generic \`connect()\`.
+generic `connect()`.
 
-- \`addStructuralGrowthProposal\` inserts both directed edges and both registry
+- `addStructuralGrowthProposal` inserts both directed edges and both registry
   records in one SQLite transaction. It validates the concept-input and
   association neuron ranges, the generated connection-ID namespace, source
   neuron existence, total connection capacity, per-target in-degree, and
   per-concept grown-edge degree. Replaying an already registered proposal is
   idempotent.
-- \`adjustStructuralSynapseWeights\` changes only registered grown synapses,
+- `adjustStructuralSynapseWeights` changes only registered grown synapses,
   clamps weights to [0.05, 1.0], limits each update to ±0.10, and requires
   explicit-user or verified-external-outcome feedback. Both edges belonging
   to a proposal must be supplied together, so one side of an association
   cannot silently drift away from the other.
-- \`removeWeakStructuralSynapses\` removes a proposal only when both of its
+- `removeWeakStructuralSynapses` removes a proposal only when both of its
   synapses are supplied and both weights are at or below the caller's
   conservative threshold (maximum 0.20). It removes both edges together.
-- \`structuralSynapseWeights\` reads weights only for registered grown edges.
+- `structuralSynapseWeights` reads weights only for registered grown edges.
 
 The generic runtime's ordinary fixed topology and existing learned weights are
 not rewritten by this API. The registry persists grown-edge ownership and
@@ -132,8 +132,8 @@ not yet make live ANS-100 behavior change automatically.
 - Weight adjustment requires a unique feedback ID. Duplicate feedback IDs
   are ignored transactionally, preventing replay from applying reinforcement
   twice.
-- Reinforcement/penalty accepts only \`EXPLICIT_USER\` or
-  \`VERIFIED_EXTERNAL_OUTCOME\`; model-generated and implicit behavior are
+- Reinforcement/penalty accepts only `EXPLICIT_USER` or
+  `VERIFIED_EXTERNAL_OUTCOME`; model-generated and implicit behavior are
   rejected at the public network API.
 - Both edges of a proposal must be supplied together for weight changes.
   Weak-edge removal also requires both edges and removes the pair only when
@@ -156,7 +156,7 @@ must precede any influence on reasoning.
 
 The network can now return only registry-backed grown connections for the
 current concept input neurons. The Android conversation pipeline supplies
-those persisted edges to \`ANS100NeuralAssociationDecoder\` alongside the
+those persisted edges to `ANS100NeuralAssociationDecoder` alongside the
 original fixed projection. A candidate still requires both paths to have
 actually propagated and the shared target to have spiked.
 
@@ -174,3 +174,23 @@ edges can still be processed. This prevents one-sided structural drift.
 the live LIF runtime and decoder, but the app does not yet automatically call
 the structural learner on every completed turn or insert its proposals. That
 requires durable co-activation eligibility state and an explicit rollout gate.
+
+
+## V1.3 — durable activity history and gated observer
+
+Android JNVM schema V8 adds two bounded SQLite tables:
+
+- structural_plasticity_turns stores unique completed-turn IDs and a monotonic sequence.
+- structural_plasticity_turn_concepts stores concepts that actually propagated during each accepted turn, including persistent neuron slot, label and provenance reference.
+
+The store retains at most 64 recent turns and returns the most recent 16 for replay. Duplicate turn IDs are ignored even after the app process is restarted, while they remain in retained history. Observation and concept rows are committed in one transaction. Before accepting a row, SQLite verifies that the concept ID still maps to the exact persistent neuron slot.
+
+The graph snapshot API reads current outgoing targets for the concept input slots involved in replay, incoming load for the 1,000-neuron association population, all registered grown concept pairs, and per-concept grown-edge degrees.
+
+A fresh bounded learner can restore this durable growth state and replay the last 16 turn snapshots. It reconstructs pending co-activation eligibility after process restart instead of relying on volatile RAM state. SQLite independently enforces a 512-pair global cap, maximum 8 grown edges per concept and maximum 16 incoming edges per association target.
+
+The ViewModel contains a disabled-by-default observer path. If explicitly enabled for a controlled experiment, it records only concepts whose input neurons actually spiked and propagated at least one fixed or grown association edge. It ignores incomplete turns, turns with pending events and budget-exhausted turns. Replayed observations may generate new proposals, which are inserted through the atomic SQLite API. New edges become available to the sparse LIF runtime and decoder on later turns.
+
+**Rollout status:** STRUCTURAL_PLASTICITY_AUTO_GROWTH_ENABLED = false. The observer is integrated in code but does not run in ordinary app sessions. This is intentional: automatic topology mutation must remain off until held-out evaluation compares fixed topology, grown topology and shuffled-co-activation controls. Co-activation is still only a candidate signal, not proof of a semantic relation.
+
+**Tests authored, not run:** durable turn history across database reopen; duplicate-turn idempotency after reopen; rebuilding an eligible proposal from persisted turns; persistent grown-pair and degree restoration; schema V7 to V8 migration without rebuilding the base topology. No Android build, APK, CI or device test was run.
