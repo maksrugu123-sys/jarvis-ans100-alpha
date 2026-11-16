@@ -35,11 +35,10 @@ class ANS100NeuralAssociationBenchmarkAssessmentAdapter {
             } else {
                 ANS100NeuralAssociationAssessment.Outcome.INCONCLUSIVE
             }
-            "NO" -> if (candidateReproduced) {
-                ANS100NeuralAssociationAssessment.Outcome.CONTRADICTED
-            } else {
-                ANS100NeuralAssociationAssessment.Outcome.INCONCLUSIVE
-            }
+            // A co-activation candidate is undirected and does not encode the
+            // benchmark relation type. Even a reproduced association on a NO
+            // relation task is therefore not a valid contradiction label.
+            "NO" -> ANS100NeuralAssociationAssessment.Outcome.INCONCLUSIVE
             else -> ANS100NeuralAssociationAssessment.Outcome.INCONCLUSIVE
         }
         return ANS100NeuralAssociationAssessment.Observation(
