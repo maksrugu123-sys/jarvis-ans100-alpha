@@ -29,6 +29,7 @@ object ANS100BenchmarkTraceAdapter {
         associationResult: ANS100NeuralAssociationDecoder.Result,
         inferenceDurationNs: Long? = null,
         neuralHypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis> = emptyList(),
+        memoryHypothesisReports: List<ANS100WorkspaceConceptInputBridge.HypothesisReport> = emptyList(),
     ): JSONObject {
         require(inputText.isNotBlank() && inputText.length <= MAX_INPUT_CHARS)
         require(taskId == null || (
@@ -45,6 +46,7 @@ object ANS100BenchmarkTraceAdapter {
         require(activatedConnectionIds.size <= AndroidHybridTopologyV2.EXPECTED_CONNECTION_COUNT)
         require(associationResult.candidates.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
         require(neuralHypotheses.size <= ANS100NeuralHypothesisEngine.MAX_HYPOTHESES_HARD_LIMIT)
+        require(memoryHypothesisReports.size <= ANS100ConceptMemory.MAX_HYPOTHESES)
 
         val heuristicRecords = evidence.records.filter { it.status == EvidenceStatus.HEURISTIC }
         val statusCounts = EvidenceStatus.values().associate { status ->
@@ -98,6 +100,19 @@ object ANS100BenchmarkTraceAdapter {
                 .put("shared_target_count", hypothesis.sharedTargetCount))
         }
 
+        val memoryExplanations = JSONArray()
+        memoryHypothesisReports.forEach { report ->
+            memoryExplanations.put(JSONObject()
+                .put("hypothesis_id_sha256", sha256(report.hypothesisId))
+                .put("from_label_sha256", sha256(report.fromLabel))
+                .put("relation_type", report.relationType.name)
+                .put("to_label_sha256", sha256(report.toLabel))
+                .put("premise_evidence_count", report.premiseEvidenceRefs.size)
+                .put("verification_status", report.verificationStatus.name)
+                .put("supporting_evidence_count", report.supportingEvidenceRefs.size)
+                .put("contradicting_evidence_count", report.contradictingEvidenceRefs.size))
+        }
+
         val root = JSONObject()
             .put("schema", SCHEMA)
             .put("task_id", taskId ?: JSONObject.NULL)
@@ -123,6 +138,7 @@ object ANS100BenchmarkTraceAdapter {
             .put("neural_outputs", neuralOutputs)
             .put("population_activity", populations)
             .put("neural_hypotheses", hypotheses)
+            .put("memory_hypothesis_explanations", memoryExplanations)
             .put("measurement", JSONObject()
                 .put("inference_duration_ns", inferenceDurationNs ?: JSONObject.NULL)
                 .put("peak_memory_mb", JSONObject.NULL)
@@ -132,7 +148,8 @@ object ANS100BenchmarkTraceAdapter {
                 "Neural spikes and readout are observable runtime outputs, not proof of semantic understanding.",
                 "Controller status is not a YES/NO/UNKNOWN/CONFLICT benchmark answer.",
                 "No expected answer or gold label is accepted or exported.",
-                "Hypothesis reproduction means repeated neural co-activation only; it does not establish factual truth."
+                "Hypothesis reproduction means repeated neural co-activation only; it does not establish factual truth.",
+                "Memory relation explanations are separate from neural hypotheses; user-entered support or counter-evidence is not independently tool-verified."
             )))
         return root
     }
