@@ -23,9 +23,13 @@ class ANS100NeuralAssociationDecoderTest {
             for (right in left + 1 until
                 ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS
             ) {
-                val shared = AndroidHybridTopologyV2.conceptAssociationTargets(left)
-                    .intersect(AndroidHybridTopologyV2.conceptAssociationTargets(right))
-                if (shared.isNotEmpty()) return Triple(left, right, shared)
+                val leftTargets = AndroidHybridTopologyV2.conceptAssociationTargets(left)
+                val rightTargets = AndroidHybridTopologyV2.conceptAssociationTargets(right)
+                val shared = leftTargets.intersect(rightTargets)
+                if (shared.isNotEmpty() &&
+                    (leftTargets - shared).isNotEmpty() &&
+                    (rightTargets - shared).isNotEmpty()
+                ) return Triple(left, right, shared)
             }
         }
         error("expected at least one convergent concept projection pair")
@@ -72,9 +76,10 @@ class ANS100NeuralAssociationDecoderTest {
     fun separateConceptProjectionsDoNotCreatePairWithoutConvergence() {
         val (left, right, shared) = convergentPair()
         val leftOnly = AndroidHybridTopologyV2.conceptAssociationTargets(left) - shared
+        val rightOnly = AndroidHybridTopologyV2.conceptAssociationTargets(right) - shared
         val result = ANS100NeuralAssociationDecoder().decode(
             conceptTrace = listOf(trace("a", left, "A"), trace("b", right, "B")),
-            emittedSpikeNeuronIds = leftOnly,
+            emittedSpikeNeuronIds = leftOnly + rightOnly,
         )
 
         assertTrue(result.candidates.isEmpty())
