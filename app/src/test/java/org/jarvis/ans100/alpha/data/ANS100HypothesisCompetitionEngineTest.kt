@@ -31,6 +31,12 @@ class ANS100HypothesisCompetitionEngineTest {
                 status == ANS100ConceptMemory.VerificationStatus.CONFLICTING) listOf("support") else emptyList(),
             contradictingEvidenceRefs = if (status == ANS100ConceptMemory.VerificationStatus.REFUTED ||
                 status == ANS100ConceptMemory.VerificationStatus.CONFLICTING) listOf("counter") else emptyList(),
+            supportingEvidenceSources = if (status == ANS100ConceptMemory.VerificationStatus.SUPPORTED ||
+                status == ANS100ConceptMemory.VerificationStatus.CONFLICTING)
+                setOf(ANS100ConceptMemory.LearningSource.EXPLICIT_USER) else emptySet(),
+            contradictingEvidenceSources = if (status == ANS100ConceptMemory.VerificationStatus.REFUTED ||
+                status == ANS100ConceptMemory.VerificationStatus.CONFLICTING)
+                setOf(ANS100ConceptMemory.LearningSource.EXPLICIT_USER) else emptySet(),
         )
 
     @Test fun noMatchingMemoryPathRemainsNeuralOnly() {
@@ -62,6 +68,43 @@ class ANS100HypothesisCompetitionEngineTest {
             ANS100HypothesisCompetitionEngine.Status.MIXED_USER_ASSERTIONS,
             engine.compare(listOf(candidate()), listOf(report(ANS100ConceptMemory.VerificationStatus.CONFLICTING))).single().status,
         )
+    }
+
+    @Test fun verifiedToolSupportIsNotMislabelledAsAUserAssertion() {
+        val toolReport = report(ANS100ConceptMemory.VerificationStatus.SUPPORTED).copy(
+            supportingEvidenceSources = setOf(ANS100ConceptMemory.LearningSource.VERIFIED_TOOL),
+        )
+        val result = ANS100HypothesisCompetitionEngine().compare(
+            listOf(candidate()), listOf(toolReport),
+        ).single()
+        assertEquals(ANS100HypothesisCompetitionEngine.Status.VERIFIED_TOOL_SUPPORT, result.status)
+        assertEquals(
+            setOf(ANS100ConceptMemory.LearningSource.VERIFIED_TOOL),
+            result.explanations.single().supportingEvidenceSources,
+        )
+    }
+
+    @Test fun mixedUserAndToolEvidenceKeepsItsMixedProvenance() {
+        val mixed = report(ANS100ConceptMemory.VerificationStatus.SUPPORTED).copy(
+            supportingEvidenceSources = setOf(
+                ANS100ConceptMemory.LearningSource.EXPLICIT_USER,
+                ANS100ConceptMemory.LearningSource.VERIFIED_TOOL,
+            ),
+        )
+        val result = ANS100HypothesisCompetitionEngine().compare(
+            listOf(candidate()), listOf(mixed),
+        ).single()
+        assertEquals(ANS100HypothesisCompetitionEngine.Status.MIXED_SOURCE_SUPPORT, result.status)
+    }
+
+    @Test fun verifiedToolCounterEvidenceIsNotLabelledAsUserEvidence() {
+        val toolReport = report(ANS100ConceptMemory.VerificationStatus.REFUTED).copy(
+            contradictingEvidenceSources = setOf(ANS100ConceptMemory.LearningSource.VERIFIED_TOOL),
+        )
+        val result = ANS100HypothesisCompetitionEngine().compare(
+            listOf(candidate()), listOf(toolReport),
+        ).single()
+        assertEquals(ANS100HypothesisCompetitionEngine.Status.VERIFIED_TOOL_COUNTER_EVIDENCE, result.status)
     }
 
     @Test fun reversedTypedPathIsRetainedAsDifferentExplanationDirection() {
