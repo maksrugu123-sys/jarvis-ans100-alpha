@@ -90,6 +90,8 @@ class ANS100BenchmarkTraceAdapterTest {
         assertEquals(1, trace.getJSONObject("core_input").getInt("heuristic_record_count"))
         assertEquals(3, trace.getJSONObject("neural_outputs").getInt("unique_spiking_neurons"))
         assertEquals(2, trace.getJSONObject("neural_outputs").getInt("activated_synapses"))
+        assertEquals(0, trace.getJSONObject("neural_outputs").getInt("association_input_concepts"))
+        assertTrue(trace.getJSONObject("neural_outputs").getBoolean("association_candidate_set_complete"))
         assertEquals(12_345L, trace.getJSONObject("measurement").getLong("inference_duration_ns"))
         assertFalse(trace.getBoolean("neural_hypothesis_state_persisted"))
         assertTrue(trace.getJSONObject("measurement").isNull("peak_memory_mb"))
