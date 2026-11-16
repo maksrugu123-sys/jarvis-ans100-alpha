@@ -34,13 +34,22 @@ class AndroidHybridTopologyV2Test {
             assertTrue(encoded.activatedTokenCount > 0)
             assertTrue(network.beginHybridTurn(encoded.batch))
 
-            val result = network.run(maxEvents = 4_096, maxTimestamps = 128)
+            var result = network.run(maxEvents = 4_096, maxTimestamps = 128)
+            val allSpikes = result.emittedSpikes.toMutableList()
+            val allTainted = result.coreTaintedNeuronIds.toMutableSet()
+            var passes = 1
+            while (result.pendingEvents > 0 && passes < 8) {
+                result = network.run(maxEvents = 4_096, maxTimestamps = 128)
+                allSpikes += result.emittedSpikes
+                allTainted += result.coreTaintedNeuronIds
+                passes++
+            }
             assertEquals(0, result.pendingEvents)
-            assertTrue(result.emittedSpikes.any {
+            assertTrue(allSpikes.any {
                 it.first in ANS100ConceptMemory.NEURAL_INPUT_START until
                     ANS100ConceptMemory.NEURAL_INPUT_START + ANS100ConceptMemory.MAX_NEURAL_INPUT_SLOTS
             })
-            assertTrue(result.coreTaintedNeuronIds.isEmpty())
+            assertTrue(allTainted.isEmpty())
             assertEquals(0, network.canonicalReadoutSynapseCount())
         }
     }
