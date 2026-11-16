@@ -1227,21 +1227,33 @@ private class AndroidNeuronSqliteStore(
         val db = writableDatabase
         db.beginTransaction()
         try {
-            var changed = 0
-            connectionIds.forEach { id ->
-                val current = db.rawQuery(
-                    "SELECT c.weight FROM connections c INNER JOIN structural_synapse_registry r ON r.connection_id=c.connection_id WHERE c.connection_id=?",
+            val proposalIds = connectionIds.mapNotNull { id ->
+                db.rawQuery(
+                    "SELECT proposal_id FROM structural_synapse_registry WHERE connection_id=?",
                     arrayOf(id),
-                ).use { if (it.moveToFirst()) it.getDouble(0) else null } ?: return@forEach
-                val update = ContentValues().apply { put("weight", (current + delta).coerceIn(0.05, 1.0)) }
-                if (db.update("connections", update, "connection_id=?", arrayOf(id)) == 1) {
+                ).use { if (it.moveToFirst()) it.getString(0) else null }
+            }.toSet()
+            var changed = 0
+            proposalIds.forEach { proposalId ->
+                val pairIds = mutableListOf<String>()
+                db.rawQuery(
+                    "SELECT connection_id FROM structural_synapse_registry WHERE proposal_id=? ORDER BY connection_id",
+                    arrayOf(proposalId),
+                ).use { cursor -> while (cursor.moveToNext()) pairIds += cursor.getString(0) }
+                if (pairIds.size != 2 || !connectionIds.containsAll(pairIds)) return@forEach
+                pairIds.forEach { id ->
+                    val current = db.rawQuery(
+                        "SELECT weight FROM connections WHERE connection_id=?",
+                        arrayOf(id),
+                    ).use { if (it.moveToFirst()) it.getDouble(0) else null } ?: return@forEach
+                    val update = ContentValues().apply { put("weight", (current + delta).coerceIn(0.05, 1.0)) }
+                    if (db.update("connections", update, "connection_id=?", arrayOf(id)) == 1) changed++
                     db.update(
                         "structural_synapse_registry",
                         ContentValues().apply { put("last_adjusted_at_ms", System.currentTimeMillis()) },
                         "connection_id=?",
                         arrayOf(id),
                     )
-                    changed++
                 }
             }
             db.setTransactionSuccessful()
@@ -1255,15 +1267,29 @@ private class AndroidNeuronSqliteStore(
         val db = writableDatabase
         db.beginTransaction()
         try {
-            var removed = 0
-            connectionIds.forEach { id ->
-                val weight = db.rawQuery(
-                    "SELECT c.weight FROM connections c INNER JOIN structural_synapse_registry r ON r.connection_id=c.connection_id WHERE c.connection_id=?",
+            val proposalIds = connectionIds.mapNotNull { id ->
+                db.rawQuery(
+                    "SELECT proposal_id FROM structural_synapse_registry WHERE connection_id=?",
                     arrayOf(id),
-                ).use { if (it.moveToFirst()) it.getDouble(0) else null } ?: return@forEach
-                if (weight <= maximumWeight) {
-                    db.delete("structural_synapse_registry", "connection_id=?", arrayOf(id))
-                    removed += db.delete("connections", "connection_id=?", arrayOf(id))
+                ).use { if (it.moveToFirst()) it.getString(0) else null }
+            }.toSet()
+            var removed = 0
+            proposalIds.forEach { proposalId ->
+                val pairIds = mutableListOf<String>()
+                db.rawQuery(
+                    "SELECT connection_id FROM structural_synapse_registry WHERE proposal_id=? ORDER BY connection_id",
+                    arrayOf(proposalId),
+                ).use { cursor -> while (cursor.moveToNext()) pairIds += cursor.getString(0) }
+                if (pairIds.size != 2 || !connectionIds.containsAll(pairIds)) return@forEach
+                val weights = pairIds.mapNotNull { id ->
+                    db.rawQuery("SELECT weight FROM connections WHERE connection_id=?", arrayOf(id))
+                        .use { if (it.moveToFirst()) it.getDouble(0) else null }
+                }
+                if (weights.size == 2 && weights.all { it <= maximumWeight }) {
+                    pairIds.forEach { id ->
+                        db.delete("structural_synapse_registry", "connection_id=?", arrayOf(id))
+                        removed += db.delete("connections", "connection_id=?", arrayOf(id))
+                    }
                 }
             }
             db.setTransactionSuccessful()
