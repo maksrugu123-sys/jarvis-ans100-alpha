@@ -256,6 +256,32 @@ def _score_pair(
     )
 
 
+def _projection_coverage(
+    examples: Sequence[PairExample], slots: dict[str, int]
+) -> dict[str, object]:
+    """Report the topology-only upper bound on pairs the decoder can compare.
+
+    A shared projection target is necessary for a candidate, but an actual
+    Android candidate additionally requires both synapses to activate and the
+    common association neuron to spike during the same turn.
+    """
+    histogram = Counter(
+        len(_pair_shared_edges(item.concept_a, item.concept_b, slots))
+        for item in examples
+    )
+    total = len(examples)
+    eligible = total - histogram.get(0, 0)
+    return {
+        "pairs": total,
+        "projection_eligible_pairs": eligible,
+        "no_shared_projection_pairs": histogram.get(0, 0),
+        "projection_coverage_upper_bound": round(eligible / total, 8) if total else 0.0,
+        "shared_target_count_histogram": {
+            str(count): histogram.get(count, 0) for count in range(PROJECTION_FAN_OUT + 1)
+        },
+    }
+
+
 def _balanced_accuracy(rows: Sequence[tuple[bool, bool]]) -> float:
     positives = [row for row in rows if row[0]]
     negatives = [row for row in rows if not row[0]]
@@ -404,6 +430,8 @@ def evaluate(
         split_rows.append({
             "seed": seed,
             "train_pairs": len(split.train),
+            "train_projection_coverage": _projection_coverage(split.train, slots),
+            "held_out_projection_coverage": _projection_coverage(split.held_out, slots),
             "held_out_pairs": len(split.held_out),
             "excluded_cross_partition_pairs": split.excluded_cross_partition,
             "train_positive": sum(item.related for item in split.train),
@@ -427,6 +455,7 @@ def evaluate(
         "dataset_sha256": _dataset_digest(examples),
         "dataset_pairs": len(examples),
         "dataset_concepts": len({x.concept_a for x in examples} | {x.concept_b for x in examples}),
+        "projection_coverage": _projection_coverage(examples, _concept_slots(examples)),
         "trusted_label_sources": sorted({x.source for x in examples}),
         "seeds": list(seeds),
         "splits": split_rows,
