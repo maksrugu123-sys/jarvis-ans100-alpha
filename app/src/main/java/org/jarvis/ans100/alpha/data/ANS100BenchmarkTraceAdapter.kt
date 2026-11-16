@@ -49,6 +49,11 @@ object ANS100BenchmarkTraceAdapter {
         require(neuralHypotheses.size <= ANS100NeuralHypothesisEngine.MAX_HYPOTHESES_HARD_LIMIT)
         require(memoryHypothesisReports.size <= ANS100ConceptMemory.MAX_HYPOTHESES)
         require(hypothesisComparisons.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
+        val neuralCandidateIds = associationResult.candidates.map { it.candidateId }.toSet()
+        require(hypothesisComparisons.all { it.neuralCandidateId in neuralCandidateIds })
+        require(hypothesisComparisons.all {
+            it.explanations.size <= ANS100HypothesisCompetitionEngine.MAX_EXPLANATIONS_PER_CANDIDATE
+        })
 
         val heuristicRecords = evidence.records.filter { it.status == EvidenceStatus.HEURISTIC }
         val statusCounts = EvidenceStatus.values().associate { status ->
