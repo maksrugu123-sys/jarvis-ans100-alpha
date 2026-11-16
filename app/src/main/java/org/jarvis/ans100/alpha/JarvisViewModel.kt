@@ -469,6 +469,22 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Executes one isolated Qwen-only benchmark item. The callback is delivered
+     * on the main thread; all LiteRT engine access stays on conversationExecutor.
+     */
+    fun runTransformerOnlyBenchmark(
+        inputText: String,
+        onComplete: (Result<org.jarvis.ans100.alpha.data.LiteRtLmBenchmarkResult>) -> Unit,
+    ) {
+        conversationExecutor.execute {
+            val result = runCatching {
+                conversationResponseEngine.benchmarkTransformerOnly(inputText)
+            }
+            mainHandler.post { onComplete(result) }
+        }
+    }
+
     fun setGpuEnabled(enabled: Boolean) {
         val before = mutableState.value
         if (before.conversation.isBusy || before.conversation.gpuEnabled == enabled) return
