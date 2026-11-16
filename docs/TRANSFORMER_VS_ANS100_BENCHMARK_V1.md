@@ -41,6 +41,14 @@ Use the same task order and repeat protocol. Report quality and resource use sep
 
 Missing predictions count as wrong in overall accuracy. Duplicate or unknown prediction task IDs are rejected. The scorer also rejects duplicate source-task IDs, unknown split/family values, non-canonical gold labels, and invalid seed metadata before calculating any score. Results include per-seed accuracy so a pooled score cannot hide a seed-specific collapse. The scorer reports per-split/per-family accuracy, submitted rows, answered rows, abstentions, missing rows, coverage, latency median/p95, peak-memory max/median, cold-start versus warm steady-state latency/memory summaries, and paired task outcomes (only Transformer correct / only ANS-100 correct / same correctness). Explicit null answers count as abstentions and reduce coverage; they are not confused with missing output files. The `development` split is excluded from every score and paired outcome; predictions carrying development task IDs are rejected.
 
+## Structured input prototype (Stage B1)
+
+A separate `ANS100StructuredBenchmarkInputAdapter` has been added on the experimental branch. It recognizes only the benchmark's explicit fact/query grammar and routes six roles through six disjoint sub-lanes inside the existing 138 concept-input neurons (23 slots per role): fact subject, fact relation, fact object, query subject, query relation, and query object. Supported fact forms are direct positive/negative relations, directed edges, and supporting/refuting evidence. Supported query forms are direct relation status, two-hop directed-path questions, and evidence classification.
+
+The adapter emits clean presence pulses and a trace containing role, normalized value, and bounded fact/query provenance. It rejects unsupported syntax rather than silently treating it as understood language. It reports hash-slot collisions. This is deterministic grammar parsing plus role-aware feature routing; it is not learned semantic parsing, synonym understanding, hypothesis generation, or causal reasoning. The original lexical adapter remains unchanged as the baseline.
+
+The structured adapter is currently an isolated prototype and is NOT yet wired into `ANS100StandaloneBenchmarkRuntime` or the Android benchmark UI. The new JVM unit tests have been authored but have NOT been run. Do not compare structured-adapter performance until it is integrated behind an explicit benchmark mode, its tests pass, and both old/new modes are evaluated on the exact same tasks.
+
 ## Current implementation boundary
 
 The repository currently contains a 10k sparse LIF network, concept activation and associative/structural experiments, but the full app still has heuristic Core logic that prepares some evidence and candidate signals. A benchmark adapter must identify those signals and report them. It must not silently label the current integrated pipeline as pure neural reasoning.
