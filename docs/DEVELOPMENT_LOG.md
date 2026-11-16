@@ -3329,3 +3329,18 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 **Limitations:** this is a cold engine/network initialization inside the existing Android app process, not a force-stop/relaunch or a separate process. PSS remains process-wide; co-resident app/runtime allocations can affect absolute values. The ANS database contents are preserved across network reopen.
 
 **Verification:** source-only edits. No Kotlin compilation, Android/Python tests, builds, CI, or device measurements were run.
+
+
+## 2026-11-16 — Cold-start memory measurement for every held-out task
+
+**Objective:** make the paired benchmark measure model/runtime initialization for every held-out task, not just the first row in a batch.
+
+**Changed:**
+- Paired held-out batches now request cold-start mode for every task.
+- Qwen closes its native LiteRT engine before the PSS baseline and initializes again inside the measured window.
+- ANS-100 closes and reopens its isolated SQLite-backed network before the PSS baseline; its learned benchmark database is preserved, so the network is reinitialized without erasing development training.
+- Existing result fields distinguish initialization duration from generation/inference duration and identify cold-start rows.
+
+**Interpretation:** this is a cold model/runtime initialization within a still-running Android app process. The other benchmark subject may remain resident, and Android/native allocators may retain pages. PSS remains process-wide, not per-model isolated memory. Every held-out row now receives a cold-start measurement rather than only the first row.
+
+**Verification:** source inspection and diff checks only. No Gradle build, Kotlin tests, Python tests, APK, CI, or device experiment was run.
