@@ -36,6 +36,7 @@ data class LiteRtLmBenchmarkResult(
     val peakMemoryPssMb: Double? = null,
     val peakMemoryDeltaMb: Double? = null,
     val memorySampleIntervalMs: Long? = null,
+    val coldStart: Boolean = false,
 )
 
 class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmModelStore) : LocalResponseEngine, AutoCloseable {
@@ -67,7 +68,8 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
      * workspace memory, fallback responses, and tool calling. It is a comparison
      * path only; it does not alter the normal JARVIS conversation pipeline.
      */
-    fun benchmarkTransformerOnly(inputText: String): LiteRtLmBenchmarkResult {
+    fun benchmarkTransformerOnly(inputText: String, coldStart: Boolean = false): LiteRtLmBenchmarkResult {
+        if (coldStart) reset()
         val measured = ProcessMemoryPeakSampler.measure {
             benchmarkTransformerOnlyInternal(inputText)
         }
@@ -76,6 +78,7 @@ class LiteRtLmResponseEngine(context: Context, private val modelStore: LiteRtLmM
             peakMemoryPssMb = measured.peakPssMb,
             peakMemoryDeltaMb = measured.peakDeltaMb,
             memorySampleIntervalMs = measured.sampleIntervalMs,
+            coldStart = coldStart,
         )
     }
 
