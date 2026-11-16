@@ -165,6 +165,9 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun resolveConceptInputSlots(conceptIds: List<String>): Map<String, Int>
     fun recordNeuralAssociationEligibility(turnId: String, candidateId: String, connectionIds: List<String>, eligibility: Double): Int
     fun neuralAssociationWeights(connectionIds: List<String>): Map<String, Double>
+    fun recordNeuralAssociationEvaluation(candidateId: String, observation: ANS100NeuralAssociationAssessment.Observation): Int
+    fun neuralAssociationEvaluations(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.PersistedObservation>
+    fun neuralAssociationWeightHistory(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.WeightChange>
     fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String, reward: Double, source: ANS100CandidateFeedbackLearner.FeedbackSource): Int
     fun dialogueSynapseWeight(sourceNeuronId: Int, outputNeuronId: Int): Double
     fun dialogueOutputScores(hiddenNeuronIds: List<Int>): Map<Int, Double>
@@ -739,6 +742,28 @@ class AndroidSparseNeuronNetwork(
         return store.neuralAssociationWeights(connectionIds)
     }
 
+    @Synchronized
+    fun recordNeuralAssociationEvaluation(candidateId: String, observation: ANS100NeuralAssociationAssessment.Observation): Int {
+        require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
+        require(observation.taskId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(observation.independenceKey.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        return store.recordNeuralAssociationEvaluation(candidateId, observation)
+    }
+
+    @Synchronized
+    fun neuralAssociationEvaluations(candidateId: String, limit: Int = 200): List<ANS100NeuralAssociationAssessment.PersistedObservation> {
+        require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
+        require(limit in 1..2_000)
+        return store.neuralAssociationEvaluations(candidateId, limit)
+    }
+
+    @Synchronized
+    fun neuralAssociationWeightHistory(candidateId: String, limit: Int = 200): List<ANS100NeuralAssociationAssessment.WeightChange> {
+        require(candidateId.matches(Regex("^neural-association:[a-f0-9]{32}$")))
+        require(limit in 1..2_000)
+        return store.neuralAssociationWeightHistory(candidateId, limit)
+    }
+
     /** Applies a stable user-feedback event at most once, atomically with weight updates. */
     @Synchronized
     fun applyNeuralAssociationFeedback(feedbackId: String, turnId: String, candidateId: String, reward: Double,
@@ -917,6 +942,7 @@ private class AndroidNeuronSqliteStore(
         createDialogueEligibilityTable(db)
         createHybridCandidateEligibilityTable(db)
         createNeuralAssociationLearningTables(db)
+        createNeuralAssociationAssessmentTables(db)
         createConceptInputSlotTable(db)
         createStructuralSynapseRegistry(db)
         createStructuralSynapseFeedbackTable(db)
@@ -975,6 +1001,7 @@ private class AndroidNeuronSqliteStore(
             db.execSQL("UPDATE events SET core_tainted=1")
             db.execSQL("UPDATE neurons SET core_tainted=1 WHERE potential!=0 OR adaptation!=0 OR refractory_until_ns>last_update_ns")
         }
+        if (oldVersion < 11) createNeuralAssociationAssessmentTables(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -992,6 +1019,13 @@ private class AndroidNeuronSqliteStore(
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_eligibility_age_idx ON neural_association_eligibility(created_at_ms)")
         db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_feedback_events (feedback_id TEXT PRIMARY KEY, turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, reward REAL NOT NULL, source TEXT NOT NULL, created_at_ms INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_feedback_age_idx ON neural_association_feedback_events(created_at_ms)")
+    }
+
+    private fun createNeuralAssociationAssessmentTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_task_evaluations (candidate_id TEXT NOT NULL, task_id TEXT NOT NULL, independence_key TEXT NOT NULL, outcome TEXT NOT NULL, evidence_source TEXT NOT NULL, created_at_ms INTEGER NOT NULL, PRIMARY KEY(candidate_id, task_id), UNIQUE(candidate_id, independence_key))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_eval_age_idx ON neural_association_task_evaluations(candidate_id, created_at_ms)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS neural_association_weight_history (feedback_id TEXT NOT NULL, connection_id TEXT NOT NULL, turn_id TEXT NOT NULL, candidate_id TEXT NOT NULL, previous_weight REAL NOT NULL, next_weight REAL NOT NULL, reward REAL NOT NULL, source TEXT NOT NULL, changed_at_ms INTEGER NOT NULL, PRIMARY KEY(feedback_id, connection_id))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS neural_association_weight_history_candidate_idx ON neural_association_weight_history(candidate_id, changed_at_ms)")
     }
 
     private fun createStructuralSynapseRegistry(db: SQLiteDatabase) {
@@ -2231,6 +2265,45 @@ private class AndroidNeuronSqliteStore(
         } finally { db.endTransaction() }
     }
 
+    override fun recordNeuralAssociationEvaluation(candidateId: String, observation: ANS100NeuralAssociationAssessment.Observation): Int {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("candidate_id", candidateId); put("task_id", observation.taskId)
+            put("independence_key", observation.independenceKey); put("outcome", observation.outcome.name)
+            put("evidence_source", observation.source.name); put("created_at_ms", System.currentTimeMillis())
+        }
+        val inserted = db.insertWithOnConflict("neural_association_task_evaluations", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        val excess = scalar(db, "SELECT COUNT(*) FROM neural_association_task_evaluations") - MAX_NEURAL_ASSOCIATION_EVALUATIONS
+        if (excess > 0L) db.execSQL("DELETE FROM neural_association_task_evaluations WHERE rowid IN (SELECT rowid FROM neural_association_task_evaluations ORDER BY created_at_ms ASC, rowid ASC LIMIT ?)", arrayOf(excess))
+        return if (inserted == -1L) 0 else 1
+    }
+
+    override fun neuralAssociationEvaluations(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.PersistedObservation> {
+        val result = ArrayList<ANS100NeuralAssociationAssessment.PersistedObservation>()
+        readableDatabase.rawQuery("SELECT task_id, independence_key, outcome, evidence_source, created_at_ms FROM neural_association_task_evaluations WHERE candidate_id=? ORDER BY created_at_ms DESC LIMIT ?", arrayOf(candidateId, limit.toString())).use { cursor ->
+            while (cursor.moveToNext()) result += ANS100NeuralAssociationAssessment.PersistedObservation(
+                candidateId, ANS100NeuralAssociationAssessment.Observation(
+                    taskId = cursor.getString(0), independenceKey = cursor.getString(1),
+                    outcome = ANS100NeuralAssociationAssessment.Outcome.valueOf(cursor.getString(2)),
+                    source = ANS100NeuralAssociationAssessment.EvidenceSource.valueOf(cursor.getString(3)),
+                ), cursor.getLong(4),
+            )
+        }
+        return result
+    }
+
+    override fun neuralAssociationWeightHistory(candidateId: String, limit: Int): List<ANS100NeuralAssociationAssessment.WeightChange> {
+        val result = ArrayList<ANS100NeuralAssociationAssessment.WeightChange>()
+        readableDatabase.rawQuery("SELECT feedback_id, turn_id, connection_id, previous_weight, next_weight, reward, source, changed_at_ms FROM neural_association_weight_history WHERE candidate_id=? ORDER BY changed_at_ms DESC LIMIT ?", arrayOf(candidateId, limit.toString())).use { cursor ->
+            while (cursor.moveToNext()) result += ANS100NeuralAssociationAssessment.WeightChange(
+                feedbackId = cursor.getString(0), turnId = cursor.getString(1), candidateId = candidateId,
+                connectionId = cursor.getString(2), previousWeight = cursor.getDouble(3), nextWeight = cursor.getDouble(4),
+                reward = cursor.getDouble(5), source = cursor.getString(6), changedAtMs = cursor.getLong(7),
+            )
+        }
+        return result
+    }
+
     override fun neuralAssociationWeights(connectionIds: List<String>): Map<String, Double> {
         if (connectionIds.isEmpty() || connectionIds.size > ANS100NeuralAssociationFeedbackLearner.MAX_CONNECTIONS_PER_CANDIDATE ||
             connectionIds.distinct().size != connectionIds.size)
@@ -2336,6 +2409,11 @@ private class AndroidNeuronSqliteStore(
                         if (db.update("connections", ContentValues().apply { put("weight", next) },
                                 "connection_id=?", arrayOf(connectionId)) != 1)
                             throw AndroidNeuronNetworkException("grown pair update did not affect exactly one synapse")
+                        db.insertOrThrow("neural_association_weight_history", null, ContentValues().apply {
+                            put("feedback_id", feedbackId); put("connection_id", connectionId); put("turn_id", turnId)
+                            put("candidate_id", candidateId); put("previous_weight", current); put("next_weight", next)
+                            put("reward", reward); put("source", source.name); put("changed_at_ms", nowMs)
+                        })
                         updated++
                     }
                     db.update(
@@ -2366,6 +2444,11 @@ private class AndroidNeuronSqliteStore(
                     if (db.update("connections", ContentValues().apply { put("weight", next) },
                             "connection_id=?", arrayOf(connectionId)) != 1)
                         throw AndroidNeuronNetworkException("neural association update did not affect exactly one synapse")
+                    db.insertOrThrow("neural_association_weight_history", null, ContentValues().apply {
+                        put("feedback_id", feedbackId); put("connection_id", connectionId); put("turn_id", turnId)
+                        put("candidate_id", candidateId); put("previous_weight", current); put("next_weight", next)
+                        put("reward", reward); put("source", source.name); put("changed_at_ms", nowMs)
+                    })
                     updated++
                 }
             }
@@ -2670,12 +2753,13 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 10
+        private const val DATABASE_VERSION = 11
         private const val MAX_PERSISTED_STRUCTURAL_TURNS = 64
         private const val STRUCTURAL_OBSERVATION_WINDOW_TURNS = 16
         private const val MAX_STRUCTURAL_GROWN_PAIRS = 512
         private const val MAX_NEURAL_ASSOCIATION_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_NEURAL_ASSOCIATION_FEEDBACK_EVENTS = 10_000L
+        private const val MAX_NEURAL_ASSOCIATION_EVALUATIONS = 20_000L
         private const val MAX_CANONICAL_READOUT_ELIGIBILITY_ROWS = 20_000L
         private const val MAX_CANONICAL_READOUT_FEEDBACK_EVENTS = 10_000L
         private const val NEURAL_ASSOCIATION_LEARNING_RATE = 0.02
