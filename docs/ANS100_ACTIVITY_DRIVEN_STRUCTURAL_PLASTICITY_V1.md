@@ -146,3 +146,7 @@ This still does not mean that a new association is automatically decoded as a
 semantic fact. The co-activation decoder and production turn pipeline need
 explicit support for registered grown proposals, and independent validation
 must precede any influence on reasoning.
+
+- Before insertion, SQLite also verifies that each proposal concept ID resolves
+  to the exact persistent neuron slot carried by that proposal. A stale or
+  forged per-turn neuron mapping is rejected.
