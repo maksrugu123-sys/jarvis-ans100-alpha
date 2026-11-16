@@ -1005,14 +1005,36 @@ private class AndroidNeuronSqliteStore(
                 "SELECT value FROM metadata WHERE key='ans100_topology_version'", null,
             ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0).toInt() else 0 }
             if (existingNeurons != 0L || existingConnections != 0L || existingId != null || existingVersion != 0) {
-                if (existingNeurons != AndroidNeuronNetworkLimits.MAX_NEURONS.toLong() ||
-                    existingConnections != connections.size.toLong() ||
-                    existingId != topologyId || existingVersion != topologyVersion
-                ) throw AndroidNeuronNetworkException(
-                    "hybrid V2 database contains a different or incomplete topology; refusing destructive reinitialization",
+                val staticConnections = scalar(db, "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v4-%'")
+                val knownDynamicConnections = scalar(
+                    db,
+                    "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v5-grown-association-%' OR connection_id LIKE 'ans100-v9-canonical-readout-%'",
                 )
-                db.setTransactionSuccessful()
-                return false
+                val compatibleCounts = staticConnections == connections.size.toLong() &&
+                    existingConnections == staticConnections + knownDynamicConnections
+                if (existingNeurons != AndroidNeuronNetworkLimits.MAX_NEURONS.toLong() ||
+                    !compatibleCounts || existingId != topologyId
+                ) throw AndroidNeuronNetworkException(
+                    "hybrid database contains an unknown or incomplete topology; refusing destructive reinitialization",
+                )
+                if (existingVersion == topologyVersion) {
+                    db.setTransactionSuccessful()
+                    return false
+                }
+                if (existingVersion == 4 && topologyVersion == 5) {
+                    migrateHybridTopologyV4ToV5(db)
+                    db.update(
+                        "metadata",
+                        ContentValues().apply { put("value", topologyVersion) },
+                        "key='ans100_topology_version'",
+                        null,
+                    )
+                    db.setTransactionSuccessful()
+                    return false
+                }
+                throw AndroidNeuronNetworkException(
+                    "unsupported hybrid topology migration: $existingVersion -> $topologyVersion",
+                )
             }
 
             for (id in 0 until AndroidNeuronNetworkLimits.MAX_NEURONS) insertNeuron(db, id)
@@ -1053,10 +1075,64 @@ private class AndroidNeuronSqliteStore(
         val actualVersion = db.rawQuery(
             "SELECT value FROM metadata WHERE key='ans100_topology_version'", null,
         ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0).toInt() else 0 }
+        val staticConnections = scalar(db, "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v4-%'")
+        val knownDynamicConnections = scalar(
+            db,
+            "SELECT COUNT(*) FROM connections WHERE connection_id LIKE 'ans100-v5-grown-association-%' OR connection_id LIKE 'ans100-v9-canonical-readout-%'",
+        )
         return actualNeurons == neuronCount.toLong() &&
-            actualConnections == connectionCount.toLong() &&
+            staticConnections == connectionCount.toLong() &&
+            actualConnections == staticConnections + knownDynamicConnections &&
             actualId == topologyId &&
             actualVersion == topologyVersion
+    }
+
+    private fun migrateHybridTopologyV4ToV5(db: SQLiteDatabase) {
+        if (scalar(db, "SELECT COUNT(*) FROM events") != 0L) {
+            throw AndroidNeuronBackpressureException(
+                "cannot migrate ANS-100 topology while delayed neural events remain queued",
+            )
+        }
+        val rows = mutableListOf<Pair<String, Int>>()
+        db.rawQuery(
+            "SELECT connection_id, source_id FROM connections WHERE connection_id LIKE 'ans100-v4-working-to-goal-%' ORDER BY source_id",
+            null,
+        ).use { cursor ->
+            while (cursor.moveToNext()) rows += cursor.getString(0) to cursor.getInt(1)
+        }
+        if (rows.size != 1_800 || rows.map { it.second }.toSet().size != 1_800 ||
+            rows.any { it.second !in 4_000 until 5_800 }
+        ) {
+            throw AndroidNeuronNetworkException(
+                "V4-to-V5 migration found an unexpected working-to-goal projection; no topology was changed",
+            )
+        }
+        for ((connectionId, sourceId) in rows) {
+            val offset = Math.floorMod((sourceId - 4_000).toLong() * 37L + 97L, 300L).toInt()
+            val targetId = 8_500 + offset
+            if (db.update(
+                    "connections",
+                    ContentValues().apply { put("target_id", targetId) },
+                    "connection_id=?",
+                    arrayOf(connectionId),
+                ) != 1
+            ) throw AndroidNeuronNetworkException("failed to isolate canonical output neurons during migration")
+        }
+        val modelTime = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'")
+        db.update(
+            "neurons",
+            ContentValues().apply {
+                put("potential", 0.0)
+                put("adaptation", 0.0)
+                put("last_update_ns", modelTime)
+                put("refractory_until_ns", modelTime)
+            },
+            "neuron_id BETWEEN ? AND ?",
+            arrayOf(
+                ANS100CanonicalReadoutContract.OUTPUT_START.toString(),
+                (ANS100CanonicalReadoutContract.OUTPUT_END - 1).toString(),
+            ),
+        )
     }
 
     override fun resetHybridTurnState(modelTimeNs: Long): Boolean {
