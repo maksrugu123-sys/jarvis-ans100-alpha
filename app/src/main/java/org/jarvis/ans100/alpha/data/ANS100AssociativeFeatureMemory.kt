@@ -46,7 +46,7 @@ class ANS100AssociativeFeatureEncoder {
             )
         }
         tokens.zipWithNext().forEach { (left, right) ->
-            val id = "bigram:$left_$right"
+            val id = "bigram:${left}_$right"
             if (id.length <= ANS100LexicalFeature.MAX_FEATURE_ID_CHARS && id !in features) {
                 features[id] = ANS100LexicalFeature(
                     id = id,
