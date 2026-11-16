@@ -95,20 +95,27 @@ class ANS100HypothesisCompetitionEngine {
             val counterSources = explanations.flatMap { it.contradictingEvidenceSources }.toSet()
             val explicitUser = ANS100ConceptMemory.LearningSource.EXPLICIT_USER
             val verifiedTool = ANS100ConceptMemory.LearningSource.VERIFIED_TOOL
+            val supportHasUnclassifiedSource = explanations.any {
+                it.supportingEvidenceCount > 0 && it.supportingEvidenceSources.isEmpty()
+            }
+            val counterHasUnclassifiedSource = explanations.any {
+                it.contradictingEvidenceCount > 0 && it.contradictingEvidenceSources.isEmpty()
+            }
             val status = when {
                 explanations.isEmpty() -> Status.NEURAL_ONLY
                 hasSupport && hasCounterEvidence ->
-                    if ((supportSources + counterSources).isNotEmpty() &&
+                    if (!supportHasUnclassifiedSource && !counterHasUnclassifiedSource &&
+                        (supportSources + counterSources).isNotEmpty() &&
                         (supportSources + counterSources).all { it == explicitUser }
                     ) Status.MIXED_USER_ASSERTIONS else Status.MIXED_EVIDENCE
                 hasSupport -> when {
-                    supportSources.isEmpty() -> Status.UNCLASSIFIED_SUPPORT
+                    supportHasUnclassifiedSource || supportSources.isEmpty() -> Status.UNCLASSIFIED_SUPPORT
                     supportSources == setOf(explicitUser) -> Status.USER_ASSERTIONS_SUPPORT
                     supportSources == setOf(verifiedTool) -> Status.VERIFIED_TOOL_SUPPORT
                     else -> Status.MIXED_SOURCE_SUPPORT
                 }
                 hasCounterEvidence -> when {
-                    counterSources.isEmpty() -> Status.UNCLASSIFIED_COUNTER_EVIDENCE
+                    counterHasUnclassifiedSource || counterSources.isEmpty() -> Status.UNCLASSIFIED_COUNTER_EVIDENCE
                     counterSources == setOf(explicitUser) -> Status.USER_COUNTER_EVIDENCE
                     counterSources == setOf(verifiedTool) -> Status.VERIFIED_TOOL_COUNTER_EVIDENCE
                     else -> Status.MIXED_SOURCE_COUNTER_EVIDENCE
