@@ -13,14 +13,22 @@ data class AndroidWebSearchIntent(val query: String) {
         private val politePrefixes = listOf(
             "можешь ли ты",
             "можете ли вы",
+            "умеешь ли ты",
+            "умеете ли вы",
             "можешь ты",
             "можете вы",
             "ты можешь",
             "вы можете",
+            "ты умеешь",
+            "вы умеете",
             "можешь ли",
             "можете ли",
+            "умеешь ли",
+            "умеете ли",
             "можешь",
             "можете",
+            "умеешь",
+            "умеете",
             "could you",
             "can you",
             "please",
@@ -42,6 +50,7 @@ data class AndroidWebSearchIntent(val query: String) {
             "поищи",
             "загугли",
             "search the web for",
+            "search the internet for",
             "search online for",
             "find online",
             "search for",
@@ -94,11 +103,19 @@ data class AndroidWebSearchIntent(val query: String) {
             val tokens = ANDROID_SEARCH_TOKEN_REGEX.findAll(clean.lowercase(Locale.ROOT))
                 .map { it.value }
                 .toList()
-            val mentionsSearch = capabilityPhrases.any { phrase ->
-                val phraseTokens = ANDROID_SEARCH_TOKEN_REGEX.findAll(phrase).map { it.value }.toList()
-                phraseTokens.isNotEmpty() && tokens.windowed(phraseTokens.size).any { it == phraseTokens }
-            }
-            return mentionsSearch && tokens.any { it in capabilityMarkers }
+            val matchedPhrase = capabilityPhrases
+                .filter { phrase ->
+                    val phraseTokens = ANDROID_SEARCH_TOKEN_REGEX.findAll(phrase).map { it.value }.toList()
+                    phraseTokens.isNotEmpty() && tokens.windowed(phraseTokens.size).any { it == phraseTokens }
+                }
+                .maxByOrNull { phrase -> normalized.lastIndexOf(phrase) }
+                ?: return false
+            val phraseEnd = normalized.lastIndexOf(matchedPhrase) + matchedPhrase.length
+            val trailingText = normalized.substring(phraseEnd)
+                .trim()
+                .trimEnd('?', '!', '.', ',', ';', ':')
+                .trim()
+            return trailingText.isEmpty() && tokens.any { it in capabilityMarkers }
         }
 
         fun capabilityReply(): String =
