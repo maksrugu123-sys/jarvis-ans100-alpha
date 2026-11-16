@@ -1,21 +1,6 @@
 name: Windows desktop package
 
 on:
-  push:
-    branches:
-      - experiment/jarvis-integrated-prototype-v1
-    paths:
-      - ".github/workflows/windows-desktop.yml"
-      - "docs/JARVIS_WINDOWS_COMPATIBILITY.md"
-      - "packaging/windows/**"
-      - "start_jarvis_windows_exe.bat"
-      - "start_jarvis_windows.bat"
-      - "run_jarvis_core.bat"
-      - "tools/jarvis_app/**"
-      - "tools/neuron_runtime/**"
-      - "tools/jpvr_reference/**"
-      - "tools/reasoning_engine/**"
-      - "tools/numerical_oracle/**"
   workflow_dispatch:
 
 permissions:
