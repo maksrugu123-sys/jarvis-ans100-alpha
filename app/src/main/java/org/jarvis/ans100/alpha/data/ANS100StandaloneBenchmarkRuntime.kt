@@ -2,46 +2,12 @@ package org.jarvis.ans100.alpha.data
 
 import android.content.Context
 import java.io.Closeable
-import java.io.File
 import java.util.UUID
 
 /**
  * Isolated local ANS-100 benchmark runtime with its own SQLite topology.
  * It never reads or writes the production dialogue network.
  */
-
-/**
- * Android's deleteDatabase() returns false when no database files were deleted.
- * A never-created isolated benchmark database is already clean, not a reset failure.
- * If any database or SQLite sidecar exists, delete it and verify that all known
- * artifacts (including multi-instance journals) are gone before reopening SQLite.
- */
-internal fun deleteBenchmarkDatabaseIfPresent(
-    databaseFile: File,
-    deleteDatabase: () -> Boolean,
-    errorMessage: String,
-) {
-    fun existingArtifacts(): List<File> {
-        val standardFiles = listOf(
-            databaseFile,
-            File("${databaseFile.path}-journal"),
-            File("${databaseFile.path}-shm"),
-            File("${databaseFile.path}-wal"),
-        )
-        val masterJournals = databaseFile.parentFile
-            ?.listFiles { candidate -> candidate.name.startsWith("${databaseFile.name}-mj") }
-            ?.toList()
-            .orEmpty()
-        return standardFiles + masterJournals
-    }
-
-    if (existingArtifacts().none { it.exists() }) return
-    deleteDatabase()
-    if (existingArtifacts().any { it.exists() }) {
-        throw AndroidNeuronNetworkException(errorMessage)
-    }
-}
-
 class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
     private val appContext = context.applicationContext
     private var lastNetworkInitializationNs = 0L
@@ -305,18 +271,13 @@ class ANS100StandaloneBenchmarkRuntime(context: Context) : Closeable {
         network.close()
         hypothesisLedger.close()
         activeStructuredInput = structuredInput
-        val benchmarkDb = databaseName(structuredInput)
-        deleteBenchmarkDatabaseIfPresent(
-            appContext.getDatabasePath(benchmarkDb),
-            deleteDatabase = { appContext.deleteDatabase(benchmarkDb) },
-            errorMessage = "unable to reset isolated ANS-100 benchmark database",
-        )
+        if (!appContext.deleteDatabase(databaseName(structuredInput))) {
+            throw AndroidNeuronNetworkException("unable to reset isolated ANS-100 benchmark database")
+        }
         val hypothesisDb = hypothesisDatabaseName(structuredInput)
-        deleteBenchmarkDatabaseIfPresent(
-            appContext.getDatabasePath(hypothesisDb),
-            deleteDatabase = { appContext.deleteDatabase(hypothesisDb) },
-            errorMessage = "unable to reset isolated ANS-100 hypothesis database",
-        )
+        if (!appContext.deleteDatabase(hypothesisDb)) {
+            throw AndroidNeuronNetworkException("unable to reset isolated ANS-100 hypothesis database")
+        }
         hypothesisLedger = openHypothesisLedger(structuredInput)
         hypothesisEngine = ANS100NeuralHypothesisEngine()
         network = openNetwork(structuredInput)

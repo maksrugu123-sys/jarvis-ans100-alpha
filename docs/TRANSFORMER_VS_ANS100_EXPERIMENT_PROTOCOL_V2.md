@@ -87,3 +87,8 @@ Do not claim that a reported process PSS number is the model's standalone RAM re
 ## Verification state
 
 The source-level Android flow and Python scorer have been updated for the structured ANS-100 primary comparison, input-encoder reporting, initialization latency, and explicit process-wide PSS qualification. Tests were authored/updated but not run. No Gradle build, APK, CI workflow, or on-device model experiment has been run as part of this change. No benchmark winner or measured performance result is claimed.
+
+
+### Execution pacing update (2026-11-17)
+
+The earlier fixed inter-example waits and periodic cooldown sleeps have been removed from Android development training and paired held-out evaluation. The benchmark still checks device memory and thermal stop conditions before each training example and each paired evaluation row. Removing fixed waits does not guarantee that the device will remain cool or have sufficient memory; the safety stop remains authoritative.
