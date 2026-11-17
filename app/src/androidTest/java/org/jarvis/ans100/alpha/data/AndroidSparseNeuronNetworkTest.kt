@@ -19,6 +19,8 @@ class AndroidSparseNeuronNetworkTest {
     @After
     fun cleanup() {
         context.deleteDatabase(databaseName)
+        context.deleteDatabase(ANS100StandaloneBenchmarkRuntime.STRUCTURED_BENCHMARK_DATABASE_NAME)
+        context.deleteDatabase(AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME)
     }
 
     @Test
@@ -1041,6 +1043,39 @@ class AndroidSparseNeuronNetworkTest {
                 1,
                 network.recordCanonicalReadoutEligibility("independent-turn", listOf(1_200)),
             )
+        }
+    }
+
+    @Test
+    fun benchmarkLabelsAreAllowedOnlyInBothIsolatedBenchmarkDatabases() {
+        AndroidHybridTopologyV2.open(
+            context,
+            ANS100StandaloneBenchmarkRuntime.STRUCTURED_BENCHMARK_DATABASE_NAME,
+        ).use { structured ->
+            structured.initializeHybridTopologyV2()
+            assertEquals(
+                0,
+                structured.applyCanonicalReadoutBenchmarkFeedback(
+                    feedbackId = "structured-benchmark-feedback",
+                    turnId = "structured-benchmark-turn",
+                    answer = ANS100CanonicalReadoutContract.Answer.YES,
+                ),
+            )
+        }
+
+        AndroidHybridTopologyV2.open(context, databaseName).use { production ->
+            production.initializeHybridTopologyV2()
+            var rejected = false
+            try {
+                production.applyCanonicalReadoutBenchmarkFeedback(
+                    feedbackId = "production-benchmark-feedback",
+                    turnId = "production-benchmark-turn",
+                    answer = ANS100CanonicalReadoutContract.Answer.YES,
+                )
+            } catch (_: AndroidNeuronNetworkException) {
+                rejected = true
+            }
+            assertTrue("production dialogue database must reject benchmark labels", rejected)
         }
     }
 

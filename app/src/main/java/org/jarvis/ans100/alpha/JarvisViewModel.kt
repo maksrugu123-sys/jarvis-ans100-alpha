@@ -608,6 +608,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         return@execute
                     }
                 }
+                if (index + 1 < examples.size) {
+                    Thread.sleep(300L)
+                    if ((index + 1) % 8 == 0) Thread.sleep(10_000L)
+                }
             }
             mainHandler.post { onComplete(results) }
         }
@@ -807,6 +811,23 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     mainHandler.post { onComplete(results) }
                     return@execute
+                }
+                if (index + 1 < inputs.size) {
+                    Thread.sleep(1_000L)
+                    val completed = index + 1
+                    val cooldownMs = when {
+                        completed == 2 -> 30_000L
+                        completed == 6 -> 30_000L
+                        completed == 14 -> 45_000L
+                        completed == 30 || (completed > 30 && (completed - 30) % 8 == 0) -> 60_000L
+                        else -> 0L
+                    }
+                    if (cooldownMs > 0L) {
+                        mainHandler.post {
+                            onProgress(completed, inputs.size, result)
+                        }
+                        Thread.sleep(cooldownMs)
+                    }
                 }
             }
             mainHandler.post { onComplete(results) }

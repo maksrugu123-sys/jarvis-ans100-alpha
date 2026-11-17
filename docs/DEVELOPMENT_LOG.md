@@ -3344,33 +3344,3 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 **Interpretation:** this is a cold model/runtime initialization within a still-running Android app process. The other benchmark subject may remain resident, and Android/native allocators may retain pages. PSS remains process-wide, not per-model isolated memory. Every held-out row now receives a cold-start measurement rather than only the first row.
 
 **Verification:** source inspection and diff checks only. No Gradle build, Kotlin tests, Python tests, APK, CI, or device experiment was run.
-
-
-## 2026-11-17 — Fix first-run reset of isolated structured ANS-100 benchmark databases
-
-**Objective:** unblock the primary Qwen3-0.6B INT4 vs structured ANS-100 experiment after the Android panel reported `unable to reset isolated ANS-100 benchmark database`, despite successfully loading the 48-row development and 144-row held-out JSONL files.
-
-**Root cause:** `ANS100StandaloneBenchmarkRuntime` opens the lexical database at construction, while the primary experiment resets the separate structured database. On a fresh install that structured database (and its hypothesis ledger) may not exist yet. Android's `SQLiteDatabase.deleteDatabase(File)` returns false when it did not delete any database or auxiliary file; treating that return value as an unconditional failure incorrectly rejects the already-clean first-run state. The official Android source shows the deletion result is accumulated from the main database, journal, shared-memory, WAL and multi-instance journal file deletions: https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/database/sqlite/SQLiteDatabase.java#1094.
-
-**Changed:**
-- `ANS100StandaloneBenchmarkRuntime.kt`: added an idempotent database-reset helper. It skips deletion when no main database, journal, SHM, WAL or multi-instance journal exists; otherwise it calls the Android deletion API and verifies that no known artifacts remain. The same guarded reset is used for the isolated neural-hypothesis database. Production/dialogue databases remain untouched.
-- `ANS100StandaloneBenchmarkDatabaseResetTest.kt`: added regression tests for a never-created database, existing database plus sidecars, orphaned WAL sidecar, and a failed deletion that leaves artifacts behind.
-- `JARVIS_ARCHITECTURE.md` and `TRANSFORMER_VS_ANS100_EXPERIMENT_PROTOCOL_V2.md`: documented first-run reset semantics and updated the Android benchmark implementation status.
-
-**Verification:** source readback and static review only before push. New JVM regression tests are **AUTHORED, NOT RUN** locally; no local Gradle command or phone-side experiment was run. The authorized push-triggered GitHub Actions workflow is the next executable verification gate; its result must be recorded separately. No benchmark predictions or winner are claimed.
-
-**Next step:** confirm the workflow result, install the resulting APK if the workflow passes, then retry the already-selected 48/144-row primary comparison in staged mode.
-
-
-## 2026-11-17 — Allow supervised labels in the isolated structured benchmark database; remove benchmark sleeps
-
-**Observed on device:** structured ANS-100 training stopped with `benchmark labels are forbidden outside the isolated benchmark database` after JSONL selection and database reset.
-
-**Root cause:** the guard in `AndroidSparseNeuronNetwork.applyCanonicalReadoutBenchmarkFeedback` allowed only the legacy lexical benchmark database name. The structured B1 runtime intentionally opens a different database (`jarvis_ans100_structured_benchmark_v1.db`), so its correctly isolated training feedback was rejected.
-
-**Changes:**
-- Permit controlled benchmark feedback only in either of the two exact isolated database names: the legacy lexical benchmark DB and the dedicated structured benchmark DB. Production dialogue DBs remain rejected.
-- Remove fixed sleeps from development training (300 ms per example and 10 s after each 8) and paired held-out evaluation (1 s per example and periodic 30–60 s cooldowns).
-- Keep the per-example safety check for Android low-memory state, available RAM, process PSS and severe thermal status. This removes artificial waiting, not the safety stop checks.
-
-**Verification:** source-level review only at commit time. Android unit/instrumentation tests and APK build must pass in GitHub Actions; no device benchmark was run as part of this change. The benchmark remains unstarted and no model winner is claimed.
