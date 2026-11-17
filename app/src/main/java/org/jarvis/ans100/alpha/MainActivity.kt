@@ -2918,7 +2918,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                 .onFailure { status = "Ошибка сохранения structured ANS-100: ${it.message}" }
         } else status = "Сохранение structured ANS-100 отменено."
         pendingEncodingFiles = null
-        busy = false
+        viewModel.markBenchmarkRunning(false)
     }
     val lexicalEncodingExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/x-ndjson"),
@@ -2934,12 +2934,12 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
             }.onFailure {
                 status = "Ошибка сохранения лексического ANS-100: ${it.message}"
                 pendingEncodingFiles = null
-                busy = false
+                viewModel.markBenchmarkRunning(false)
             }
         } else {
             status = "Сохранение лексического ANS-100 отменено."
             pendingEncodingFiles = null
-            busy = false
+            viewModel.markBenchmarkRunning(false)
         }
     }
 
@@ -2955,7 +2955,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                 .onFailure { status = "Ошибка сохранения ANS-100: ${it.message}" }
         } else status = "Сохранение ANS-100 отменено."
         pendingFiles = null
-        busy = false
+        viewModel.markBenchmarkRunning(false)
     }
     val transformerExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/x-ndjson"),
@@ -2971,12 +2971,12 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
             }.onFailure {
                 status = "Ошибка сохранения Transformer: ${it.message}"
                 pendingFiles = null
-                busy = false
+                viewModel.markBenchmarkRunning(false)
             }
         } else {
             status = "Сохранение Transformer отменено."
             pendingFiles = null
-            busy = false
+            viewModel.markBenchmarkRunning(false)
         }
     }
     val developmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -3011,11 +3011,11 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
             }
             Button(
                 onClick = {
-                    busy = true
+                    viewModel.markBenchmarkRunning(true)
                     status = "Сброс изолированной памяти ANS-100…"
                     viewModel.resetAns100StructuredBenchmark { reset ->
                         reset.onFailure {
-                            busy = false
+                            viewModel.markBenchmarkRunning(false)
                             status = "Не удалось сбросить структурированный ANS-100: ${it.message}"
                         }.onSuccess {
                             status = "Обучение структурированного ANS-100: 0 / ${developmentRows.size}"
@@ -3029,7 +3029,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                 onComplete = { trained ->
                                     val failure = trained.firstOrNull { it.isFailure }?.exceptionOrNull()
                                     if (failure != null) {
-                                        busy = false
+                                        viewModel.markBenchmarkRunning(false)
                                         status = "Обучение прервано: ${failure.message}"
                                     } else {
                                         status = "Проверка Qwen и структурированного ANS-100: 0 / ${heldOutRows.size}"
@@ -3060,7 +3060,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                                         transformerExportLauncher.launch("transformer_predictions.jsonl")
                                                     }
                                                     .onFailure {
-                                                        busy = false
+                                                        viewModel.markBenchmarkRunning(false)
                                                         status = "Не удалось подготовить JSONL: ${it.message}"
                                                     }
                                             },
@@ -3076,7 +3076,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
             ) { Text(if (busy) "Эксперимент выполняется…" else "Начать честное сравнение") }
             Button(
                 onClick = {
-                    busy = true
+                    viewModel.markBenchmarkRunning(true)
                     status = "Подготовка двух независимых ANS-100 экспериментов…"
                     viewModel.runCompleteAns100EncodingComparison(
                         developmentRows,
@@ -3091,11 +3091,11 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                                         lexicalEncodingExportLauncher.launch("ans100_lexical_predictions.jsonl")
                                     }
                                     .onFailure {
-                                        busy = false
+                                        viewModel.markBenchmarkRunning(false)
                                         status = "Не удалось подготовить результаты: ${it.message}"
                                     }
                             }.onFailure {
-                                busy = false
+                                viewModel.markBenchmarkRunning(false)
                                 status = "Сравнение ANS-100 прервано: ${it.message}"
                             }
                         },

@@ -61,6 +61,8 @@ import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutContract
 import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutDecoder
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceStore
 import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
 import org.jarvis.ans100.alpha.data.formatAndroidWebSearchReply
 import java.io.ByteArrayOutputStream
@@ -209,6 +211,70 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     val benchmarkBusyState = mutableStateOf(false)
     val benchmarkPendingFilesState = mutableStateOf<ANS100BenchmarkJsonl.PredictionFiles?>(null)
     val benchmarkPendingEncodingFilesState = mutableStateOf<ANS100BenchmarkJsonl.EncodingComparisonFiles?>(null)
+
+    private val benchmarkPreferences = application.getSharedPreferences("jarvis_benchmark_checkpoint_v1", Application.MODE_PRIVATE)
+
+    init {
+        restoreBenchmarkCheckpoint()
+    }
+
+    /** Persist only validated task inputs and safe UI status; held-out labels are never stored. */
+    fun saveBenchmarkDevelopmentRows(rows: List<ANS100BenchmarkDevelopmentExample>) {
+        benchmarkDevelopmentRowsState.value = rows
+        val json = JSONArray().apply {
+            rows.forEach { row ->
+                put(JSONObject().put("task_id", row.taskId).put("input_text", row.inputText)
+                    .put("training_label", row.trainingLabel))
+            }
+        }
+        benchmarkPreferences.edit().putString("development_rows", json.toString()).apply()
+    }
+
+    fun saveBenchmarkHeldOutRows(rows: List<ANS100BenchmarkBatchInput>) {
+        benchmarkHeldOutRowsState.value = rows
+        val json = JSONArray().apply {
+            rows.forEach { row ->
+                put(JSONObject().put("task_id", row.taskId).put("input_text", row.inputText))
+            }
+        }
+        benchmarkPreferences.edit().putString("held_out_rows", json.toString()).apply()
+    }
+
+    private fun restoreBenchmarkCheckpoint() {
+        runCatching {
+            benchmarkPreferences.getString("development_rows", null)?.let { raw ->
+                val json = JSONArray(raw)
+                benchmarkDevelopmentRowsState.value = List(json.length()) { index ->
+                    val row = json.getJSONObject(index)
+                    ANS100BenchmarkDevelopmentExample(
+                        row.getString("task_id"), row.getString("input_text"), row.getString("training_label"),
+                    )
+                }
+            }
+            benchmarkPreferences.getString("held_out_rows", null)?.let { raw ->
+                val json = JSONArray(raw)
+                benchmarkHeldOutRowsState.value = List(json.length()) { index ->
+                    val row = json.getJSONObject(index)
+                    ANS100BenchmarkBatchInput(row.getString("task_id"), row.getString("input_text"))
+                }
+            }
+        }.onFailure {
+            benchmarkDevelopmentRowsState.value = emptyList()
+            benchmarkHeldOutRowsState.value = emptyList()
+            benchmarkStatusState.value = "Не удалось восстановить контрольную точку эксперимента: ${it.message}"
+        }
+        if (benchmarkPreferences.getBoolean("was_running", false)) {
+            benchmarkStatusState.value = "Приложение перезапускалось во время эксперимента. Входные наборы восстановлены; незавершённый запуск нужно начать заново."
+            benchmarkPreferences.edit().putBoolean("was_running", false).apply()
+        } else if (benchmarkDevelopmentRowsState.value.isNotEmpty() || benchmarkHeldOutRowsState.value.isNotEmpty()) {
+            benchmarkStatusState.value = "Контрольная точка восстановлена: development ${benchmarkDevelopmentRowsState.value.size}, held-out ${benchmarkHeldOutRowsState.value.size}."
+        }
+    }
+
+    fun markBenchmarkRunning(running: Boolean) {
+        benchmarkBusyState.value = running
+        benchmarkPreferences.edit().putBoolean("was_running", running).apply()
+    }
 
     private val appContext = application.applicationContext
     private val repository = LocalDraftRepository(
