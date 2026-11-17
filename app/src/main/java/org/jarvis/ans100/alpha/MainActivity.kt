@@ -587,6 +587,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onAccentChange = { accentChoice = it; uiPreferences.edit().putString("accent", it).apply() },
                                 glowEnabled = glowEnabled,
                                 onGlowChange = { glowEnabled = it; uiPreferences.edit().putBoolean("flowing_glow", it).apply() },
+                                backgroundEnabled = backgroundEnabled,
+                                onBackgroundChange = { enabled ->
+                                    backgroundEnabled = enabled
+                                    setJarvisBackgroundEnabled(context, enabled)
+                                },
                                 conversation = ui.conversation,
                                 gpuEnabled = ui.conversation.gpuEnabled,
                                 onGpuChange = viewModel::setGpuEnabled,
@@ -2596,6 +2601,8 @@ private fun SettingsPanel(
     onAccentChange: (String) -> Unit,
     glowEnabled: Boolean,
     onGlowChange: (Boolean) -> Unit,
+    backgroundEnabled: Boolean,
+    onBackgroundChange: (Boolean) -> Unit,
     conversation: LocalConversationUiState,
     gpuEnabled: Boolean,
     onGpuChange: (Boolean) -> Unit,
