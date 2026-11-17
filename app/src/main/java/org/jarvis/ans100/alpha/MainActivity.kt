@@ -1,6 +1,8 @@
 package org.jarvis.ans100.alpha
 
 import android.os.Bundle
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -52,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -92,7 +95,22 @@ import org.jarvis.ans100.alpha.data.RuntimeTaskSnapshot
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val preferences = getSharedPreferences(JarvisBackgroundService.PREFERENCES, Context.MODE_PRIVATE)
+        if (preferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) {
+            runCatching { startForegroundService(Intent(this, JarvisBackgroundService::class.java)) }
+        }
         setContent { JarvisApp() }
+    }
+}
+
+private fun setJarvisBackgroundEnabled(context: Context, enabled: Boolean) {
+    val preferences = context.getSharedPreferences(JarvisBackgroundService.PREFERENCES, Context.MODE_PRIVATE)
+    preferences.edit().putBoolean(JarvisBackgroundService.KEY_ENABLED, enabled).apply()
+    val intent = Intent(context, JarvisBackgroundService::class.java)
+    if (enabled) {
+        runCatching { context.startForegroundService(intent) }
+    } else {
+        context.stopService(intent)
     }
 }
 
@@ -118,6 +136,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
     var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
     var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
+    var backgroundEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) }
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.jarvis.workspace+json"),
     ) { uri: Uri? ->
@@ -2614,6 +2633,38 @@ private fun SettingsPanel(
             "appearance" -> {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(
+                                modifier = Modifier.size(58.dp).background(
+                                    Brush.linearGradient(listOf(Color(0xFF06244A), Color(0xFF10152D))),
+                                    CircleShape,
+                                ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("✧", color = Color(0xFF55D9FF), style = MaterialTheme.typography.headlineLarge)
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("JARVIS · ANS-100", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("NEURAL SYSTEM INTERFACE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        SectionHeading("Постоянная работа", "фоновый режим Android")
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Оставлять JARVIS активным", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Показывает постоянное уведомление «JARVIS работает в фоне». Помогает не завершать процесс при сворачивании приложения. Отключить можно здесь или из уведомления.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(checked = backgroundEnabled, onCheckedChange = onBackgroundChange)
+                        }
+                        Text(
+                            "Android может ограничивать фоновую работу при экстремальной экономии энергии или принудительной остановке приложения.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         SectionHeading("Цвет интерфейса", "выбери акцент приложения")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(selected = accentChoice == "blue", onClick = { onAccentChange("blue") }, label = { Text("Голубой") })
