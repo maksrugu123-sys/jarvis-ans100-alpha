@@ -2669,7 +2669,7 @@ private fun SettingsPanel(
                                 ),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text("✧", color = Color(0xFF55D9FF), style = MaterialTheme.typography.headlineLarge)
+                                Text("J", color = Color(0xFF38BFFF), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("JARVIS · ANS-100", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
