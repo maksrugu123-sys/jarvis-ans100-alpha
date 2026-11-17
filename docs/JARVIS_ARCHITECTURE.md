@@ -5073,7 +5073,7 @@ tools/task_validation/structural_plasticity_eval_v1.py воспроизводи�
 
 Обе системы должны получать одинаковый `input_text`; gold labels и expected answers остаются только у evaluator. Сравниваются точность по split/family, paired outcomes, latency и фактически измеренная peak memory. Неизмеренные ресурсы нельзя заполнять оценками. Текущая Android-система ещё содержит эвристический Core, который готовит часть сигналов; benchmark adapter обязан раскрывать это, а не выдавать pipeline за полностью автономное нейронное рассуждение.
 
-**Статус:** генератор и scorer IMPLEMENTED; тесты AUTHORED / NOT RUN. Реальные adapters/inference и предсказания ещё отсутствуют. Никакого вывода о победителе пока нет. Подробности: `docs/TRANSFORMER_VS_ANS100_BENCHMARK_V1.md`.
+**Статус:** offline generator/scorer и Android JSONL workflow IMPLEMENTED на уровне исходников. Android импортирует 48 development rows и 144 held-out inputs, очищает только изолированные structured ANS-100 базы, обучает ANS-100 только на development, затем запускает Qwen-only и structured ANS-100 на одинаковых held-out inputs и экспортирует отдельные prediction JSONL. Отсутствующая при первом запуске база считается уже чистым состоянием: перед удалением проверяются основной SQLite-файл и sidecar-файлы, а после удаления проверяется отсутствие оставшихся артефактов. Unit regression tests для этого поведения добавлены, но их результат зависит от CI. Реальные on-device predictions и score ещё отсутствуют; победитель не определён. Подробности: `docs/TRANSFORMER_VS_ANS100_BENCHMARK_V1.md` и `docs/TRANSFORMER_VS_ANS100_EXPERIMENT_PROTOCOL_V2.md`.
 
 
 ### 3.54. Leakage-safe ANS-100 benchmark adapter V1

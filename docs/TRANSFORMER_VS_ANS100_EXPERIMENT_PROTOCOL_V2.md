@@ -49,7 +49,7 @@ The training export contains labels from development only. The held-out export c
 2. Open the ANS-100 benchmark panel.
 3. Select `ans100_development_training.jsonl` as development input.
 4. Select `held_out_inputs.jsonl` as held-out input.
-5. Start the primary comparison. The app resets only the isolated structured ANS-100 benchmark database, trains structured ANS-100 on development rows, and runs Qwen plus structured ANS-100 on each identical held-out input.
+5. Start the primary comparison. The app resets only the isolated structured ANS-100 benchmark database, trains structured ANS-100 on development rows, and runs Qwen plus structured ANS-100 on each identical held-out input. On first use, a structured database that has never been created is treated as already clean; existing SQLite database/sidecar files must be deleted and verified absent before the network is reopened.
 6. Save the generated transformer and ANS-100 JSONL files without editing their contents. Each prediction row carries the SHA-256 digest of the exact held-out input supplied to both systems; the scorer checks this digest against the source task before scoring.
 
 The current paired runner deliberately requests a cold start for each model on each task. Initialization time is reported separately from generation/inference time; these measurements are not a warm steady-state throughput benchmark.
