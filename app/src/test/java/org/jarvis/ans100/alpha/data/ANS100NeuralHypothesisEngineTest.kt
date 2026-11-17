@@ -62,7 +62,8 @@ class ANS100NeuralHypothesisEngineTest {
         val engine = ANS100NeuralHypothesisEngine()
         engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), false)
         engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true)
-        val row = engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true).single()
+        engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true)
+        val row = engine.snapshot().single()
         assertEquals(ANS100NeuralHypothesisEngine.Status.GENERATED, row.status)
         assertEquals(1, row.observationCount)
     }

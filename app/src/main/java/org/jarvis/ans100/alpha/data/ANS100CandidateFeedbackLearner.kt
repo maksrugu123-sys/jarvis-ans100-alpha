@@ -90,7 +90,9 @@ class ANS100CandidateFeedbackLearner(
                     connectionId = trace.connectionId,
                     previousWeight = current,
                     nextWeight = next,
-                    appliedDelta = actualDelta,
+                    // Floating-point subtraction can exceed the configured bound
+                    // by one ULP (for example 0.010000000000000009).
+                    appliedDelta = actualDelta.coerceIn(-maxDeltaPerSynapse, maxDeltaPerSynapse),
                 )
             }
             .toList()

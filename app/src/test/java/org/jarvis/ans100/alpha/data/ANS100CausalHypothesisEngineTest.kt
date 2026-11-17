@@ -87,12 +87,21 @@ class ANS100CausalHypothesisEngineTest {
     }
 
     @Test fun preventionRelationsAreNotComposed() {
-        val memory = buildMemory()
-        val prevents = ANS100ConceptMemory.Relation(
+        val memory = ANS100ConceptMemory()
+        listOf("a", "b", "c").forEach { id ->
+            assertTrue(memory.learnConcept(
+                ANS100ConceptMemory.Concept(id, "Событие $id"),
+                ANS100ConceptMemory.LearningSource.EXPLICIT_USER,
+            ))
+        }
+        assertTrue(memory.learnRelation(ANS100ConceptMemory.Relation(
+            "a-causes-b", "a", ANS100ConceptMemory.RelationType.CAUSES, "b",
+            0.8, ANS100ConceptMemory.LearningSource.EXPLICIT_USER, "memory:causes",
+        )))
+        assertTrue(memory.learnRelation(ANS100ConceptMemory.Relation(
             "b-prevents-c", "b", ANS100ConceptMemory.RelationType.PREVENTS, "c",
             0.8, ANS100ConceptMemory.LearningSource.EXPLICIT_USER, "memory:prevents",
-        )
-        assertTrue(memory.learnRelation(prevents))
+        )))
         assertTrue(ANS100CausalHypothesisEngine().generate(memory, setOf("a")).isEmpty())
     }
 

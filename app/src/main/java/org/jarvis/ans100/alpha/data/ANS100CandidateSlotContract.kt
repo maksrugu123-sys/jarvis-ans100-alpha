@@ -45,7 +45,7 @@ object ANS100CandidateSlotContract {
         lane(AndroidHybridTopologyV2.populations[4], slot, polarity, CRITIC_LANE_SIZE)
 
     fun readoutLane(slot: Slot, polarity: Polarity): AndroidHybridTopologyV2.Population {
-        val readout = AndroidHybridTopologyV2.populations[6]
+        val readout = AndroidHybridTopologyV2.populations[7]
         val start = readout.startInclusive + slot.index * READOUT_SLOT_SIZE +
             polarity.index * READOUT_POLARITY_SIZE
         return AndroidHybridTopologyV2.Population(

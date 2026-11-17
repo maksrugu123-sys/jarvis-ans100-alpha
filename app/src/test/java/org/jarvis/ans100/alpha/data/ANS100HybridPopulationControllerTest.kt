@@ -29,8 +29,8 @@ class ANS100HybridPopulationControllerTest {
                 }
             }
         }
-        AndroidHybridTopologyV2.populations.dropLast(1)
-            .filterNot { it.id == missingPopulation }
+        AndroidHybridTopologyV2.populations
+            .filterNot { it.id == "canonical_readout" || it.id == missingPopulation }
             .forEach { add(it.startInclusive) }
     }
 

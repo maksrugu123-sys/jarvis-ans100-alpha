@@ -50,8 +50,9 @@ class ANS100ActivityDrivenStructuralPlasticityTest {
         val replay = observe(learner, "same-turn")
         assertFalse(replay.acceptedTurn)
         assertTrue(replay.emittedProposals.isEmpty())
+        // Only two distinct turns have been accepted; the replay must not
+        // count as a third independent co-activation.
         assertTrue(observe(learner, "turn-2").emittedProposals.isEmpty())
-        assertTrue(observe(learner, "turn-3").emittedProposals.isEmpty())
         assertEquals(0, learner.grownPairCount())
         assertEquals(1, learner.pendingCount())
     }
