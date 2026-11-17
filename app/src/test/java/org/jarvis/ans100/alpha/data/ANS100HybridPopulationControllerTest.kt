@@ -30,7 +30,11 @@ class ANS100HybridPopulationControllerTest {
             }
         }
         AndroidHybridTopologyV2.populations
-            .filterNot { it.id == "canonical_readout" || it.id == missingPopulation }
+            .filterNot {
+                it.id == "canonical_readout" ||
+                    it.id == "decision_readout" ||
+                    it.id == missingPopulation
+            }
             .forEach { add(it.startInclusive) }
     }
 
