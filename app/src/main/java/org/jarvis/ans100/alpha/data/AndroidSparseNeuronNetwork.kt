@@ -461,8 +461,9 @@ class AndroidSparseNeuronNetwork(
         turnId: String,
         answer: ANS100CanonicalReadoutContract.Answer,
     ): Int {
-        if (databaseName != AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME) {
-            throw AndroidNeuronNetworkException("benchmark labels are forbidden outside the isolated benchmark database")
+        if (databaseName != AndroidHybridTopologyV2.BENCHMARK_DATABASE_NAME &&
+            databaseName != ANS100StandaloneBenchmarkRuntime.STRUCTURED_BENCHMARK_DATABASE_NAME) {
+            throw AndroidNeuronNetworkException("benchmark labels are forbidden outside an isolated benchmark database")
         }
         require(feedbackId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
         require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
