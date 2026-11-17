@@ -134,6 +134,18 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var settingsCategory by rememberSaveable { mutableStateOf("appearance") }
     val context = LocalContext.current
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            backgroundEnabled = true
+            setJarvisBackgroundEnabled(context, true)
+        } else {
+            backgroundEnabled = false
+            context.getSharedPreferences(JarvisBackgroundService.PREFERENCES, Context.MODE_PRIVATE)
+                .edit().putBoolean(JarvisBackgroundService.KEY_ENABLED, false).apply()
+        }
+    }
     val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
     var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
     var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
@@ -589,8 +601,16 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onGlowChange = { glowEnabled = it; uiPreferences.edit().putBoolean("flowing_glow", it).apply() },
                                 backgroundEnabled = backgroundEnabled,
                                 onBackgroundChange = { enabled ->
-                                    backgroundEnabled = enabled
-                                    setJarvisBackgroundEnabled(context, enabled)
+                                    if (
+                                        enabled &&
+                                        android.os.Build.VERSION.SDK_INT >= 33 &&
+                                        context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        backgroundEnabled = enabled
+                                        setJarvisBackgroundEnabled(context, enabled)
+                                    }
                                 },
                                 conversation = ui.conversation,
                                 gpuEnabled = ui.conversation.gpuEnabled,
