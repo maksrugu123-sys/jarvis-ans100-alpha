@@ -134,6 +134,10 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var settingsCategory by rememberSaveable { mutableStateOf("appearance") }
     val context = LocalContext.current
+    val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
+    var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
+    var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
+    var backgroundEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -146,10 +150,6 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                 .edit().putBoolean(JarvisBackgroundService.KEY_ENABLED, false).apply()
         }
     }
-    val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
-    var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
-    var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
-    var backgroundEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) }
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.jarvis.workspace+json"),
     ) { uri: Uri? ->
