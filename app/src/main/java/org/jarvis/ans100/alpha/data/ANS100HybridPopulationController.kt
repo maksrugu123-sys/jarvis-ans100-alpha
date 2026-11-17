@@ -37,11 +37,12 @@ class ANS100HybridPopulationController {
             "decision requires the current candidate-lane topology version"
         }
 
+        val allPopulationIds = AndroidHybridTopologyV2.populations.map { it.id }
         val requiredPopulationIds = AndroidHybridTopologyV2.populations
             .filterNot { it.id == "canonical_readout" }
             .map { it.id }
-        require(telemetry.populations.size == requiredPopulationIds.size)
-        require(telemetry.populations.map { it.populationId }.toSet() == requiredPopulationIds.toSet()) {
+        require(telemetry.populations.size == allPopulationIds.size)
+        require(telemetry.populations.map { it.populationId }.toSet() == allPopulationIds.toSet()) {
             "hybrid telemetry must contain each population exactly once"
         }
         val activityById = telemetry.populations.associateBy { it.populationId }
