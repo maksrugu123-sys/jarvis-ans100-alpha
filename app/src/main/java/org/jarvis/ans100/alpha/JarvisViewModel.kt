@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Handler
 import android.net.Uri
 import android.os.Looper
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -200,6 +201,15 @@ data class JarvisUiState(
 )
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
+    // Compose-owned benchmark UI state is held by the ViewModel, not the disposable tab.
+    // This keeps selected JSONL inputs, progress and export hand-off alive across tab changes.
+    val benchmarkDevelopmentRowsState = mutableStateOf<List<ANS100BenchmarkDevelopmentExample>>(emptyList())
+    val benchmarkHeldOutRowsState = mutableStateOf<List<ANS100BenchmarkBatchInput>>(emptyList())
+    val benchmarkStatusState = mutableStateOf("Выбери два JSONL-файла, подготовленных Python-адаптером.")
+    val benchmarkBusyState = mutableStateOf(false)
+    val benchmarkPendingFilesState = mutableStateOf<ANS100BenchmarkJsonl.PredictionFiles?>(null)
+    val benchmarkPendingEncodingFilesState = mutableStateOf<ANS100BenchmarkJsonl.EncodingComparisonFiles?>(null)
+
     private val appContext = application.applicationContext
     private val repository = LocalDraftRepository(
         SharedPreferencesDraftStorage(application.applicationContext),

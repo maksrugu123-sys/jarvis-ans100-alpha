@@ -76,7 +76,7 @@ class JarvisBackgroundService : Service() {
             Notification.Builder(this)
         }
         return builder
-            .setSmallIcon(R.drawable.ic_jarvis)
+            .setSmallIcon(R.drawable.ic_jarvis_notification)
             .setContentTitle("JARVIS работает в фоне")
             .setContentText("Локальный ИИ-ассистент активен")
             .setContentIntent(openIntent)
