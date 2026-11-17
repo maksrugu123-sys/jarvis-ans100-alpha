@@ -2877,12 +2877,14 @@ private fun SettingsPanel(
 @Composable
 private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boolean) {
     val context = LocalContext.current
-    var developmentRows by remember { mutableStateOf<List<ANS100BenchmarkDevelopmentExample>>(emptyList()) }
-    var heldOutRows by remember { mutableStateOf<List<ANS100BenchmarkBatchInput>>(emptyList()) }
-    var status by remember { mutableStateOf("Выбери два JSONL-файла, подготовленных Python-адаптером.") }
-    var busy by remember { mutableStateOf(false) }
-    var pendingFiles by remember { mutableStateOf<ANS100BenchmarkJsonl.PredictionFiles?>(null) }
-    var pendingEncodingFiles by remember { mutableStateOf<ANS100BenchmarkJsonl.EncodingComparisonFiles?>(null) }
+    // Keep benchmark inputs, progress and export hand-off in the ViewModel so tab
+    // navigation does not discard the active experiment's UI state.
+    var developmentRows by viewModel.benchmarkDevelopmentRowsState
+    var heldOutRows by viewModel.benchmarkHeldOutRowsState
+    var status by viewModel.benchmarkStatusState
+    var busy by viewModel.benchmarkBusyState
+    var pendingFiles by viewModel.benchmarkPendingFilesState
+    var pendingEncodingFiles by viewModel.benchmarkPendingEncodingFilesState
 
     val structuredEncodingExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/x-ndjson"),
