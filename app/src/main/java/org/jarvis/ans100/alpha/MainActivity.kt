@@ -2983,7 +2983,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
         if (uri != null) runCatching {
             ANS100BenchmarkJsonl.readDevelopmentRows(context.contentResolver, uri)
         }.onSuccess {
-            developmentRows = it
+            viewModel.saveBenchmarkDevelopmentRows(it)
             status = "Обучающих примеров загружено: ${it.size}."
         }.onFailure { status = "Ошибка обучающего JSONL: ${it.message}" }
     }
@@ -2991,7 +2991,7 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
         if (uri != null) runCatching {
             ANS100BenchmarkJsonl.readHeldOutRows(context.contentResolver, uri)
         }.onSuccess {
-            heldOutRows = it
+            viewModel.saveBenchmarkHeldOutRows(it)
             status = "Проверочных примеров загружено: ${it.size}."
         }.onFailure { status = "Ошибка проверочного JSONL: ${it.message}" }
     }
