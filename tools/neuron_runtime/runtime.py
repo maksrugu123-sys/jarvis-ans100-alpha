@@ -5,7 +5,7 @@ It delegates all neuron and plasticity equations to the immutable Oracle.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Literal, Mapping, Sequence
 
@@ -18,6 +18,12 @@ from tools.numerical_oracle.jarvis_oracle import (
 
 LearningRule = Literal["none", "stdp", "rstdp"]
 _U64_MAX = (1 << 64) - 1
+
+def _plasticity_scale(value: float) -> float:
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or not 0.25 <= value <= 2.0):
+        raise NeuronRuntimeError("plasticity_scale must be a finite real number in [0.25, 2]")
+    return float(value)
 
 
 class NeuronRuntimeError(ValueError):
@@ -167,7 +173,9 @@ class NeuronRuntime:
         inputs: Sequence[SynapticInput],
         *,
         learning_context_id: str | None = None,
+        plasticity_scale: float = 1.0,
     ) -> RuntimeStep:
+        plasticity_scale = _plasticity_scale(plasticity_scale)
         if self._processed_batches >= _U64_MAX:
             raise NeuronRuntimeError("processed_batches exhausted its unsigned 64-bit range")
         if not isinstance(inputs, (list, tuple)):
@@ -208,17 +216,25 @@ class NeuronRuntime:
         n_post = int(neuron_candidate.spike_emitted)
 
         if self._learning_rule != "none":
+            effective_synapse_params = (
+                self._synapse_params if plasticity_scale == 1.0 else replace(
+                    self._synapse_params,
+                    eta_plus=self._synapse_params.eta_plus * plasticity_scale,
+                    eta_minus=self._synapse_params.eta_minus * plasticity_scale,
+                )
+            )
+            effective_synapse_params.validate()
             for synapse_id in sorted(self._synapse_states):
                 current = self._synapse_states[synapse_id]
                 n_pre = pre_counts[synapse_id]
                 if self._learning_rule == "stdp":
                     plasticity = update_stdp(
-                        current, self._synapse_params, time_ns, n_pre, n_post
+                        current, effective_synapse_params, time_ns, n_pre, n_post
                     )
                 else:
                     assert learning_context_id is not None
                     plasticity = update_rstdp(
-                        current, self._synapse_params, self._reward_params,
+                        current, effective_synapse_params, self._reward_params,
                         time_ns, n_pre, n_post, learning_context_id,
                     )
                 synapse_candidates[synapse_id] = plasticity.state
@@ -236,15 +252,25 @@ class NeuronRuntime:
         reward_value: float,
         baseline_before: float,
         learning_context_id: str | None,
+        *,
+        plasticity_scale: float = 1.0,
     ) -> RewardUpdate:
+        plasticity_scale = _plasticity_scale(plasticity_scale)
         if self._learning_rule != "rstdp":
             raise NeuronRuntimeError("reward is available only in rstdp mode")
         if synapse_id not in self._synapse_states:
             raise NeuronRuntimeError(f"unknown synapse ID: {synapse_id}")
+        effective_reward_params = (
+            self._reward_params if plasticity_scale == 1.0 else replace(
+                self._reward_params,
+                eta_r=self._reward_params.eta_r * plasticity_scale,
+            )
+        )
+        effective_reward_params.validate()
         result = apply_reward(
             self._synapse_states[synapse_id],
             self._synapse_params,
-            self._reward_params,
+            effective_reward_params,
             time_ns,
             reward_value,
             baseline_before,
