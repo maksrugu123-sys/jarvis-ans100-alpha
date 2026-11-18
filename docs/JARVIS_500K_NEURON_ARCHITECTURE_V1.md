@@ -25,7 +25,7 @@ The first source-level sidecars are tools/neuron_runtime/neuron_features.py and 
 
 Boundaries:
 - Confidence is an internal ranking signal, not a calibrated probability.
-- Sensitivity is not applied to ALIF-DT until an explicit adapter and differential contract exist.
+- The Python network adapter applies sensitivity as a bounded multiplier on incoming excitatory strength; it does not alter the canonical ALIF-DT threshold equation. Android parity and differential verification remain open.
 - Sidecar traces do not silently modify canonical STDP/R-STDP weights.
 - Inhibition suppresses a signal but does not delete competing hypotheses or evidence.
 - UNRESOLVED is not the same as REFUTED.
