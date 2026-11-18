@@ -1,42 +1,85 @@
 # JARVIS Network Runtime V1 — bounded multi-neuron event loop
 
-**Status:** Python reference coordinator plus a separate bounded JPVR checkpoint adapter/store are implemented; 15 scheduler tests, 11 snapshot-codec tests and 14 storage tests are AUTHORED, NOT RUN. Not production NCC, concurrent, or device-verified.
+**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 21 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
 
-## Scope and contracts
+## Runtime execution
 
-`NetworkRuntime` composes existing `NeuronRuntime` instances. It does not add or alter Adaptive LIF-DT, STDP, or R-STDP equations.
+`NetworkRuntime` composes existing `NeuronRuntime` instances and delegates the canonical ALIF-DT/STDP/R-STDP equations to the Numerical Oracle-backed runtime.
 
-- A `NetworkConnection` is a directed route from one source neuron's output spike to exactly one incoming synapse on a target neuron.
-- The authoritative synaptic weight remains in the target neuron's `NeuronRuntime`; a connection stores only route metadata, delay, normalized strength, and attention.
-- Propagation delay must be a positive integer number of model nanoseconds. Zero-delay edges are rejected to prevent same-timestamp recursive propagation.
-- External inputs are inserted with `schedule_input`. All events at one timestamp are processed as complete batches; each affected neuron receives at most one `process_batch` call for that timestamp.
-- An output spike schedules one event per outgoing connection at `spike_time + delay_ns`. The queue is deterministic by timestamp and stable event ID.
-- The pending queue and each `run()` call have explicit limits. Complete same-timestamp batches are never split; remaining work stays pending when the run budget is reached.
-- Before a timestamp batch is committed, the coordinator reserves worst-case outgoing fan-out capacity. Backpressure defers the batch without changing neuron state.
-- Candidate neuron coordinators are copied and all affected nodes are evaluated before the timestamp is committed in memory. A failed candidate leaves its events pending and commits no neuron state for that timestamp.
-- R-STDP nodes receive the caller's `learning_context_id`; reward baseline remains external and can be applied through `NetworkRuntime.apply_reward`.
+- A `NetworkConnection` routes one source spike to one target synapse with a positive model-time delay.
+- All queued events at one timestamp are processed as a complete deterministic batch.
+- Candidate neuron states and outgoing events are prepared before in-memory publication.
+- Queue capacity and per-run event budgets are bounded; a same-timestamp batch is never split.
+- Fan-out capacity and timestamp overflow are checked before candidate state is published.
+- Failed candidate processing restores the timestamp's inputs and does not publish neuron, sidecar, queue, or clock changes.
 
-## Ownership and limitations
+## Cognitive sidecar integration
 
-The constructor copies supplied `NeuronRuntime` instances. The network then owns its coordinator state; callers inspect neuron and synapse snapshots through read-only/copy-returning accessors.
+`NetworkRuntime` optionally accepts sparse `feature_states` and `synaptic_memories` mappings.
 
-This is a single-threaded Python reference event loop, not a production scheduler or Neural Core Controller. Durable snapshots are provided only when the caller explicitly uses JPVRNetworkCheckpointStore; they do not make individual timestamp batches crash-atomic or introduce concurrent producers. CQE authorization/idempotency, topology learning, inhibitory synapse type/iSTDP, device integration and resource measurements remain absent. External event IDs are checked for uniqueness while pending, not retained forever as durable idempotency keys. Cyclic topologies are allowed only with positive delays and bounded by queue/run budgets; they are not evidence of stable recurrent dynamics.
+For a neuron with feature state:
+- Sensitivity and inhibition gate each incoming excitatory signal through `effective_excitatory_gain`; output is clamped to [0, 1].
+- Sensitivity adaptation uses negative feedback: activity below the configured target raises sensitivity, while activity above target lowers it.
+- After a successful candidate neuron update, activity, the prior memory trace, and event attention update bounded confidence, uncertainty, prediction-error, memory, inhibition, and context fields.
+- Touched synapses receive bounded coactivation and predictive traces.
+- Reward operations update the optional reward trace without silently changing canonical STDP/R-STDP weights.
 
-## JPVR network checkpoint integration
+Neurons without a feature sidecar retain the baseline signal path. A sidecar is optional and sparse; it does not enlarge the 40-byte base numerical payload.
 
-See docs/JNVM_NETWORK_CHECKPOINT_STORE_V1.md. The snapshot includes all neuron runtime state/configuration, directed connections, queue contents, current model time, the processed-state flag, and queue/run limits. It requires one caller-supplied non-zero 128-bit clock epoch shared by all neurons.
+Important limitations:
+- Confidence is an internal ranking signal, not a calibrated probability.
+- The current prediction baseline is the prior bounded memory trace, not a learned sequence model.
+- Context similarity currently uses mean event-attention.
+- The sidecar does not yet implement a complete inhibitory population, full predictive coding, hypothesis competition, or causal reasoning.
+- Android Kotlin feature parity and UI controls are not integrated.
+- Feature activation is currently selected by supplying sidecar state at runtime; there is no complete user-facing per-mechanism configuration system.
 
-A save writes one versioned JNNW BLOB record and one JNCP CHECKPOINT descriptor page in the same JPVR transaction. The active MANIFEST points to that immutable CHECKPOINT page. Load validates the source COMMIT ancestry, BLOB page range, transaction/generation identity, CRC, network ID and nested neuron schemas before reconstructing the queue. This is one active network checkpoint per container; it is not a per-network index or a CQE event log. The external R-STDP reward-baseline manager remains outside the snapshot.
+## Checkpoint and persistence path
 
-## Verification
+`NetworkRuntime.export_checkpoint_state()` includes neuron state, sidecars, pending events, topology, queue/run limits, and model clock. `restore_checkpoint_state()` validates and reconstructs these values.
 
-`tools/neuron_runtime/test_network.py` now contains 15 contract tests for topology validation, delayed propagation across multiple neurons, deterministic same-timestamp batching, bounded queue/run behavior, fan-out backpressure, runtime ownership isolation, bounded recurrent routing, and scheduler time initialization from per-synapse trace/reward clocks.
+`JPVRNetworkJNVMStore.save_timestamp()` persists changed neuron records, their optional sidecars, the scheduler snapshot, and all corresponding COW index mutations in one JPVR typed transaction / COMMIT. The scheduler contains a complete neuron-record-version manifest. Restore reads the scheduler and every neuron from one pinned JPVR snapshot and rejects version drift.
 
-The original 14 contract tests had a historical isolated-harness result of 14/14 using an API-compatible Runtime/Oracle stand-in; this was not an integration run against the repository's actual Numerical Oracle. The fifteenth test (restored per-synapse clock boundary) has been added and is AUTHORED, NOT RUN. The user's earlier Termux full-suite result of 216/216 predates this module and does not cover it.
+`NetworkJNVMCoordinator`:
+- restores one coherent network snapshot;
+- stages inputs and rewards on a detached runtime copy;
+- processes at most one complete timestamp in `run_next_timestamp()`;
+- commits changed neuron records and scheduler state together;
+- publishes the candidate in memory only after a confirmed durable commit;
+- freezes on uncertain publication until a reopened container proves either the exact new commit or exact prior snapshot;
+- requires explicit reload after a definite stale-version conflict.
 
-Run from the repository root:
+This is a single-writer Python reference path. The coordinator still holds the complete `NetworkRuntime` and neuron objects in process RAM. It is not connected to the 128-shard per-neuron write-back working set, and it is not a storage-paged 500,000-neuron runtime.
 
-    python3 -m unittest tools.neuron_runtime.test_network -v
-    python3 -m unittest discover -s tools -t . -v
+## Verification state
 
-No build, CI, APK/AAB, Android resource measurement, or production integration is part of this increment.
+`tools/neuron_runtime/test_network.py` contains 21 authored tests, including:
+- topology and endpoint validation;
+- deterministic same-timestamp batching;
+- delayed multi-neuron propagation;
+- queue/run budget and fan-out backpressure;
+- failed-timestamp rollback;
+- sidecar input modulation and memory update;
+- feature-counter rollback;
+- inhibition and sensitivity behavior;
+- negative-feedback sensitivity adaptation;
+- rejection of boolean and non-finite sensitivity;
+- caller-state isolation and deterministic input ordering.
+
+The focused network tests, JPVR persistence tests, coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
+
+Suggested focused verification when explicitly approved:
+
+```bash
+python3 -m unittest tools.neuron_runtime.test_network -v
+python3 -m unittest tools.neuron_runtime.test_network_jnvm_store -v
+python3 -m unittest tools.neuron_runtime.test_network_jnvm_coordinator -v
+```
+
+Next engineering gates:
+1. Run focused tests and repair any real regressions.
+2. Add differential Python/Kotlin golden vectors for feature updates and input gating.
+3. Integrate sidecar state into Android's SQLite timestamp transaction without weakening atomicity.
+4. Connect bounded working-set paging to network execution only after the group-commit boundary is preserved.
+5. Develop prediction and uncertainty into actual hypothesis generation/competition, with independent evidence.
+6. Increase logical capacity only through staged indexed storage and measured resource gates.
