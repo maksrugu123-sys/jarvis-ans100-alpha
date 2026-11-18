@@ -6,7 +6,7 @@
 
 `NetworkRuntime` composes existing `NeuronRuntime` instances and delegates the canonical ALIF-DT/STDP/R-STDP equations to the Numerical Oracle-backed runtime.
 
-- A `NetworkConnection` routes one source spike to one target synapse with a positive model-time delay.
+- A `NetworkConnection` routes one source spike to one target with a positive model-time delay. Its `signal_type` is `excitatory` (the default; targets one owned synapse) or `inhibitory` (targets the neuron and has no excitatory synapse ID).
 - All queued events at one timestamp are processed as a complete deterministic batch.
 - Candidate neuron states and outgoing events are prepared before in-memory publication.
 - Queue capacity and per-run event budgets are bounded; a same-timestamp batch is never split.
@@ -22,8 +22,9 @@ For a neuron with feature state:
 - Sensitivity adaptation uses negative feedback: activity below the configured target raises sensitivity, while activity above target lowers it.
 - The sidecar's meta-plasticity value scales STDP/R-STDP local learning rates through a bounded runtime parameter adapter. Oracle safety caps remain unchanged; without a sidecar the scale is exactly 1.0.
 - After a successful candidate neuron update, activity, the prior memory trace, and event attention update bounded confidence, uncertainty, prediction-error, memory, inhibition, and context fields.
-- Touched synapses receive bounded coactivation and predictive traces.
+- Touched excitatory synapses receive bounded coactivation and predictive traces.
 - Reward operations update the optional reward trace without silently changing canonical STDP/R-STDP weights.
+- Explicit inhibitory connections create separate delayed inhibitory events. Same-timestamp inhibitory strengths combine as a bounded probabilistic union, gate simultaneous excitatory inputs before the neuron update, and update the target's persistent inhibition feature. Inhibitory events do not enter excitatory STDP or claim an excitatory target synapse.
 
 Neurons without a feature sidecar retain the baseline signal path. A sidecar is optional and sparse; it does not enlarge the 40-byte base numerical payload.
 
@@ -31,7 +32,7 @@ Important limitations:
 - Confidence is an internal ranking signal, not a calibrated probability.
 - The current prediction baseline is the prior bounded memory trace, not a learned sequence model.
 - Context similarity currently uses mean event-attention.
-- Inhibition is currently only a gate for existing state; the runtime supplies no new inhibitory drive or inhibitory population.
+- Inhibitory routing is an explicit event pathway, but it is still a simple scalar drive/gate, not a biologically detailed inhibitory population or interneuron model.
 - Synaptic memory traces are stored but are not yet consumed by later activation or credit assignment.
 - The sidecar does not yet implement full predictive coding, hypothesis competition, or causal reasoning.
 - Android Kotlin feature parity and UI controls are not integrated.
@@ -41,7 +42,7 @@ Important limitations:
 
 `NetworkRuntime.export_checkpoint_state()` includes neuron state, sidecars, pending events, topology, queue/run limits, and model clock. `restore_checkpoint_state()` validates and reconstructs these values.
 
-`JPVRNetworkJNVMStore.save_timestamp()` persists changed neuron records, their optional sidecars, the scheduler snapshot, and all corresponding COW index mutations in one JPVR typed transaction / COMMIT. The scheduler contains a complete neuron-record-version manifest. Restore reads the scheduler and every neuron from one pinned JPVR snapshot and rejects version drift.
+`JPVRNetworkJNVMStore.save_timestamp()` persists changed neuron records, their optional sidecars, the scheduler snapshot (including excitatory/inhibitory topology and typed pending events), and all corresponding COW index mutations in one JPVR typed transaction / COMMIT. Scheduler snapshot V3 is written for this event contract; V2 scheduler snapshots remain readable as excitatory-only topology. The scheduler contains a complete neuron-record-version manifest. Restore reads the scheduler and every neuron from one pinned JPVR snapshot and rejects version drift.
 
 `NetworkJNVMCoordinator`:
 - restores one coherent network snapshot;
@@ -56,13 +57,14 @@ This is a single-writer Python reference path. The coordinator still holds the c
 
 ## Verification state
 
-`tools/neuron_runtime/test_network.py` contains 22 authored tests, including:
+`tools/neuron_runtime/test_network.py` contains 26 authored tests, including:
 - topology and endpoint validation;
 - deterministic same-timestamp batching;
 - delayed multi-neuron propagation;
 - queue/run budget and fan-out backpressure;
 - failed-timestamp rollback;
 - sidecar input modulation and memory update;
+- inhibitory route validation, same-timestamp suppression, feature-state creation, and checkpoint round-trip;
 - feature-counter rollback;
 - inhibition and sensitivity behavior;
 - negative-feedback sensitivity adaptation;
