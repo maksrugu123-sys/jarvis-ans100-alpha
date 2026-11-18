@@ -310,10 +310,11 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         c.validate()
         if c.source_neuron_id not in neuron_ids or c.target_neuron_id not in neuron_ids:
             raise JPVRNetworkJNVMError("connection endpoint is outside neuron_ids")
-        target = (c.target_neuron_id, c.target_synapse_id)
-        if target in owned:
-            raise JPVRNetworkJNVMError("target synapse has multiple connection owners")
-        owned.add(target)
+        if c.signal_type == "excitatory":
+            target = (c.target_neuron_id, c.target_synapse_id)
+            if target in owned:
+                raise JPVRNetworkJNVMError("target synapse has multiple connection owners")
+            owned.add(target)
         connections.append(c)
         ids.append(c.connection_id)
     if ids != sorted(set(ids)):
