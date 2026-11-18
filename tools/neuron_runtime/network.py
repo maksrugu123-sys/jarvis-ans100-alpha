@@ -400,7 +400,7 @@ class NetworkRuntime:
                         raise NetworkRuntimeError("generated event ID collision")
                     if len(self._queue) + len(generated) > self._queue_limit:
                         raise NetworkBackpressureError("generated events exceed queue capacity")
-                except (NeuronRuntimeError, OracleInputError) as exc:
+                except (NeuronRuntimeError, OracleInputError, NeuronFeatureError) as exc:
                     self._restore(group)
                     raise NetworkRuntimeError(f"neuron batch rejected: {exc}") from exc
                 except Exception:
