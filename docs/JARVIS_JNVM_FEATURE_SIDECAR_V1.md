@@ -48,12 +48,15 @@ per-neuron write-back working set.
 
 This does **not** yet integrate the sidecar with Android's SQLite timestamp
 transaction or Kotlin `AndroidSparseNeuronNetwork`. It also does not make the
-confidence value a calibrated probability, implement a full inhibitory
-population, or prove a complete predictive model. The prediction baseline is
-the prior bounded memory trace, and context similarity currently uses the
-mean event-attention value. The network currently supplies zero new
-`inhibitory_drive`, so inhibition is only an input gate for an existing state
-value that decays; a real inhibitory population is not connected. The
+confidence value a calibrated probability, implement a biologically detailed
+inhibitory population, or prove a complete predictive model. Explicit
+`NetworkConnection(signal_type="inhibitory")` routes create separate delayed
+inhibitory events; same-timestamp inhibitory strengths combine as a bounded
+probabilistic union, gate concurrent excitatory inputs, and update the target's
+persisted inhibition feature. These are scalar inhibitory routes, not a
+biologically detailed interneuron model or a dedicated inhibitory population
+registry. The prediction baseline is the prior bounded memory trace, and
+context similarity currently uses the mean event-attention value. The
 `plasticity` field now scales the Numerical Oracle's STDP/R-STDP local learning
 rates through a bounded `NeuronRuntime` adapter. The Oracle equations and
 safety caps remain unchanged; a neuron without a sidecar uses scale 1.0.
@@ -67,7 +70,8 @@ See `docs/JARVIS_INTEGRATION_AUDIT_V1.md` for the current component-by-component
 connection audit and next integration order.
 
 Focused tests have been authored for real signal modulation, memory-trace
-facilitation, baseline preservation, feature updates, and persistence/restore.
+facilitation, baseline preservation, inhibitory route behavior, checkpoint
+round-trip, feature updates, and persistence/restore.
 They are **NOT RUN**. No benchmark, build, CI or
 device measurement has been performed.
 
