@@ -276,5 +276,58 @@ class NetworkTests(unittest.TestCase):
         self.assertEqual(run(events), run(list(reversed(events))))
 
 
+    def test_prior_synaptic_memory_facilitates_later_activation(self):
+        from unittest.mock import patch
+        from tools.neuron_runtime.neuron_features import (
+            NeuronFeatureState, SynapticMemoryState,
+        )
+        from tools.numerical_oracle.jarvis_oracle import process_neuron_batch
+
+        network = NetworkRuntime(
+            {"n": NeuronRuntime({"in": 1.0})},
+            feature_states={"n": NeuronFeatureState()},
+            synaptic_memories={"n": {"in": SynapticMemoryState(
+                coactivation_trace=1.0, predictive_trace=1.0, reward_trace=1.0,
+            )}},
+        )
+        network.schedule_input(0, "n", "in", "remembered-input", 0.5)
+        with patch(
+            "tools.neuron_runtime.runtime.process_neuron_batch",
+            wraps=process_neuron_batch,
+        ) as process:
+            network.run()
+
+        delivered = process.call_args.args[2][0].strength
+        self.assertAlmostEqual(delivered, 0.725)
+
+    def test_absent_synaptic_memory_preserves_baseline_input_strength(self):
+        from unittest.mock import patch
+        from tools.numerical_oracle.jarvis_oracle import process_neuron_batch
+
+        network = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})})
+        network.schedule_input(0, "n", "in", "baseline-input", 0.5)
+        with patch(
+            "tools.neuron_runtime.runtime.process_neuron_batch",
+            wraps=process_neuron_batch,
+        ) as process:
+            network.run()
+
+        delivered = process.call_args.args[2][0].strength
+        self.assertEqual(delivered, 0.5)
+
+    def test_synaptic_memory_gain_is_bounded_and_validated(self):
+        from tools.neuron_runtime.neuron_features import (
+            NeuronFeatureError, SynapticMemoryState, effective_synaptic_memory_gain,
+        )
+
+        maximum = effective_synaptic_memory_gain(SynapticMemoryState(
+            coactivation_trace=1.0, predictive_trace=1.0, reward_trace=1.0,
+        ))
+        self.assertEqual(maximum, 1.45)
+        with self.assertRaises(NeuronFeatureError):
+            effective_synaptic_memory_gain(SynapticMemoryState(coactivation_trace=2.0))
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
