@@ -51,6 +51,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -292,24 +293,52 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             tonalElevation = 0.dp,
                         ) {
                             NavigationBarItem(
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFF62CFFF),
+                                    selectedTextColor = Color(0xFFBDEBFF),
+                                    indicatorColor = Color(0xFF12344D),
+                                    unselectedIconColor = Color(0xFF7595AE),
+                                    unselectedTextColor = Color(0xFF7595AE),
+                                ),
                                 selected = selectedTab == 4,
                                 onClick = { selectedTab = 4 },
                                 icon = { Text("⌂") },
                                 label = { Text("Обзор") },
                             )
                             NavigationBarItem(
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFF62CFFF),
+                                    selectedTextColor = Color(0xFFBDEBFF),
+                                    indicatorColor = Color(0xFF12344D),
+                                    unselectedIconColor = Color(0xFF7595AE),
+                                    unselectedTextColor = Color(0xFF7595AE),
+                                ),
                                 selected = selectedTab == 0,
                                 onClick = { selectedTab = 0 },
                                 icon = { Text("◉") },
                                 label = { Text("Чат") },
                             )
                             NavigationBarItem(
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFF62CFFF),
+                                    selectedTextColor = Color(0xFFBDEBFF),
+                                    indicatorColor = Color(0xFF12344D),
+                                    unselectedIconColor = Color(0xFF7595AE),
+                                    unselectedTextColor = Color(0xFF7595AE),
+                                ),
                                 selected = selectedTab == 1,
                                 onClick = { selectedTab = 1 },
                                 icon = { Text("▤") },
                                 label = { Text("Память") },
                             )
                             NavigationBarItem(
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFF62CFFF),
+                                    selectedTextColor = Color(0xFFBDEBFF),
+                                    indicatorColor = Color(0xFF12344D),
+                                    unselectedIconColor = Color(0xFF7595AE),
+                                    unselectedTextColor = Color(0xFF7595AE),
+                                ),
                                 selected = selectedTab == 2,
                                 onClick = { selectedTab = 2 },
                                 icon = { Text("☷") },
@@ -703,11 +732,13 @@ private fun LocalMemoryPanel(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, Color(0x443D789F)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1C2B)),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -913,11 +944,13 @@ private fun WorkspaceMemoryPanel(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, Color(0x443D789F)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1C2B)),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2775,18 +2808,33 @@ private fun ConversationPanel(
                         Column(modifier = Modifier.fillMaxWidth().padding(top = 36.dp, bottom = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Surface(modifier = Modifier.size(64.dp).then(rememberGlowBorder(glowEnabled, 32.dp)),
-                                shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                            Surface(
+                                modifier = Modifier.size(82.dp).then(rememberGlowBorder(glowEnabled, 42.dp)),
+                                shape = CircleShape,
+                                color = Color(0xFF0B2942),
+                                border = BorderStroke(1.dp, Color(0x6649BFFF)),
+                            ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Text("✦", style = MaterialTheme.typography.headlineLarge,
-                                        color = MaterialTheme.colorScheme.primary)
+                                    Text("J", style = MaterialTheme.typography.displaySmall,
+                                        color = Color(0xFF58C8FF), fontWeight = FontWeight.Bold)
                                 }
                             }
-                            Text("Чем могу помочь?", style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold)
-                            Text("Напиши сообщение. Переписка хранится локально на этом устройстве.",
+                            Text("Ваш интеллектуальный центр", style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold, color = Color(0xFFEAF6FF))
+                            Text("Задайте вопрос или начните новую задачу. JARVIS работает в локальной среде.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                color = Color(0xFF8FAFC8))
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = Color(0xFF0C263A),
+                                border = BorderStroke(1.dp, Color(0x443E83B2)),
+                            ) {
+                                Text("PRIVATE SESSION  ·  ANS-100",
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                    color = Color(0xFF82CFFF),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    letterSpacing = 1.sp)
+                            }
                         }
                     }
                 }
@@ -2806,10 +2854,11 @@ private fun ConversationPanel(
                             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp,
                                 bottomStart = if (userMessage) 20.dp else 6.dp,
                                 bottomEnd = if (userMessage) 6.dp else 20.dp),
-                            color = if (userMessage) MaterialTheme.colorScheme.secondaryContainer
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                            border = if (!userMessage && glowEnabled && message.id != latestAssistantId)
-                                BorderStroke(1.dp, Color(0x6655BFFF)) else null,
+                            color = if (userMessage) Color(0xFF123B5A) else Color(0xFF0D2032),
+                            border = BorderStroke(
+                                1.dp,
+                                if (userMessage) Color(0x6654BFFF) else Color(0x443A789F),
+                            ),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
                                 verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -2991,12 +3040,56 @@ private fun SettingsPanel(
 ) {
     val categories = listOf("appearance" to "Внешний вид", "model" to "Языковая модель",
         "speed" to "Скорость", "neural" to "ANS-100", "system" to "Система", "about" to "О приложении")
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Настройки", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(categories, key = { it.first }) { (id, title) ->
-                FilterChip(selected = selectedCategory == id, onClick = { onCategoryChange(id) },
-                    label = { Text(title) })
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, Color(0x55428FBE)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1B2C)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(13.dp),
+            ) {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    color = Color(0xFF0B2942),
+                    border = BorderStroke(1.dp, Color(0xFF347FB0)),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("J", color = Color(0xFF58C8FF),
+                            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("СИСТЕМА JARVIS", color = Color(0xFF82BDE5),
+                        style = MaterialTheme.typography.labelSmall, letterSpacing = 1.5.sp)
+                    Text("Центр управления", color = Color(0xFFEAF6FF),
+                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Персональная конфигурация ANS-100",
+                        color = Color(0xFF8FAFC8), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = Color(0xFF0A1A29),
+            border = BorderStroke(1.dp, Color(0x333D7195)),
+        ) {
+            androidx.compose.foundation.lazy.LazyRow(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                items(categories, key = { it.first }) { (id, title) ->
+                    FilterChip(
+                        selected = selectedCategory == id,
+                        onClick = { onCategoryChange(id) },
+                        label = { Text(title) },
+                    )
+                }
             }
         }
         when (selectedCategory) {
