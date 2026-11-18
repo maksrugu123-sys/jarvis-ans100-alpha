@@ -213,6 +213,31 @@ class NetworkTests(unittest.TestCase):
         self.assertEqual(baseline.run().spikes, ())
         self.assertEqual(len(amplified.run().spikes), 1)
 
+    def test_adaptive_sensitivity_uses_negative_feedback(self):
+        from tools.neuron_runtime.neuron_features import (
+            NeuronFeatureInput, NeuronFeatureState, update_neuron_features,
+        )
+
+        low_activity = update_neuron_features(
+            NeuronFeatureState(),
+            NeuronFeatureInput(activity=0.0, predicted_activity=0.0),
+        )
+        high_activity = update_neuron_features(
+            NeuronFeatureState(),
+            NeuronFeatureInput(activity=1.0, predicted_activity=1.0),
+        )
+
+        self.assertGreater(low_activity.sensitivity, 1.0)
+        self.assertLess(high_activity.sensitivity, 1.0)
+
+    def test_sensitivity_rejects_boolean_and_non_finite_values(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureError, NeuronFeatureState
+
+        for value in (True, float("nan"), float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaises(NeuronFeatureError):
+                    NeuronFeatureState(sensitivity=value).validate()
+
     def test_caller_runtime_is_not_mutated_by_network(self):
         source = NeuronRuntime({"ext": 1.0})
         network = NetworkRuntime({"source": source})
