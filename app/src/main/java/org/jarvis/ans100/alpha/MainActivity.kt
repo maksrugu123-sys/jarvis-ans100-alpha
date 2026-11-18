@@ -16,6 +16,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -1293,189 +1294,227 @@ private fun DashboardScreen(
     onOpenSettings: () -> Unit,
     onOpenNeural: () -> Unit,
 ) {
+    val transition = rememberInfiniteTransition(label = "ans-core-pulse")
+    val pulse by transition.animateFloat(
+        initialValue = 0.86f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "ans-core-scale",
+    )
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
-            border = BorderStroke(1.dp, Color(0x664DAFFF)),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1C30)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            shape = RoundedCornerShape(30.dp),
+            border = BorderStroke(1.dp, Color(0x66428FBE)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF091827)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 9.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF102F4B), Color(0xFF091827), Color(0xFF101C35)),
-                            start = Offset.Zero,
-                            end = Offset(900f, 700f),
-                        ),
-                    )
-                    .padding(20.dp),
+                modifier = Modifier.fillMaxWidth().background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFF12314B), Color(0xFF091A2A), Color(0xFF121A31)),
+                        start = Offset.Zero,
+                        end = Offset(1000f, 900f),
+                    ),
+                ).padding(20.dp),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "SYSTEM OVERVIEW",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF7CCBFF),
-                            letterSpacing = 2.sp,
-                            modifier = Modifier.weight(1f),
-                        )
                         Surface(
                             shape = RoundedCornerShape(50),
-                            color = Color(0xFF123B42),
-                            border = BorderStroke(1.dp, Color(0xFF286B70)),
+                            color = Color(0x222CBAFF),
+                            border = BorderStroke(1.dp, Color(0x5549BFFF)),
                         ) {
-                            Text(
-                                if (storageReady) "LOCAL CORE READY" else "STORAGE CHECK",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                color = Color(0xFF8CE8D1),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                "Интеллектуальная\nсистема JARVIS",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = Color(0xFFF0F8FF),
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 34.sp,
-                            )
-                            Text(
-                                "Локальная среда ANS-100",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFA8C9E2),
-                            )
-                        }
-                        Surface(
-                            modifier = Modifier.size(76.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            color = Color(0xFF0B2942),
-                            border = BorderStroke(1.dp, Color(0xFF347FB0)),
-                            shadowElevation = 10.dp,
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            ) {
+                                Box(Modifier.size(6.dp).background(
+                                    if (isBusy) Color(0xFFFFC66D) else Color(0xFF62D9B5),
+                                    CircleShape,
+                                ))
                                 Text(
-                                    "J",
-                                    color = Color(0xFF58C8FF),
-                                    style = MaterialTheme.typography.displaySmall,
-                                    fontWeight = FontWeight.Bold,
+                                    "NEURAL SYSTEM  /  ANS-100",
+                                    color = Color(0xFF9AD9FF),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    letterSpacing = 1.1.sp,
+                                    fontWeight = FontWeight.SemiBold,
                                 )
                             }
                         }
+                        Spacer(Modifier.weight(1f))
+                        Text("v0.6", color = Color(0xFF7194B2),
+                            style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(9.dp),
+                        ) {
+                            Text(
+                                "JARVIS",
+                                color = Color(0xFFF1F8FF),
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.4.sp,
+                            )
+                            Text(
+                                "Локальный интеллект.\nСвоя архитектура мышления.",
+                                color = Color(0xFFB6CDE0),
+                                style = MaterialTheme.typography.bodyMedium,
+                                lineHeight = 22.sp,
+                            )
+                            Text(
+                                if (isBusy) "СИСТЕМА ОБРАБАТЫВАЕТ ЗАПРОС" else "СИСТЕМА ГОТОВА К РАБОТЕ",
+                                color = if (isBusy) Color(0xFFFFD18B) else Color(0xFF78DFC5),
+                                style = MaterialTheme.typography.labelSmall,
+                                letterSpacing = 0.8.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        NeuralCoreVisual(pulse = pulse)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
                             onClick = onOpenChat,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                        ) { Text("Открыть чат") }
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                        ) { Text("Открыть JARVIS", fontWeight = FontWeight.SemiBold) }
                         OutlinedButton(
-                            onClick = onOpenSettings,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, Color(0xFF477CA4)),
-                        ) { Text("Настроить") }
+                            onClick = onOpenNeural,
+                            modifier = Modifier.height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, Color(0xFF397BA7)),
+                        ) { Text("Ядро ANS") }
                     }
                 }
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Text(
-                "СОСТОЯНИЕ СИСТЕМЫ",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF79BCE7),
-                letterSpacing = 1.8.sp,
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "СИСТЕМНЫЙ МОНИТОР",
+                    modifier = Modifier.weight(1f),
+                    color = Color(0xFF82BDE5),
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.7.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    if (storageReady) "LOCAL STORAGE READY" else "STORAGE CHECK",
+                    color = if (storageReady) Color(0xFF69D8B7) else Color(0xFFFFC66D),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, Color(0x553A7198)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2033)),
+                shape = RoundedCornerShape(22.dp),
+                border = BorderStroke(1.dp, Color(0x443D7399)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1C2C)),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(9.dp).background(
-                                if (isBusy) Color(0xFFFFC66D) else Color(0xFF62D9B5),
-                                CircleShape,
-                            ),
-                        )
+                        Text("Диалоговый движок", color = Color(0xFF9CB9D0),
+                            style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.weight(1f))
                         Text(
-                            if (isBusy) "Выполняется обработка" else "Ожидание команд",
-                            modifier = Modifier.weight(1f).padding(start = 9.dp),
-                            color = Color(0xFFE6F4FF),
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            if (storageReady) "ONLINE" else "CHECK",
-                            color = if (storageReady) Color(0xFF62D9B5) else Color(0xFFFFC66D),
+                            if (isBusy) "PROCESSING" else "STANDBY",
+                            color = if (isBusy) Color(0xFFFFC66D) else Color(0xFF75DCC0),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                        )
+                    }
+                    Text(backendLabel, color = Color(0xFFE5F3FF),
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Box(Modifier.fillMaxWidth().height(4.dp)
+                        .background(Color(0xFF18334A), RoundedCornerShape(50))) {
+                        Box(
+                            Modifier.fillMaxWidth(if (isBusy) 0.72f else 1f).height(4.dp)
+                                .background(
+                                    Brush.horizontalGradient(listOf(Color(0xFF328DCE), Color(0xFF5DD6E8))),
+                                    RoundedCornerShape(50),
+                                ),
                         )
                     }
                     Text(
-                        "Движок диалога: $backendLabel",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFA9C4DC),
-                    )
-                    Text(
-                        "Статус отражает состояние приложения и хранилища, а не гарантирует активность всех нейронных модулей.",
+                        "Отображается состояние приложения и хранилища. Активность отдельных нейронных модулей проверяется отдельно.",
+                        color = Color(0xFF7898B2),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF7897B1),
+                        lineHeight = 16.sp,
                     )
                 }
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Text(
-                "ЛОКАЛЬНЫЕ ДАННЫЕ",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF79BCE7),
-                letterSpacing = 1.8.sp,
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("ЛОКАЛЬНАЯ СРЕДА", color = Color(0xFF82BDE5),
+                style = MaterialTheme.typography.labelSmall, letterSpacing = 1.7.sp,
+                fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 DashboardMetric("СЕССИИ", sessionCount.toString(), Modifier.weight(1f))
-                DashboardMetric("ЧЕРНОВИКИ", draftCount.toString(), Modifier.weight(1f))
+                DashboardMetric("ЗАДАЧИ", draftCount.toString(), Modifier.weight(1f))
                 DashboardMetric("ПАМЯТЬ", memoryCount.toString(), Modifier.weight(1f))
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Text(
-                "БЫСТРЫЙ ДОСТУП",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF79BCE7),
-                letterSpacing = 1.8.sp,
-            )
-            DashboardAction("Нейронное ядро ANS-100", "Обучение, тесты и состояние нейронных модулей", "✧", onOpenNeural)
-            DashboardAction("Нейронная память", "Локальные записи и синхронизация", "◈", onOpenMemory)
-            DashboardAction("Рабочие задачи", "Сессии и сохранённые черновики", "⌘", onOpenTasks)
-            DashboardAction("Параметры системы", "Модель, внешний вид и системные настройки", "⚙", onOpenSettings)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("МОДУЛИ JARVIS", color = Color(0xFF82BDE5),
+                style = MaterialTheme.typography.labelSmall, letterSpacing = 1.7.sp,
+                fontWeight = FontWeight.SemiBold)
+            DashboardAction("Нейронное ядро ANS-100", "Архитектура, обучение и эксперименты", "✧", onOpenNeural)
+            DashboardAction("Память системы", "Локальные знания и сохранённые данные", "◈", onOpenMemory)
+            DashboardAction("Рабочее пространство", "Сессии и активные задачи", "⌘", onOpenTasks)
+            DashboardAction("Конфигурация", "Модель, внешний вид и параметры", "⚙", onOpenSettings)
         }
         Text(
-            "JARVIS ANS-100  •  PRIVATE LOCAL ENVIRONMENT",
+            "JARVIS ANS-100  •  PRIVATE NEURAL ENVIRONMENT",
             modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
             style = MaterialTheme.typography.labelSmall,
             color = Color(0xFF587A96),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            letterSpacing = 1.sp,
+            letterSpacing = 1.1.sp,
         )
+    }
+}
+
+@Composable
+private fun NeuralCoreVisual(pulse: Float) {
+    Canvas(modifier = Modifier.size(148.dp)) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val outer = size.minDimension * 0.43f
+        val middle = size.minDimension * 0.30f
+        val inner = size.minDimension * 0.14f
+        val nodes = listOf(
+            Offset(center.x, center.y - outer),
+            Offset(center.x + outer * 0.86f, center.y - outer * 0.5f),
+            Offset(center.x + outer * 0.86f, center.y + outer * 0.5f),
+            Offset(center.x, center.y + outer),
+            Offset(center.x - outer * 0.86f, center.y + outer * 0.5f),
+            Offset(center.x - outer * 0.86f, center.y - outer * 0.5f),
+        )
+        nodes.forEach { node ->
+            drawLine(Color(0x6659C9FF), center, node, strokeWidth = 1.4.dp.toPx())
+            drawCircle(Color(0xFF58C8FF), radius = 3.2.dp.toPx(), center = node)
+        }
+        drawCircle(Color(0x223CBFFF), radius = outer * pulse, center = center)
+        drawCircle(Color(0x6655C9FF), radius = middle, center = center)
+        drawCircle(Color(0xFF0B2943), radius = inner * 1.8f, center = center)
+        drawCircle(Color(0xFF66D5FF), radius = inner * pulse, center = center)
     }
 }
 
