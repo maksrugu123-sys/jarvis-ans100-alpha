@@ -45,6 +45,7 @@ from .jpvr_adapter import (
     neuron_runtime_object_id,
 )
 from .runtime import NeuronRuntime
+from .neuron_features import NeuronFeatureState, SynapticMemoryState
 
 
 LOCATOR_MAGIC = b"JNLR"
@@ -508,6 +509,8 @@ class JPVRNeuronCheckpointStore:
         *,
         clock_epoch_id: bytes,
         expected_record_version: int | None = None,
+        feature_state: NeuronFeatureState | None = None,
+        synaptic_memory: dict[str, SynapticMemoryState] | None = None,
         max_pages: int = 4096,
     ) -> SavedNeuronCheckpoint:
         """Persist a complete neuron snapshot and its locator in one JPVR commit.
@@ -529,7 +532,8 @@ class JPVRNeuronCheckpointStore:
         object_id = neuron_runtime_object_id(neuron_id)
         # Validate the complete runtime before making even the one-time INDEX initialization commit.
         make_neuron_runtime_record_input(
-            neuron_id, runtime, clock_epoch_id=clock_epoch_id, record_version=1
+            neuron_id, runtime, clock_epoch_id=clock_epoch_id, record_version=1,
+            feature_state=feature_state, synaptic_memory=synaptic_memory,
         )
 
         active, catalog, manifest = self._read_snapshot(max_pages)
@@ -562,7 +566,8 @@ class JPVRNeuronCheckpointStore:
         next_version = previous_version + 1
 
         record_input = make_neuron_runtime_record_input(
-            neuron_id, runtime, clock_epoch_id=clock_epoch_id, record_version=next_version
+            neuron_id, runtime, clock_epoch_id=clock_epoch_id, record_version=next_version,
+            feature_state=feature_state, synaptic_memory=synaptic_memory,
         )
         transaction_id, commit_id, operation_id = _new_id(), _new_id(), _new_id()
         base_request = TypedTransactionRequest(
