@@ -86,6 +86,8 @@ class NetworkJNVMStoreTests(unittest.TestCase):
                 coactivation_trace=0.2, predictive_trace=0.4, reward_trace=0.1,
             )}},
         )
+        runtime.schedule_input(0, "source", "external", "feature-pulse", 0.4)
+        runtime.run()
         saved = self.store.save_timestamp(
             "feature-network", runtime, ("source",),
             clock_epoch_id=EPOCH,
