@@ -876,31 +876,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 results.add(result)
                 val completed = index + 1
-                val cooldownMs = when {
-                    completed == 2 || completed == 6 -> 30_000L
-                    completed == 14 -> 45_000L
-                    completed == 30 || (completed > 30 && (completed - 30) % 8 == 0) -> 60_000L
-                    else -> 0L
-                }
                 mainHandler.post {
                     onProgress(completed, inputs.size, result)
-                }
-                // The UI previously displayed cooldown labels without actually waiting.
-                // Pause the worker thread only; the main thread remains responsive.
-                if (cooldownMs > 0L) {
-                    try {
-                        Thread.sleep(cooldownMs)
-                    } catch (_: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        val stopped = Result.failure<Nothing>(
-                            IllegalStateException("BENCHMARK_SAFETY_STOP: benchmark worker was interrupted."),
-                        )
-                        for (remaining in inputs.drop(index + 1)) {
-                            results.add(StructuredPairedBenchmarkTaskResult(remaining.taskId, stopped, stopped))
-                        }
-                        mainHandler.post { onComplete(results) }
-                        return@execute
-                    }
                 }
                 if (result.transformer.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true ||
                     result.ans100Structured.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true) {
