@@ -29,7 +29,7 @@
 | `NeuronRole` | DESIGNED / DECLARATIVE | Role enum exists, but no population registry or role-specific routing/behavior is connected |
 | `KnowledgeStatus` and `resolve_evidence()` | IMPLEMENTED UTILITY | Four-valued evidence resolution exists, but no evidence store or Reasoning Engine consumes it |
 | `context_match` | PARTIALLY_INTEGRATED | Current input is mean event attention, not a semantic/context embedding or persistent context model |
-| `inhibition` | PARTIALLY_INTEGRATED | The current network adapter supplies zero new inhibitory drive; an initial inhibition value only decays unless supplied through a future explicit mechanism |
+| `inhibition` | INTEGRATED, bounded event drive | Explicit inhibitory connections produce separate delayed events, combine bounded same-timestamp drive, gate concurrent excitation, and update persisted feature inhibition; no biological interneuron population is claimed |
 
 ## 3. Architecture not yet connected
 
@@ -45,13 +45,11 @@
 
 1. Run the focused network, JPVR store and coordinator tests after explicit approval; fix actual failures before expanding.
 2. Add focused tests for sidecar rollback, persistence and reward updates.
-3. Add an explicit inhibitory event/route type and connect its accumulated drive to `NeuronFeatureInput.inhibitory_drive`.
-4. Give inhibitory events bounded signal semantics, candidate transaction behavior, checkpoint persistence and rollback coverage.
-5. Extend synaptic memory from bounded activation facilitation to a separately validated per-synapse learning/credit-assignment rule; retain the canonical synapse weight as the source of truth.
-6. Add population roles and a small registry only when role-specific execution behavior exists.
-7. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
-8. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
-9. Integrate storage-backed bounded residency before raising logical neuron limits.
+3. Add a separately validated per-synapse learning/credit-assignment rule for synaptic memory; retain the canonical synapse weight as the source of truth.
+4. Add population roles and a small registry only when role-specific execution behavior exists, including a dedicated inhibitory population if justified by experiments.
+5. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
+6. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
+7. Integrate storage-backed bounded residency before raising logical neuron limits.
 
 ## 5. Non-negotiable accuracy
 
