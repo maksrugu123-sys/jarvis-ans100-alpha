@@ -329,5 +329,85 @@ class NetworkTests(unittest.TestCase):
 
 
 
+    def test_inhibitory_connection_has_no_excitatory_synapse_target(self):
+        route = NetworkConnection(
+            "inh", "source", "target", None, 5, 0.8, 0.0, "inhibitory",
+        )
+        route.validate()
+        with self.assertRaises(NetworkRuntimeError):
+            NetworkConnection(
+                "bad-inh", "source", "target", "input", 5, 0.8, 0.0, "inhibitory",
+            ).validate()
+        with self.assertRaises(NetworkRuntimeError):
+            NetworkConnection(
+                "bad-kind", "source", "target", None, 5, 0.8, 0.0, "unknown",
+            ).validate()
+
+    def test_inhibitory_route_suppresses_same_timestamp_excitation(self):
+        neurons = {
+            "source": NeuronRuntime({"external": 1.0}),
+            "target": NeuronRuntime({"input": 1.0}),
+        }
+        route = NetworkConnection(
+            "source-target-inhibition", "source", "target", None,
+            5, 1.0, 0.0, "inhibitory",
+        )
+        network = NetworkRuntime(neurons, [route])
+        network.schedule_input(0, "source", "external", "source-pulse", 1.0)
+        network.schedule_input(5, "target", "input", "target-excitation", 1.0)
+
+        result = network.run()
+
+        self.assertEqual([(spike.neuron_id, spike.time_ns) for spike in result.spikes],
+                         [("source", 0)])
+        self.assertGreater(network.feature_states["target"].inhibition, 0.0)
+        self.assertEqual(network.pending_events, 0)
+
+    def test_inhibitory_route_creates_feature_state_without_prior_sidecar(self):
+        network = NetworkRuntime(
+            {
+                "source": NeuronRuntime({"external": 1.0}),
+                "target": NeuronRuntime({"input": 1.0}),
+            },
+            [NetworkConnection(
+                "inhibit", "source", "target", None, 2, 0.6, 0.0, "inhibitory",
+            )],
+        )
+        network.schedule_input(0, "source", "external", "source", 1.0)
+        network.run()
+
+        self.assertEqual(network.feature_states["target"].observations, 1)
+        self.assertGreater(network.feature_states["target"].inhibition, 0.0)
+
+    def test_pending_inhibitory_event_survives_runtime_checkpoint_roundtrip(self):
+        network = NetworkRuntime(
+            {
+                "source": NeuronRuntime({"external": 1.0}),
+                "target": NeuronRuntime({"input": 1.0}),
+            },
+            [NetworkConnection(
+                "inhibit", "source", "target", None, 2, 0.6, 0.0, "inhibitory",
+            )],
+        )
+        network.schedule_input(0, "source", "external", "source", 1.0)
+        first = network.run(max_timestamps=1)
+        self.assertEqual(first.pending_events, 1)
+        state = network.export_checkpoint_state()
+        restored = NetworkRuntime.restore_checkpoint_state(
+            state["neurons"], state["connections"], state["pending_events"],
+            max_pending_events=state["max_pending_events"],
+            max_events_per_run=state["max_events_per_run"],
+            current_time_ns=state["current_time_ns"],
+            has_processed=state["has_processed"],
+            feature_states=state["feature_states"],
+            synaptic_memories=state["synaptic_memories"],
+        )
+        self.assertEqual(restored.pending_events, 1)
+        result = restored.run()
+        self.assertEqual(result.pending_events, 0)
+        self.assertGreater(restored.feature_states["target"].inhibition, 0.0)
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
