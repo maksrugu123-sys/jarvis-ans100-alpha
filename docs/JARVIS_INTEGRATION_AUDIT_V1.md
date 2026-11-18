@@ -22,7 +22,7 @@
 
 | Component | Current status | Missing connection |
 |---|---|---|
-| `NeuronFeatureState.plasticity` | PARTIALLY_INTEGRATED | The value is calculated and persisted, but does not yet modulate STDP/R-STDP learning parameters |
+| `NeuronFeatureState.plasticity` | INTEGRATED, bounded | The previous sidecar value scales STDP/R-STDP local learning rates through `NeuronRuntime`; baseline safety caps remain unchanged and absent sidecars use scale 1.0 |
 | `SynapticMemoryState.coactivation_trace` | PARTIALLY_INTEGRATED | The trace is stored and restored, but does not yet influence later synaptic activation or learning |
 | `SynapticMemoryState.predictive_trace` | PARTIALLY_INTEGRATED | The trace is stored and restored, but no temporal prediction model consumes it |
 | `SynapticMemoryState.reward_trace` | PARTIALLY_INTEGRATED | Positive reward history is stored; it is not yet used for future credit assignment |
