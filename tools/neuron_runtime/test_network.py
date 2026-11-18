@@ -199,6 +199,20 @@ class NetworkTests(unittest.TestCase):
         self.assertEqual(result.spikes, ())
         self.assertEqual(network.feature_states["n"].observations, 1)
 
+    def test_sensitivity_amplifies_input_with_a_hard_unit_ceiling(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState
+
+        baseline = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})})
+        amplified = NetworkRuntime(
+            {"n": NeuronRuntime({"in": 1.0})},
+            feature_states={"n": NeuronFeatureState(sensitivity=2.0)},
+        )
+        baseline.schedule_input(0, "n", "in", "baseline", 0.60)
+        amplified.schedule_input(0, "n", "in", "amplified", 0.60)
+
+        self.assertEqual(baseline.run().spikes, ())
+        self.assertEqual(len(amplified.run().spikes), 1)
+
     def test_caller_runtime_is_not_mutated_by_network(self):
         source = NeuronRuntime({"ext": 1.0})
         network = NetworkRuntime({"source": source})
