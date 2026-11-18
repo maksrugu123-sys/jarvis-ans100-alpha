@@ -21,7 +21,7 @@ The phone must keep only a bounded active subset resident. Start with the existi
 
 ## 3. Capability modules
 
-The first source-level sidecar is tools/neuron_runtime/neuron_features.py. It defines deterministic bounded updates for adaptive sensitivity, compact memory trace, prediction error/predictive surprise, context similarity, confidence and uncertainty, plasticity modulation, inhibitory modulation, synaptic co-activation/predictive/reward traces, and four-valued evidence status: SUPPORTED / REFUTED / CONFLICTING / UNRESOLVED.
+The first source-level sidecars are tools/neuron_runtime/neuron_features.py and app/src/main/java/org/jarvis/ans100/alpha/data/ANS100NeuronFeatures.kt. Both define matching bounded updates for the cognitive feature state. It defines deterministic bounded updates for adaptive sensitivity, compact memory trace, prediction error/predictive surprise, context similarity, confidence and uncertainty, plasticity modulation, inhibitory modulation, synaptic co-activation/predictive/reward traces, and four-valued evidence status: SUPPORTED / REFUTED / CONFLICTING / UNRESOLVED.
 
 Boundaries:
 - Confidence is an internal ranking signal, not a calibrated probability.
