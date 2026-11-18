@@ -82,6 +82,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jarvis.ans100.alpha.data.ConversationRole
 import org.jarvis.ans100.alpha.data.LocalSession
@@ -132,7 +133,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var pendingBackupExportBytes by remember { mutableStateOf<ByteArray?>(null) }
     var pendingBackupExportRevision by remember { mutableStateOf<Long?>(null) }
     var pendingRestorePassphrase by remember { mutableStateOf<CharArray?>(null) }
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var selectedTab by rememberSaveable { mutableStateOf(4) }
     var settingsCategory by rememberSaveable { mutableStateOf("appearance") }
     val context = LocalContext.current
     val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
@@ -286,6 +287,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         }
                         NavigationBar {
                             NavigationBarItem(
+                                selected = selectedTab == 4,
+                                onClick = { selectedTab = 4 },
+                                icon = { Text("⌂") },
+                                label = { Text("Обзор") },
+                            )
+                            NavigationBarItem(
                                 selected = selectedTab == 0,
                                 onClick = { selectedTab = 0 },
                                 icon = { Text("◉") },
@@ -320,6 +327,18 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         onSettingsClick = { selectedTab = if (selectedTab == 3) 0 else 3 },
                     )
                     when (selectedTab) {
+                        4 -> DashboardScreen(
+                            backendLabel = ui.conversation.backendLabel,
+                            isBusy = ui.conversation.isBusy,
+                            storageReady = ui.storageReady,
+                            sessionCount = ui.data.sessions.size,
+                            draftCount = ui.data.tasks.size,
+                            memoryCount = ui.localMemory.records.size,
+                            onOpenChat = { selectedTab = 0 },
+                            onOpenMemory = { selectedTab = 1 },
+                            onOpenTasks = { selectedTab = 2 },
+                            onOpenSettings = { selectedTab = 3; settingsCategory = "model" },
+                        )
                         0 -> {
                             ChatTitleBar(
                                 backendLabel = ui.conversation.backendLabel,
@@ -1256,49 +1275,303 @@ private fun WorkspaceMemoryPanel(
 }
 
 @Composable
+private fun DashboardScreen(
+    backendLabel: String,
+    isBusy: Boolean,
+    storageReady: Boolean,
+    sessionCount: Int,
+    draftCount: Int,
+    memoryCount: Int,
+    onOpenChat: () -> Unit,
+    onOpenMemory: () -> Unit,
+    onOpenTasks: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            border = BorderStroke(1.dp, Color(0x664DAFFF)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1C30)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(Color(0xFF102F4B), Color(0xFF091827), Color(0xFF101C35)),
+                            start = Offset.Zero,
+                            end = Offset(900f, 700f),
+                        ),
+                    )
+                    .padding(20.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "SYSTEM OVERVIEW",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF7CCBFF),
+                            letterSpacing = 2.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = Color(0xFF123B42),
+                            border = BorderStroke(1.dp, Color(0xFF286B70)),
+                        ) {
+                            Text(
+                                if (storageReady) "LOCAL CORE READY" else "STORAGE CHECK",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                color = Color(0xFF8CE8D1),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Интеллектуальная\nсистема JARVIS",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Color(0xFFF0F8FF),
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 34.sp,
+                            )
+                            Text(
+                                "Локальная среда ANS-100",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFA8C9E2),
+                            )
+                        }
+                        Surface(
+                            modifier = Modifier.size(76.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color(0xFF0B2942),
+                            border = BorderStroke(1.dp, Color(0xFF347FB0)),
+                            shadowElevation = 10.dp,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    "J",
+                                    color = Color(0xFF58C8FF),
+                                    style = MaterialTheme.typography.displaySmall,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = onOpenChat,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp),
+                        ) { Text("Открыть чат") }
+                        OutlinedButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFF477CA4)),
+                        ) { Text("Настроить") }
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(
+                "СОСТОЯНИЕ СИСТЕМЫ",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF79BCE7),
+                letterSpacing = 1.8.sp,
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color(0x553A7198)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2033)),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(9.dp).background(
+                                if (isBusy) Color(0xFFFFC66D) else Color(0xFF62D9B5),
+                                CircleShape,
+                            ),
+                        )
+                        Text(
+                            if (isBusy) "Выполняется обработка" else "Ожидание команд",
+                            modifier = Modifier.weight(1f).padding(start = 9.dp),
+                            color = Color(0xFFE6F4FF),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            if (storageReady) "ONLINE" else "CHECK",
+                            color = if (storageReady) Color(0xFF62D9B5) else Color(0xFFFFC66D),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Text(
+                        "Движок диалога: $backendLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFA9C4DC),
+                    )
+                    Text(
+                        "Статус отражает состояние приложения и хранилища, а не гарантирует активность всех нейронных модулей.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF7897B1),
+                    )
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(
+                "ЛОКАЛЬНЫЕ ДАННЫЕ",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF79BCE7),
+                letterSpacing = 1.8.sp,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                DashboardMetric("СЕССИИ", sessionCount.toString(), Modifier.weight(1f))
+                DashboardMetric("ЧЕРНОВИКИ", draftCount.toString(), Modifier.weight(1f))
+                DashboardMetric("ПАМЯТЬ", memoryCount.toString(), Modifier.weight(1f))
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(
+                "БЫСТРЫЙ ДОСТУП",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF79BCE7),
+                letterSpacing = 1.8.sp,
+            )
+            DashboardAction("Нейронная память", "Локальные записи и синхронизация", "◈", onOpenMemory)
+            DashboardAction("Рабочие задачи", "Сессии и сохранённые черновики", "⌘", onOpenTasks)
+            DashboardAction("Параметры системы", "Модель, внешний вид и эксперименты", "⚙", onOpenSettings)
+        }
+        Text(
+            "JARVIS ANS-100  •  PRIVATE LOCAL ENVIRONMENT",
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF587A96),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            letterSpacing = 1.sp,
+        )
+    }
+}
+
+@Composable
+private fun DashboardMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, Color(0x553A7198)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2033)),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Color(0xFF83A9C5))
+            Text(value, style = MaterialTheme.typography.headlineSmall, color = Color(0xFFEAF6FF), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun DashboardAction(title: String, subtitle: String, symbol: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(17.dp),
+        border = BorderStroke(1.dp, Color(0x553D7195)),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 13.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(38.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF102D46),
+                border = BorderStroke(1.dp, Color(0x553C8BB9)),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(symbol, color = Color(0xFF69C9FF), fontWeight = FontWeight.Bold)
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, color = Color(0xFFE7F3FC), fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = Color(0xFF91AEC4), style = MaterialTheme.typography.labelSmall)
+            }
+            Text("›", color = Color(0xFF6DC8FF), style = MaterialTheme.typography.titleLarge)
+        }
+    }
+}
+
+@Composable
 private fun Header(
     isBusy: Boolean,
     isSettingsOpen: Boolean,
     onSettingsClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        IconButton(onClick = onSettingsClick) {
-            Text(if (isSettingsOpen) "←" else "⚙", style = MaterialTheme.typography.titleLarge)
+        Surface(
+            modifier = Modifier.size(46.dp),
+            shape = RoundedCornerShape(15.dp),
+            color = Color(0xFF071A2B),
+            border = BorderStroke(1.dp, Color(0xFF24577D)),
+            shadowElevation = 8.dp,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    "J",
+                    color = Color(0xFF55C5FF),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 "JARVIS",
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
+                color = Color(0xFFEAF6FF),
+                letterSpacing = 2.sp,
             )
             Text(
-                "ANS-100 ALPHA · ЛОКАЛЬНОЕ ПРИЛОЖЕНИЕ",
+                "ANS-100  /  NEURAL INTELLIGENCE",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color(0xFF72A9CC),
+                letterSpacing = 1.1.sp,
             )
         }
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            ActivityStatusPill(isBusy = isBusy)
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                border = BorderStroke(1.dp, Color(0x664DA3FF)),
-            ) {
-                Text(
-                    "V0.6",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
+        ActivityStatusPill(isBusy = isBusy)
+        IconButton(onClick = onSettingsClick) {
+            Text(
+                if (isSettingsOpen) "×" else "⚙",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
