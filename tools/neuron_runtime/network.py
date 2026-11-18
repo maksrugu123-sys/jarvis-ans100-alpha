@@ -76,7 +76,7 @@ class NetworkConnection:
     connection_id: str
     source_neuron_id: str
     target_neuron_id: str
-    target_synapse_id: str
+    target_synapse_id: str | None
     delay_ns: int
     strength: float = 1.0
     attention: float = 0.0
@@ -120,7 +120,7 @@ class _Event:
     time_ns: int
     event_id: str
     target_neuron_id: str
-    target_synapse_id: str
+    target_synapse_id: str | None
     strength: float = field(compare=False)
     attention: float = field(compare=False)
     inhibitory: bool = field(default=False, compare=False)
