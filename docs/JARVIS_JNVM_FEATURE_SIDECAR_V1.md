@@ -27,9 +27,15 @@ in `tools/neuron_runtime/feature_codec.py`.
 sensitivity and inhibition values gate incoming excitatory signal strength
 before the Numerical Oracle-backed neuron update. After the candidate update,
 activity, prior memory trace and event attention are used to update the feature
-state; touched synapses receive bounded coactivation/prediction traces. Reward
-updates add a reward trace without silently changing canonical STDP/R-STDP
-weights. Neurons without a sidecar retain the baseline input path.
+state; touched synapses receive bounded coactivation/prediction traces. On a
+later event, the prior coactivation, predictive-success and positive-reward
+traces apply a small multiplicative facilitation to that synapse's input:
+`1 + 0.20*coactivation + 0.15*prediction + 0.10*reward`. The
+facilitation is capped at 1.45 and the delivered input is still capped at 1.0.
+Trace updates use the raw incoming event strength, not the facilitated value,
+so the mechanism does not create an unbounded self-amplifying update loop.
+Reward updates add a reward trace without silently changing canonical
+STDP/R-STDP weights. Neurons without a sidecar retain the baseline input path.
 
 `NetworkRuntime.export_checkpoint_state()` includes the sidecars, and
 `restore_checkpoint_state()` validates and restores them. The single-container
@@ -51,15 +57,18 @@ value that decays; a real inhibitory population is not connected. The
 `plasticity` field now scales the Numerical Oracle's STDP/R-STDP local learning
 rates through a bounded `NeuronRuntime` adapter. The Oracle equations and
 safety caps remain unchanged; a neuron without a sidecar uses scale 1.0.
-Synaptic coactivation, predictive and reward traces are persisted, but are not
-yet consumed by later activation or credit assignment. These are explicit first integration
-semantics, not claims of human-like cognition.
+Synaptic coactivation, predictive and reward traces now influence later
+activation through the bounded input facilitation described above. They still
+do not directly alter canonical synapse weights or provide a separate
+per-synapse learning-rate/credit-assignment rule. These are explicit first
+integration semantics, not claims of human-like cognition.
 
 See `docs/JARVIS_INTEGRATION_AUDIT_V1.md` for the current component-by-component
 connection audit and next integration order.
 
-Focused tests have been authored for real signal modulation, feature updates,
-and persistence/restore. They are **NOT RUN**. No benchmark, build, CI or
+Focused tests have been authored for real signal modulation, memory-trace
+facilitation, baseline preservation, feature updates, and persistence/restore.
+They are **NOT RUN**. No benchmark, build, CI or
 device measurement has been performed.
 
 Next gate: differential Python/Kotlin behavior and a separately designed
