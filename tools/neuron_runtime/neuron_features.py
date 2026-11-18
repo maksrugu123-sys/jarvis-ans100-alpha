@@ -202,6 +202,25 @@ def resolve_evidence(
         return KnowledgeStatus.REFUTED
     return KnowledgeStatus.UNRESOLVED
 
+def effective_synaptic_memory_gain(state: SynapticMemoryState) -> float:
+    """Return a bounded gain from prior synaptic experience.
+
+    Coactivation, successful prediction and positive reward provide small,
+    independent facilitation signals. The gain is deliberately capped at 1.45;
+    canonical synapse weights remain authoritative and are never rewritten.
+    """
+    if not isinstance(state, SynapticMemoryState):
+        raise NeuronFeatureError("state must be SynapticMemoryState")
+    state.validate()
+    gain = (
+        1.0
+        + 0.20 * state.coactivation_trace
+        + 0.15 * state.predictive_trace
+        + 0.10 * state.reward_trace
+    )
+    return min(1.45, max(1.0, gain))
+
+
 def effective_excitatory_gain(
     activity: float, inhibition: float, sensitivity: float = 1.0,
 ) -> float:
