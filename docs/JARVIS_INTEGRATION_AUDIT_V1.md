@@ -10,7 +10,7 @@
 |---|---|---|
 | `NeuronFeatureState` | INTEGRATED | Optional per-neuron state is accepted by `NetworkRuntime`, validated, updated on processed inputs and exported/restored |
 | Adaptive sensitivity | INTEGRATED, basic | Applies a bounded gain to incoming excitatory input; negative feedback raises sensitivity below target and lowers it above target |
-| Inhibitory gate | PARTIALLY_INTEGRATED | Existing inhibition value suppresses input; no inhibitory population currently generates `inhibitory_drive` |
+| Inhibitory event routing | INTEGRATED, bounded Python reference | Explicit inhibitory connections create delayed typed events; same-timestamp strengths combine, suppress concurrent excitation, update feature inhibition, and survive runtime/JPVR checkpoint restore |
 | Memory trace | INTEGRATED, basic | Updated after a successful neuron batch and used as the next activity-prediction baseline |
 | Prediction error | INTEGRATED, basic | Absolute difference between observed activity and previous memory trace |
 | Confidence / uncertainty | INTEGRATED, heuristic | Deterministic bounded values update from prediction error and event attention; confidence is not calibrated |
@@ -39,7 +39,7 @@
 4. **Predictive processing:** current prediction is a simple prior-memory-trace baseline, not a learned sequence or hierarchical predictive model.
 5. **Reasoning:** no integrated evidence graph, competing hypothesis lifecycle, contradiction reconciliation or explainable inference pipeline is established by these feature utilities.
 6. **Meta-plasticity:** the bounded adapter is connected in the Python reference path; Android parity and empirical stability remain unverified.
-7. **Inhibitory populations:** a real inhibitory pathway needs explicit topology semantics, bounded signals, tests and persisted state; it must not be simulated by an arbitrary constant.
+7. **Inhibitory population roles:** typed inhibitory event routing is implemented, but source neurons do not yet have a dedicated inhibitory population role or biologically detailed interneuron dynamics.
 
 ## 4. Correct next implementation order
 
