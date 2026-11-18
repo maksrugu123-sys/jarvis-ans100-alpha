@@ -230,6 +230,25 @@ class NetworkTests(unittest.TestCase):
         self.assertGreater(low_activity.sensitivity, 1.0)
         self.assertLess(high_activity.sensitivity, 1.0)
 
+    def test_meta_plasticity_sidecar_reaches_stdp_runtime(self):
+        from unittest.mock import patch
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState
+        from tools.numerical_oracle.jarvis_oracle import update_stdp
+
+        runtime = NeuronRuntime({"in": 0.5}, learning_rule="stdp")
+        network = NetworkRuntime(
+            {"n": runtime},
+            feature_states={"n": NeuronFeatureState(plasticity=1.0)},
+        )
+        network.schedule_input(0, "n", "in", "meta-plasticity", 0.4)
+        with patch("tools.neuron_runtime.runtime.update_stdp", wraps=update_stdp) as update:
+            network.run()
+
+        effective_params = update.call_args.args[1]
+        self.assertAlmostEqual(
+            effective_params.eta_plus, runtime.synapse_params.eta_plus * 1.5,
+        )
+
     def test_sensitivity_rejects_boolean_and_non_finite_values(self):
         from tools.neuron_runtime.neuron_features import NeuronFeatureError, NeuronFeatureState
 
