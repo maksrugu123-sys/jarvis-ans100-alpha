@@ -3344,3 +3344,10 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 **Interpretation:** this is a cold model/runtime initialization within a still-running Android app process. The other benchmark subject may remain resident, and Android/native allocators may retain pages. PSS remains process-wide, not per-model isolated memory. Every held-out row now receives a cold-start measurement rather than only the first row.
 
 **Verification:** source inspection and diff checks only. No Gradle build, Kotlin tests, Python tests, APK, CI, or device experiment was run.
+
+## 2026-11-18 — Cognitive sidecar connected to Python network reference
+
+- Integrated optional sparse `NeuronFeatureState` and `SynapticMemoryState` into `NetworkRuntime` candidate processing. Sidecar-enabled neurons apply bounded sensitivity/inhibition gain to incoming excitatory events; after a successful candidate batch they update activity, prediction-error, context, memory, confidence/uncertainty and per-synapse traces. Reward operations update the sidecar reward trace without silently changing canonical STDP/R-STDP weights.
+- Added sidecar state to network checkpoint export/restore. `JPVRNetworkJNVMStore` now passes feature sidecars into each changed-neuron runtime record inside the same group transaction as the scheduler checkpoint; restore reconstructs them from the same pinned snapshot.
+- Added focused tests for signal modulation, sidecar updates and execution -> group checkpoint -> restore. Tests are authored but **NOT RUN**. No benchmark, APK build, CI, held-out experiment or device verification was performed.
+- Explicit scope: sidecars are opt-in per neuron by supplying feature state or synaptic memory at network construction. Neurons without sidecars preserve the baseline signal path. This is a Python reference integration only; Kotlin/Android runtime, dialog integration, bounded 128-shard working-set integration, full inhibitory populations and 500,000-neuron capacity remain unfinished.
