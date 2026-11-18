@@ -1,7 +1,8 @@
 """Versioned, strict codec for sparse cognitive neuron sidecars.
 
 This codec is deliberately separate from the 40-byte ALIF hot state. It is
-ready to be embedded as an optional JNVM sidecar record; it does not claim that
+embedded in the optional feature field of a versioned JNVM neuron checkpoint;
+it does not claim that
 the current network scheduler persists or applies these features.
 """
 from __future__ import annotations
