@@ -140,8 +140,9 @@ def update_neuron_features(
                            + (1.0 - config.memory_decay) * rewarded_activity)
     inhibition = _clamp(config.inhibition_decay * state.inhibition
                         + (1.0 - config.inhibition_decay) * observation.inhibitory_drive)
+    # Negative feedback: low activity raises sensitivity; high activity lowers it.
     sensitivity = min(2.0, max(0.5, state.sensitivity + config.sensitivity_rate
-                               * (observation.activity - config.target_activity)))
+                               * (config.target_activity - observation.activity)))
     plasticity = _clamp(0.5 + config.plasticity_surprise_gain * surprise
                         - config.plasticity_stability_gain * confidence
                         + 0.15 * max(0.0, observation.reward))
