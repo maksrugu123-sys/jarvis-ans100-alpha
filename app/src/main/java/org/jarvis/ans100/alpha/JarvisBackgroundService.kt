@@ -407,5 +407,20 @@ class JarvisBackgroundService : Service() {
                 .getString(KEY_STATE, STATE_IDLE)
             return state == STATE_PENDING || state == STATE_RUNNING
         }
+
+        /** Restore only explicitly enabled background presence or a saved user-requested run. */
+        fun restoreAfterBoot(context: Context) {
+            val presenceEnabled = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ENABLED, false)
+            val state = context.getSharedPreferences(CHECKPOINT_PREFERENCES, Context.MODE_PRIVATE)
+                .getString(KEY_STATE, STATE_IDLE)
+            if (presenceEnabled || state == STATE_PENDING || state == STATE_RUNNING) {
+                runCatching {
+                    context.startForegroundService(
+                        Intent(context, JarvisBackgroundService::class.java).setAction(ACTION_RESUME),
+                    )
+                }
+            }
+        }
     }
 }
