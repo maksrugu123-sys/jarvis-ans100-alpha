@@ -488,6 +488,7 @@ class JPVRNetworkJNVMStore:
         active, catalog, manifest = self._read_snapshot(max_pages)
         scheduler = self._load_scheduler_from_snapshot(network_id, active, catalog, manifest)
         runtimes, versions = {}, {}
+        feature_states, synaptic_memories = {}, {}
         for neuron_id in scheduler.snapshot.neuron_ids:
             locator, version = self._neurons._lookup_existing(neuron_id, neuron_runtime_object_id(neuron_id), manifest, active, catalog)
             if locator is None:
@@ -501,6 +502,10 @@ class JPVRNetworkJNVMStore:
             if decoded.clock_epoch_id != scheduler.snapshot.clock_epoch_id:
                 raise JPVRNetworkJNVMConflict(f"neuron {neuron_id!r} has a different clock epoch")
             runtimes[neuron_id] = decoded.runtime
+            if decoded.feature_state is not None:
+                feature_states[neuron_id] = decoded.feature_state
+            if decoded.synaptic_memory:
+                synaptic_memories[neuron_id] = decoded.synaptic_memory
             versions[neuron_id] = version
         try:
             runtime = NetworkRuntime.restore_checkpoint_state(
@@ -509,6 +514,8 @@ class JPVRNetworkJNVMStore:
                 max_events_per_run=scheduler.snapshot.max_events_per_run,
                 current_time_ns=scheduler.snapshot.current_time_ns,
                 has_processed=scheduler.snapshot.has_processed,
+                feature_states=feature_states,
+                synaptic_memories=synaptic_memories,
             )
         except NetworkRuntimeError as exc:
             raise JPVRNetworkJNVMError(f"persisted scheduler is incompatible with neuron states: {exc}") from exc
@@ -627,6 +634,8 @@ class JPVRNetworkJNVMStore:
             record = make_neuron_runtime_record_input(
                 neuron_id, neurons[neuron_id], clock_epoch_id=epoch,
                 record_version=next_neuron_versions[neuron_id],
+                feature_state=state["feature_states"].get(neuron_id),
+                synaptic_memory=state["synaptic_memories"].get(neuron_id),
             )
             owner = ("neuron", neuron_id)
             if isinstance(record, DataRecordInput):
