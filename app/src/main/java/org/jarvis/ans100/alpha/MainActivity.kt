@@ -3337,6 +3337,40 @@ private fun SettingsPanel(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        conversation.hybridNetworkStats?.let { stats ->
+                            HorizontalDivider(color = Color(0x33428FBE))
+                            Text("HYBRID RUNTIME / SQLITE JNVM", color = Color(0xFF82BDE5),
+                                style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
+                            Text(
+                                "Топология: ${stats.neuronCount} нейронов · ${stats.connectionCount} связей",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                "Кэш: ${stats.residentNeuronCount} / ${stats.hotSetCapacity} резидентных · очередь: ${stats.pendingEvents}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                "Модельное время: ${stats.currentTimeNs / 1_000_000L} мс",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (conversation.hybridPopulationActivity.isNotEmpty()) {
+                                Text("Активность популяций · текущий проход",
+                                    color = Color(0xFF82BDE5), style = MaterialTheme.typography.labelSmall)
+                                conversation.hybridPopulationActivity.forEach { activity ->
+                                    Text(
+                                        "${activity.populationId}: обработано ${activity.uniqueNeuronsProcessed}, " +
+                                            "спайковые нейроны ${activity.uniqueSpikingNeurons}, импульсы ${activity.spikeCount}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        } ?: Text(
+                            "Счётчики гибридного runtime появятся после завершённого прохода. Размер сети сам по себе не означает, что все нейроны активны.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
                 Card(

@@ -90,6 +90,8 @@ data class LocalConversationUiState(
     val modelDownloadProgress: Float? = null,
     val modelDownloadStatus: String? = null,
     val hybridNetworkSummary: String? = null,
+    val hybridNetworkStats: org.jarvis.ans100.alpha.data.AndroidNeuronNetworkStats? = null,
+    val hybridPopulationActivity: List<org.jarvis.ans100.alpha.data.AndroidNeuronPopulationActivity> = emptyList(),
     val hybridFeedbackAvailable: Boolean = false,
     val hybridFeedbackMessage: String? = null,
     val neuralAssociationFeedback: NeuralAssociationFeedbackUi? = null,
@@ -1377,6 +1379,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                                 hybridDialogueAnalysis?.hybridTelemetrySummary
                                     ?: "Гибридный проход не завершён; ответ продолжен без решения ANS-100."
                             },
+                            hybridNetworkStats = if (clean.startsWith("/")) {
+                                current.conversation.hybridNetworkStats
+                            } else hybridDialogueAnalysis?.hybridNetworkStats,
+                            hybridPopulationActivity = if (clean.startsWith("/")) {
+                                current.conversation.hybridPopulationActivity
+                            } else hybridDialogueAnalysis?.hybridPopulationActivity.orEmpty(),
                             hybridFeedbackAvailable = latestHybridFeedback != null,
                             hybridFeedbackMessage = null,
                             neuralAssociationFeedback = pendingNeuralAssociationFeedbackUi,
@@ -1620,6 +1628,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         passes++
                     }
                     val telemetry = result.hybridTelemetry ?: return@submit null
+                    // Read authoritative SQLite counters after the bounded run; do not infer activity from topology size.
+                    val hybridNetworkStats = hybridNeuronNetwork.stats()
                     // Decode only associations supported by actual shared spikes
                     // in the general association population; no symbolic relation
                     // hypotheses are fed into this neural candidate path.
@@ -1899,6 +1909,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         classifierTrainedExamples = 0,
                         statePersisted = false,
                         hybridTelemetrySummary = telemetrySummary,
+                        hybridNetworkStats = hybridNetworkStats,
+                        hybridPopulationActivity = telemetry.populations,
                         hybridQwenHandoff = handoff,
                     )
                 } catch (_: Exception) {

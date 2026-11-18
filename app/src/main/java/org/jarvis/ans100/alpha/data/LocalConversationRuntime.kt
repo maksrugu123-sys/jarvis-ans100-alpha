@@ -247,6 +247,10 @@ data class DialogueNeuralAnalysis(
     val networkOutputScores: Map<String, Double> = emptyMap(),
     /** Descriptive seven-population activity from the hybrid dialogue graph. */
     val hybridTelemetrySummary: String? = null,
+    /** Snapshot read from the hybrid SQLite network after this real run. */
+    val hybridNetworkStats: AndroidNeuronNetworkStats? = null,
+    /** Per-population counters accumulated across all bounded passes in this turn. */
+    val hybridPopulationActivity: List<AndroidNeuronPopulationActivity> = emptyList(),
     /** Prebuilt, turn-bound decision package from the hybrid population controller. */
     val hybridQwenHandoff: ANS100QwenHandoff? = null,
 ) {
