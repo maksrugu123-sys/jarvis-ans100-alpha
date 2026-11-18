@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from tools.neuron_runtime.runtime import NeuronRuntime, NeuronRuntimeError, SynapticInput
 from tools.numerical_oracle.jarvis_oracle import (
@@ -95,6 +96,51 @@ class RuntimeBatchTests(unittest.TestCase):
         self.assertEqual(len(result.synapse_updates), 1)
         self.assertEqual(result.synapse_updates[0].n_pre, 2)
         self.assertEqual(runtime.synapses["a"].pre_trace, 2.0)
+
+    def test_meta_plasticity_scales_stdp_rates_but_not_safety_caps(self):
+        runtime = NeuronRuntime({"a": 0.5}, learning_rule="stdp")
+        with patch("tools.neuron_runtime.runtime.update_stdp", wraps=update_stdp) as update:
+            runtime.process_batch(
+                0, [SynapticInput("pre", "a", 0.5)], plasticity_scale=1.5,
+            )
+
+        effective = update.call_args.args[1]
+        self.assertAlmostEqual(effective.eta_plus, runtime.synapse_params.eta_plus * 1.5)
+        self.assertAlmostEqual(effective.eta_minus, runtime.synapse_params.eta_minus * 1.5)
+        self.assertEqual(effective.q_batch_max, runtime.synapse_params.q_batch_max)
+        self.assertEqual(effective.delta_w_batch_max, runtime.synapse_params.delta_w_batch_max)
+
+    def test_meta_plasticity_scales_rstdp_reward_rate(self):
+        runtime = NeuronRuntime({"a": 0.5}, learning_rule="rstdp")
+        runtime.process_batch(
+            0, [SynapticInput("pre", "a", 0.5)],
+            learning_context_id="episode",
+        )
+        with patch("tools.neuron_runtime.runtime.apply_reward", wraps=__import__(
+            "tools.numerical_oracle.jarvis_oracle", fromlist=["apply_reward"]
+        ).apply_reward) as apply:
+            runtime.apply_reward(
+                "a", 1, 1.0, 0.5, "episode", plasticity_scale=1.5,
+            )
+
+        effective_reward_params = apply.call_args.args[2]
+        self.assertAlmostEqual(
+            effective_reward_params.eta_r, runtime.reward_params.eta_r * 1.5,
+        )
+        self.assertEqual(
+            effective_reward_params.delta_w_reward_max,
+            runtime.reward_params.delta_w_reward_max,
+        )
+
+    def test_invalid_meta_plasticity_scale_does_not_mutate_runtime(self):
+        runtime = NeuronRuntime({"a": 0.5}, learning_rule="stdp")
+        before = runtime.neuron_state
+        with self.assertRaises(NeuronRuntimeError):
+            runtime.process_batch(
+                0, [SynapticInput("pre", "a", 0.5)], plasticity_scale=float("nan"),
+            )
+        self.assertEqual(runtime.neuron_state, before)
+        self.assertEqual(runtime.processed_batches, 0)
 
     def test_later_reward_can_advance_synapse_clock_past_membrane_clock(self):
         runtime = NeuronRuntime({"a": 0.5}, learning_rule="rstdp")
