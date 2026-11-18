@@ -14,7 +14,7 @@
 | Memory trace | INTEGRATED, basic | Updated after a successful neuron batch and used as the next activity-prediction baseline |
 | Prediction error | INTEGRATED, basic | Absolute difference between observed activity and previous memory trace |
 | Confidence / uncertainty | INTEGRATED, heuristic | Deterministic bounded values update from prediction error and event attention; confidence is not calibrated |
-| Synaptic memory sidecar | INTEGRATED, storage + update | Coactivation, predictive and positive reward traces update for touched synapses and are persisted |
+| Synaptic memory sidecar | INTEGRATED, bounded activation | Coactivation, predictive and positive reward traces update, persist, and provide capped facilitation to later input on the same synapse |
 | JPVR network persistence | INTEGRATED at source level | Changed neuron records (including sidecars), scheduler snapshot and index mutations share one group COMMIT |
 | Network restore | INTEGRATED at source level | Sidecars are restored from the same pinned JPVR snapshot and validated with the network checkpoint |
 
@@ -38,21 +38,20 @@
 3. **500,000-neuron capacity:** current Python and Android network limits remain 10,000. No indexed, paged 500K execution runtime exists.
 4. **Predictive processing:** current prediction is a simple prior-memory-trace baseline, not a learned sequence or hierarchical predictive model.
 5. **Reasoning:** no integrated evidence graph, competing hypothesis lifecycle, contradiction reconciliation or explainable inference pipeline is established by these feature utilities.
-6. **Meta-plasticity:** the sidecar value must be connected through a validated learning-parameter adapter without changing Numerical Oracle equations silently.
+6. **Meta-plasticity:** the bounded adapter is connected in the Python reference path; Android parity and empirical stability remain unverified.
 7. **Inhibitory populations:** a real inhibitory pathway needs explicit topology semantics, bounded signals, tests and persisted state; it must not be simulated by an arbitrary constant.
 
 ## 4. Correct next implementation order
 
 1. Run the focused network, JPVR store and coordinator tests after explicit approval; fix actual failures before expanding.
 2. Add focused tests for sidecar rollback, persistence and reward updates.
-3. Design a small explicit `plasticity_scale` contract and connect it to the existing learning-parameter path without changing the baseline behavior when sidecars are absent.
-4. Add an explicit inhibitory input type/route and connect its accumulated drive to `NeuronFeatureInput.inhibitory_drive`.
-5. Add a real inhibitory event/connection pathway with bounded drive, candidate transaction semantics and persistence.
-6. Extend synaptic memory from bounded activation facilitation to a separately validated per-synapse learning/credit-assignment rule; retain the canonical synapse weight as the source of truth.
-7. Add population roles and a small registry only when role-specific execution behavior exists.
-8. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
-9. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
-10. Integrate storage-backed bounded residency before raising logical neuron limits.
+3. Add an explicit inhibitory event/route type and connect its accumulated drive to `NeuronFeatureInput.inhibitory_drive`.
+4. Give inhibitory events bounded signal semantics, candidate transaction behavior, checkpoint persistence and rollback coverage.
+5. Extend synaptic memory from bounded activation facilitation to a separately validated per-synapse learning/credit-assignment rule; retain the canonical synapse weight as the source of truth.
+6. Add population roles and a small registry only when role-specific execution behavior exists.
+7. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
+8. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
+9. Integrate storage-backed bounded residency before raising logical neuron limits.
 
 ## 5. Non-negotiable accuracy
 
