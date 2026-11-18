@@ -127,8 +127,9 @@ class JarvisBackgroundService : Service() {
                 val prefs = checkpointPreferences()
                 if (resetBeforeRun) {
                     updateNotification("Подготовка изолированной памяти ANS-100…")
-                    runtime = ANS100StandaloneBenchmarkRuntime(applicationContext)
-                    runtime.resetStructuredLearnedState()
+                    val activeRuntime = ANS100StandaloneBenchmarkRuntime(applicationContext)
+                    runtime = activeRuntime
+                    activeRuntime.resetStructuredLearnedState()
                     check(prefs.edit()
                         .putInt(KEY_TOTAL, rows.size)
                         .putInt(KEY_COMPLETED, 0)
@@ -137,7 +138,8 @@ class JarvisBackgroundService : Service() {
                         .putString(KEY_ERROR, "")
                         .commit()) { "Не удалось сохранить начало фонового эксперимента." }
                 } else {
-                    runtime = ANS100StandaloneBenchmarkRuntime(applicationContext)
+                    val activeRuntime = ANS100StandaloneBenchmarkRuntime(applicationContext)
+                    runtime = activeRuntime
                     check(prefs.getInt(KEY_TOTAL, -1) == rows.size) {
                         "Размер сохранённого development-набора изменился; автоматическое продолжение запрещено."
                     }
@@ -158,7 +160,8 @@ class JarvisBackgroundService : Service() {
                         .commit()) { "Не удалось зафиксировать начало задания ${index + 1}." }
 
                     val row = rows[index]
-                    val result = runtime.runStructuredTask(
+                    val activeRuntime = runtime ?: error("ANS-100 runtime is unavailable.")
+                    val result = activeRuntime.runStructuredTask(
                         taskId = row.taskId,
                         inputText = row.inputText,
                         trainingLabel = row.trainingLabel,
@@ -177,6 +180,10 @@ class JarvisBackgroundService : Service() {
                         .putString(KEY_ERROR, "")
                         .commit()) { "Не удалось сохранить результат задания ${index + 1}." }
                     updateNotification("Обучение ANS-100: $completed / ${rows.size}")
+                    if (completed < rows.size && completed % TRAINING_BATCH_SIZE == 0) {
+                        updateNotification("Пауза для охлаждения · продолжение после 10 секунд")
+                        Thread.sleep(TRAINING_COOLDOWN_MS)
+                    }
                 }
 
                 prefs.edit()
@@ -349,6 +356,8 @@ class JarvisBackgroundService : Service() {
         private const val STATE_FAILED = "failed"
         private const val MAX_TRAINING_ROWS = 1_000
         private const val MAX_PROCESS_PSS_MB = 1_800L
+        private const val TRAINING_BATCH_SIZE = 8
+        private const val TRAINING_COOLDOWN_MS = 10_000L
         private val ALLOWED_LABELS = setOf("YES", "NO", "UNKNOWN", "CONFLICT")
 
         fun startStructuredTraining(context: Context): Boolean {
@@ -367,10 +376,18 @@ class JarvisBackgroundService : Service() {
                     .putString(KEY_ERROR, "")
                     .commit()
             ) return false
-            context.startForegroundService(
-                Intent(context, JarvisBackgroundService::class.java).setAction(ACTION_START_STRUCTURED_TRAINING),
-            )
-            return true
+            return try {
+                context.startForegroundService(
+                    Intent(context, JarvisBackgroundService::class.java).setAction(ACTION_START_STRUCTURED_TRAINING),
+                )
+                true
+            } catch (error: Exception) {
+                prefs.edit()
+                    .putString(KEY_STATE, STATE_FAILED)
+                    .putString(KEY_ERROR, error.message ?: "Не удалось запустить foreground service.")
+                    .commit()
+                throw error
+            }
         }
 
         fun resumeIfNeeded(context: Context) {
