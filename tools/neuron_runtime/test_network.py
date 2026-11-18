@@ -153,6 +153,34 @@ class NetworkTests(unittest.TestCase):
         self.assertEqual(network.current_time_ns, clock_before)
         self.assertEqual(network.pending_events, 1)
 
+    def test_feature_sidecar_modulates_real_network_input_and_updates_memory(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState
+
+        network = NetworkRuntime(
+            {"n": NeuronRuntime({"in": 1.0})},
+            feature_states={"n": NeuronFeatureState(sensitivity=2.0)},
+        )
+        network.schedule_input(0, "n", "in", "feature-pulse", 0.60)
+        result = network.run()
+
+        self.assertEqual(result.spikes[0].neuron_id, "n")
+        self.assertEqual(network.feature_states["n"].observations, 1)
+        self.assertGreater(network.feature_states["n"].memory_trace, 0.0)
+        self.assertGreater(network.synaptic_memories["n"]["in"].coactivation_trace, 0.0)
+
+    def test_feature_sidecar_can_inhibit_a_real_network_input(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState
+
+        network = NetworkRuntime(
+            {"n": NeuronRuntime({"in": 1.0})},
+            feature_states={"n": NeuronFeatureState(inhibition=0.75)},
+        )
+        network.schedule_input(0, "n", "in", "inhibited-pulse", 1.0)
+        result = network.run()
+
+        self.assertEqual(result.spikes, ())
+        self.assertEqual(network.feature_states["n"].observations, 1)
+
     def test_caller_runtime_is_not_mutated_by_network(self):
         source = NeuronRuntime({"ext": 1.0})
         network = NetworkRuntime({"source": source})
