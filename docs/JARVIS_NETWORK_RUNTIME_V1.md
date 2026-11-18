@@ -1,6 +1,6 @@
 # JARVIS Network Runtime V1 — bounded multi-neuron event loop
 
-**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 21 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
+**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 22 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
 
 ## Runtime execution
 
@@ -20,6 +20,7 @@
 For a neuron with feature state:
 - Sensitivity and inhibition gate each incoming excitatory signal through `effective_excitatory_gain`; output is clamped to [0, 1].
 - Sensitivity adaptation uses negative feedback: activity below the configured target raises sensitivity, while activity above target lowers it.
+- The sidecar's meta-plasticity value scales STDP/R-STDP local learning rates through a bounded runtime parameter adapter. Oracle safety caps remain unchanged; without a sidecar the scale is exactly 1.0.
 - After a successful candidate neuron update, activity, the prior memory trace, and event attention update bounded confidence, uncertainty, prediction-error, memory, inhibition, and context fields.
 - Touched synapses receive bounded coactivation and predictive traces.
 - Reward operations update the optional reward trace without silently changing canonical STDP/R-STDP weights.
@@ -30,7 +31,9 @@ Important limitations:
 - Confidence is an internal ranking signal, not a calibrated probability.
 - The current prediction baseline is the prior bounded memory trace, not a learned sequence model.
 - Context similarity currently uses mean event-attention.
-- The sidecar does not yet implement a complete inhibitory population, full predictive coding, hypothesis competition, or causal reasoning.
+- Inhibition is currently only a gate for existing state; the runtime supplies no new inhibitory drive or inhibitory population.
+- Synaptic memory traces are stored but are not yet consumed by later activation or credit assignment.
+- The sidecar does not yet implement full predictive coding, hypothesis competition, or causal reasoning.
 - Android Kotlin feature parity and UI controls are not integrated.
 - Feature activation is currently selected by supplying sidecar state at runtime; there is no complete user-facing per-mechanism configuration system.
 
@@ -53,7 +56,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 
 ## Verification state
 
-`tools/neuron_runtime/test_network.py` contains 21 authored tests, including:
+`tools/neuron_runtime/test_network.py` contains 22 authored tests, including:
 - topology and endpoint validation;
 - deterministic same-timestamp batching;
 - delayed multi-neuron propagation;
@@ -63,6 +66,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 - feature-counter rollback;
 - inhibition and sensitivity behavior;
 - negative-feedback sensitivity adaptation;
+- meta-plasticity propagation into STDP learning parameters;
 - rejection of boolean and non-finite sensitivity;
 - caller-state isolation and deterministic input ordering.
 
