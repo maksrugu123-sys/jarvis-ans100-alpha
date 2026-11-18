@@ -57,14 +57,14 @@ This is a single-writer Python reference path. The coordinator still holds the c
 
 ## Verification state
 
-`tools/neuron_runtime/test_network.py` contains 29 authored tests, including:
+`tools/neuron_runtime/test_network.py` contains 30 authored tests, including:
 - topology and endpoint validation;
 - deterministic same-timestamp batching;
 - delayed multi-neuron propagation;
 - queue/run budget and fan-out backpressure;
 - failed-timestamp rollback;
 - sidecar input modulation and memory update;
-- inhibitory route validation, same-timestamp suppression, feature-state creation, and runtime checkpoint round-trip;
+- inhibitory route validation, same-timestamp suppression, feature-state creation, runtime checkpoint round-trip, and failed-timestamp rollback;
 - feature-counter rollback;
 - inhibition and sensitivity behavior;
 - negative-feedback sensitivity adaptation;
@@ -72,7 +72,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 - rejection of boolean and non-finite sensitivity;
 - caller-state isolation and deterministic input ordering.
 
-The network suite (29 authored tests), JPVR network persistence suite (10 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
+The network suite (30 authored tests), JPVR network persistence suite (10 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
 
 Suggested focused verification when explicitly approved:
 
