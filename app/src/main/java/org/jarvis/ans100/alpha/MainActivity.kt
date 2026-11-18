@@ -3246,9 +3246,25 @@ private fun SettingsPanel(
                 }
             }
             "neural" -> {
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeading("Гибридная сеть ANS-100", "10 000 нейронов · 7 популяций · SQLite JNVM")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color(0x55428FBE)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1B2C)),
+                ) {
+                    Column(modifier = Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            NeuralCoreVisual(pulse = 0.94f)
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("ANS-100  /  NEURAL CORE", color = Color(0xFF82BDE5),
+                                    style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp)
+                                Text("Нейронная система", color = Color(0xFFEAF6FF),
+                                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("10 000 нейронов · 7 популяций · SQLite JNVM",
+                                    color = Color(0xFF8FAFC8), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                         Text(
                             "Новая сеть запускается автоматически при обычных сообщениях. " +
                                 "Она проходит через группы входа, ассоциаций, рабочего состояния, кандидатов, критики, планирования и readout.",
@@ -3263,8 +3279,13 @@ private fun SettingsPanel(
                         )
                     }
                 }
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, Color(0x443D789F)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1C2B)),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SectionHeading("Core и передача Qwen", "предварительный анализ и структурированное решение")
                         conversation.understandingIntent?.let {
                             Text(
@@ -3288,8 +3309,13 @@ private fun SettingsPanel(
                     }
                 }
                 ANS100BenchmarkPanel(viewModel = benchmarkViewModel, modelInstalled = conversation.modelInstalled)
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, Color(0x443D789F)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1C2B)),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SectionHeading("Локальные сигналы", "низкоуровневый анализ формы сообщения")
                         Text(
                             "Активно нейронов: ${conversation.ans100ActiveNeuronCount}, событий: ${conversation.ans100ProcessedEvents}, импульсов: ${conversation.ans100SpikeCount}, attention gate: ${if (conversation.ans100AttentionGateActive) "да" else "нет"}",
