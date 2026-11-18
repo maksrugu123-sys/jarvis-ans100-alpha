@@ -168,6 +168,24 @@ class NetworkTests(unittest.TestCase):
         self.assertGreater(network.feature_states["n"].memory_trace, 0.0)
         self.assertGreater(network.synaptic_memories["n"]["in"].coactivation_trace, 0.0)
 
+    def test_feature_counter_exhaustion_rolls_back_the_whole_timestamp(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState
+
+        initial = NeuronFeatureState(observations=(1 << 64) - 1)
+        network = NetworkRuntime(
+            {"n": NeuronRuntime({"in": 1.0})},
+            feature_states={"n": initial},
+        )
+        network.schedule_input(0, "n", "in", "overflow-feature-counter", 1.0)
+        neuron_before = network.neuron_states["n"]
+
+        with self.assertRaises(NetworkRuntimeError):
+            network.run()
+
+        self.assertEqual(network.neuron_states["n"], neuron_before)
+        self.assertEqual(network.feature_states["n"], initial)
+        self.assertEqual(network.pending_events, 1)
+
     def test_feature_sidecar_can_inhibit_a_real_network_input(self):
         from tools.neuron_runtime.neuron_features import NeuronFeatureState
 
