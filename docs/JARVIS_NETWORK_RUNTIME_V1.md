@@ -1,6 +1,6 @@
 # JARVIS Network Runtime V1 — bounded multi-neuron event loop
 
-**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 22 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
+**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 29 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
 
 ## Runtime execution
 
@@ -32,8 +32,8 @@ Important limitations:
 - Confidence is an internal ranking signal, not a calibrated probability.
 - The current prediction baseline is the prior bounded memory trace, not a learned sequence model.
 - Context similarity currently uses mean event-attention.
-- Inhibitory routing is an explicit event pathway, but it is still a simple scalar drive/gate, not a biologically detailed inhibitory population or interneuron model.
-- Synaptic memory traces are stored but are not yet consumed by later activation or credit assignment.
+- Inhibitory routing is an explicit event pathway, but it is still a simple scalar drive/gate, not a biologically detailed inhibitory population or interneuron model. Source neurons are not yet assigned a dedicated inhibitory role.
+- Synaptic memory traces now provide bounded facilitation to later activation; they do not yet provide a distinct per-synapse credit-assignment or learning-rate rule.
 - The sidecar does not yet implement full predictive coding, hypothesis competition, or causal reasoning.
 - Android Kotlin feature parity and UI controls are not integrated.
 - Feature activation is currently selected by supplying sidecar state at runtime; there is no complete user-facing per-mechanism configuration system.
@@ -57,14 +57,14 @@ This is a single-writer Python reference path. The coordinator still holds the c
 
 ## Verification state
 
-`tools/neuron_runtime/test_network.py` contains 26 authored tests, including:
+`tools/neuron_runtime/test_network.py` contains 29 authored tests, including:
 - topology and endpoint validation;
 - deterministic same-timestamp batching;
 - delayed multi-neuron propagation;
 - queue/run budget and fan-out backpressure;
 - failed-timestamp rollback;
 - sidecar input modulation and memory update;
-- inhibitory route validation, same-timestamp suppression, feature-state creation, and checkpoint round-trip;
+- inhibitory route validation, same-timestamp suppression, feature-state creation, and runtime checkpoint round-trip;
 - feature-counter rollback;
 - inhibition and sensitivity behavior;
 - negative-feedback sensitivity adaptation;
@@ -72,7 +72,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 - rejection of boolean and non-finite sensitivity;
 - caller-state isolation and deterministic input ordering.
 
-The focused network tests, JPVR persistence tests, coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
+The network suite (29 authored tests), JPVR network persistence suite (10 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
 
 Suggested focused verification when explicitly approved:
 
