@@ -31,12 +31,15 @@ from tools.numerical_oracle.jarvis_oracle import (
 )
 
 from .runtime import NeuronRuntime
+from .feature_codec import decode_feature_sidecar, encode_feature_sidecar
+from .neuron_features import NeuronFeatureState, SynapticMemoryState
 
 
 JNVM_RUNTIME_RECORD_TYPE = 0x0101
 JNVM_RUNTIME_SCHEMA_ID = 0x4A4E564D  # ASCII "JNVM"
 JNVM_RUNTIME_SCHEMA_VERSION = 1
-_SNAPSHOT_FORMAT = "JARVIS_NEURON_RUNTIME_SNAPSHOT_V1"
+_SNAPSHOT_FORMAT_V1 = "JARVIS_NEURON_RUNTIME_SNAPSHOT_V1"
+_SNAPSHOT_FORMAT_V2 = "JARVIS_NEURON_RUNTIME_SNAPSHOT_V2"
 _U64_MAX = (1 << 64) - 1
 _OBJECT_ID_DOMAIN = b"JARVIS:JNVM:NEURON-RUNTIME:V1\x00"
 
@@ -52,6 +55,8 @@ class DecodedNeuronRuntimeSnapshot:
     neuron_id: str
     clock_epoch_id: bytes
     runtime: NeuronRuntime
+    feature_state: NeuronFeatureState | None = None
+    synaptic_memory: dict[str, SynapticMemoryState] | None = None
 
 
 def _identifier(name: str, value: object) -> str:
@@ -132,6 +137,8 @@ def encode_neuron_runtime_snapshot(
     runtime: NeuronRuntime,
     *,
     clock_epoch_id: bytes,
+    feature_state: NeuronFeatureState | None = None,
+    synaptic_memory: dict[str, SynapticMemoryState] | None = None,
 ) -> bytes:
     """Encode all authoritative one-neuron runtime state in canonical JSON bytes.
 
@@ -156,8 +163,16 @@ def encode_neuron_runtime_snapshot(
         # without forcing a synthetic neuron integration step.
         synapse_items.append({"synapse_id": synapse_name, "state": asdict(state)})
 
+    if feature_state is not None or synaptic_memory is not None:
+        feature_state = feature_state or NeuronFeatureState()
+        sidecar = encode_feature_sidecar(identifier, feature_state, synaptic_memory or {})
+        snapshot_format = _SNAPSHOT_FORMAT_V2
+    else:
+        sidecar = None
+        snapshot_format = _SNAPSHOT_FORMAT_V1
+
     payload = {
-        "format": _SNAPSHOT_FORMAT,
+        "format": snapshot_format,
         "schema_version": JNVM_RUNTIME_SCHEMA_VERSION,
         "neuron_id": identifier,
         "clock_epoch_id": epoch.hex(),
@@ -169,6 +184,8 @@ def encode_neuron_runtime_snapshot(
         "neuron_state": asdict(runtime.neuron_state),
         "synapses": synapse_items,
     }
+    if sidecar is not None:
+        payload["feature_sidecar"] = sidecar.decode("utf-8", errors="strict")
     try:
         encoded = json.dumps(
             payload,
@@ -209,12 +226,15 @@ def decode_neuron_runtime_snapshot(payload: bytes | bytearray | memoryview) -> D
         "learning_rule", "processed_batches", "neuron_params",
         "synapse_params", "reward_params", "neuron_state", "synapses",
     }
-    top = _require_keys("snapshot", document, expected_top)
+    if isinstance(document, dict) and document.get("format") == _SNAPSHOT_FORMAT_V2:
+        top = _require_keys("snapshot", document, expected_top | {"feature_sidecar"})
+    else:
+        top = _require_keys("snapshot", document, expected_top)
     schema_version = top["schema_version"]
     if (
         isinstance(schema_version, bool)
         or not isinstance(schema_version, int)
-        or top["format"] != _SNAPSHOT_FORMAT
+        or top["format"] not in (_SNAPSHOT_FORMAT_V1, _SNAPSHOT_FORMAT_V2)
         or schema_version != JNVM_RUNTIME_SCHEMA_VERSION
     ):
         raise NeuronRuntimePersistenceError("unsupported neuron runtime snapshot format/version")
@@ -269,7 +289,21 @@ def decode_neuron_runtime_snapshot(payload: bytes | bytearray | memoryview) -> D
         )
     except (TypeError, ValueError) as exc:
         raise NeuronRuntimePersistenceError(f"reconstructed runtime is invalid: {exc}") from exc
-    return DecodedNeuronRuntimeSnapshot(neuron_id, epoch, runtime)
+    feature_state = None
+    synaptic_memory = None
+    if top["format"] == _SNAPSHOT_FORMAT_V2:
+        sidecar_text = top["feature_sidecar"]
+        if not isinstance(sidecar_text, str):
+            raise NeuronRuntimePersistenceError("feature_sidecar must be a UTF-8 JSON string")
+        try:
+            decoded_id, feature_state, synaptic_memory = decode_feature_sidecar(
+                sidecar_text.encode("utf-8", "strict"), expected_neuron_id=neuron_id
+            )
+        except (UnicodeEncodeError, ValueError) as exc:
+            raise NeuronRuntimePersistenceError(f"invalid cognitive feature sidecar: {exc}") from exc
+    return DecodedNeuronRuntimeSnapshot(
+        neuron_id, epoch, runtime, feature_state, synaptic_memory
+    )
 
 
 def decode_neuron_runtime_record(
@@ -300,12 +334,15 @@ def make_neuron_runtime_record_input(
     *,
     clock_epoch_id: bytes,
     record_version: int = 1,
+    feature_state: NeuronFeatureState | None = None,
+    synaptic_memory: dict[str, SynapticMemoryState] | None = None,
 ) -> DataRecordInput | BlobRecordInput:
     """Create a DATA/JREC or BLOB input depending on the encoded snapshot size."""
     identifier = _identifier("neuron_id", neuron_id)
     version = _record_version(record_version)
     payload = encode_neuron_runtime_snapshot(
-        identifier, runtime, clock_epoch_id=clock_epoch_id
+        identifier, runtime, clock_epoch_id=clock_epoch_id,
+        feature_state=feature_state, synaptic_memory=synaptic_memory,
     )
     common = (
         JNVM_RUNTIME_RECORD_TYPE,
