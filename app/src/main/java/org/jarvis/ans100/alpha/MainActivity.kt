@@ -285,7 +285,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 glowEnabled = glowEnabled,
                             )
                         }
-                        NavigationBar {
+                        NavigationBar(
+                            containerColor = Color(0xFF081625),
+                            contentColor = Color(0xFFDCEEFF),
+                            tonalElevation = 0.dp,
+                        ) {
                             NavigationBarItem(
                                 selected = selectedTab == 4,
                                 onClick = { selectedTab = 4 },
@@ -338,6 +342,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onOpenMemory = { selectedTab = 1 },
                             onOpenTasks = { selectedTab = 2 },
                             onOpenSettings = { selectedTab = 3; settingsCategory = "model" },
+                            onOpenNeural = { selectedTab = 3; settingsCategory = "neural" },
                         )
                         0 -> {
                             ChatTitleBar(
@@ -1286,6 +1291,7 @@ private fun DashboardScreen(
     onOpenMemory: () -> Unit,
     onOpenTasks: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenNeural: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1457,9 +1463,10 @@ private fun DashboardScreen(
                 color = Color(0xFF79BCE7),
                 letterSpacing = 1.8.sp,
             )
+            DashboardAction("Нейронное ядро ANS-100", "Обучение, тесты и состояние нейронных модулей", "✧", onOpenNeural)
             DashboardAction("Нейронная память", "Локальные записи и синхронизация", "◈", onOpenMemory)
             DashboardAction("Рабочие задачи", "Сессии и сохранённые черновики", "⌘", onOpenTasks)
-            DashboardAction("Параметры системы", "Модель, внешний вид и эксперименты", "⚙", onOpenSettings)
+            DashboardAction("Параметры системы", "Модель, внешний вид и системные настройки", "⚙", onOpenSettings)
         }
         Text(
             "JARVIS ANS-100  •  PRIVATE LOCAL ENVIRONMENT",
@@ -2650,21 +2657,43 @@ private fun ChatTitleBar(
     glowEnabled: Boolean,
     onOpenSettings: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().then(rememberGlowBorder(glowEnabled, 18.dp))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    Surface(
+        modifier = Modifier.fillMaxWidth().then(rememberGlowBorder(glowEnabled, 18.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xFF0A1B2D),
+        border = BorderStroke(1.dp, Color(0x553E83B2)),
     ) {
-        IconButton(onClick = onOpenSettings) {
-            Text("⚙", style = MaterialTheme.typography.titleLarge)
-        }
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("JARVIS", style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Text("$backendLabel · ${if (isBusy) "формирует ответ" else "локально"}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(38.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF0B2942),
+                border = BorderStroke(1.dp, Color(0xFF347FB0)),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("J", color = Color(0xFF58C8FF),
+                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("JARVIS", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold, color = Color(0xFFEAF6FF), letterSpacing = 1.5.sp)
+                Text(
+                    "$backendLabel · ${if (isBusy) "формирует ответ" else "локально"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF8FB4D0),
+                    maxLines = 1,
+                )
+            }
+            ActivityStatusPill(isBusy = isBusy)
+            IconButton(onClick = onOpenSettings) {
+                Text("⚙", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleMedium)
+            }
         }
     }
 }
