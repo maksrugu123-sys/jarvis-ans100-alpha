@@ -19,8 +19,9 @@ from .network import MAX_NETWORK_CONNECTIONS, MAX_NETWORK_NEURONS, NetworkConnec
 
 SCHEDULER_RECORD_TYPE = 0x0103
 SCHEDULER_SCHEMA_ID = 0x4A4E5343
-SCHEDULER_SCHEMA_VERSION = 2
-SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V2"
+SCHEDULER_SCHEMA_VERSION = 3
+SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V3"
+_LEGACY_SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V2"
 SCHEDULER_LOCATOR_MAGIC = b"JNSL"
 SCHEDULER_LOCATOR_VERSION = 2
 SCHEDULER_LOCATOR = struct.Struct("<4sHBBHHI16sQQIQQ16s16s")
@@ -197,6 +198,7 @@ def encode_network_scheduler_snapshot(
                 "delay_ns": c.delay_ns,
                 "strength": float(c.strength),
                 "attention": float(c.attention),
+                "signal_type": c.signal_type,
             } for c in connections],
             "pending_events": [{
                 "time_ns": e.time_ns,
@@ -205,6 +207,7 @@ def encode_network_scheduler_snapshot(
                 "target_synapse_id": e.target_synapse_id,
                 "strength": float(e.strength),
                 "attention": float(e.attention),
+                "inhibitory": bool(e.inhibitory),
             } for e in pending],
             "max_pending_events": state["max_pending_events"],
             "max_events_per_run": state["max_events_per_run"],
@@ -233,13 +236,16 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         raise
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise JPVRNetworkJNVMError(f"invalid scheduler JSON: {exc}") from exc
-    top = _exact_object("scheduler", doc, {
+    common_fields = {
         "format", "schema_version", "network_id", "clock_epoch_id", "neuron_ids",
         "neuron_record_versions", "connections", "pending_events", "max_pending_events", "max_events_per_run",
         "current_time_ns", "has_processed",
-    })
+    }
+    top = _exact_object("scheduler", doc, common_fields)
     version = top["schema_version"]
-    if top["format"] != SCHEDULER_FORMAT or isinstance(version, bool) or version != SCHEDULER_SCHEMA_VERSION:
+    legacy = top["format"] == _LEGACY_SCHEDULER_FORMAT and version == 2
+    current = top["format"] == SCHEDULER_FORMAT and version == SCHEDULER_SCHEMA_VERSION
+    if isinstance(version, bool) or not (legacy or current):
         raise JPVRNetworkJNVMError("unsupported scheduler format/version")
     network_id = _id("network_id", top["network_id"])
     epoch_text = top["clock_epoch_id"]
@@ -275,18 +281,31 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         raise JPVRNetworkJNVMError("connections must be a bounded array")
     connections, ids, owned = [], [], set()
     for item in raw_connections:
-        row = _exact_object("connection", item, {
+        connection_fields = {
             "connection_id", "source_neuron_id", "target_neuron_id",
             "target_synapse_id", "delay_ns", "strength", "attention",
-        })
+        }
+        if not legacy:
+            connection_fields.add("signal_type")
+        row = _exact_object("connection", item, connection_fields)
+        signal_type = row.get("signal_type", "excitatory")
+        target_synapse_id = row["target_synapse_id"]
+        if signal_type == "excitatory":
+            target_synapse_id = _id("target_synapse_id", target_synapse_id, 128)
+        elif signal_type == "inhibitory":
+            if target_synapse_id is not None:
+                raise JPVRNetworkJNVMError("inhibitory connection must not target an excitatory synapse")
+        else:
+            raise JPVRNetworkJNVMError("unknown connection signal_type")
         c = NetworkConnection(
             _id("connection_id", row["connection_id"], 128),
             _id("source_neuron_id", row["source_neuron_id"], 128),
             _id("target_neuron_id", row["target_neuron_id"], 128),
-            _id("target_synapse_id", row["target_synapse_id"], 128),
+            target_synapse_id,
             _uint("delay_ns", row["delay_ns"], minimum=1),
             _unit("strength", row["strength"]),
             _unit("attention", row["attention"]),
+            signal_type,
         )
         c.validate()
         if c.source_neuron_id not in neuron_ids or c.target_neuron_id not in neuron_ids:
@@ -304,19 +323,37 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         raise JPVRNetworkJNVMError("pending_events exceeds queue limit")
     pending, keys, seen = [], [], set()
     for item in raw_pending:
-        row = _exact_object("pending event", item, {
+        event_fields = {
             "time_ns", "event_id", "target_neuron_id", "target_synapse_id",
             "strength", "attention",
-        })
+        }
+        if not legacy:
+            event_fields.add("inhibitory")
+        row = _exact_object("pending event", item, event_fields)
         t = _uint("event time_ns", row["time_ns"])
         event_id = _id("event_id", row["event_id"], 256)
         target_neuron = _id("target_neuron_id", row["target_neuron_id"], 128)
-        target_synapse = _id("target_synapse_id", row["target_synapse_id"], 128)
+        inhibitory = row.get("inhibitory", False)
+        if not isinstance(inhibitory, bool):
+            raise JPVRNetworkJNVMError("pending event inhibitory must be bool")
+        target_synapse = row["target_synapse_id"]
+        if inhibitory:
+            if target_synapse is not None:
+                raise JPVRNetworkJNVMError("inhibitory event must not target an excitatory synapse")
+        else:
+            target_synapse = _id("target_synapse_id", target_synapse, 128)
         strength, attention = _unit("event strength", row["strength"]), _unit("event attention", row["attention"])
         if target_neuron not in neuron_ids:
             raise JPVRNetworkJNVMError("pending event targets unknown neuron")
         internal = event_id.startswith(INTERNAL_EVENT_PREFIX)
-        if internal != ((target_neuron, target_synapse) in owned):
+        if inhibitory:
+            if not internal or not any(
+                connection.signal_type == "inhibitory"
+                and connection.target_neuron_id == target_neuron
+                for connection in connections
+            ):
+                raise JPVRNetworkJNVMError("inhibitory event origin does not match inhibitory topology")
+        elif internal != ((target_neuron, target_synapse) in owned):
             raise JPVRNetworkJNVMError("event origin does not match synapse ownership")
         if internal:
             digest = event_id[len(INTERNAL_EVENT_PREFIX):]
@@ -327,8 +364,8 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         seen.add(event_id)
         if (has_processed and t <= current_time) or (not has_processed and t < current_time):
             raise JPVRNetworkJNVMError("pending event is not later than network clock")
-        pending.append((t, event_id, target_neuron, target_synapse, strength, attention))
-        keys.append((t, event_id, target_neuron, target_synapse))
+        pending.append((t, event_id, target_neuron, target_synapse, strength, attention, inhibitory))
+        keys.append((t, event_id, target_neuron, target_synapse or "", inhibitory))
     if keys != sorted(keys):
         raise JPVRNetworkJNVMError("pending events are not in canonical order")
     return NetworkSchedulerSnapshot(
@@ -346,7 +383,7 @@ def _validate_locator(locator: NetworkSchedulerLocator) -> None:
     _uint("schema_version", locator.schema_version, 65535)
     if locator.storage_kind not in (LOCATOR_DATA, LOCATOR_BLOB):
         raise JPVRNetworkJNVMError("unknown scheduler storage kind")
-    if (locator.record_type, locator.schema_id, locator.schema_version) != (SCHEDULER_RECORD_TYPE, SCHEDULER_SCHEMA_ID, SCHEDULER_SCHEMA_VERSION):
+    if (locator.record_type, locator.schema_id) != (SCHEDULER_RECORD_TYPE, SCHEDULER_SCHEMA_ID) or locator.schema_version not in (2, SCHEDULER_SCHEMA_VERSION):
         raise JPVRNetworkJNVMError("scheduler locator schema mismatch")
     for name, value in (("object_id", locator.object_id), ("commit_id", locator.commit_id), ("transaction_id", locator.transaction_id)):
         if not isinstance(value, bytes) or len(value) != 16 or value == bytes(16):
