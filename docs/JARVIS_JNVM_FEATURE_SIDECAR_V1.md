@@ -45,8 +45,17 @@ transaction or Kotlin `AndroidSparseNeuronNetwork`. It also does not make the
 confidence value a calibrated probability, implement a full inhibitory
 population, or prove a complete predictive model. The prediction baseline is
 the prior bounded memory trace, and context similarity currently uses the
-mean event-attention value. These are explicit first integration semantics,
-not claims of human-like cognition.
+mean event-attention value. The network currently supplies zero new
+`inhibitory_drive`, so inhibition is only an input gate for an existing state
+value that decays; a real inhibitory population is not connected. The
+`plasticity` field is calculated and persisted but does not yet modulate the
+Numerical Oracle's STDP/R-STDP learning parameters. Synaptic coactivation,
+predictive and reward traces are persisted, but are not yet consumed by later
+activation or credit assignment. These are explicit first integration
+semantics, not claims of human-like cognition.
+
+See `docs/JARVIS_INTEGRATION_AUDIT_V1.md` for the current component-by-component
+connection audit and next integration order.
 
 Focused tests have been authored for real signal modulation, feature updates,
 and persistence/restore. They are **NOT RUN**. No benchmark, build, CI or
