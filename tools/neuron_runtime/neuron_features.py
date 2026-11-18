@@ -1,7 +1,8 @@
-"""Optional cognitive state beside the compact ANS-100 neuron core.
+"""Optional cognitive state integrated into the bounded ANS network event loop.
 
-Deterministic bounded feature updates. This module does not alter Numerical
-Oracle equations and is not yet integrated with NetworkRuntime.
+Feature state is kept as a sparse sidecar and participates in input gating,
+activity prediction, confidence/uncertainty updates, and synaptic memory traces.
+The Numerical Oracle neuron equations remain unchanged.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -59,8 +60,11 @@ class NeuronFeatureState:
     observations: int = 0
 
     def validate(self) -> None:
-        if not math.isfinite(self.sensitivity) or not 0.5 <= self.sensitivity <= 2.0:
-            raise NeuronFeatureError("sensitivity must be finite and in [0.5, 2]")
+        if (isinstance(self.sensitivity, bool)
+                or not isinstance(self.sensitivity, (int, float))
+                or not math.isfinite(self.sensitivity)
+                or not 0.5 <= self.sensitivity <= 2.0):
+            raise NeuronFeatureError("sensitivity must be a finite real number in [0.5, 2]")
         for name in ("memory_trace", "prediction_error", "confidence", "uncertainty",
                      "plasticity", "inhibition", "context_match"):
             _unit(name, getattr(self, name))
@@ -107,10 +111,10 @@ def update_neuron_features(
     observation: NeuronFeatureInput,
     config: NeuronFeatureConfig = NeuronFeatureConfig(),
 ) -> NeuronFeatureState:
-    """Update sidecar features; confidence is NOT a calibrated probability.
+    """Update bounded sidecar features; confidence is NOT a calibrated probability.
 
-    Sensitivity is a threshold multiplier proposal. The existing ALIF-DT
-    threshold is unchanged until an explicit adapter applies this state.
+    Sensitivity is consumed by NetworkRuntime as a bounded input-gain factor.
+    It does not rewrite the Numerical Oracle threshold or its LIF-DT equations.
     """
     if not isinstance(state, NeuronFeatureState):
         raise NeuronFeatureError("state must be NeuronFeatureState")
@@ -197,6 +201,17 @@ def resolve_evidence(
         return KnowledgeStatus.REFUTED
     return KnowledgeStatus.UNRESOLVED
 
-def effective_excitatory_gain(activity: float, inhibition: float) -> float:
-    """Bounded inhibitory gate; suppression never deletes memory or alternatives."""
-    return _unit("activity", activity) * (1.0 - _unit("inhibition", inhibition))
+def effective_excitatory_gain(
+    activity: float, inhibition: float, sensitivity: float = 1.0,
+) -> float:
+    """Apply bounded sensitivity and inhibition to one excitatory input.
+
+    Sensitivity may amplify an input, but the resulting signal remains in [0, 1].
+    Inhibition gates activation without deleting stored memory or alternatives.
+    """
+    activity = _unit("activity", activity)
+    inhibition = _unit("inhibition", inhibition)
+    if (isinstance(sensitivity, bool) or not isinstance(sensitivity, (int, float))
+            or not math.isfinite(sensitivity) or not 0.5 <= sensitivity <= 2.0):
+        raise NeuronFeatureError("sensitivity must be a finite real number in [0.5, 2]")
+    return _clamp(activity * float(sensitivity) * (1.0 - inhibition))
