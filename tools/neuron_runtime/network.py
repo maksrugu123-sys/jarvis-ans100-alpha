@@ -71,7 +71,7 @@ def _limit(name: str, value: int) -> int:
 
 @dataclass(frozen=True)
 class NetworkConnection:
-    """Directed output-spike route; weight lives on the target synapse."""
+    """Delayed spike route; excitatory routes target a synapse, inhibitory routes target a neuron."""
 
     connection_id: str
     source_neuron_id: str
