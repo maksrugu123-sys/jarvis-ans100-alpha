@@ -344,11 +344,12 @@ class NetworkRuntime:
                         if feature_state is None:
                             payload = [SynapticInput(e.event_id, e.target_synapse_id, e.strength, e.attention) for e in events]
                         else:
-                            gain = feature_state.sensitivity * (1.0 - feature_state.inhibition)
                             payload = [SynapticInput(
                                 e.event_id, e.target_synapse_id,
-                                effective_excitatory_gain(e.strength, feature_state.inhibition)
-                                if feature_state.sensitivity == 1.0 else min(1.0, e.strength * gain),
+                                effective_excitatory_gain(
+                                    e.strength, feature_state.inhibition,
+                                    feature_state.sensitivity,
+                                ),
                                 e.attention,
                             ) for e in events]
                         step = candidates[node].process_batch(
