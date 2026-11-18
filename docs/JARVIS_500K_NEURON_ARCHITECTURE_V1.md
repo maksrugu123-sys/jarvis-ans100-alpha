@@ -1,7 +1,7 @@
 # ANS-100: 500,000-neuron architecture and cognitive extensions
 
 **Target:** 500,000 addressable logical neurons.  
-**Status:** target and migration architecture specified; first standalone cognitive-feature sidecar authored. Current Python and Android network runtimes remain capped at 10,000. A 500,000-node runtime is NOT implemented or verified.
+**Status:** target and migration architecture specified; sparse cognitive sidecars are now connected to the Python in-memory network reference and single-container JPVR group checkpoint path. Current Python and Android network runtimes remain capped at 10,000. A 500,000-node runtime is NOT implemented or verified.
 
 ## 1. Non-negotiable architecture
 
@@ -29,7 +29,7 @@ Boundaries:
 - Sidecar traces do not silently modify canonical STDP/R-STDP weights.
 - Inhibition suppresses a signal but does not delete competing hypotheses or evidence.
 - UNRESOLVED is not the same as REFUTED.
-- The sidecar is authored standalone; it is not yet wired into NeuronRuntime, Android Kotlin runtime, or the dialog path.
+- Python `NetworkRuntime` now optionally accepts per-neuron sidecars, applies sensitivity/inhibition to incoming excitatory strength, updates bounded feature/synaptic traces, and exports/restores the state. `JPVRNetworkJNVMStore` persists changed-neuron sidecars in the same group COMMIT as scheduler state. Android Kotlin runtime and dialog path remain unintegrated.
 
 Functional roles should be assigned by population/role tables, not heavyweight Python object subclasses per neuron. Proposed roles: detector, memory, predictor, context, confidence, inhibitory and coordinator.
 
@@ -52,8 +52,8 @@ No stage is promoted because a constant was raised. Every stage needs determinis
 2. Complete NetworkCheckpointStore on one JPVR container. Do not connect the existing 128-shard per-neuron write-back prototype directly to the scheduler.
 3. Add population/role registries, compact numeric edge IDs, sparse adjacency paging and bounded fan-out.
 4. Port the same versioned state and scheduling contract to Android SQLite. Keep its transaction as timestamp publication boundary.
-5. Add a versioned feature-state codec and integrate sidecar updates into candidate/commit/publish.
-6. Add an adapter that applies sensitivity and inhibitory modulation without changing baseline ALIF-DT when disabled.
+5. [Python reference implemented; tests authored, NOT RUN] Add a versioned feature-state codec and integrate sidecar updates into candidate/commit/publish. Android parity remains open.
+6. [Python reference implemented for sidecar-enabled neurons] Add an adapter that applies sensitivity and inhibitory modulation to incoming excitatory signal strength; baseline neurons without sidecars retain the original path. Android parity and an explicit feature-disable configuration remain open.
 7. Integrate prediction and uncertainty with hypothesis generation/competition, not with a language model's answer text.
 8. Add migration/recovery paths before changing existing database limits or schema.
 
