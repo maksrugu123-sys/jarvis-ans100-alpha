@@ -18,6 +18,7 @@ from tools.neuron_runtime.jpvr_store import (
     encode_neuron_checkpoint_locator,
 )
 from tools.neuron_runtime.runtime import NeuronRuntime, SynapticInput
+from tools.neuron_runtime.neuron_features import NeuronFeatureState, SynapticMemoryState
 from tools.numerical_oracle.jarvis_oracle import SynapseState
 
 
@@ -121,6 +122,37 @@ class JPVRNeuronCheckpointStoreTests(unittest.TestCase):
         self.assertEqual(loaded.snapshot.runtime.synapses, runtime.synapses)
         self.assertEqual(loaded.locator.commit_id, saved.commit_id)
         self.assertEqual(loaded.locator.storage_kind, LOCATOR_DATA)
+
+    def test_cognitive_features_commit_atomically_with_base_neuron_checkpoint(self):
+        runtime = _runtime()
+        features = NeuronFeatureState(
+            sensitivity=1.25, memory_trace=0.4, prediction_error=0.2,
+            confidence=0.7, uncertainty=0.3, plasticity=0.8,
+            inhibition=0.1, context_match=0.9, observations=17,
+        )
+        memory = {
+            "input-000": SynapticMemoryState(
+                coactivation_trace=0.6,
+                predictive_trace=0.5,
+                reward_trace=0.25,
+            )
+        }
+        saved = self.checkpoints.save(
+            "feature-neuron", runtime, clock_epoch_id=CLOCK_EPOCH,
+            feature_state=features, synaptic_memory=memory,
+        )
+        loaded = self.checkpoints.load("feature-neuron")
+        self.assertEqual(loaded.locator.commit_id, saved.commit_id)
+        self.assertEqual(loaded.snapshot.runtime.synapses, runtime.synapses)
+        self.assertEqual(loaded.snapshot.feature_state, features)
+        self.assertEqual(loaded.snapshot.synaptic_memory, memory)
+
+    def test_legacy_checkpoint_without_features_still_loads(self):
+        runtime = _runtime()
+        self.checkpoints.save("legacy-neuron", runtime, clock_epoch_id=CLOCK_EPOCH)
+        loaded = self.checkpoints.load("legacy-neuron")
+        self.assertIsNone(loaded.snapshot.feature_state)
+        self.assertIsNone(loaded.snapshot.synaptic_memory)
 
     def test_load_after_reopening_container(self):
         runtime = _runtime()
