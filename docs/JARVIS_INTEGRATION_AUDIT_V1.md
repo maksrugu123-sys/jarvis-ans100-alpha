@@ -23,9 +23,9 @@
 | Component | Current status | Missing connection |
 |---|---|---|
 | `NeuronFeatureState.plasticity` | INTEGRATED, bounded | The previous sidecar value scales STDP/R-STDP local learning rates through `NeuronRuntime`; baseline safety caps remain unchanged and absent sidecars use scale 1.0 |
-| `SynapticMemoryState.coactivation_trace` | PARTIALLY_INTEGRATED | The trace is stored and restored, but does not yet influence later synaptic activation or learning |
-| `SynapticMemoryState.predictive_trace` | PARTIALLY_INTEGRATED | The trace is stored and restored, but no temporal prediction model consumes it |
-| `SynapticMemoryState.reward_trace` | PARTIALLY_INTEGRATED | Positive reward history is stored; it is not yet used for future credit assignment |
+| `SynapticMemoryState.coactivation_trace` | INTEGRATED, bounded activation | Prior coactivation applies a small capped gain to later input on the same synapse; canonical weight is unchanged |
+| `SynapticMemoryState.predictive_trace` | INTEGRATED, bounded activation | Prior prediction-success trace contributes to the same capped later-input gain; this is not a sequence model |
+| `SynapticMemoryState.reward_trace` | PARTIALLY_INTEGRATED | Positive reward trace contributes to later activation gain, but does not yet drive a separate credit-assignment or learning-rate rule |
 | `NeuronRole` | DESIGNED / DECLARATIVE | Role enum exists, but no population registry or role-specific routing/behavior is connected |
 | `KnowledgeStatus` and `resolve_evidence()` | IMPLEMENTED UTILITY | Four-valued evidence resolution exists, but no evidence store or Reasoning Engine consumes it |
 | `context_match` | PARTIALLY_INTEGRATED | Current input is mean event attention, not a semantic/context embedding or persistent context model |
@@ -47,11 +47,12 @@
 2. Add focused tests for sidecar rollback, persistence and reward updates.
 3. Design a small explicit `plasticity_scale` contract and connect it to the existing learning-parameter path without changing the baseline behavior when sidecars are absent.
 4. Add an explicit inhibitory input type/route and connect its accumulated drive to `NeuronFeatureInput.inhibitory_drive`.
-5. Make synaptic memory traces influence a later, bounded activation/learning decision; retain the canonical synapse weight as the source of truth.
-6. Add population roles and a small registry only when role-specific execution behavior exists.
-7. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
-8. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
-9. Integrate storage-backed bounded residency before raising logical neuron limits.
+5. Add a real inhibitory event/connection pathway with bounded drive, candidate transaction semantics and persistence.
+6. Extend synaptic memory from bounded activation facilitation to a separately validated per-synapse learning/credit-assignment rule; retain the canonical synapse weight as the source of truth.
+7. Add population roles and a small registry only when role-specific execution behavior exists.
+8. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
+9. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
+10. Integrate storage-backed bounded residency before raising logical neuron limits.
 
 ## 5. Non-negotiable accuracy
 
