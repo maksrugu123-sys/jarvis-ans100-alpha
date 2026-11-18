@@ -198,5 +198,42 @@ class NetworkJNVMStoreTests(unittest.TestCase):
                          runtime.neuron_states["source"].spike_sequence)
 
 
+    def test_pending_inhibitory_route_is_persisted_and_restored(self):
+        runtime = NetworkRuntime(
+            {
+                "source": NeuronRuntime({"external": 1.0}),
+                "target": NeuronRuntime({"input": 1.0}),
+            },
+            [NetworkConnection(
+                "inhibitory-route", "source", "target", None, 5, 0.7, 0.0, "inhibitory",
+            )],
+            max_pending_events=32, max_events_per_run=16,
+        )
+        runtime.schedule_input(0, "source", "external", "pulse", 1.0)
+        first = self.store.save_timestamp(
+            "inhibitory-network", runtime, runtime.neuron_ids,
+            clock_epoch_id=EPOCH,
+            expected_network_record_version=0,
+            expected_neuron_record_versions={key: 0 for key in runtime.neuron_ids},
+        )
+
+        runtime.run(max_timestamps=1)
+        second = self.store.save_timestamp(
+            "inhibitory-network", runtime, ("source",),
+            clock_epoch_id=EPOCH,
+            expected_network_record_version=first.network_record_version,
+            expected_neuron_record_versions={"source": first.neuron_record_versions["source"]},
+        )
+        restored = self.store.restore_network("inhibitory-network")
+
+        self.assertEqual(restored.network_record_version, second.network_record_version)
+        self.assertEqual(restored.runtime.connections, runtime.connections)
+        self.assertEqual(restored.runtime.pending_events, runtime.pending_events)
+        result = restored.runtime.run()
+        self.assertEqual(result.pending_events, 0)
+        self.assertGreater(restored.runtime.feature_states["target"].inhibition, 0.0)
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
