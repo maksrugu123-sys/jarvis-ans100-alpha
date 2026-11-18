@@ -80,12 +80,18 @@ class NetworkConnection:
     delay_ns: int
     strength: float = 1.0
     attention: float = 0.0
+    signal_type: str = "excitatory"
 
     def validate(self) -> None:
         _id("connection_id", self.connection_id)
         _id("source_neuron_id", self.source_neuron_id)
         _id("target_neuron_id", self.target_neuron_id)
-        _id("target_synapse_id", self.target_synapse_id)
+        if self.signal_type not in ("excitatory", "inhibitory"):
+            raise NetworkRuntimeError("signal_type must be excitatory or inhibitory")
+        if self.signal_type == "excitatory":
+            _id("target_synapse_id", self.target_synapse_id)
+        elif self.target_synapse_id is not None:
+            raise NetworkRuntimeError("inhibitory connections must not target an excitatory synapse")
         if isinstance(self.delay_ns, bool) or not isinstance(self.delay_ns, int) or not 1 <= self.delay_ns <= _U64_MAX:
             raise NetworkRuntimeError("connection delay_ns must be a positive unsigned 64-bit integer")
         _unit("strength", self.strength)
@@ -117,6 +123,7 @@ class _Event:
     target_synapse_id: str
     strength: float = field(compare=False)
     attention: float = field(compare=False)
+    inhibitory: bool = field(default=False, compare=False)
 
 
 class NetworkRuntime:
@@ -200,12 +207,13 @@ class NetworkRuntime:
             ids.add(conn.connection_id)
             if conn.source_neuron_id not in self._neurons or conn.target_neuron_id not in self._neurons:
                 raise NetworkRuntimeError("connection references an unknown neuron")
-            if conn.target_synapse_id not in self._neurons[conn.target_neuron_id].synapses:
-                raise NetworkRuntimeError("connection references an unknown target synapse")
-            key = (conn.target_neuron_id, conn.target_synapse_id)
-            if key in owned:
-                raise NetworkRuntimeError("a target synapse may have only one network connection owner")
-            owned.add(key)
+            if conn.signal_type == "excitatory":
+                if conn.target_synapse_id not in self._neurons[conn.target_neuron_id].synapses:
+                    raise NetworkRuntimeError("connection references an unknown target synapse")
+                key = (conn.target_neuron_id, conn.target_synapse_id)
+                if key in owned:
+                    raise NetworkRuntimeError("a target synapse may have only one network connection owner")
+                owned.add(key)
             outgoing[conn.source_neuron_id].append(conn)
         self._outgoing = {key: tuple(sorted(value, key=lambda c: c.connection_id)) for key, value in outgoing.items()}
         self._connections = tuple(connections)
@@ -339,11 +347,23 @@ class NetworkRuntime:
                     feature_candidates: dict[str, NeuronFeatureState] = {}
                     synaptic_memory_candidates: dict[str, dict[str, SynapticMemoryState]] = {}
                     for node in sorted(by_node):
-                        events = sorted(by_node[node], key=lambda e: (e.event_id, e.target_synapse_id))
-                        feature_state = self._feature_states.get(node)
+                        events = sorted(by_node[node], key=lambda e: (e.event_id, e.target_synapse_id or ""))
+                        excitatory_events = [event for event in events if not event.inhibitory]
+                        inhibitory_events = [event for event in events if event.inhibitory]
+                        prior_feature = self._feature_states.get(node)
+                        feature_state = prior_feature or (NeuronFeatureState() if inhibitory_events else None)
                         prior_traces = self._synaptic_memories.get(node, {})
+                        inhibitory_drive = 1.0
+                        for event in inhibitory_events:
+                            inhibitory_drive *= 1.0 - event.strength
+                        inhibitory_drive = 1.0 - inhibitory_drive
+                        effective_inhibition = inhibitory_drive
+                        if feature_state is not None:
+                            effective_inhibition = 1.0 - (
+                                (1.0 - feature_state.inhibition) * (1.0 - inhibitory_drive)
+                            )
                         payload = []
-                        for event in events:
+                        for event in excitatory_events:
                             memory_gain = effective_synaptic_memory_gain(
                                 prior_traces.get(event.target_synapse_id, SynapticMemoryState())
                             )
@@ -352,7 +372,7 @@ class NetworkRuntime:
                                 effective_strength = remembered_strength
                             else:
                                 effective_strength = effective_excitatory_gain(
-                                    remembered_strength, feature_state.inhibition,
+                                    remembered_strength, effective_inhibition,
                                     feature_state.sensitivity,
                                 )
                             payload.append(SynapticInput(
@@ -372,20 +392,23 @@ class NetworkRuntime:
                         if feature_state is not None:
                             input_activity = min(1.0, sum(item.strength for item in payload) / max(1, len(payload)))
                             activity = 1.0 if step.spike_emitted else input_activity
-                            context_similarity = sum(item.attention for item in events) / max(1, len(events))
+                            context_similarity = (
+                                sum(item.attention for item in excitatory_events)
+                                / max(1, len(excitatory_events))
+                            )
                             updated_features = update_neuron_features(
                                 feature_state,
                                 NeuronFeatureInput(
                                     activity=activity,
                                     predicted_activity=feature_state.memory_trace,
                                     context_similarity=context_similarity,
-                                    inhibitory_drive=0.0,
+                                    inhibitory_drive=inhibitory_drive,
                                 ),
                             )
                             feature_candidates[node] = updated_features
                             traces = dict(prior_traces)
                             by_synapse: dict[str, list[float]] = {}
-                            for event in events:
+                            for event in excitatory_events:
                                 by_synapse.setdefault(event.target_synapse_id, []).append(event.strength)
                             for synapse_id, strengths in by_synapse.items():
                                 traces[synapse_id] = update_synaptic_memory(
@@ -408,7 +431,8 @@ class NetworkRuntime:
                             event_id = _INTERNAL_PREFIX + hashlib.sha256(raw_id).hexdigest()
                             generated.append(_Event(timestamp + conn.delay_ns, event_id,
                                 conn.target_neuron_id, conn.target_synapse_id,
-                                float(conn.strength), float(conn.attention)))
+                                float(conn.strength), float(conn.attention),
+                                conn.signal_type == "inhibitory"))
                     new_ids = [e.event_id for e in generated]
                     if len(new_ids) != len(set(new_ids)) or any(eid in self._pending_ids for eid in new_ids):
                         raise NetworkRuntimeError("generated event ID collision")
@@ -508,9 +532,9 @@ class NetworkRuntime:
     ) -> "NetworkRuntime":
         """Rebuild a network only after validating its complete scheduler state.
 
-        Each pending event tuple is (time_ns, event_id, target_neuron_id,
-        target_synapse_id, strength, attention). Internal routed events must
-        target connection-owned synapses; external events must not.
+        Pending event tuples use the legacy six-field excitatory form or the
+        seven-field form with a trailing inhibitory boolean. Inhibitory events
+        have no target synapse and must originate from an inhibitory connection.
         """
         if not isinstance(pending_events, (tuple, list)):
             raise NetworkRuntimeError("pending_events must be a tuple or list")
@@ -535,24 +559,40 @@ class NetworkRuntime:
         prepared = []
         seen_ids = set()
         for item in pending_events:
-            if not isinstance(item, (tuple, list)) or len(item) != 6:
-                raise NetworkRuntimeError("pending event must contain exactly six fields")
-            time_ns, event_id, target_neuron_id, target_synapse_id, strength, attention = item
+            if not isinstance(item, (tuple, list)) or len(item) not in (6, 7):
+                raise NetworkRuntimeError("pending event must contain six or seven fields")
+            time_ns, event_id, target_neuron_id, target_synapse_id, strength, attention = item[:6]
+            inhibitory = item[6] if len(item) == 7 else False
+            if not isinstance(inhibitory, bool):
+                raise NetworkRuntimeError("pending event inhibitory flag must be bool")
             time_ns = _time(time_ns)
             _id("event_id", event_id, 256)
             _id("target_neuron_id", target_neuron_id)
-            _id("target_synapse_id", target_synapse_id)
+            if inhibitory:
+                if target_synapse_id is not None:
+                    raise NetworkRuntimeError("inhibitory event must not target an excitatory synapse")
+            else:
+                _id("target_synapse_id", target_synapse_id)
             strength = _unit("strength", strength)
             attention = _unit("attention", attention)
             if time_ns < current_time_ns or (has_processed and time_ns <= current_time_ns):
                 raise NetworkRuntimeError("restored event is not later than the persisted network clock")
             runtime = result._neurons.get(target_neuron_id)
-            if runtime is None or target_synapse_id not in runtime.synapses:
+            if runtime is None or (not inhibitory and target_synapse_id not in runtime.synapses):
                 raise NetworkRuntimeError("restored event references an unknown neuron or synapse")
-            owned = (target_neuron_id, target_synapse_id) in result._owned_synapses
             internal = event_id.startswith(_INTERNAL_PREFIX)
-            if internal != owned:
-                raise NetworkRuntimeError("restored event origin does not match synapse ownership")
+            if inhibitory:
+                valid_route = any(
+                    conn.signal_type == "inhibitory"
+                    and conn.target_neuron_id == target_neuron_id
+                    for conn in result._connections
+                )
+                if not internal or not valid_route:
+                    raise NetworkRuntimeError("inhibitory event origin does not match an inhibitory connection")
+            else:
+                owned = (target_neuron_id, target_synapse_id) in result._owned_synapses
+                if internal != owned:
+                    raise NetworkRuntimeError("restored event origin does not match synapse ownership")
             if internal:
                 suffix = event_id[len(_INTERNAL_PREFIX):]
                 if len(suffix) != 64 or any(ch not in "0123456789abcdef" for ch in suffix):
@@ -562,7 +602,7 @@ class NetworkRuntime:
             seen_ids.add(event_id)
             prepared.append(_Event(
                 time_ns, event_id, target_neuron_id, target_synapse_id,
-                strength, attention,
+                strength, attention, inhibitory,
             ))
 
         result._queue.clear()
