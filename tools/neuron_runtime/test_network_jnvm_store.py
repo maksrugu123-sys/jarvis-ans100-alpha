@@ -76,6 +76,31 @@ class NetworkJNVMStoreTests(unittest.TestCase):
         self.assertEqual(restored.runtime.neuron_states["source"].spike_sequence,
                          runtime.neuron_states["source"].spike_sequence)
 
+    def test_feature_sidecars_survive_atomic_network_checkpoint_restore(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState, SynapticMemoryState
+
+        runtime = NetworkRuntime(
+            {"source": NeuronRuntime({"external": 1.0})},
+            feature_states={"source": NeuronFeatureState(sensitivity=1.4, memory_trace=0.3)},
+            synaptic_memories={"source": {"external": SynapticMemoryState(
+                coactivation_trace=0.2, predictive_trace=0.4, reward_trace=0.1,
+            )}},
+        )
+        saved = self.store.save_timestamp(
+            "feature-network", runtime, ("source",),
+            clock_epoch_id=EPOCH,
+            expected_network_record_version=0,
+            expected_neuron_record_versions={"source": 0},
+        )
+        restored = self.store.restore_network("feature-network")
+
+        self.assertEqual(restored.generation, saved.generation)
+        self.assertEqual(restored.runtime.feature_states["source"], runtime.feature_states["source"])
+        self.assertEqual(
+            restored.runtime.synaptic_memories["source"]["external"],
+            runtime.synaptic_memories["source"]["external"],
+        )
+
     def test_stale_scheduler_version_rejects_without_commit(self):
         runtime, _ = self.initial_save()
         before = self.storage.get_superblock()
