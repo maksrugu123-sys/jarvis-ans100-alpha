@@ -364,6 +364,10 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         4 -> DashboardScreen(
                             backendLabel = ui.conversation.backendLabel,
                             isBusy = ui.conversation.isBusy,
+                            signalActiveNeurons = ui.conversation.ans100ActiveNeuronCount,
+                            signalSpikeCount = ui.conversation.ans100SpikeCount,
+                            signalEvents = ui.conversation.ans100ProcessedEvents,
+                            attentionGateActive = ui.conversation.ans100AttentionGateActive,
                             storageReady = ui.storageReady,
                             sessionCount = ui.data.sessions.size,
                             draftCount = ui.data.tasks.size,
@@ -1317,6 +1321,10 @@ private fun WorkspaceMemoryPanel(
 private fun DashboardScreen(
     backendLabel: String,
     isBusy: Boolean,
+    signalActiveNeurons: Int,
+    signalSpikeCount: Int,
+    signalEvents: Int,
+    attentionGateActive: Boolean,
     storageReady: Boolean,
     sessionCount: Int,
     draftCount: Int,
@@ -1415,7 +1423,12 @@ private fun DashboardScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                         }
-                        NeuralCoreVisual(pulse = pulse)
+                        NeuralCoreVisual(
+                            pulse = pulse,
+                            activeNeurons = signalActiveNeurons,
+                            spikeCount = signalSpikeCount,
+                            attentionGateActive = attentionGateActive,
+                        )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
@@ -1485,7 +1498,13 @@ private fun DashboardScreen(
                         )
                     }
                     Text(
-                        "Отображается состояние приложения и хранилища. Активность отдельных нейронных модулей проверяется отдельно.",
+                        "Сигнальный контур: $signalActiveNeurons активных нейронов · $signalSpikeCount импульсов · $signalEvents событий. Подсветка ядра отражает эти измерения, а не условную загрузку всей сети.",
+                        color = Color(0xFF7898B2),
+                        style = MaterialTheme.typography.labelSmall,
+                        lineHeight = 16.sp,
+                    )
+                    Text(
+                        "Attention gate: ${if (attentionGateActive) "активен" else "не активен"}. Это отдельный низкоуровневый контур, не полный мониторинг гибридной сети из 10 000 нейронов.",
                         color = Color(0xFF7898B2),
                         style = MaterialTheme.typography.labelSmall,
                         lineHeight = 16.sp,
@@ -1526,7 +1545,12 @@ private fun DashboardScreen(
 }
 
 @Composable
-private fun NeuralCoreVisual(pulse: Float) {
+private fun NeuralCoreVisual(
+    pulse: Float,
+    activeNeurons: Int = 0,
+    spikeCount: Int = 0,
+    attentionGateActive: Boolean = false,
+) {
     Canvas(modifier = Modifier.size(148.dp)) {
         val center = Offset(size.width / 2f, size.height / 2f)
         val outer = size.minDimension * 0.43f
@@ -1540,14 +1564,45 @@ private fun NeuralCoreVisual(pulse: Float) {
             Offset(center.x - outer * 0.86f, center.y + outer * 0.5f),
             Offset(center.x - outer * 0.86f, center.y - outer * 0.5f),
         )
-        nodes.forEach { node ->
-            drawLine(Color(0x6659C9FF), center, node, strokeWidth = 1.4.dp.toPx())
-            drawCircle(Color(0xFF58C8FF), radius = 3.2.dp.toPx(), center = node)
+        // These six points visualize the measured lightweight signal contour,
+        // not all 10,000 neurons in the hybrid network.
+        val litNodes = minOf(nodes.size, activeNeurons.coerceAtLeast(0))
+        nodes.forEachIndexed { index, node ->
+            val active = index < litNodes
+            val alpha = if (active) 0.92f else 0.30f
+            val radius = if (active) 4.0.dp.toPx() else 2.6.dp.toPx()
+            drawLine(
+                Color(0xFF59C9FF).copy(alpha = if (active) 0.72f else 0.18f),
+                center,
+                node,
+                strokeWidth = if (active) 1.8.dp.toPx() else 1.0.dp.toPx(),
+            )
+            drawCircle(
+                Color(0xFF58C8FF).copy(alpha = alpha),
+                radius = radius,
+                center = node,
+            )
         }
-        drawCircle(Color(0x223CBFFF), radius = outer * pulse, center = center)
-        drawCircle(Color(0x6655C9FF), radius = middle, center = center)
+        val signalGlow = if (spikeCount > 0 || attentionGateActive) 0.34f else 0.12f
+        drawCircle(
+            Color(0xFF3CBFFF).copy(alpha = signalGlow),
+            radius = outer * pulse,
+            center = center,
+        )
+        drawCircle(
+            Color(0x6655C9FF).copy(alpha = if (attentionGateActive) 0.85f else 0.40f),
+            radius = middle,
+            center = center,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = if (attentionGateActive) 2.4.dp.toPx() else 1.2.dp.toPx(),
+            ),
+        )
         drawCircle(Color(0xFF0B2943), radius = inner * 1.8f, center = center)
-        drawCircle(Color(0xFF66D5FF), radius = inner * pulse, center = center)
+        drawCircle(
+            if (attentionGateActive) Color(0xFF8BE7FF) else Color(0xFF66D5FF),
+            radius = inner * pulse,
+            center = center,
+        )
     }
 }
 
@@ -3255,7 +3310,12 @@ private fun SettingsPanel(
                     Column(modifier = Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            NeuralCoreVisual(pulse = 0.94f)
+                            NeuralCoreVisual(
+                                pulse = 0.94f,
+                                activeNeurons = conversation.ans100ActiveNeuronCount,
+                                spikeCount = conversation.ans100SpikeCount,
+                                attentionGateActive = conversation.ans100AttentionGateActive,
+                            )
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text("ANS-100  /  NEURAL CORE", color = Color(0xFF82BDE5),
                                     style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp)
@@ -3322,7 +3382,7 @@ private fun SettingsPanel(
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            "Этот сигнальный контур не заменяет гибридную сеть из 10 000 нейронов.",
+                            "Визуализация выше подсвечивает активность этого измеряемого сигнального контура. Она не выдаёт его за мониторинг всех 10 000 нейронов гибридной сети.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
