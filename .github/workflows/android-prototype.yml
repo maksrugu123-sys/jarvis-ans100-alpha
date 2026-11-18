@@ -5,7 +5,6 @@ on:
     branches:
       - experiment/jarvis-integrated-prototype-v1
     paths:
-      - ".github/workflows/android-prototype.yml"
       - "app/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
@@ -67,4 +66,4 @@ jobs:
           name: jarvis-ans100-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
