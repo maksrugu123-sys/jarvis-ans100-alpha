@@ -100,6 +100,7 @@ class MainActivity : ComponentActivity() {
         if (preferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) {
             runCatching { startForegroundService(Intent(this, JarvisBackgroundService::class.java)) }
         }
+        JarvisBackgroundService.resumeIfNeeded(this)
         setContent { JarvisApp() }
     }
 }
@@ -3071,9 +3072,26 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                         }
                     }
                 },
-                enabled = !busy && modelInstalled && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty(),
+                enabled = !busy && modelInstalled && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty() &&
+                    !JarvisBackgroundService.isStructuredTrainingActive(context),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (busy) "Эксперимент выполняется…" else "Начать честное сравнение") }
+            OutlinedButton(
+                onClick = {
+                    runCatching { JarvisBackgroundService.startStructuredTraining(context) }
+                        .onSuccess { started ->
+                            status = if (started) {
+                                "Фоновое обучение ANS-100 запущено. Прогресс и состояние доступны в постоянном уведомлении JARVIS."
+                            } else {
+                                "Не удалось запустить обучение: проверь development JSONL или дождись завершения текущего фонового запуска."
+                            }
+                        }
+                        .onFailure { status = "Ошибка запуска фонового обучения: ${it.message}" }
+                },
+                enabled = !busy && developmentRows.isNotEmpty() &&
+                    !JarvisBackgroundService.isStructuredTrainingActive(context),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Обучить ANS-100 в фоне") }
             Button(
                 onClick = {
                     viewModel.markBenchmarkRunning(true)
@@ -3101,7 +3119,8 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                         },
                     )
                 },
-                enabled = !busy && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty(),
+                enabled = !busy && developmentRows.isNotEmpty() && heldOutRows.isNotEmpty() &&
+                    !JarvisBackgroundService.isStructuredTrainingActive(context),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Сравнить два механизма ANS-100") }
             if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
