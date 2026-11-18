@@ -819,12 +819,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val memory = android.app.ActivityManager.MemoryInfo()
         manager?.getMemoryInfo(memory)
         if (memory.lowMemory) return "Android reported low memory."
-        if (memory.availMem < 256L * 1024L * 1024L) {
-            return "Available system memory fell below 256 MiB."
+        if (memory.availMem < 384L * 1024L * 1024L) {
+            return "Available system memory fell below the 384 MiB safety reserve."
         }
         val processPssMb = android.os.Debug.getPss().toLong() / 1024L
-        if (processPssMb >= 1_800L) {
-            return "JARVIS process PSS reached 1800 MiB."
+        if (processPssMb >= 1_400L) {
+            return "JARVIS process PSS reached the 1400 MiB safety limit."
         }
         if (android.os.Build.VERSION.SDK_INT >= 29) {
             val power = appContext.getSystemService(android.content.Context.POWER_SERVICE)
@@ -875,8 +875,35 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     StructuredPairedBenchmarkTaskResult(input.taskId, transformer, structured)
                 }
                 results.add(result)
-                mainHandler.post { onProgress(index + 1, inputs.size, result) }
-                if (result.transformer.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true) {
+                val completed = index + 1
+                val cooldownMs = when {
+                    completed == 2 || completed == 6 -> 30_000L
+                    completed == 14 -> 45_000L
+                    completed == 30 || (completed > 30 && (completed - 30) % 8 == 0) -> 60_000L
+                    else -> 0L
+                }
+                mainHandler.post {
+                    onProgress(completed, inputs.size, result)
+                }
+                // The UI previously displayed cooldown labels without actually waiting.
+                // Pause the worker thread only; the main thread remains responsive.
+                if (cooldownMs > 0L) {
+                    try {
+                        Thread.sleep(cooldownMs)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        val stopped = Result.failure<Nothing>(
+                            IllegalStateException("BENCHMARK_SAFETY_STOP: benchmark worker was interrupted."),
+                        )
+                        for (remaining in inputs.drop(index + 1)) {
+                            results.add(StructuredPairedBenchmarkTaskResult(remaining.taskId, stopped, stopped))
+                        }
+                        mainHandler.post { onComplete(results) }
+                        return@execute
+                    }
+                }
+                if (result.transformer.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true ||
+                    result.ans100Structured.exceptionOrNull()?.message?.startsWith("BENCHMARK_SAFETY_STOP:") == true) {
                     for (remaining in inputs.drop(index + 1)) {
                         val stopped = Result.failure<Nothing>(
                             IllegalStateException(result.transformer.exceptionOrNull()?.message ?: "BENCHMARK_SAFETY_STOP"),

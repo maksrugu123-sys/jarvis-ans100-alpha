@@ -3338,7 +3338,7 @@ private fun SettingsPanel(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         conversation.hybridNetworkStats?.let { stats ->
-                            Spacer(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0x33428FBE)))
+                            HorizontalDivider(color = Color(0x33428FBE))
                             Text("HYBRID RUNTIME / SQLITE JNVM", color = Color(0xFF82BDE5),
                                 style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
                             Text(
