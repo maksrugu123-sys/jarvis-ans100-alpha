@@ -148,6 +148,7 @@ internal interface AndroidNeuronStateStore : Closeable {
     fun nextTimestampEvents(maxEvents: Int): List<AndroidNeuronEvent>?
     fun outgoing(neuronId: Int): List<AndroidNeuronConnection>
     fun loadNeuron(neuronId: Int): AndroidNeuronState
+    fun loadFeatureState(neuronId: Int): ANS100NeuronFeatureState?
     fun recordDialogueEligibility(
         contextId: String,
         sourceNeuronIds: List<Int>,
@@ -177,6 +178,7 @@ internal interface AndroidNeuronStateStore : Closeable {
         consumed: List<AndroidNeuronEvent>,
         generated: List<AndroidNeuronEvent>,
         changedStates: Collection<AndroidNeuronState>,
+        changedFeatureStates: Map<Int, ANS100NeuronFeatureState>,
     )
     fun stats(residentCount: Int, hotSetCapacity: Int): AndroidNeuronNetworkStats
 }
@@ -193,9 +195,11 @@ class AndroidSparseNeuronNetwork(
     context: Context,
     private val databaseName: String = DEFAULT_DATABASE_NAME,
     private val hotSetCapacity: Int = DEFAULT_HOT_SET_CAPACITY,
+    private val cognitiveFeaturesEnabled: Boolean = false,
 ) : Closeable {
     private val store: AndroidNeuronStateStore
     private val hot = LinkedHashMap<Int, AndroidNeuronState>(hotSetCapacity, 0.75f, true)
+    private val hotFeatures = LinkedHashMap<Int, ANS100NeuronFeatureState>(hotSetCapacity, 0.75f, true)
     private val hybridTelemetryLock = Any()
     private var hybridTelemetryTurnId: String? = null
     private val hybridReceivedEvents = IntArray(AndroidHybridTopologyV2.populations.size)
@@ -559,13 +563,29 @@ class AndroidSparseNeuronNetwork(
                 }
             }
             val changed = LinkedHashMap<Int, AndroidNeuronState>()
+            val changedFeatures = LinkedHashMap<Int, ANS100NeuronFeatureState>()
             val generated = mutableListOf<AndroidNeuronEvent>()
 
             // Build detached candidates. Nothing in the resident cache changes
             // until the store has atomically committed the complete timestamp.
             for ((targetId, targetEvents) in byTarget.toSortedMap()) {
                 val previous = stateFor(targetId)
-                val result = processNeuron(previous, timestamp, targetEvents.sumOf { it.strength })
+                val previousFeatures = if (cognitiveFeaturesEnabled) featureStateFor(targetId) else null
+                val rawInput = targetEvents.sumOf { it.strength }
+                val effectiveInput = previousFeatures?.let {
+                    rawInput * it.sensitivity * (1.0 - it.inhibition)
+                } ?: rawInput
+                val result = processNeuron(previous, timestamp, effectiveInput)
+                if (previousFeatures != null) {
+                    val activity = if (result.second) 1.0 else effectiveInput.coerceIn(0.0, 1.0)
+                    changedFeatures[targetId] = ANS100NeuronFeatures.update(
+                        previousFeatures,
+                        ANS100NeuronFeatureInput(
+                            activity = activity,
+                            predictedActivity = previousFeatures.memoryTrace,
+                        ),
+                    )
+                }
                 val targetCoreTainted = previous.coreTainted || targetEvents.any { it.coreTainted }
                 val updatedState = result.first.copy(coreTainted = targetCoreTainted)
                 changed[targetId] = updatedState
@@ -605,10 +625,11 @@ class AndroidSparseNeuronNetwork(
                 }
             }
 
-            store.commitTimestamp(timestamp, group, generated, changed.values)
+            store.commitTimestamp(timestamp, group, generated, changed.values, changedFeatures)
             // The durable COMMIT succeeded. Only now publish candidates to the
             // LRU and permit clean least-recently-used states to be evicted.
             changed.values.forEach(::publish)
+            changedFeatures.forEach(::publishFeature)
             processedEvents += group.size
             processedBatches += byTarget.size
             clock = timestamp
@@ -848,7 +869,29 @@ class AndroidSparseNeuronNetwork(
     @Synchronized
     override fun close() {
         hot.clear()
+        hotFeatures.clear()
         store.close()
+    }
+
+    /** Read the persisted sparse cognitive state for diagnostics and focused tests. */
+    @Synchronized
+    fun neuronFeatureState(neuronId: Int): ANS100NeuronFeatureState? {
+        if (!cognitiveFeaturesEnabled) return null
+        hotFeatures[neuronId]?.let { return it }
+        return store.loadFeatureState(neuronId)?.also(::publishFeature)
+    }
+
+    private fun featureStateFor(neuronId: Int): ANS100NeuronFeatureState =
+        hotFeatures[neuronId] ?: store.loadFeatureState(neuronId) ?: ANS100NeuronFeatureState()
+
+    private fun publishFeature(neuronId: Int, state: ANS100NeuronFeatureState) {
+        hotFeatures[neuronId] = state
+        while (hotFeatures.size > hotSetCapacity) {
+            val eldest = hotFeatures.entries.iterator()
+            if (!eldest.hasNext()) break
+            eldest.next()
+            eldest.remove()
+        }
     }
 
     private fun stateFor(neuronId: Int): AndroidNeuronState {
@@ -978,6 +1021,7 @@ private class AndroidNeuronSqliteStore(
         createStructuralSynapseFeedbackTable(db)
         createStructuralPlasticityObservationTables(db)
         createCanonicalReadoutTables(db)
+        createNeuronFeatureTable(db)
         db.execSQL(
             "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, strength REAL NOT NULL, core_tainted INTEGER NOT NULL DEFAULT 0)",
         )
@@ -1032,9 +1076,16 @@ private class AndroidNeuronSqliteStore(
             db.execSQL("UPDATE neurons SET core_tainted=1 WHERE potential!=0 OR adaptation!=0 OR refractory_until_ns>last_update_ns")
         }
         if (oldVersion < 11) createNeuralAssociationAssessmentTables(db)
+        if (oldVersion < 12) createNeuronFeatureTable(db)
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
+    }
+
+    private fun createNeuronFeatureTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS neuron_features (neuron_id INTEGER PRIMARY KEY, sensitivity REAL NOT NULL, memory_trace REAL NOT NULL, prediction_error REAL NOT NULL, confidence REAL NOT NULL, uncertainty REAL NOT NULL, plasticity REAL NOT NULL, inhibition REAL NOT NULL, context_match REAL NOT NULL, observations INTEGER NOT NULL)",
+        )
     }
 
     private fun createHybridCandidateEligibilityTable(db: SQLiteDatabase) {
@@ -1866,6 +1917,28 @@ private class AndroidNeuronSqliteStore(
         return result
     }
 
+    override fun loadFeatureState(neuronId: Int): ANS100NeuronFeatureState? {
+        return readableDatabase.rawQuery(
+            "SELECT sensitivity, memory_trace, prediction_error, confidence, uncertainty, plasticity, inhibition, context_match, observations FROM neuron_features WHERE neuron_id=?",
+            arrayOf(neuronId.toString()),
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            val state = ANS100NeuronFeatureState(
+                sensitivity = cursor.getDouble(0),
+                memoryTrace = cursor.getDouble(1),
+                predictionError = cursor.getDouble(2),
+                confidence = cursor.getDouble(3),
+                uncertainty = cursor.getDouble(4),
+                plasticity = cursor.getDouble(5),
+                inhibition = cursor.getDouble(6),
+                contextMatch = cursor.getDouble(7),
+                observations = cursor.getLong(8),
+            )
+            state.validate()
+            state
+        }
+    }
+
     override fun loadNeuron(neuronId: Int): AndroidNeuronState {
         return readableDatabase.rawQuery(
             "SELECT neuron_id, potential, adaptation, last_update_ns, refractory_until_ns, spike_sequence, core_tainted FROM neurons WHERE neuron_id=?",
@@ -2669,6 +2742,7 @@ private class AndroidNeuronSqliteStore(
         consumed: List<AndroidNeuronEvent>,
         generated: List<AndroidNeuronEvent>,
         changedStates: Collection<AndroidNeuronState>,
+        changedFeatureStates: Map<Int, ANS100NeuronFeatureState>,
     ) {
         if (timestampNs < 0L) throw AndroidNeuronNetworkException("negative timestamp")
         if (generated.size > AndroidSparseNeuronNetwork.MAX_PENDING_EVENTS) {
@@ -2688,6 +2762,10 @@ private class AndroidNeuronSqliteStore(
                 if (deleted != 1) throw AndroidNeuronNetworkException("event disappeared before timestamp commit")
             }
             for (state in changedStates) updateNeuron(db, state)
+            for ((neuronId, state) in changedFeatureStates.toSortedMap()) {
+                requireNeuron(db, neuronId)
+                updateNeuronFeature(db, neuronId, state)
+            }
             val remaining = scalar(db, "SELECT COUNT(*) FROM events")
             if (remaining + generated.size > AndroidSparseNeuronNetwork.MAX_PENDING_EVENTS) {
                 throw AndroidNeuronBackpressureException("generated events exceed the pending-event bound")
@@ -2775,6 +2853,23 @@ private class AndroidNeuronSqliteStore(
         }
     }
 
+    private fun updateNeuronFeature(db: SQLiteDatabase, neuronId: Int, state: ANS100NeuronFeatureState) {
+        state.validate()
+        val values = ContentValues().apply {
+            put("neuron_id", neuronId)
+            put("sensitivity", state.sensitivity)
+            put("memory_trace", state.memoryTrace)
+            put("prediction_error", state.predictionError)
+            put("confidence", state.confidence)
+            put("uncertainty", state.uncertainty)
+            put("plasticity", state.plasticity)
+            put("inhibition", state.inhibition)
+            put("context_match", state.contextMatch)
+            put("observations", state.observations)
+        }
+        db.insertWithOnConflict("neuron_features", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
     private fun readEvent(cursor: Cursor) = AndroidNeuronEvent(
         eventId = cursor.getString(0),
         timeNs = cursor.getLong(1),
@@ -2802,7 +2897,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 11
+        private const val DATABASE_VERSION = 12
         private const val MAX_PERSISTED_STRUCTURAL_TURNS = 64
         private const val STRUCTURAL_OBSERVATION_WINDOW_TURNS = 16
         private const val MAX_STRUCTURAL_GROWN_PAIRS = 512
