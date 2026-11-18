@@ -353,7 +353,13 @@ class NetworkRuntime:
                                 e.attention,
                             ) for e in events]
                         step = candidates[node].process_batch(
-                            timestamp, payload, learning_context_id=learning_context_id,
+                            timestamp,
+                            payload,
+                            learning_context_id=learning_context_id,
+                            plasticity_scale=(
+                                0.5 + feature_state.plasticity
+                                if feature_state is not None else 1.0
+                            ),
                         )
                         steps[node] = step
                         if feature_state is not None:
@@ -440,7 +446,11 @@ class NetworkRuntime:
         if original is None:
             raise NetworkRuntimeError(f"unknown neuron: {neuron_id}")
         candidate = deepcopy(original)
-        result = candidate.apply_reward(synapse_id, time_ns, reward_value, baseline_before, learning_context_id)
+        feature_state = self._feature_states.get(neuron_id)
+        result = candidate.apply_reward(
+            synapse_id, time_ns, reward_value, baseline_before, learning_context_id,
+            plasticity_scale=0.5 + feature_state.plasticity if feature_state is not None else 1.0,
+        )
         if neuron_id in self._feature_states:
             traces = dict(self._synaptic_memories.get(neuron_id, {}))
             traces[synapse_id] = update_synaptic_memory(
