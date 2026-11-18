@@ -18,8 +18,8 @@ from tools.numerical_oracle.jarvis_oracle import OracleInputError
 from .runtime import NeuronRuntime, NeuronRuntimeError, RewardUpdate, RuntimeStep, SynapticInput
 from .neuron_features import (
     NeuronFeatureError, NeuronFeatureInput, NeuronFeatureState,
-    SynapticMemoryState, effective_excitatory_gain, update_neuron_features,
-    update_synaptic_memory,
+    SynapticMemoryState, effective_excitatory_gain,
+    effective_synaptic_memory_gain, update_neuron_features, update_synaptic_memory,
 )
 
 _U64_MAX = (1 << 64) - 1
@@ -341,17 +341,24 @@ class NetworkRuntime:
                     for node in sorted(by_node):
                         events = sorted(by_node[node], key=lambda e: (e.event_id, e.target_synapse_id))
                         feature_state = self._feature_states.get(node)
-                        if feature_state is None:
-                            payload = [SynapticInput(e.event_id, e.target_synapse_id, e.strength, e.attention) for e in events]
-                        else:
-                            payload = [SynapticInput(
-                                e.event_id, e.target_synapse_id,
-                                effective_excitatory_gain(
-                                    e.strength, feature_state.inhibition,
+                        prior_traces = self._synaptic_memories.get(node, {})
+                        payload = []
+                        for event in events:
+                            memory_gain = effective_synaptic_memory_gain(
+                                prior_traces.get(event.target_synapse_id, SynapticMemoryState())
+                            )
+                            remembered_strength = min(1.0, event.strength * memory_gain)
+                            if feature_state is None:
+                                effective_strength = remembered_strength
+                            else:
+                                effective_strength = effective_excitatory_gain(
+                                    remembered_strength, feature_state.inhibition,
                                     feature_state.sensitivity,
-                                ),
-                                e.attention,
-                            ) for e in events]
+                                )
+                            payload.append(SynapticInput(
+                                event.event_id, event.target_synapse_id,
+                                effective_strength, event.attention,
+                            ))
                         step = candidates[node].process_batch(
                             timestamp,
                             payload,
@@ -376,10 +383,10 @@ class NetworkRuntime:
                                 ),
                             )
                             feature_candidates[node] = updated_features
-                            traces = dict(self._synaptic_memories.get(node, {}))
+                            traces = dict(prior_traces)
                             by_synapse: dict[str, list[float]] = {}
-                            for event in payload:
-                                by_synapse.setdefault(event.synapse_id, []).append(event.strength)
+                            for event in events:
+                                by_synapse.setdefault(event.target_synapse_id, []).append(event.strength)
                             for synapse_id, strengths in by_synapse.items():
                                 traces[synapse_id] = update_synaptic_memory(
                                     traces.get(synapse_id, SynapticMemoryState()),
