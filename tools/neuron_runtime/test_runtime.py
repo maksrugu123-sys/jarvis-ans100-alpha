@@ -7,7 +7,8 @@ from unittest.mock import patch
 from tools.neuron_runtime.runtime import NeuronRuntime, NeuronRuntimeError, SynapticInput
 from tools.numerical_oracle.jarvis_oracle import (
     InputSignal, NeuronState, OracleInputError, SynapseParams, SynapseState,
-    process_neuron_batch, starter_neuron_params, starter_synapse_params, update_stdp,
+    apply_reward as oracle_apply_reward, process_neuron_batch,
+    starter_neuron_params, starter_synapse_params, update_stdp,
 )
 
 MS = 1_000_000
@@ -116,9 +117,7 @@ class RuntimeBatchTests(unittest.TestCase):
             0, [SynapticInput("pre", "a", 0.5)],
             learning_context_id="episode",
         )
-        with patch("tools.neuron_runtime.runtime.apply_reward", wraps=__import__(
-            "tools.numerical_oracle.jarvis_oracle", fromlist=["apply_reward"]
-        ).apply_reward) as apply:
+        with patch("tools.neuron_runtime.runtime.apply_reward", wraps=oracle_apply_reward) as apply:
             runtime.apply_reward(
                 "a", 1, 1.0, 0.5, "episode", plasticity_scale=1.5,
             )
