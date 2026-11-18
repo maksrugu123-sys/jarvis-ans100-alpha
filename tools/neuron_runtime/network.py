@@ -16,6 +16,11 @@ from typing import Mapping, Sequence
 from tools.numerical_oracle.jarvis_oracle import OracleInputError
 
 from .runtime import NeuronRuntime, NeuronRuntimeError, RewardUpdate, RuntimeStep, SynapticInput
+from .neuron_features import (
+    NeuronFeatureError, NeuronFeatureInput, NeuronFeatureState,
+    SynapticMemoryState, effective_excitatory_gain, update_neuron_features,
+    update_synaptic_memory,
+)
 
 _U64_MAX = (1 << 64) - 1
 _DEFAULT_QUEUE_LIMIT = 4096
@@ -124,6 +129,8 @@ class NetworkRuntime:
         *,
         max_pending_events: int = _DEFAULT_QUEUE_LIMIT,
         max_events_per_run: int = _DEFAULT_RUN_LIMIT,
+        feature_states: Mapping[str, NeuronFeatureState] | None = None,
+        synaptic_memories: Mapping[str, Mapping[str, SynapticMemoryState]] | None = None,
     ) -> None:
         if not isinstance(neurons, Mapping) or not neurons:
             raise NetworkRuntimeError("neurons must be a non-empty mapping")
@@ -145,6 +152,41 @@ class NetworkRuntime:
             if total_synapses > MAX_NETWORK_SYNAPSES:
                 raise NetworkRuntimeError(f"network exceeds the {MAX_NETWORK_SYNAPSES}-synapse topology limit")
             self._neurons[key] = deepcopy(runtime)
+
+        if feature_states is None:
+            feature_states = {}
+        if not isinstance(feature_states, Mapping):
+            raise NetworkRuntimeError("feature_states must map neuron IDs to NeuronFeatureState")
+        self._feature_states: dict[str, NeuronFeatureState] = {}
+        for neuron_id, feature_state in feature_states.items():
+            if neuron_id not in self._neurons or not isinstance(feature_state, NeuronFeatureState):
+                raise NetworkRuntimeError("feature state references an unknown neuron or invalid state")
+            try:
+                feature_state.validate()
+            except NeuronFeatureError as exc:
+                raise NetworkRuntimeError(f"invalid feature state for {neuron_id}: {exc}") from exc
+            self._feature_states[neuron_id] = deepcopy(feature_state)
+
+        if synaptic_memories is None:
+            synaptic_memories = {}
+        if not isinstance(synaptic_memories, Mapping):
+            raise NetworkRuntimeError("synaptic_memories must map neuron IDs to synapse traces")
+        self._synaptic_memories: dict[str, dict[str, SynapticMemoryState]] = {}
+        for neuron_id, traces in synaptic_memories.items():
+            runtime = self._neurons.get(neuron_id)
+            if runtime is None or not isinstance(traces, Mapping):
+                raise NetworkRuntimeError("synaptic memory references an unknown neuron or invalid mapping")
+            prepared_traces: dict[str, SynapticMemoryState] = {}
+            for synapse_id, trace in traces.items():
+                if synapse_id not in runtime.synapses or not isinstance(trace, SynapticMemoryState):
+                    raise NetworkRuntimeError("synaptic memory references an unknown synapse or invalid state")
+                try:
+                    trace.validate()
+                except NeuronFeatureError as exc:
+                    raise NetworkRuntimeError(f"invalid synaptic memory for {neuron_id}/{synapse_id}: {exc}") from exc
+                prepared_traces[synapse_id] = deepcopy(trace)
+            self._synaptic_memories[neuron_id] = prepared_traces
+            self._feature_states.setdefault(neuron_id, NeuronFeatureState())
 
         outgoing: dict[str, list[NetworkConnection]] = {key: [] for key in self._neurons}
         owned: set[tuple[str, str]] = set()
@@ -190,6 +232,14 @@ class NetworkRuntime:
     @property
     def connections(self) -> tuple[NetworkConnection, ...]:
         return self._connections
+
+    @property
+    def feature_states(self) -> Mapping[str, NeuronFeatureState]:
+        return dict(self._feature_states)
+
+    @property
+    def synaptic_memories(self) -> Mapping[str, Mapping[str, SynapticMemoryState]]:
+        return {neuron_id: dict(traces) for neuron_id, traces in self._synaptic_memories.items()}
 
     @property
     def current_time_ns(self) -> int:
@@ -286,11 +336,51 @@ class NetworkRuntime:
                 try:
                     candidates = {node: deepcopy(self._neurons[node]) for node in by_node}
                     steps: dict[str, RuntimeStep] = {}
+                    feature_candidates: dict[str, NeuronFeatureState] = {}
+                    synaptic_memory_candidates: dict[str, dict[str, SynapticMemoryState]] = {}
                     for node in sorted(by_node):
                         events = sorted(by_node[node], key=lambda e: (e.event_id, e.target_synapse_id))
-                        payload = [SynapticInput(e.event_id, e.target_synapse_id, e.strength, e.attention) for e in events]
-                        steps[node] = candidates[node].process_batch(timestamp, payload,
-                            learning_context_id=learning_context_id)
+                        feature_state = self._feature_states.get(node)
+                        if feature_state is None:
+                            payload = [SynapticInput(e.event_id, e.target_synapse_id, e.strength, e.attention) for e in events]
+                        else:
+                            gain = feature_state.sensitivity * (1.0 - feature_state.inhibition)
+                            payload = [SynapticInput(
+                                e.event_id, e.target_synapse_id,
+                                effective_excitatory_gain(e.strength, feature_state.inhibition)
+                                if feature_state.sensitivity == 1.0 else min(1.0, e.strength * gain),
+                                e.attention,
+                            ) for e in events]
+                        step = candidates[node].process_batch(
+                            timestamp, payload, learning_context_id=learning_context_id,
+                        )
+                        steps[node] = step
+                        if feature_state is not None:
+                            input_activity = min(1.0, sum(item.strength for item in payload) / max(1, len(payload)))
+                            activity = 1.0 if step.spike_emitted else input_activity
+                            context_similarity = sum(item.attention for item in events) / max(1, len(events))
+                            updated_features = update_neuron_features(
+                                feature_state,
+                                NeuronFeatureInput(
+                                    activity=activity,
+                                    predicted_activity=feature_state.memory_trace,
+                                    context_similarity=context_similarity,
+                                    inhibitory_drive=0.0,
+                                ),
+                            )
+                            feature_candidates[node] = updated_features
+                            traces = dict(self._synaptic_memories.get(node, {}))
+                            by_synapse: dict[str, list[float]] = {}
+                            for event in payload:
+                                by_synapse.setdefault(event.synapse_id, []).append(event.strength)
+                            for synapse_id, strengths in by_synapse.items():
+                                traces[synapse_id] = update_synaptic_memory(
+                                    traces.get(synapse_id, SynapticMemoryState()),
+                                    coactivation=max(strengths),
+                                    prediction_success=1.0 - updated_features.prediction_error,
+                                    reward=0.0,
+                                )
+                            synaptic_memory_candidates[node] = traces
                     generated: list[_Event] = []
                     batch_spikes: list[NetworkSpike] = []
                     for node, step in sorted(steps.items()):
@@ -317,6 +407,8 @@ class NetworkRuntime:
                     self._restore(group)
                     raise
                 self._neurons.update(candidates)
+                self._feature_states.update(feature_candidates)
+                self._synaptic_memories.update(synaptic_memory_candidates)
                 for event in group:
                     self._pending_ids.remove(event.event_id)
                 for event in generated:
@@ -348,6 +440,13 @@ class NetworkRuntime:
             raise NetworkRuntimeError(f"unknown neuron: {neuron_id}")
         candidate = deepcopy(original)
         result = candidate.apply_reward(synapse_id, time_ns, reward_value, baseline_before, learning_context_id)
+        if neuron_id in self._feature_states:
+            traces = dict(self._synaptic_memories.get(neuron_id, {}))
+            traces[synapse_id] = update_synaptic_memory(
+                traces.get(synapse_id, SynapticMemoryState()),
+                coactivation=0.0, prediction_success=0.0, reward=reward_value,
+            )
+            self._synaptic_memories[neuron_id] = traces
         self._neurons[neuron_id] = candidate
         self._current_time_ns = time_ns
         self._has_processed = True
@@ -365,6 +464,8 @@ class NetworkRuntime:
             raise NetworkRuntimeError("cannot checkpoint while run() is active")
         return {
             "neurons": {key: deepcopy(value) for key, value in self._neurons.items()},
+            "feature_states": deepcopy(self._feature_states),
+            "synaptic_memories": deepcopy(self._synaptic_memories),
             "connections": tuple(self._connections),
             "pending_events": tuple(sorted(self._queue)),
             "max_pending_events": self._queue_limit,
@@ -384,6 +485,8 @@ class NetworkRuntime:
         max_events_per_run: int,
         current_time_ns: int,
         has_processed: bool,
+        feature_states: Mapping[str, NeuronFeatureState] | None = None,
+        synaptic_memories: Mapping[str, Mapping[str, SynapticMemoryState]] | None = None,
     ) -> "NetworkRuntime":
         """Rebuild a network only after validating its complete scheduler state.
 
@@ -401,6 +504,8 @@ class NetworkRuntime:
             connections,
             max_pending_events=max_pending_events,
             max_events_per_run=max_events_per_run,
+            feature_states=feature_states,
+            synaptic_memories=synaptic_memories,
         )
         if current_time_ns < result._current_time_ns:
             raise NetworkRuntimeError("network clock precedes a persisted neuron or synapse clock")
