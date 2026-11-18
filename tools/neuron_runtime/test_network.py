@@ -409,5 +409,34 @@ class NetworkTests(unittest.TestCase):
 
 
 
+    def test_failed_inhibitory_timestamp_rolls_back_signal_and_feature_state(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState
+
+        exhausted = NeuronFeatureState(observations=(1 << 64) - 1)
+        network = NetworkRuntime(
+            {
+                "source": NeuronRuntime({"external": 1.0}),
+                "target": NeuronRuntime({"input": 1.0}),
+            },
+            [NetworkConnection(
+                "inhibit", "source", "target", None, 2, 0.8, 0.0, "inhibitory",
+            )],
+            feature_states={"target": exhausted},
+        )
+        network.schedule_input(0, "source", "external", "source", 1.0)
+        network.run(max_timestamps=1)
+        before = network.neuron_states["target"]
+        clock = network.current_time_ns
+
+        with self.assertRaises(NetworkRuntimeError):
+            network.run()
+
+        self.assertEqual(network.neuron_states["target"], before)
+        self.assertEqual(network.feature_states["target"], exhausted)
+        self.assertEqual(network.current_time_ns, clock)
+        self.assertEqual(network.pending_events, 1)
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
