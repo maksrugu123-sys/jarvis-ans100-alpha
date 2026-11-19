@@ -82,13 +82,18 @@ class DedicatedGpuAndroidNeuronComputeBackend(context: Context) :
  * the caller's original order. This is intentionally not used for batches with
  * fewer than two candidates because both processors must receive real work.
  */
-class CpuGpuAndroidNeuronComputeBackend(context: Context) :
-    AndroidNeuronComputeBackend, Closeable {
+class CpuGpuAndroidNeuronComputeBackend private constructor(
+    private val gpu: AndroidNeuronComputeBackend,
+    workerName: String,
+) : AndroidNeuronComputeBackend, Closeable {
+
+    constructor(context: Context) : this(Gles31AndroidNeuronComputeBackend(context), "ANS100-GLES31")
+
+    internal constructor(gpuBackend: AndroidNeuronComputeBackend) : this(gpuBackend, "ANS100-GPU-TEST")
 
     override val backendName: String = "cpu+gles31-hybrid"
-    private val gpu = Gles31AndroidNeuronComputeBackend(context)
     private val gpuExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "ANS100-GLES31").apply { isDaemon = true }
+        Thread(runnable, workerName).apply { isDaemon = true }
     }
     @Volatile private var closed = false
 
@@ -128,7 +133,7 @@ class CpuGpuAndroidNeuronComputeBackend(context: Context) :
         if (closed) return
         closed = true
         try {
-            gpuExecutor.submit { gpu.close() }.get(5, TimeUnit.SECONDS)
+            gpuExecutor.submit { (gpu as? Closeable)?.close() }.get(5, TimeUnit.SECONDS)
         } catch (_: Exception) {
             // The backend is being shut down; no future work can be submitted.
         } finally {
