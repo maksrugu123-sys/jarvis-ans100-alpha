@@ -2,8 +2,7 @@
 
 This codec is deliberately separate from the 40-byte ALIF hot state. It is
 embedded in the optional feature field of a versioned JNVM neuron checkpoint;
-it does not claim that
-the current network scheduler persists or applies these features.
+network group commits persist it atomically with the scheduler and neuron records.
 """
 from __future__ import annotations
 
@@ -84,7 +83,7 @@ def decode_feature_sidecar(
     *,
     expected_neuron_id: str | None = None,
 ) -> tuple[str, NeuronFeatureState, dict[str, SynapticMemoryState]]:
-    """Strictly decode and validate a version-1 cognitive sidecar."""
+    """Strictly decode V1/V2 cognitive sidecars; V1 pattern fields default to zero."""
     if not isinstance(payload, (bytes, bytearray, memoryview)):
         raise FeatureCodecError("payload must be bytes-like")
     raw = bytes(payload)
