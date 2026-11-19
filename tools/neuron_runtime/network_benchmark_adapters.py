@@ -47,7 +47,7 @@ def make_network_cpu_backend(
             network.schedule_input(time_ns, neuron_id, synapse_id, event_id, strength, attention)
         result = network.run(learning_context_id=learning_context_id, max_events=max_events)
         states = tuple(
-            (neuron_id, state.voltage, state.adaptation, state.spike_sequence, state.last_update_model_time_ns)
+            (neuron_id, state.u, state.a, state.spike_sequence, state.last_update_model_time_ns)
             for neuron_id, state in sorted(network.neuron_states.items())
         )
         return (result.processed_events, result.processed_batches, result.spikes,
