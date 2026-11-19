@@ -11,7 +11,7 @@ class AndroidNeuronRamBudgetPolicyTest {
             availableRamBytes = 512L * 1024L * 1024L,
             appMemoryClassMb = 256,
         )
-        assertEquals(16, profile.maximumBudgetMb)
+        assertEquals(8, profile.maximumBudgetMb)
     }
 
     @Test
