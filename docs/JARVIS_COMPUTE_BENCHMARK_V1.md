@@ -28,13 +28,13 @@ The default is one warm-up and five measured runs. Inputs are limited to 2,048 c
 
 `AndroidNeuronKernel.kt` contains the pure deterministic LIF-DT candidate calculation used by `AndroidSparseNeuronNetwork`. Its batch input contains detached neuron states, a model timestamp per candidate, and the already-aggregated input for each neuron. Its output is an ordered list of candidate states plus spike decisions. It has no SQLite, LRU, event-queue, clock, or persistence side effects.
 
-`AndroidNeuronComputeBackend` is now the injected batch boundary. The default `CpuAndroidNeuronComputeBackend` calls the reference kernel. `AndroidSparseNeuronNetwork` builds one candidate per target neuron for each timestamp, calls the backend once for that timestamp, verifies output count/order identity, and only then proceeds to feature updates and outgoing event generation. A future GPU backend can be injected without moving the event queue or transaction ownership out of the existing runtime.
+`AndroidNeuronComputeBackend` is now the injected batch boundary. The default `CpuAndroidNeuronComputeBackend` calls the reference kernel. `AndroidSparseNeuronNetwork` builds one candidate per target neuron for each timestamp, calls the backend once for that timestamp, verifies output count, candidate identity, and legal spike-state transitions, and only then proceeds to feature updates and outgoing event generation. A future GPU backend can be injected without moving the event queue or transaction ownership out of the existing runtime.
 
 The event loop still groups all events at one timestamp, sums each target neuron's inputs, calculates feature updates and generated events, and commits the entire timestamp through the existing atomic store transaction. Only after that commit succeeds are changed states published into the hot LRU. The kernel extraction does not move or weaken that transaction boundary.
 
 This pure function is the CPU reference contract for a future GPU implementation. GPU parity must match potential decay, adaptation decay, input clamping, threshold comparison, refractory gating, spike sequence increment, reset potential, and overflow rejection. Simultaneous inputs remain aggregated by the CPU before the kernel call; a future accelerator must receive the same aggregate and cannot process simultaneous events sequentially.
 
-Seven JVM unit tests cover subthreshold decay, threshold crossing, refractory gating, invalid time/input, spike-counter overflow, batch ordering/reference equivalence, and input-state isolation on failure. They are authored but have not been run. No GPU kernel exists yet.
+Eight JVM unit tests cover subthreshold decay, threshold crossing, refractory gating, invalid time/input, spike-counter overflow, batch ordering/reference equivalence, input-state isolation on failure, and rejection of invalid backend spike transitions. They are authored but have not been run. No GPU kernel exists yet.
 
 ## GPU and hybrid status
 
