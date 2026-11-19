@@ -50,9 +50,11 @@ class DedicatedGpuAndroidNeuronComputeBackend(context: Context) :
     ): List<AndroidNeuronKernel.Result> {
         check(!closed) { "GPU-only compute backend is closed" }
         if (inputs.isEmpty()) return emptyList()
+        val future = executor.submit(Callable { gpu.processBatch(inputs) })
         return try {
-            executor.submit(Callable { gpu.processBatch(inputs) }).get()
+            future.get()
         } catch (error: InterruptedException) {
+            future.cancel(true)
             Thread.currentThread().interrupt()
             throw AndroidNeuronNetworkException("interrupted while waiting for GPU compute")
         } catch (error: ExecutionException) {
@@ -125,7 +127,13 @@ class CpuGpuAndroidNeuronComputeBackend private constructor(
         val gpuInputs = inputs.subList(0, gpuCount).toList()
         val cpuInputs = inputs.subList(gpuCount, inputs.size).toList()
         val gpuFuture = gpuExecutor.submit(Callable { gpu.processBatch(gpuInputs) })
-        val cpuResults = CpuAndroidNeuronComputeBackend.processBatch(cpuInputs)
+        val cpuResults = try {
+            CpuAndroidNeuronComputeBackend.processBatch(cpuInputs)
+        } catch (failure: Throwable) {
+            // Do not leave a failed timestamp's GPU partition running into the next call.
+            runCatching { gpuFuture.get() }
+            throw failure
+        }
         val gpuResults = try {
             gpuFuture.get()
         } catch (error: InterruptedException) {
