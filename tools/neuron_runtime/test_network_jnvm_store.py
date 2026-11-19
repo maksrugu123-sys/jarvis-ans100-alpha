@@ -77,11 +77,14 @@ class NetworkJNVMStoreTests(unittest.TestCase):
                          runtime.neuron_states["source"].spike_sequence)
 
     def test_feature_sidecars_survive_atomic_network_checkpoint_restore(self):
-        from tools.neuron_runtime.neuron_features import NeuronFeatureState, SynapticMemoryState
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState, NeuronRole, SynapticMemoryState
 
         runtime = NetworkRuntime(
             {"source": NeuronRuntime({"external": 1.0})},
-            feature_states={"source": NeuronFeatureState(sensitivity=1.4, memory_trace=0.3)},
+            feature_states={"source": NeuronFeatureState(sensitivity=1.4, memory_trace=0.3,
+                                                       pattern_signature=987654, pattern_trace=0.72,
+                                                       pattern_observations=9)},
+            population_roles={"source": NeuronRole.PATTERN},
             synaptic_memories={"source": {"external": SynapticMemoryState(
                 coactivation_trace=0.2, predictive_trace=0.4, reward_trace=0.1,
             )}},
