@@ -3302,6 +3302,83 @@ private fun SettingsPanel(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Button(
+                            onClick = { benchmarkViewModel.runNeuronComputeBenchmark() },
+                            enabled = !benchmarkViewModel.neuronComputeBenchmarkBusyState.value,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                if (benchmarkViewModel.neuronComputeBenchmarkBusyState.value) {
+                                    "Идёт сравнение CPU / GPU…"
+                                } else {
+                                    "Проверить ускорение CPU / GPU"
+                                },
+                            )
+                        }
+                        if (benchmarkViewModel.neuronComputeBenchmarkBusyState.value) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        Text(
+                            benchmarkViewModel.neuronComputeBenchmarkStatusState.value,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        benchmarkViewModel.neuronComputeBenchmarkReportState.value?.let { report ->
+                            Text(
+                                "Устройство: ${report.deviceModel} · Android API ${report.androidApiLevel} · прогрев: ${report.warmupRuns} · замеров: ${report.measuredRuns}",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            report.batches.forEach { batch ->
+                                val cpuMs = batch.cpu.medianLatencyNs / 1_000_000.0
+                                Text(
+                                    "Пакет ${batch.batchSize} нейронов — CPU: ${String.format(java.util.Locale.ROOT, "%.3f", cpuMs)} мс",
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                val gpu = batch.gpu
+                                if (gpu != null) {
+                                    val percent = batch.gpuFasterThanCpuPercent ?: 0.0
+                                    val comparison = if (percent >= 0.0) {
+                                        "${String.format(java.util.Locale.ROOT, "%.1f", percent)}% быстрее"
+                                    } else {
+                                        "${String.format(java.util.Locale.ROOT, "%.1f", -percent)}% медленнее"
+                                    }
+                                    Text(
+                                        "GPU: ${String.format(java.util.Locale.ROOT, "%.3f", gpu.medianLatencyNs / 1_000_000.0)} мс · $comparison",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                } else {
+                                    Text(
+                                        "GPU недоступен: ${batch.gpuAvailability.reason ?: "проверка не пройдена"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                val hybrid = batch.hybrid
+                                if (hybrid != null) {
+                                    val percent = batch.hybridFasterThanCpuPercent ?: 0.0
+                                    val comparison = if (percent >= 0.0) {
+                                        "${String.format(java.util.Locale.ROOT, "%.1f", percent)}% быстрее"
+                                    } else {
+                                        "${String.format(java.util.Locale.ROOT, "%.1f", -percent)}% медленнее"
+                                    }
+                                    Text(
+                                        "CPU + GPU: ${String.format(java.util.Locale.ROOT, "%.3f", hybrid.medianLatencyNs / 1_000_000.0)} мс · $comparison",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                } else {
+                                    Text(
+                                        "CPU + GPU недоступен: ${batch.hybridAvailability.reason ?: "проверка не пройдена"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                            Text(
+                                report.note,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         SectionHeading("Скорость ответа", "измерения на этом устройстве")
                         if (conversation.lastTurnDurationMs <= 0L) {
                             Text("Пока нет измерений. Отправь сообщение в чат, чтобы JARVIS записал время загрузки модели и генерации.")
