@@ -10,6 +10,12 @@ import kotlin.math.exp
  * GPU kernels. The caller remains responsible for atomic persistence.
  */
 internal object AndroidNeuronKernel {
+    data class Input(
+        val state: AndroidNeuronState,
+        val timestampNs: Long,
+        val input: Double,
+    )
+
     data class Result(
         val state: AndroidNeuronState,
         val spiked: Boolean,
@@ -19,7 +25,14 @@ internal object AndroidNeuronKernel {
         state: AndroidNeuronState,
         timestampNs: Long,
         input: Double,
-    ): Result {
+    ): Result = processOne(Input(state, timestampNs, input))
+
+    fun processBatch(inputs: List<Input>): List<Result> = inputs.map(::processOne)
+
+    private fun processOne(input: Input): Result {
+        val state = input.state
+        val timestampNs = input.timestampNs
+        val input = input.input
         require(input.isFinite()) { "neuron input must be finite" }
         if (timestampNs < state.lastUpdateNs) {
             throw AndroidNeuronNetworkException("neuron event time moved backwards")
@@ -76,4 +89,22 @@ internal object AndroidNeuronKernel {
     private const val TAU_MEMBRANE_NS = 20_000_000L
     private const val TAU_ADAPTATION_NS = 100_000_000L
     private const val REFRACTORY_NS = 2_000_000L
+}
+
+
+/**
+ * Batch boundary for CPU/GPU implementations. A backend receives the exact
+ * timestamp-aggregated candidates and must return results in identical order.
+ */
+internal interface AndroidNeuronComputeBackend {
+    val backendName: String
+    fun processBatch(inputs: List<AndroidNeuronKernel.Input>): List<AndroidNeuronKernel.Result>
+}
+
+internal object CpuAndroidNeuronComputeBackend : AndroidNeuronComputeBackend {
+    override val backendName: String = "cpu-reference"
+
+    override fun processBatch(
+        inputs: List<AndroidNeuronKernel.Input>,
+    ): List<AndroidNeuronKernel.Result> = AndroidNeuronKernel.processBatch(inputs)
 }
