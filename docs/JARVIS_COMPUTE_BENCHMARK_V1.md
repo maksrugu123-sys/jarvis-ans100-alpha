@@ -81,3 +81,15 @@ The Speed settings expose a persisted 1 / 2 / 4 / 8 / 16 MiB budget for the mana
 This is not a reservation or hard cap on total Android process memory. SQLite pages, connection/index structures, GPU driver allocations, temporary buffers, Kotlin/ART object overhead outside the managed hot set, and the rest of the app consume additional memory. The 2,048-byte figure is a planning allowance, not a measured per-neuron heap size. Android may still reclaim or terminate the process under system memory pressure. The selected budget is loaded when a new AndroidSparseNeuronNetwork instance is created; an already running network keeps its current capacity until it is recreated.
 
 The current Android network remains limited to 10,000 neurons and 100,000 connections. This preference does not itself raise those structural limits or complete the planned 250,000-neuron migration.
+
+
+## Device-aware Android neuron RAM ceiling
+
+The Android settings screen derives the selectable maximum from three runtime measurements:
+- physical RAM reported by `ActivityManager.MemoryInfo.totalMem`;
+- currently available RAM reported by `ActivityManager.MemoryInfo.availMem`;
+- the app memory class reported by `ActivityManager.memoryClass`.
+
+The conservative ceiling is the minimum of 8% of the app memory class, 10% of currently available RAM, and 3% of physical RAM, rounded down to a supported budget step (1/2/4/8/16 MB). The currently implemented hot-set capacity remains capped at 4,096 resident neurons, so larger device budgets do not silently increase the cache beyond that structural cap.
+
+The profile is sampled when the app creates its settings state and again whenever a new Android sparse neuron network loads its hot-set capacity. A previously saved value above the current device ceiling is clamped at use time. This is a planning ceiling for the managed neuron-state cache, not a reservation, not a process-wide memory cap, and not a measured per-neuron heap footprint. Runtime memory pressure can still change after sampling.
