@@ -3365,6 +3365,13 @@ private fun SettingsPanel(
                                         "CPU + GPU: ${String.format(java.util.Locale.ROOT, "%.3f", hybrid.medianLatencyNs / 1_000_000.0)} мс · $comparison",
                                         style = MaterialTheme.typography.bodySmall,
                                     )
+                                    batch.hybridWorkSplit?.let { split ->
+                                        Text(
+                                            "Распределено за замеры: GPU ${split.gpuCandidates}, CPU ${split.cpuCandidates} кандидатов · GPU-пакетов: ${split.gpuBatches}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 } else {
                                     Text(
                                         "CPU + GPU недоступен: ${batch.hybridAvailability.reason ?: "проверка не пройдена"}",
