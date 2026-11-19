@@ -7,7 +7,8 @@ import android.content.Context
  * This is not a reservation or hard cap on total process RAM.
  */
 class AndroidNeuronRamBudgetPreferences(context: Context) {
-    private val preferences = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val preferencesContext = context.applicationContext
+    private val preferences = preferencesContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     fun loadMegabytes(): Int {
         val saved = preferences.getInt(KEY_BUDGET_MB, DEFAULT_BUDGET_MB)
@@ -19,7 +20,10 @@ class AndroidNeuronRamBudgetPreferences(context: Context) {
         preferences.edit().putInt(KEY_BUDGET_MB, megabytes).apply()
     }
 
-    fun loadHotSetCapacity(): Int = hotSetCapacityFor(loadMegabytes())
+    fun loadHotSetCapacity(): Int {
+        val deviceMaximum = AndroidNeuronRamBudgetPolicy.inspect(preferencesContext).maximumBudgetMb
+        return hotSetCapacityFor(loadMegabytes(deviceMaximum))
+    }
 
     fun loadMegabytes(maximumAllowed: Int): Int {
         require(maximumAllowed in ALLOWED_BUDGETS_MB) { "Unsupported device RAM ceiling" }
