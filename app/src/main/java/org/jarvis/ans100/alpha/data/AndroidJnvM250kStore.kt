@@ -10,6 +10,8 @@ import java.io.Closeable
 data class AndroidJnvM250kStats(
     val neuronCount: Int,
     val connectionCount: Int,
+    val pendingEvents: Int,
+    val currentTimeNs: Long,
     val initialized: Boolean,
 )
 
@@ -65,6 +67,14 @@ class AndroidJnvM250kStore(
         } finally {
             db.endTransaction()
         }
+
+        val alreadyInitialized = db.rawQuery(
+            "SELECT value FROM metadata WHERE key='initialized'",
+            null,
+        ).use { it.moveToFirst() && it.getString(0) == "1" }
+        if (alreadyInitialized &&
+            scalar(db, "SELECT COUNT(*) FROM neurons") == AndroidJnvM250kProfile.NEURON_CAPACITY.toLong()
+        ) return stats()
 
         var firstId = 0
         while (firstId < AndroidJnvM250kProfile.NEURON_CAPACITY) {
@@ -222,16 +232,160 @@ class AndroidJnvM250kStore(
         return result
     }
 
+    /**
+     * Enqueues a bounded input batch. The persistent queue is larger than a
+     * single scheduler page, but no API reads the entire queue into RAM.
+     */
+    @Synchronized
+    fun enqueueEvents(events: List<AndroidNeuronEvent>) {
+        require(events.isNotEmpty() && events.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_ENQUEUE)
+        require(events.map { it.eventId }.toSet().size == events.size) {
+            "event IDs must be unique within an enqueue batch"
+        }
+        events.forEach { AndroidJnvM250kProfile.requireNeuronId(it.targetNeuronId) }
+        requireInitialized()
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val clock = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'").toLong()
+            if (events.any { it.timeNs <= clock }) {
+                throw AndroidNeuronNetworkException("queued events must be later than the committed 250k model clock")
+            }
+            val pending = scalar(db, "SELECT COUNT(*) FROM events")
+            if (pending + events.size > AndroidJnvM250kProfile.MAX_PENDING_EVENTS) {
+                throw AndroidNeuronBackpressureException("250k JNVM pending-event queue is full")
+            }
+            for (event in events) {
+                val values = ContentValues().apply {
+                    put("event_id", event.eventId)
+                    put("time_ns", event.timeNs)
+                    put("target_id", event.targetNeuronId)
+                    put("strength", event.strength)
+                    put("core_tainted", if (event.coreTainted) 1 else 0)
+                }
+                if (db.insertWithOnConflict("events", null, values, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
+                    throw AndroidNeuronNetworkException("250k JNVM event ID already exists")
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Reads only the earliest timestamp group. Oversized groups fail closed
+     * instead of being split into partial timestamp commits.
+     */
+    @Synchronized
+    fun nextTimestampEvents(): List<AndroidNeuronEvent>? {
+        requireInitialized()
+        val db = helper.readableDatabase
+        val nextTime = db.rawQuery("SELECT MIN(time_ns) FROM events", null).use {
+            if (!it.moveToFirst() || it.isNull(0)) null else it.getLong(0)
+        } ?: return null
+        val result = ArrayList<AndroidNeuronEvent>()
+        db.rawQuery(
+            "SELECT event_id, time_ns, target_id, strength, core_tainted FROM events " +
+                "WHERE time_ns=? ORDER BY event_id LIMIT ?",
+            arrayOf(nextTime.toString(), (AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP + 1).toString()),
+        ).use { cursor ->
+            while (cursor.moveToNext()) result += readEvent(cursor)
+        }
+        if (result.size > AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP) {
+            throw AndroidNeuronBackpressureException("one 250k JNVM timestamp group exceeds the atomic processing bound")
+        }
+        return result
+    }
+
+    /**
+     * Commits consumed events, generated events, changed states and the model
+     * clock atomically. Callers must process one complete timestamp group.
+     */
+    @Synchronized
+    fun commitTimestamp(
+        timestampNs: Long,
+        consumed: List<AndroidNeuronEvent>,
+        generated: List<AndroidNeuronEvent>,
+        changedStates: Collection<AndroidNeuronState>,
+    ) {
+        require(timestampNs >= 0L)
+        require(consumed.isNotEmpty() && consumed.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
+        require(generated.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
+        require(consumed.all { it.timeNs == timestampNs })
+        require(consumed.map { it.eventId }.toSet().size == consumed.size)
+        require(generated.map { it.eventId }.toSet().size == generated.size)
+        consumed.forEach { AndroidJnvM250kProfile.requireNeuronId(it.targetNeuronId) }
+        generated.forEach { AndroidJnvM250kProfile.requireNeuronId(it.targetNeuronId) }
+        changedStates.forEach { AndroidJnvM250kProfile.requireNeuronId(it.neuronId) }
+        requireInitialized()
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val clock = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'").toLong()
+            if (timestampNs <= clock) throw AndroidNeuronNetworkException("250k model clock must advance monotonically")
+            for (event in consumed) {
+                if (db.delete(
+                        "events",
+                        "event_id=? AND time_ns=?",
+                        arrayOf(event.eventId, timestampNs.toString()),
+                    ) != 1
+                ) throw AndroidNeuronNetworkException("250k event disappeared before timestamp commit")
+            }
+            for (state in changedStates) {
+                val values = ContentValues().apply {
+                    put("potential", state.potential)
+                    put("adaptation", state.adaptation)
+                    put("last_update_ns", state.lastUpdateNs)
+                    put("refractory_until_ns", state.refractoryUntilNs)
+                    put("spike_sequence", state.spikeSequence)
+                    put("core_tainted", if (state.coreTainted) 1 else 0)
+                }
+                if (db.update("neurons", values, "neuron_id=?", arrayOf(state.neuronId.toString())) != 1) {
+                    throw AndroidNeuronNetworkException("250k neuron disappeared before timestamp commit")
+                }
+            }
+            val remaining = scalar(db, "SELECT COUNT(*) FROM events")
+            if (remaining + generated.size > AndroidJnvM250kProfile.MAX_PENDING_EVENTS) {
+                throw AndroidNeuronBackpressureException("generated events exceed the 250k pending-event bound")
+            }
+            for (event in generated) {
+                val values = ContentValues().apply {
+                    put("event_id", event.eventId)
+                    put("time_ns", event.timeNs)
+                    put("target_id", event.targetNeuronId)
+                    put("strength", event.strength)
+                    put("core_tainted", if (event.coreTainted) 1 else 0)
+                }
+                if (db.insertWithOnConflict("events", null, values, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
+                    throw AndroidNeuronNetworkException("generated 250k event ID already exists")
+                }
+            }
+            if (db.update(
+                    "metadata",
+                    ContentValues().apply { put("value", timestampNs.toString()) },
+                    "key='model_time_ns'",
+                    null,
+                ) != 1
+            ) throw AndroidNeuronNetworkException("250k model clock metadata is missing")
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     @Synchronized
     fun stats(): AndroidJnvM250kStats {
         val db = helper.readableDatabase
         val count = scalar(db, "SELECT COUNT(*) FROM neurons").toInt()
         val connections = scalar(db, "SELECT COUNT(*) FROM connections").toInt()
+        val pending = scalar(db, "SELECT COUNT(*) FROM events").toInt()
+        val currentTime = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'").toLong()
         val initialized = db.rawQuery(
             "SELECT value FROM metadata WHERE key='initialized'",
             null,
         ).use { it.moveToFirst() && it.getString(0) == "1" }
-        return AndroidJnvM250kStats(count, connections, initialized)
+        return AndroidJnvM250kStats(count, connections, pending, currentTime, initialized)
     }
 
     private fun requireInitialized() {
@@ -257,7 +411,14 @@ class AndroidJnvM250kStore(
             )
             db.execSQL("CREATE INDEX connections_source_idx ON connections(source_id, connection_id)")
             db.execSQL("CREATE INDEX connections_target_idx ON connections(target_id)")
+            db.execSQL(
+                "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, " +
+                    "strength REAL NOT NULL, core_tainted INTEGER NOT NULL DEFAULT 0, " +
+                    "FOREIGN KEY(target_id) REFERENCES neurons(neuron_id))",
+            )
+            db.execSQL("CREATE INDEX events_time_idx ON events(time_ns, event_id)")
             db.execSQL("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            db.execSQL("INSERT INTO metadata(key, value) VALUES('model_time_ns', '0')")
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -291,6 +452,14 @@ class AndroidJnvM250kStore(
             targetNeuronId = cursor.getInt(2),
             delayNs = cursor.getLong(3),
             weight = cursor.getDouble(4),
+        )
+
+        private fun readEvent(cursor: Cursor) = AndroidNeuronEvent(
+            eventId = cursor.getString(0),
+            timeNs = cursor.getLong(1),
+            targetNeuronId = cursor.getInt(2),
+            strength = cursor.getDouble(3),
+            coreTainted = cursor.getInt(4) != 0,
         )
 
         private fun scalar(db: SQLiteDatabase, sql: String, args: Array<String> = emptyArray()): Long =
