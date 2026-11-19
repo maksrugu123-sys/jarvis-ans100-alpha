@@ -23,7 +23,7 @@ class AndroidNeuronComputeModesTest {
 
             assertEquals(listOf(1, 2, 3), gpu.receivedNeuronIds)
             assertEquals(listOf(1, 2, 3, 4, 5), results.map { it.state.neuronId })
-            assertEquals(5, gpu.receivedCount + 2)
+            assertEquals(3, gpu.receivedCount)
         } finally {
             backend.close()
         }
