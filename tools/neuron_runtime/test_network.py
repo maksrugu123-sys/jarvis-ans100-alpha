@@ -474,6 +474,61 @@ class PopulationRegistryTests(unittest.TestCase):
         pending = network.export_checkpoint_state()["pending_events"]
         self.assertEqual(pending[0].attention, 0.4)
 
+
+    def test_memory_role_uses_cross_synaptic_association(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole, SynapticMemoryState
+        neurons = {"memory": NeuronRuntime({"seen": 1.0, "cue": 1.0})}
+        traces = {"memory": {
+            "seen": SynapticMemoryState(coactivation_trace=1.0),
+            "cue": SynapticMemoryState(),
+        }}
+        memory = NetworkRuntime(neurons, population_roles={"memory": NeuronRole.MEMORY},
+                                synaptic_memories=traces)
+        baseline = NetworkRuntime(neurons, population_roles={"memory": NeuronRole.COORDINATOR},
+                                  synaptic_memories=traces)
+        memory.schedule_input(1, "memory", "cue", "cue-memory", 0.5)
+        baseline.schedule_input(1, "memory", "cue", "cue-baseline", 0.5)
+        memory.run()
+        baseline.run()
+        self.assertGreater(
+            memory.neuron_states["memory"].membrane_potential,
+            baseline.neuron_states["memory"].membrane_potential,
+        )
+
+    def test_pattern_role_recognizes_repeated_exact_coactivation(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        network = NetworkRuntime(
+            {"pattern": NeuronRuntime({"left": 1.0, "right": 1.0})},
+            population_roles={"pattern": NeuronRole.PATTERN},
+        )
+        network.schedule_input(1, "pattern", "left", "left-1", 0.4)
+        network.schedule_input(1, "pattern", "right", "right-1", 0.4)
+        network.run()
+        first = network.feature_states["pattern"]
+        self.assertNotEqual(first.pattern_signature, 0)
+        self.assertEqual(first.pattern_observations, 1)
+        self.assertGreater(first.pattern_trace, 0.0)
+
+        network.schedule_input(2, "pattern", "left", "left-2", 0.4)
+        network.schedule_input(2, "pattern", "right", "right-2", 0.4)
+        network.run()
+        second = network.feature_states["pattern"]
+        self.assertEqual(second.pattern_signature, first.pattern_signature)
+        self.assertEqual(second.pattern_observations, 2)
+        self.assertGreater(second.pattern_trace, first.pattern_trace)
+
+    def test_pattern_state_is_carried_by_runtime_checkpoint(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        network = NetworkRuntime(
+            {"pattern": NeuronRuntime({"left": 1.0, "right": 1.0})},
+            population_roles={"pattern": NeuronRole.PATTERN},
+        )
+        network.schedule_input(1, "pattern", "left", "left", 0.4)
+        network.schedule_input(1, "pattern", "right", "right", 0.4)
+        network.run()
+        state = network.export_checkpoint_state()
+        self.assertEqual(state["feature_states"]["pattern"].pattern_observations, 1)
+
     def test_runtime_checkpoint_carries_population_roles(self):
         from tools.neuron_runtime.neuron_features import NeuronRole
         network = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})}, population_roles={"n": NeuronRole.MEMORY})
