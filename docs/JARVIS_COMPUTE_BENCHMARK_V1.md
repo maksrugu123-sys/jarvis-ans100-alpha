@@ -24,6 +24,16 @@ Speedup ratio is CPU median latency divided by the selected mode median latency.
 
 The default is one warm-up and five measured runs. Inputs are limited to 2,048 characters, warm-ups to three, and measured runs to 3–9. This is a bounded diagnostic benchmark, not a long held-out evaluation. The CPU baseline is always 1.0x / 0% relative to itself.
 
+## Extracted neuron compute kernel
+
+`AndroidNeuronKernel.kt` now contains the pure deterministic LIF-DT candidate calculation used by `AndroidSparseNeuronNetwork`. Its input is one detached neuron state, a model timestamp, and the already-aggregated input for that neuron. Its output is a candidate state plus a spike decision. It has no SQLite, LRU, event-queue, clock, or persistence side effects.
+
+The event loop still groups all events at one timestamp, sums each target neuron's inputs, calculates feature updates and generated events, and commits the entire timestamp through the existing atomic store transaction. Only after that commit succeeds are changed states published into the hot LRU. The kernel extraction does not move or weaken that transaction boundary.
+
+This pure function is the CPU reference contract for a future GPU implementation. GPU parity must match potential decay, adaptation decay, input clamping, threshold comparison, refractory gating, spike sequence increment, reset potential, and overflow rejection. Simultaneous inputs remain aggregated by the CPU before the kernel call; a future accelerator must receive the same aggregate and cannot process simultaneous events sequentially.
+
+Five JVM unit tests cover subthreshold decay, threshold crossing, refractory gating, invalid time/input, and spike-counter overflow. They are authored but have not been run. No GPU kernel exists yet.
+
 ## GPU and hybrid status
 
 No GPU kernel, Android GPU adapter, or hybrid partitioner is implemented. GPU-only and CPU+GPU therefore remain unavailable; the adapter explicitly reports this rather than silently substituting CPU.
