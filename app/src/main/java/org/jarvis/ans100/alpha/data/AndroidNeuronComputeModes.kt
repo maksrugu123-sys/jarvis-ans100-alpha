@@ -25,8 +25,54 @@ object AndroidNeuronComputeBackendFactory {
         mode: AndroidNeuronComputeMode,
     ): AndroidNeuronComputeBackend = when (mode) {
         AndroidNeuronComputeMode.CPU_ONLY -> CpuAndroidNeuronComputeBackend
-        AndroidNeuronComputeMode.GPU_ONLY -> Gles31AndroidNeuronComputeBackend(context)
+        AndroidNeuronComputeMode.GPU_ONLY -> DedicatedGpuAndroidNeuronComputeBackend(context)
         AndroidNeuronComputeMode.CPU_GPU -> CpuGpuAndroidNeuronComputeBackend(context)
+    }
+}
+
+/**
+ * Owns the GLES context on a dedicated worker so callers may submit batches
+ * from the network thread without violating EGL thread confinement.
+ */
+class DedicatedGpuAndroidNeuronComputeBackend(context: Context) :
+    AndroidNeuronComputeBackend, Closeable {
+
+    override val backendName: String = "gpu-only-gles31"
+    private val gpu = Gles31AndroidNeuronComputeBackend(context)
+    private val executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "ANS100-GPU").apply { isDaemon = true }
+    }
+    @Volatile private var closed = false
+
+    @Synchronized
+    override fun processBatch(
+        inputs: List<AndroidNeuronKernel.Input>,
+    ): List<AndroidNeuronKernel.Result> {
+        check(!closed) { "GPU-only compute backend is closed" }
+        if (inputs.isEmpty()) return emptyList()
+        return try {
+            executor.submit(Callable { gpu.processBatch(inputs) }).get()
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw AndroidNeuronNetworkException("interrupted while waiting for GPU compute")
+        } catch (error: ExecutionException) {
+            throw AndroidNeuronNetworkException(
+                "GPU-only mode unavailable: ${error.cause?.message ?: error.message}",
+            )
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+        try {
+            executor.submit { gpu.close() }.get(5, TimeUnit.SECONDS)
+        } catch (_: Exception) {
+            // Closing is best-effort after the worker has stopped accepting work.
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }
 
