@@ -61,7 +61,7 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
         check(!closed) { "neuron compute benchmark is closed" }
         require(batchSizes.isNotEmpty() && batchSizes.size <= MAX_BATCH_SIZES)
         require(batchSizes.all { it in 1..MAX_BATCH_SIZE } && batchSizes.distinct().size == batchSizes.size)
-        require(warmupRuns in 0..MAX_WARMUP_RUNS)
+        require(warmupRuns in MIN_WARMUP_RUNS..MAX_WARMUP_RUNS)
         require(measuredRuns in MIN_MEASURED_RUNS..MAX_MEASURED_RUNS)
 
         val results = batchSizes.map(::benchmarkBatch)
@@ -143,35 +143,39 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
                             verify(cpuReference, output)
                         }
                         AndroidNeuronComputeMode.GPU_ONLY -> {
-                            val backend = gpuBackend ?: continue
-                            try {
-                                val startNs = SystemClock.elapsedRealtimeNanos()
-                                val output = backend.processBatch(inputs)
-                                val elapsed = SystemClock.elapsedRealtimeNanos() - startNs
-                                verify(cpuReference, output)
-                                check(elapsed > 0L)
-                                gpuSamples += elapsed
-                            } catch (error: Throwable) {
-                                gpuFailure = conciseError(error)
-                                gpuSamples.clear()
-                                (backend as? Closeable)?.close()
-                                gpuBackend = null
+                            val backend = gpuBackend
+                            if (backend != null) {
+                                try {
+                                    val startNs = SystemClock.elapsedRealtimeNanos()
+                                    val output = backend.processBatch(inputs)
+                                    val elapsed = SystemClock.elapsedRealtimeNanos() - startNs
+                                    verify(cpuReference, output)
+                                    check(elapsed > 0L)
+                                    gpuSamples += elapsed
+                                } catch (error: Throwable) {
+                                    gpuFailure = conciseError(error)
+                                    gpuSamples.clear()
+                                    (backend as? Closeable)?.close()
+                                    gpuBackend = null
+                                }
                             }
                         }
                         AndroidNeuronComputeMode.CPU_GPU -> {
-                            val backend = hybridBackend ?: continue
-                            try {
-                                val startNs = SystemClock.elapsedRealtimeNanos()
-                                val output = backend.processBatch(inputs)
-                                val elapsed = SystemClock.elapsedRealtimeNanos() - startNs
-                                verify(cpuReference, output)
-                                check(elapsed > 0L)
-                                hybridSamples += elapsed
-                            } catch (error: Throwable) {
-                                hybridFailure = conciseError(error)
-                                hybridSamples.clear()
-                                (backend as? Closeable)?.close()
-                                hybridBackend = null
+                            val backend = hybridBackend
+                            if (backend != null) {
+                                try {
+                                    val startNs = SystemClock.elapsedRealtimeNanos()
+                                    val output = backend.processBatch(inputs)
+                                    val elapsed = SystemClock.elapsedRealtimeNanos() - startNs
+                                    verify(cpuReference, output)
+                                    check(elapsed > 0L)
+                                    hybridSamples += elapsed
+                                } catch (error: Throwable) {
+                                    hybridFailure = conciseError(error)
+                                    hybridSamples.clear()
+                                    (backend as? Closeable)?.close()
+                                    hybridBackend = null
+                                }
                             }
                         }
                     }
@@ -280,6 +284,7 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
     companion object {
         val DEFAULT_BATCH_SIZES = listOf(32, 128, 256)
         const val DEFAULT_WARMUP_RUNS = 1
+        const val MIN_WARMUP_RUNS = 1
         const val DEFAULT_MEASURED_RUNS = 3
         const val MAX_WARMUP_RUNS = 2
         const val MIN_MEASURED_RUNS = 3
