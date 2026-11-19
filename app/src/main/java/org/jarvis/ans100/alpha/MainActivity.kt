@@ -146,7 +146,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
         mutableStateOf(neuronComputePreferences.load())
     }
     val neuronRamPreferences = remember(context) { org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences(context) }
-    var ansNeuronRamBudgetMb by remember(neuronRamPreferences) { mutableIntStateOf(neuronRamPreferences.loadMegabytes()) }
+    var ansNeuronRamBudgetMb by remember(neuronRamPreferences) { mutableStateOf(neuronRamPreferences.loadMegabytes()) }
     var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
     var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
     var backgroundEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) }
