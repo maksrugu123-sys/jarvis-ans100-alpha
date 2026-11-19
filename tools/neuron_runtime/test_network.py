@@ -491,8 +491,8 @@ class PopulationRegistryTests(unittest.TestCase):
         memory.run()
         baseline.run()
         self.assertGreater(
-            memory.neuron_states["memory"].membrane_potential,
-            baseline.neuron_states["memory"].membrane_potential,
+            memory.neuron_states["memory"].u,
+            baseline.neuron_states["memory"].u,
         )
 
     def test_pattern_role_recognizes_repeated_exact_coactivation(self):
