@@ -211,6 +211,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     val benchmarkHeldOutRowsState = mutableStateOf<List<ANS100BenchmarkBatchInput>>(emptyList())
     val benchmarkStatusState = mutableStateOf("Выбери два JSONL-файла, подготовленных Python-адаптером.")
     val benchmarkBusyState = mutableStateOf(false)
+    val neuronComputeBenchmarkStatusState = mutableStateOf("Сравнительный тест ещё не запускался.")
+    val neuronComputeBenchmarkBusyState = mutableStateOf(false)
+    val neuronComputeBenchmarkReportState = mutableStateOf<org.jarvis.ans100.alpha.data.AndroidNeuronKernelBenchmarkReport?>(null)
     val benchmarkPendingFilesState = mutableStateOf<ANS100BenchmarkJsonl.PredictionFiles?>(null)
     val benchmarkPendingEncodingFilesState = mutableStateOf<ANS100BenchmarkJsonl.EncodingComparisonFiles?>(null)
 
@@ -288,6 +291,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     )
     private val conversationExecutor = Executors.newSingleThreadExecutor()
     private val hybridNetworkExecutor = Executors.newSingleThreadExecutor()
+    private val neuronComputeBenchmarkExecutor = Executors.newSingleThreadExecutor()
     private var pairedBenchmarkSequence = 0L
     private val ans100BenchmarkRuntimeDelegate = lazy {
         org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime(appContext)
@@ -1024,6 +1028,32 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 conversationResponseEngine.benchmarkTransformerOnly(inputText, coldStart)
             }
             PairedBenchmarkTaskResult(taskId, transformer, ans100)
+        }
+    }
+
+    fun runNeuronComputeBenchmark() {
+        if (neuronComputeBenchmarkBusyState.value) return
+        neuronComputeBenchmarkBusyState.value = true
+        neuronComputeBenchmarkStatusState.value = "Подготовка CPU, GPU и гибридного теста…"
+        neuronComputeBenchmarkReportState.value = null
+        neuronComputeBenchmarkExecutor.execute {
+            try {
+                val report = org.jarvis.ans100.alpha.data.AndroidNeuronKernelComputeBenchmark(appContext).use {
+                    it.run()
+                }
+                mainHandler.post {
+                    neuronComputeBenchmarkReportState.value = report
+                    neuronComputeBenchmarkBusyState.value = false
+                    neuronComputeBenchmarkStatusState.value =
+                        "Тест завершён. Все опубликованные результаты прошли проверку совпадения с CPU."
+                }
+            } catch (error: Throwable) {
+                mainHandler.post {
+                    neuronComputeBenchmarkBusyState.value = false
+                    neuronComputeBenchmarkStatusState.value =
+                        "Тест не завершён: ${error.message ?: error.javaClass.simpleName}"
+                }
+            }
         }
     }
 
@@ -3153,6 +3183,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
         conversationExecutor.shutdown()
         hybridNetworkExecutor.shutdown()
+        neuronComputeBenchmarkExecutor.shutdownNow()
         runtimeExecutor.shutdownNow()
         peerSyncExecutor.shutdownNow()
         super.onCleared()
