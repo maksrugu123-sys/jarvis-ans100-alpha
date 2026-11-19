@@ -53,6 +53,20 @@ class AndroidJnvM250kStore(
             if (existingProfile != null && existingProfile != AndroidJnvM250kProfile.PROFILE_ID) {
                 throw AndroidNeuronNetworkException("250k JNVM database belongs to a different profile")
             }
+            val existingCapacity = db.rawQuery(
+                "SELECT value FROM metadata WHERE key='neuron_capacity'",
+                null,
+            ).use { if (it.moveToFirst()) it.getString(0).toIntOrNull() else null }
+            if (existingCapacity != null && existingCapacity != AndroidJnvM250kProfile.NEURON_CAPACITY) {
+                throw AndroidNeuronNetworkException("250k JNVM database capacity metadata does not match this profile")
+            }
+            val existingVersion = db.rawQuery(
+                "SELECT value FROM metadata WHERE key='profile_version'",
+                null,
+            ).use { if (it.moveToFirst()) it.getString(0).toIntOrNull() else null }
+            if (existingVersion != null && existingVersion != AndroidJnvM250kProfile.PROFILE_VERSION) {
+                throw AndroidNeuronNetworkException("unsupported 250k JNVM profile version")
+            }
             val values = ContentValues().apply {
                 put("key", "profile_id")
                 put("value", AndroidJnvM250kProfile.PROFILE_ID)
@@ -63,6 +77,15 @@ class AndroidJnvM250kStore(
                 put("value", AndroidJnvM250kProfile.NEURON_CAPACITY.toString())
             }
             db.insertWithOnConflict("metadata", null, capacity, SQLiteDatabase.CONFLICT_REPLACE)
+            db.insertWithOnConflict(
+                "metadata",
+                null,
+                ContentValues().apply {
+                    put("key", "profile_version")
+                    put("value", AndroidJnvM250kProfile.PROFILE_VERSION.toString())
+                },
+                SQLiteDatabase.CONFLICT_REPLACE,
+            )
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -254,6 +277,16 @@ class AndroidJnvM250kStore(
             val pending = scalar(db, "SELECT COUNT(*) FROM events")
             if (pending + events.size > AndroidJnvM250kProfile.MAX_PENDING_EVENTS) {
                 throw AndroidNeuronBackpressureException("250k JNVM pending-event queue is full")
+            }
+            for ((timeNs, batch) in events.groupBy { it.timeNs }) {
+                val persistedAtTime = scalar(
+                    db,
+                    "SELECT COUNT(*) FROM events WHERE time_ns=?",
+                    arrayOf(timeNs.toString()),
+                )
+                if (persistedAtTime + batch.size > AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP) {
+                    throw AndroidNeuronBackpressureException("250k JNVM timestamp group exceeds the atomic processing bound")
+                }
             }
             for (event in events) {
                 val values = ContentValues().apply {
