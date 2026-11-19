@@ -15,7 +15,7 @@ from .neuron_features import (
 )
 
 _FORMAT = "JARVIS_NEURON_FEATURE_SIDECAR"
-_VERSION = 2
+_VERSION = 3
 
 
 class FeatureCodecError(ValueError):
@@ -83,7 +83,7 @@ def decode_feature_sidecar(
     *,
     expected_neuron_id: str | None = None,
 ) -> tuple[str, NeuronFeatureState, dict[str, SynapticMemoryState]]:
-    """Strictly decode V1/V2 cognitive sidecars; V1 pattern fields default to zero."""
+    """Strictly decode V1/V2/V3 sidecars; absent pattern/predictor fields default to zero."""
     if not isinstance(payload, (bytes, bytearray, memoryview)):
         raise FeatureCodecError("payload must be bytes-like")
     raw = bytes(payload)
@@ -104,7 +104,7 @@ def decode_feature_sidecar(
     }:
         raise FeatureCodecError("sidecar top-level fields mismatch")
     version = doc["version"]
-    if doc["format"] != _FORMAT or isinstance(version, bool) or version not in (1, _VERSION):
+    if doc["format"] != _FORMAT or isinstance(version, bool) or version not in (1, 2, _VERSION):
         raise FeatureCodecError("unsupported feature sidecar format/version")
     neuron_id = doc["neuron_id"]
     if (not isinstance(neuron_id, str) or not neuron_id.strip() or "\x00" in neuron_id
@@ -114,8 +114,11 @@ def decode_feature_sidecar(
         raise FeatureCodecError("sidecar neuron_id does not match requested neuron")
     raw_state = doc["neuron_features"]
     expected_state = set(NeuronFeatureState.__dataclass_fields__)
-    legacy_state = expected_state - {"pattern_signature", "pattern_trace", "pattern_observations"}
-    accepted_state = legacy_state if version == 1 else expected_state
+    v1_state = expected_state - {"pattern_signature", "pattern_trace", "pattern_observations", "predictor_expected_signature", "predictor_confidence", "predictor_observations", "predictor_hits"}
+    v2_state = expected_state - {"predictor_expected_signature", "predictor_confidence", "predictor_observations", "predictor_hits"}
+    accepted_state = v1_state if version == 1 else (v2_state if version == 2 else expected_state)
+    if isinstance(raw_state, dict) and version in (1, 2):
+        raw_state = {**asdict(NeuronFeatureState()), **raw_state}
     if not isinstance(raw_state, dict) or set(raw_state) != accepted_state:
         raise FeatureCodecError("neuron feature fields mismatch")
     try:
