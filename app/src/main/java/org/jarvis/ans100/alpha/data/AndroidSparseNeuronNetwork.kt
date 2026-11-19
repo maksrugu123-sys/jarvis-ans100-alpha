@@ -1059,6 +1059,7 @@ private class AndroidNeuronSqliteStore(
             "CREATE TABLE connections (connection_id TEXT PRIMARY KEY, source_id INTEGER NOT NULL, target_id INTEGER NOT NULL, delay_ns INTEGER NOT NULL, weight REAL NOT NULL)",
         )
         db.execSQL("CREATE INDEX connections_source_idx ON connections(source_id)")
+        db.execSQL("CREATE INDEX connections_target_idx ON connections(target_id)")
         createDialogueEligibilityTable(db)
         createHybridCandidateEligibilityTable(db)
         createNeuralAssociationLearningTables(db)
@@ -1124,6 +1125,7 @@ private class AndroidNeuronSqliteStore(
         }
         if (oldVersion < 11) createNeuralAssociationAssessmentTables(db)
         if (oldVersion < 12) createNeuronFeatureTable(db)
+        if (oldVersion < 13) db.execSQL("CREATE INDEX IF NOT EXISTS connections_target_idx ON connections(target_id)")
         if (newVersion > DATABASE_VERSION) {
             throw AndroidNeuronNetworkException("Unsupported Android JNVM schema migration: $oldVersion -> $newVersion")
         }
@@ -2944,7 +2946,7 @@ private class AndroidNeuronSqliteStore(
         }
 
     companion object {
-        private const val DATABASE_VERSION = 12
+        private const val DATABASE_VERSION = 13
         private const val MAX_PERSISTED_STRUCTURAL_TURNS = 64
         private const val STRUCTURAL_OBSERVATION_WINDOW_TURNS = 16
         private const val MAX_STRUCTURAL_GROWN_PAIRS = 512
