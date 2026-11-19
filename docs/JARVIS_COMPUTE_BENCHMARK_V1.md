@@ -36,25 +36,31 @@ This pure function is the CPU reference contract for a future GPU implementation
 
 Eight JVM unit tests cover subthreshold decay, threshold crossing, refractory gating, invalid time/input, spike-counter overflow, batch ordering/reference equivalence, input-state isolation on failure, and rejection of invalid backend spike transitions. They are authored but have not been run. No GPU kernel exists yet.
 
-## GPU and hybrid status
+## Experimental Android GPU backend
 
-No GPU kernel, Android GPU adapter, or hybrid partitioner is implemented. GPU-only and CPU+GPU therefore remain unavailable; the adapter explicitly reports this rather than silently substituting CPU.
+`app/src/main/java/org/jarvis/ans100/alpha/data/Gles31AndroidNeuronComputeBackend.kt` adds an OpenGL ES 3.1 compute-shader implementation for the floating-point part of the LIF-DT candidate update. It creates a headless EGL pbuffer/context, compiles a compute shader, uploads timestamp-aggregated candidate inputs in SSBOs, dispatches 64-wide workgroups, waits through the shader memory barrier and synchronous result mapping, then validates returned states before the network can commit them.
 
-Android supports GPU compute through Vulkan (NDK) and OpenGL ES 3.1 compute. Vulkan requires native initialization, selection of a physical device and compute queue, shader compilation, dispatch, and completion synchronization. GLES 3.1 compute is accessible through Android SDK bindings. The project should choose one real compute path after runtime device capability checks, not infer compute support from the Android version alone.
+The shader computes membrane decay, adaptation decay, bounded potential, adaptive threshold, refractory-gated spike decision and post-spike adaptation. CPU retains timestamp grouping, integer timestamp/refractory/spike-sequence metadata, event scheduling, feature updates, outgoing-event generation, and the authoritative SQLite transaction. Therefore GPU-only means GPU execution of the per-neuron floating-point candidate arithmetic, not a GPU-only ANS brain or GPU ownership of the complete runtime.
 
-The existing Android ANS runtime is SQLite-backed and commits each timestamp atomically. A practical first acceleration boundary is the deterministic per-neuron candidate calculation for one timestamp: CPU retains queue grouping, synapse lookup/event generation, SQLite transaction and commit; a GPU kernel may calculate candidate neuron state/spike decisions for the same grouped inputs. The GPU result must be returned and validated before the existing atomic commit. This makes CPU+GPU a genuine split. A GPU-only neural-arithmetic mode would require the entire neuron-state update kernel to execute on GPU, while CPU still performs host orchestration and persistence; it must never be labelled GPU-only if only a small unrelated calculation is offloaded.
+The GPU uses FP32 while the reference kernel uses Kotlin Double. Before accepting real batches, the adapter runs deterministic qualification fixtures against the CPU reference. Spike decisions and integer metadata must match exactly; potential and adaptation must be within 0.00005. It also refuses candidates whose pre-reset threshold margin is within 0.0002, rather than making an uncertain FP32 spike decision. Unsupported GLES versions, shader failures, GL errors, invalid outputs and ambiguous thresholds fail closed; there is no silent CPU fallback. Qualification is a startup gate, not proof of parity for every possible state or long-run drift.
 
-For hybrid mode, partitioning overhead, input/output transfer, synchronization, and queue wait time must be included. A GPU path is enabled only after its output matches CPU results on deterministic parity fixtures, including simultaneous same-timestamp inputs, refractory boundaries, threshold crossings, and generated spikes.
+`AndroidNeuronComputeModes.kt` defines explicit `CPU_ONLY`, `GPU_ONLY` and `CPU_GPU` choices. GPU-only runs on a dedicated EGL worker thread. CPU+GPU partitions a timestamp batch into non-empty halves and executes the GPU and CPU partitions concurrently, then restores the original candidate order. A batch smaller than two candidates is rejected in CPU+GPU mode rather than pretending both processors participated. The factory does not silently substitute another mode.
+
+## Current integration boundary and limitations
+
+The backend is injectable through the existing `AndroidSparseNeuronNetwork(computeBackend=...)` constructor. The new factory creates the requested backend, but the app's user-facing settings, persisted mode selection and normal runtime construction are not yet wired to that factory. The existing language-model GPU toggle is separate and does not control ANS neuron compute.
+
+No GPU kernel is enabled by default. CPU remains the default reference backend. No GPU/hybrid benchmark, Android device execution, GLES shader compilation on a real device, battery/thermal measurement, or APK build has been run. The experimental GPU backend must not yet be treated as production-ready or as proof that this device supports compute shaders.
 
 ## Android integration gates
 
 1. Run the Android CPU adapter on-device and verify repeatable signatures and bounded resource use.
-2. Extract a pure per-neuron candidate calculation from the Android timestamp loop without changing its transaction boundary.
-3. Add deterministic CPU parity fixtures for the extracted calculation.
-4. Implement and synchronize a Vulkan or GLES 3.1 compute adapter; do not enable it based only on a feature flag.
-5. Add hybrid partitioning with transfer-inclusive timing and CPU/GPU result equivalence.
-6. Record device model, runtime/backend, precision, thermal/battery/RAM context, and sample distributions.
-7. Expose the three modes in Android UI only after the corresponding adapters pass correctness checks.
+2. Run JVM tests for the pure kernel and Android instrumentation tests for EGL initialization, shader compilation, buffer mapping, and candidate parity.
+3. Verify qualification and fail-closed behavior on the target device; record exact GLES version and GPU renderer.
+4. Integrate persisted mode selection into the ANS runtime construction path and expose it separately from the language-model GPU setting.
+5. Measure identical workloads in CPU-only, GPU-only and true concurrent CPU+GPU modes, including upload, dispatch, synchronization, readback and partition overhead.
+6. Check longer-run state drift, threshold-edge cases, spike sequence/refractory boundaries, and timestamp batches of varying sizes.
+7. Record device model, runtime/backend, precision, thermal/battery/RAM context, and sample distributions.
 8. Keep device runs short and bounded; do not run long held-out experiments as part of a compute benchmark.
 
-No Android device benchmark or GPU acceleration claim has been made.
+No Android device benchmark or real-device GPU acceleration claim has been made.
