@@ -406,7 +406,8 @@ class NetworkRuntime:
                                                 if synapse_id != event.target_synapse_id]
                                 if other_traces:
                                     memory_gain = min(1.60, memory_gain * (1.0 + 0.15 * (sum(other_traces) / len(other_traces))))
-                            remembered_strength = min(1.0, event.strength * memory_gain * pattern_match_gain * predictor_gain)
+                            attention_gain = 1.0 + 0.25 * event.attention
+                            remembered_strength = min(1.0, event.strength * memory_gain * pattern_match_gain * predictor_gain * attention_gain)
                             if feature_state is None:
                                 effective_strength = remembered_strength
                             else:
