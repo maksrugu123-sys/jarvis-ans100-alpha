@@ -373,7 +373,7 @@ class NetworkRuntime:
                         active_synapses = sorted({event.target_synapse_id for event in excitatory_events})
                         pattern_signature = 0
                         if role == NeuronRole.PATTERN and len(active_synapses) >= 2:
-                            signature_bytes = hashlib.sha256("\\0".join(active_synapses).encode("utf-8")).digest()[:8]
+                            signature_bytes = hashlib.sha256(b"".join(len(encoded).to_bytes(4, "big") + encoded for encoded in (name.encode("utf-8") for name in active_synapses))).digest()[:8]
                             pattern_signature = int.from_bytes(signature_bytes, "big") or 1
                         pattern_match_gain = 1.0
                         if (role == NeuronRole.PATTERN and feature_state is not None
