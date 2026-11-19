@@ -344,10 +344,16 @@ class AndroidJnvM250kStore(
     ) {
         require(timestampNs >= 0L)
         require(consumed.isNotEmpty() && consumed.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
-        require(generated.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
+        require(generated.size <= AndroidJnvM250kProfile.MAX_GENERATED_EVENTS_PER_TIMESTAMP)
         require(consumed.all { it.timeNs == timestampNs })
         require(consumed.map { it.eventId }.toSet().size == consumed.size)
         require(generated.map { it.eventId }.toSet().size == generated.size)
+        require(consumed.map { it.eventId }.toSet().intersect(generated.map { it.eventId }.toSet()).isEmpty()) {
+            "a timestamp commit cannot recycle a consumed event ID"
+        }
+        require(changedStates.all { it.lastUpdateNs == timestampNs }) {
+            "changed neuron states must be updated at the committed timestamp"
+        }
         require(generated.all { it.timeNs > timestampNs }) {
             "generated events must be scheduled after the committed timestamp"
         }
