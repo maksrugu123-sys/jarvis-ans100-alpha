@@ -79,10 +79,6 @@ class NeuronFeatureState:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= (1 << 64) - 1:
                 raise NeuronFeatureError(f"{name} exceeds unsigned 64-bit range")
-        if isinstance(self.observations, bool) or not isinstance(self.observations, int):
-            raise NeuronFeatureError("observations must be a non-negative integer")
-        if not 0 <= self.observations <= (1 << 64) - 1:
-            raise NeuronFeatureError("observations exceeds unsigned 64-bit range")
 
 @dataclass(frozen=True, slots=True)
 class NeuronFeatureInput:
