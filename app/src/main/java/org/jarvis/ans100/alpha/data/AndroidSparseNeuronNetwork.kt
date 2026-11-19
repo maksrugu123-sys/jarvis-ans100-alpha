@@ -927,17 +927,8 @@ class AndroidSparseNeuronNetwork(
     private fun resizeHotSet(capacity: Int) {
         require(capacity in 1..MAX_HOT_SET_CAPACITY)
         hotSetCapacity = capacity
-        trimLeastRecentlyUsed(hot, capacity)
-        trimLeastRecentlyUsed(hotFeatures, capacity)
-    }
-
-    private fun <T> trimLeastRecentlyUsed(cache: LinkedHashMap<Int, T>, capacity: Int) {
-        while (cache.size > capacity) {
-            val eldest = cache.entries.iterator()
-            if (!eldest.hasNext()) return
-            eldest.next()
-            eldest.remove()
-        }
+        AndroidNeuronHotSetCache.trimToCapacity(hot, capacity)
+        AndroidNeuronHotSetCache.trimToCapacity(hotFeatures, capacity)
     }
 
     @Synchronized
