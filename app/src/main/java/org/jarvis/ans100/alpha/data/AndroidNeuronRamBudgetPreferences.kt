@@ -21,6 +21,11 @@ class AndroidNeuronRamBudgetPreferences(context: Context) {
 
     fun loadHotSetCapacity(): Int = hotSetCapacityFor(loadMegabytes())
 
+    fun loadMegabytes(maximumAllowed: Int): Int {
+        require(maximumAllowed in ALLOWED_BUDGETS_MB) { "Unsupported device RAM ceiling" }
+        return loadMegabytes().coerceAtMost(maximumAllowed)
+    }
+
     companion object {
         const val DEFAULT_BUDGET_MB = 4
         const val ESTIMATED_BYTES_PER_RESIDENT_NEURON = 2_048
