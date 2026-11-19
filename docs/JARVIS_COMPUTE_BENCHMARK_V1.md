@@ -72,3 +72,12 @@ No GPU kernel is enabled by default. CPU remains the default reference backend. 
 8. Keep device runs short and bounded; do not run long held-out experiments as part of a compute benchmark.
 
 No Android device benchmark or real-device GPU acceleration claim has been made.
+
+
+## User-controlled Android neuron RAM budget
+
+The Speed settings expose a persisted 1 / 2 / 4 / 8 / 16 MiB budget for the managed neuron-state hot set. The runtime converts that budget into a bounded LRU capacity using a planning allowance of 2,048 bytes per resident neuron and the current 4,096-entry ceiling. Capacities are 512 / 1,024 / 2,048 / 4,096 / 4,096 entries.
+
+This is not a reservation or hard cap on total Android process memory. SQLite pages, connection/index structures, GPU driver allocations, temporary buffers, Kotlin/ART object overhead outside the managed hot set, and the rest of the app consume additional memory. The 2,048-byte figure is a planning allowance, not a measured per-neuron heap size. Android may still reclaim or terminate the process under system memory pressure. The selected budget is loaded when a new AndroidSparseNeuronNetwork instance is created; an already running network keeps its current capacity until it is recreated.
+
+The current Android network remains limited to 10,000 neurons and 100,000 connections. This preference does not itself raise those structural limits or complete the planned 250,000-neuron migration.
