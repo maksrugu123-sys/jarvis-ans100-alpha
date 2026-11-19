@@ -72,7 +72,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 - rejection of boolean and non-finite sensitivity;
 - caller-state isolation and deterministic input ordering.
 
-The network suite (30 authored tests), JPVR network persistence suite (13 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
+The network suite (30 authored tests), JPVR network persistence suite (15 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
 
 Suggested focused verification when explicitly approved:
 
