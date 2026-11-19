@@ -38,6 +38,12 @@ Important limitations:
 - Android Kotlin feature parity and UI controls are not integrated.
 - Feature activation is currently selected by supplying sidecar state at runtime; there is no complete user-facing per-mechanism configuration system.
 
+## Attention-budget policy foundation
+
+`tools/neuron_runtime/attention_scheduler.py` now defines a deterministic pure policy for ranking neuron batches from salience (50%), uncertainty (25%), and prediction error (25%). Deferred candidates gain priority through wait-cycle aging; selected candidates reset their age. The policy validates bounded inputs, rejects duplicate/unknown IDs, and returns explicit selected/deferred sets without dropping work.
+
+**Integration boundary:** this policy is not yet called by `NetworkRuntime`, and it does not yet allocate CPU time or split timestamp execution. The current runtime still processes each model timestamp as one atomic candidate batch. To integrate a real per-cycle neuron-batch budget safely, the runtime must add resumable active-timestamp state, preserve all same-neuron same-time excitatory/inhibitory inputs as one batch, persist the deferred cursor and candidate progress through the JPVR scheduler transaction, and retain rollback/recovery guarantees. Until that transaction model exists, this module is a tested-by-source policy foundation only; its tests are authored and NOT RUN.
+
 ## Checkpoint and persistence path
 
 `NetworkRuntime.export_checkpoint_state()` includes neuron state, sidecars, pending events, topology, queue/run limits, and model clock. `restore_checkpoint_state()` validates and reconstructs these values.
