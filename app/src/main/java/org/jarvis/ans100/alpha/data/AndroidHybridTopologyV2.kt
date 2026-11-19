@@ -58,10 +58,13 @@ object AndroidHybridTopologyV2 {
         context: Context,
         databaseName: String = DATABASE_NAME,
         hotSetCapacity: Int = AndroidSparseNeuronNetwork.DEFAULT_HOT_SET_CAPACITY,
+        computeBackend: AndroidNeuronComputeBackend = CpuAndroidNeuronComputeBackend,
     ): AndroidSparseNeuronNetwork {
         require(databaseName.matches(Regex("^[A-Za-z0-9._-]{1,128}\\.db$")))
         val network = AndroidSparseNeuronNetwork(
-            context, databaseName, hotSetCapacity, cognitiveFeaturesEnabled = true,
+            context, databaseName, hotSetCapacity,
+            cognitiveFeaturesEnabled = true,
+            computeBackend = computeBackend,
         )
         try {
             network.initializeHybridTopologyV2()
