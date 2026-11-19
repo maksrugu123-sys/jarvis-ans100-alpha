@@ -3331,7 +3331,7 @@ private fun SettingsPanel(
                             report.batches.forEach { batch ->
                                 val cpuMs = batch.cpu.medianLatencyNs / 1_000_000.0
                                 Text(
-                                    "Пакет ${batch.batchSize} нейронов — CPU: ${String.format(java.util.Locale.ROOT, "%.3f", cpuMs)} мс",
+                                    "Пакет ${batch.batchSize} нейронов — CPU: ${String.format(java.util.Locale.ROOT, "%.3f", cpuMs)} мс · ${String.format(java.util.Locale.ROOT, "%.0f", batch.cpu.candidatesPerSecond)} кандидатов/с",
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 val gpu = batch.gpu
@@ -3343,7 +3343,7 @@ private fun SettingsPanel(
                                         "${String.format(java.util.Locale.ROOT, "%.1f", -percent)}% медленнее"
                                     }
                                     Text(
-                                        "GPU: ${String.format(java.util.Locale.ROOT, "%.3f", gpu.medianLatencyNs / 1_000_000.0)} мс · $comparison",
+                                        "GPU: ${String.format(java.util.Locale.ROOT, "%.3f", gpu.medianLatencyNs / 1_000_000.0)} мс · ${String.format(java.util.Locale.ROOT, "%.0f", gpu.candidatesPerSecond)} кандидатов/с · $comparison",
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 } else {
@@ -3362,7 +3362,7 @@ private fun SettingsPanel(
                                         "${String.format(java.util.Locale.ROOT, "%.1f", -percent)}% медленнее"
                                     }
                                     Text(
-                                        "CPU + GPU: ${String.format(java.util.Locale.ROOT, "%.3f", hybrid.medianLatencyNs / 1_000_000.0)} мс · $comparison",
+                                        "CPU + GPU: ${String.format(java.util.Locale.ROOT, "%.3f", hybrid.medianLatencyNs / 1_000_000.0)} мс · ${String.format(java.util.Locale.ROOT, "%.0f", hybrid.candidatesPerSecond)} кандидатов/с · $comparison",
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                     batch.hybridWorkSplit?.let { split ->
