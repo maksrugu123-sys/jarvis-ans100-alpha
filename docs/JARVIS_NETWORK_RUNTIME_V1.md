@@ -89,3 +89,16 @@ Next engineering gates:
 4. Connect bounded working-set paging to network execution only after the group-commit boundary is preserved.
 5. Develop prediction and uncertainty into actual hypothesis generation/competition, with independent evidence.
 6. Increase logical capacity only through staged indexed storage and measured resource gates.
+
+
+## Population registry increment
+
+`NetworkRuntime` accepts optional `population_roles` keyed by neuron ID. Roles are validated and grouped by the immutable `NeuronPopulationRegistry` in `population.py`; unassigned neurons default to `COORDINATOR`.
+
+- `EXCITATORY` sources may emit only excitatory connections.
+- `INHIBITORY` sources may emit only inhibitory connections.
+- `CONTRADICTION` sources must have at least one inhibitory output route.
+- `ATTENTION` sources propagate at least their connection strength as event attention salience.
+- `MEMORY`, `PATTERN`, and `PREDICTOR` currently have typed membership only; dedicated operators are future work.
+
+Runtime checkpoint export carries role assignments; callers must pass them into restore. JPVR scheduler snapshots do not yet persist population roles. Five registry tests were authored and NOT RUN. No Android parity is claimed.
