@@ -90,6 +90,6 @@ The Android settings screen derives the selectable maximum from three runtime me
 - currently available RAM reported by `ActivityManager.MemoryInfo.availMem`;
 - the app memory class reported by `ActivityManager.memoryClass`.
 
-The conservative ceiling is the minimum of 8% of the app memory class, 10% of currently available RAM, and 3% of physical RAM, rounded down to a supported budget step (1/2/4/8/16 MB). The currently implemented hot-set capacity remains capped at 4,096 resident neurons, so larger device budgets do not silently increase the cache beyond that structural cap.
+The conservative ceiling is the minimum of 8% of the app memory class, 10% of currently available RAM, and 3% of physical RAM, rounded down to a supported budget step (1/2/4/8 MB). The current implementation caps the managed hot set at 4,096 resident neurons (8 MB at the planning allowance of 2,048 bytes per resident neuron), so the selectable ceiling cannot exceed 8 MB until that structural limit is redesigned.
 
 The profile is sampled when the app creates its settings state and again whenever a new Android sparse neuron network loads its hot-set capacity. A previously saved value above the current device ceiling is clamped at use time. This is a planning ceiling for the managed neuron-state cache, not a reservation, not a process-wide memory cap, and not a measured per-neuron heap footprint. Runtime memory pressure can still change after sampling.
