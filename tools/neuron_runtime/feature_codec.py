@@ -117,10 +117,10 @@ def decode_feature_sidecar(
     v1_state = expected_state - {"pattern_signature", "pattern_trace", "pattern_observations", "predictor_expected_signature", "predictor_confidence", "predictor_observations", "predictor_hits"}
     v2_state = expected_state - {"predictor_expected_signature", "predictor_confidence", "predictor_observations", "predictor_hits"}
     accepted_state = v1_state if version == 1 else (v2_state if version == 2 else expected_state)
-    if isinstance(raw_state, dict) and version in (1, 2):
-        raw_state = {**asdict(NeuronFeatureState()), **raw_state}
     if not isinstance(raw_state, dict) or set(raw_state) != accepted_state:
         raise FeatureCodecError("neuron feature fields mismatch")
+    if version in (1, 2):
+        raw_state = {**asdict(NeuronFeatureState()), **raw_state}
     try:
         state = NeuronFeatureState(**raw_state)
         state.validate()
