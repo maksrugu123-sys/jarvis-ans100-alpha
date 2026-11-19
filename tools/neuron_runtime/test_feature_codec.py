@@ -13,6 +13,7 @@ class FeatureCodecTests(unittest.TestCase):
             sensitivity=1.2, memory_trace=0.4, prediction_error=0.3,
             confidence=0.7, uncertainty=0.2, plasticity=0.8,
             inhibition=0.1, context_match=0.9, observations=42,
+            pattern_signature=123456, pattern_trace=0.65, pattern_observations=7,
         )
         traces = {
             "syn-b": SynapticMemoryState(0.2, 0.3, 0.4),
@@ -34,6 +35,19 @@ class FeatureCodecTests(unittest.TestCase):
             ("n", NeuronFeatureState(), {}),
         )
 
+
+    def test_version_one_sidecar_migrates_new_pattern_fields_to_defaults(self):
+        import json
+        encoded = encode_feature_sidecar("legacy", NeuronFeatureState())
+        document = json.loads(encoded)
+        document["version"] = 1
+        for key in ("pattern_signature", "pattern_trace", "pattern_observations"):
+            document["neuron_features"].pop(key)
+        decoded = decode_feature_sidecar(json.dumps(document).encode("utf-8"))
+        self.assertEqual(decoded[1].pattern_signature, 0)
+        self.assertEqual(decoded[1].pattern_trace, 0.0)
+        self.assertEqual(decoded[1].pattern_observations, 0)
+
     def test_rejects_wrong_neuron_identity(self):
         encoded = encode_feature_sidecar("a", NeuronFeatureState())
         with self.assertRaises(FeatureCodecError):
@@ -41,7 +55,7 @@ class FeatureCodecTests(unittest.TestCase):
 
     def test_rejects_unknown_version_and_duplicate_keys(self):
         with self.assertRaises(FeatureCodecError):
-            decode_feature_sidecar(b'{"format":"JARVIS_NEURON_FEATURE_SIDECAR","version":2}')
+            decode_feature_sidecar(b'{"format":"JARVIS_NEURON_FEATURE_SIDECAR","version":3}')
         encoded = b'{"format":"x","format":"y"}'
         with self.assertRaises(FeatureCodecError):
             decode_feature_sidecar(encoded)
