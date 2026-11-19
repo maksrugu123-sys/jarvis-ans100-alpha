@@ -65,6 +65,10 @@ class NeuronFeatureState:
     pattern_signature: int = 0
     pattern_trace: float = 0.0
     pattern_observations: int = 0
+    predictor_expected_signature: int = 0
+    predictor_confidence: float = 0.0
+    predictor_observations: int = 0
+    predictor_hits: int = 0
 
     def validate(self) -> None:
         if (isinstance(self.sensitivity, bool)
@@ -73,9 +77,9 @@ class NeuronFeatureState:
                 or not 0.5 <= self.sensitivity <= 2.0):
             raise NeuronFeatureError("sensitivity must be a finite real number in [0.5, 2]")
         for name in ("memory_trace", "prediction_error", "confidence", "uncertainty",
-                     "plasticity", "inhibition", "context_match", "pattern_trace"):
+                     "plasticity", "inhibition", "context_match", "pattern_trace", "predictor_confidence"):
             _unit(name, getattr(self, name))
-        for name in ("observations", "pattern_signature", "pattern_observations"):
+        for name in ("observations", "pattern_signature", "pattern_observations", "predictor_expected_signature", "predictor_observations", "predictor_hits"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= (1 << 64) - 1:
                 raise NeuronFeatureError(f"{name} exceeds unsigned 64-bit range")
@@ -162,7 +166,62 @@ def update_neuron_features(
         pattern_signature=state.pattern_signature,
         pattern_trace=state.pattern_trace,
         pattern_observations=state.pattern_observations,
+        predictor_expected_signature=state.predictor_expected_signature,
+        predictor_confidence=state.predictor_confidence,
+        predictor_observations=state.predictor_observations,
+        predictor_hits=state.predictor_hits,
     )
+
+
+
+def effective_prediction_gain(state: NeuronFeatureState, observed_signature: int) -> float:
+    """Bounded confidence-weighted gain for a one-step persistence forecast."""
+    state.validate()
+    if isinstance(observed_signature, bool) or not isinstance(observed_signature, int) or not 0 <= observed_signature <= (1 << 64) - 1:
+        raise NeuronFeatureError("observed signature must be an unsigned 64-bit integer")
+    if not state.predictor_expected_signature or not observed_signature:
+        return 1.0
+    if observed_signature == state.predictor_expected_signature:
+        return min(1.15, 1.0 + 0.15 * state.predictor_confidence)
+    return max(0.85, 1.0 - 0.10 * state.predictor_confidence)
+
+
+def update_sequence_predictor(
+    state: NeuronFeatureState, observed_signature: int, *,
+    confidence_decay: float = 0.80, confidence_rate: float = 0.20,
+) -> NeuronFeatureState:
+    """Update a bounded next-observation persistence predictor.
+
+    This deliberately predicts recurrence of the latest active-synapse set;
+    it is not a general n-gram or semantic sequence model.
+    """
+    state.validate()
+    if isinstance(observed_signature, bool) or not isinstance(observed_signature, int) or not 0 <= observed_signature <= (1 << 64) - 1:
+        raise NeuronFeatureError("observed signature must be an unsigned 64-bit integer")
+    confidence_decay = _unit("confidence_decay", confidence_decay)
+    confidence_rate = _unit("confidence_rate", confidence_rate)
+    if observed_signature == 0:
+        return state
+    if state.predictor_expected_signature == 0:
+        return NeuronFeatureState(**{
+            **{name: getattr(state, name) for name in NeuronFeatureState.__dataclass_fields__},
+            "predictor_expected_signature": observed_signature,
+        })
+    if state.predictor_observations == (1 << 64) - 1:
+        raise NeuronFeatureError("predictor observation counter exhausted")
+    correct = observed_signature == state.predictor_expected_signature
+    hits = state.predictor_hits + int(correct)
+    if hits > (1 << 64) - 1:
+        raise NeuronFeatureError("predictor hit counter exhausted")
+    confidence = _clamp(confidence_decay * state.predictor_confidence
+                        + confidence_rate * (1.0 if correct else 0.0))
+    return NeuronFeatureState(**{
+        **{name: getattr(state, name) for name in NeuronFeatureState.__dataclass_fields__},
+        "predictor_expected_signature": observed_signature,
+        "predictor_confidence": confidence,
+        "predictor_observations": state.predictor_observations + 1,
+        "predictor_hits": hits,
+    })
 
 
 def update_pattern_memory(
