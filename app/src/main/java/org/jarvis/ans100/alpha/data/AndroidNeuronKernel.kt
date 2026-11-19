@@ -32,8 +32,8 @@ object AndroidNeuronKernel {
     private fun processOne(input: Input): Result {
         val state = input.state
         val timestampNs = input.timestampNs
-        val input = input.input
-        require(input.isFinite()) { "neuron input must be finite" }
+        val inputStrength = input.input
+        require(inputStrength.isFinite()) { "neuron input must be finite" }
         if (timestampNs < state.lastUpdateNs) {
             throw AndroidNeuronNetworkException("neuron event time moved backwards")
         }
@@ -41,7 +41,7 @@ object AndroidNeuronKernel {
         val elapsed = timestampNs - state.lastUpdateNs
         val decayedPotential = state.potential * exp(-elapsed.toDouble() / TAU_MEMBRANE_NS)
         val decayedAdaptation = state.adaptation * exp(-elapsed.toDouble() / TAU_ADAPTATION_NS)
-        val potential = (decayedPotential + input).coerceIn(POTENTIAL_MIN, POTENTIAL_MAX)
+        val potential = (decayedPotential + inputStrength).coerceIn(POTENTIAL_MIN, POTENTIAL_MAX)
         val threshold = (BASE_THRESHOLD + ADAPTATION_GAIN * decayedAdaptation)
             .coerceIn(BASE_THRESHOLD, MAX_THRESHOLD)
         val spiked = timestampNs >= state.refractoryUntilNs && potential >= threshold
