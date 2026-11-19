@@ -198,6 +198,72 @@ class NetworkJNVMStoreTests(unittest.TestCase):
                          runtime.neuron_states["source"].spike_sequence)
 
 
+
+    def test_population_roles_survive_atomic_scheduler_checkpoint_restore(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+
+        runtime = NetworkRuntime(
+            {
+                "source": NeuronRuntime({"external": 1.0}),
+                "target": NeuronRuntime({"input": 1.0}),
+            },
+            [NetworkConnection("route", "source", "target", "input", 5)],
+            population_roles={
+                "source": NeuronRole.ATTENTION,
+                "target": NeuronRole.MEMORY,
+            },
+        )
+        saved = self.store.save_timestamp(
+            "population-network", runtime, runtime.neuron_ids,
+            clock_epoch_id=EPOCH,
+            expected_network_record_version=0,
+            expected_neuron_record_versions={key: 0 for key in runtime.neuron_ids},
+        )
+        scheduler = self.store.load_scheduler("population-network")
+        restored = self.store.restore_network("population-network")
+
+        self.assertEqual(dict(scheduler.snapshot.population_roles), {
+            "source": NeuronRole.ATTENTION.value,
+            "target": NeuronRole.MEMORY.value,
+        })
+        self.assertEqual(dict(restored.runtime.population_registry.roles), {
+            "source": NeuronRole.ATTENTION,
+            "target": NeuronRole.MEMORY,
+        })
+        self.assertEqual(restored.generation, saved.generation)
+
+    def test_default_population_roles_are_explicitly_persisted(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+
+        runtime = make_network()
+        self.store.save_timestamp(
+            "default-populations", runtime, runtime.neuron_ids,
+            clock_epoch_id=EPOCH,
+            expected_network_record_version=0,
+            expected_neuron_record_versions={key: 0 for key in runtime.neuron_ids},
+        )
+        snapshot = self.store.load_scheduler("default-populations").snapshot
+        self.assertEqual(dict(snapshot.population_roles), {
+            "source": NeuronRole.COORDINATOR.value,
+            "target": NeuronRole.COORDINATOR.value,
+        })
+
+    def test_unknown_persisted_population_role_is_rejected(self):
+        import json
+        from tools.neuron_runtime.network_jnvm_store import (
+            encode_network_scheduler_snapshot, decode_network_scheduler_snapshot,
+        )
+
+        runtime = make_network()
+        payload = encode_network_scheduler_snapshot(
+            "invalid-population", runtime, clock_epoch_id=EPOCH,
+            neuron_record_versions={"source": 1, "target": 1},
+        )
+        document = json.loads(payload)
+        document["population_roles"]["source"] = "not-a-real-role"
+        with self.assertRaises(ValueError):
+            decode_network_scheduler_snapshot(json.dumps(document).encode("utf-8"))
+
     def test_pending_inhibitory_route_is_persisted_and_restored(self):
         runtime = NetworkRuntime(
             {
