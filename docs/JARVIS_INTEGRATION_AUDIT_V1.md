@@ -39,7 +39,7 @@
 1. **Android parity:** Kotlin `ANS100NeuronFeatures` is not connected to the Android timestamp candidate/commit/publish loop. No Python/Kotlin golden-vector parity is established.
 2. **Working-set paging:** the 128-shard per-neuron `NeuronWorkingSet` is not the backing store for `NetworkRuntime`. The coordinator still holds the full Python network object graph in RAM.
 3. **500,000-neuron capacity:** current Python and Android network limits remain 10,000. No indexed, paged 500K execution runtime exists.
-4. **Predictive processing:** current prediction is a simple prior-memory-trace baseline, not a learned sequence or hierarchical predictive model.
+4. **Predictive processing:** the generic feature prediction remains a prior-memory-trace baseline. The PREDICTOR role adds one-step signature persistence with bounded confidence; it is not a learned multi-step, hierarchical, or semantic sequence model.
 5. **Reasoning:** no integrated evidence graph, competing hypothesis lifecycle, contradiction reconciliation or explainable inference pipeline is established by these feature utilities.
 6. **Meta-plasticity:** the bounded adapter is connected in the Python reference path; Android parity and empirical stability remain unverified.
 7. **Inhibitory population roles:** typed inhibitory event routing is implemented, but source neurons do not yet have a dedicated inhibitory population role or biologically detailed interneuron dynamics.
@@ -49,7 +49,7 @@
 1. Run the focused network, JPVR store and coordinator tests after explicit approval; fix actual failures before expanding.
 2. Add focused tests for sidecar rollback, persistence and reward updates.
 3. Add a separately validated per-synapse learning/credit-assignment rule for synaptic memory; retain the canonical synapse weight as the source of truth.
-4. Implement a bounded PREDICTOR operator and explicit attention-budget allocation; add a dedicated inhibitory population model only if experiments justify it.
+4. Implement explicit attention-budget allocation and richer bounded transition memory for PREDICTOR; add a dedicated inhibitory population model only if experiments justify it.
 5. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
 6. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
 7. Integrate storage-backed bounded residency before raising logical neuron limits.
