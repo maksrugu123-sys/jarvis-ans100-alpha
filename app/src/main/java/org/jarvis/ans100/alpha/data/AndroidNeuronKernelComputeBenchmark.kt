@@ -28,6 +28,7 @@ data class AndroidNeuronKernelBatchResult(
     val hybrid: AndroidNeuronKernelModeMeasurement?,
     val gpuAvailability: AndroidNeuronKernelModeAvailability,
     val hybridAvailability: AndroidNeuronKernelModeAvailability,
+    val hybridWorkSplit: AndroidHybridComputeStats?,
     val gpuSpeedupRatio: Double?,
     val gpuFasterThanCpuPercent: Double?,
     val hybridSpeedupRatio: Double?,
@@ -127,6 +128,8 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
                 }
             }
 
+            (hybridBackend as? CpuGpuAndroidNeuronComputeBackend)?.resetStats()
+
             // Interleave modes and rotate their order on each repetition to reduce
             // systematic thermal/order bias. Every measured sample includes the
             // complete backend call, including GPU transfers and readback.
@@ -209,6 +212,9 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
             hybridAvailability = AndroidNeuronKernelModeAvailability(
                 AndroidNeuronComputeMode.CPU_GPU, hybrid != null, hybridFailure,
             ),
+            hybridWorkSplit = if (hybrid != null) {
+                (hybridBackend as? CpuGpuAndroidNeuronComputeBackend)?.stats()
+            } else null,
             gpuSpeedupRatio = gpu?.let { cpu.medianLatencyNs.toDouble() / it.medianLatencyNs.toDouble() },
             gpuFasterThanCpuPercent = gpu?.let { fasterPercent(cpu.medianLatencyNs, it.medianLatencyNs) },
             hybridSpeedupRatio = hybrid?.let { cpu.medianLatencyNs.toDouble() / it.medianLatencyNs.toDouble() },
