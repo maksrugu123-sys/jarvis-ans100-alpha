@@ -76,6 +76,13 @@ class DedicatedGpuAndroidNeuronComputeBackend(context: Context) :
     }
 }
 
+data class AndroidHybridComputeStats(
+    val gpuBatches: Int,
+    val gpuCandidates: Int,
+    val cpuCandidates: Int,
+    val cpuOnlySmallBatches: Int,
+)
+
 /**
  * Genuine split execution: the GPU computes the first partition while the CPU
  * computes the remaining partition concurrently. Results are reassembled in
@@ -96,6 +103,10 @@ class CpuGpuAndroidNeuronComputeBackend private constructor(
         Thread(runnable, workerName).apply { isDaemon = true }
     }
     @Volatile private var closed = false
+    private var gpuBatches = 0
+    private var gpuCandidates = 0
+    private var cpuCandidates = 0
+    private var cpuOnlySmallBatches = 0
 
     @Synchronized
     override fun processBatch(
@@ -103,10 +114,12 @@ class CpuGpuAndroidNeuronComputeBackend private constructor(
     ): List<AndroidNeuronKernel.Result> {
         check(!closed) { "CPU+GPU compute backend is closed" }
         if (inputs.isEmpty()) return emptyList()
-        if (inputs.size < 2) {
-            throw AndroidNeuronNetworkException(
-                "CPU+GPU mode requires at least two neuron candidates in a timestamp batch",
-            )
+        if (inputs.size == 1) {
+            // Never dispatch a one-item GPU batch: launch/readback overhead dominates.
+            // This is an explicit, observable hybrid scheduling decision, not GPU-only fallback.
+            cpuOnlySmallBatches++
+            cpuCandidates++
+            return CpuAndroidNeuronComputeBackend.processBatch(inputs)
         }
         val gpuCount = (inputs.size + 1) / 2
         val gpuInputs = inputs.subList(0, gpuCount).toList()
@@ -125,8 +138,19 @@ class CpuGpuAndroidNeuronComputeBackend private constructor(
                 "GPU partition failed: ${cause?.message ?: error.message}",
             )
         }
+        gpuBatches++
+        gpuCandidates += gpuInputs.size
+        cpuCandidates += cpuInputs.size
         return gpuResults + cpuResults
     }
+
+    @Synchronized
+    fun stats(): AndroidHybridComputeStats = AndroidHybridComputeStats(
+        gpuBatches = gpuBatches,
+        gpuCandidates = gpuCandidates,
+        cpuCandidates = cpuCandidates,
+        cpuOnlySmallBatches = cpuOnlySmallBatches,
+    )
 
     @Synchronized
     override fun close() {
