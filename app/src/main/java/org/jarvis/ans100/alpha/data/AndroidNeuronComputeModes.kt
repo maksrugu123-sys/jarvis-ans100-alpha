@@ -153,6 +153,14 @@ class CpuGpuAndroidNeuronComputeBackend private constructor(
     }
 
     @Synchronized
+    fun resetStats() {
+        gpuBatches = 0
+        gpuCandidates = 0
+        cpuCandidates = 0
+        cpuOnlySmallBatches = 0
+    }
+
+    @Synchronized
     fun stats(): AndroidHybridComputeStats = AndroidHybridComputeStats(
         gpuBatches = gpuBatches,
         gpuCandidates = gpuCandidates,
