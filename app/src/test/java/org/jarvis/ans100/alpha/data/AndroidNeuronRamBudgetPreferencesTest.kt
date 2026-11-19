@@ -9,9 +9,11 @@ class AndroidNeuronRamBudgetPreferencesTest {
         assertEquals(1_024, AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(2))
         assertEquals(2_048, AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(4))
         assertEquals(4_096, AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(8))
-        assertEquals(4_096, AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(16))
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun unsupportedBudgetIsRejected() { AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(3) }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun budgetAboveImplementedHotSetLimitIsRejected() { AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(16) }
 }
