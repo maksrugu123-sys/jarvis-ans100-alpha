@@ -143,6 +143,9 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
         val outputBytes = inputs.size * OUTPUT_FLOATS * 4
         val output = ByteBuffer.allocateDirect(outputBytes).order(ByteOrder.nativeOrder())
         GLES31.glUseProgram(program)
+        val countLocation = GLES31.glGetUniformLocation(program, "uCount")
+        if (countLocation < 0) fail("GPU batch-size uniform is missing")
+        GLES31.glUniform1i(countLocation, inputs.size)
         GLES31.glBindBuffer(GLES31.GL_SHADER_STORAGE_BUFFER, inputBuffer)
         GLES31.glBufferData(
             GLES31.GL_SHADER_STORAGE_BUFFER, inputBytes.capacity(), inputBytes, GLES31.GL_DYNAMIC_DRAW,
@@ -170,6 +173,7 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
             val potential = resultFloats.get(index * OUTPUT_FLOATS)
             val adaptation = resultFloats.get(index * OUTPUT_FLOATS + 1)
             val spiked = resultFloats.get(index * OUTPUT_FLOATS + 2) > 0.5f
+            val thresholdMargin = resultFloats.get(index * OUTPUT_FLOATS + 3)
             val item = inputs[index]
             if (!potential.isFinite() || !adaptation.isFinite() ||
                 potential !in -2f..2f || adaptation !in 0f..1f
@@ -177,10 +181,16 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
                 GLES31.glUnmapBuffer(GLES31.GL_SHADER_STORAGE_BUFFER)
                 fail("GPU returned an invalid neuron state")
             }
-            val threshold = 1.0 + 0.5 * adaptation.toDouble()
-            if (kotlin.math.abs(potential.toDouble() - threshold) <= THRESHOLD_GUARD) {
+            if (!thresholdMargin.isFinite() ||
+                kotlin.math.abs(thresholdMargin.toDouble()) <= THRESHOLD_GUARD
+            ) {
                 GLES31.glUnmapBuffer(GLES31.GL_SHADER_STORAGE_BUFFER)
                 fail("GPU threshold decision is numerically ambiguous; refusing FP32 result")
+            }
+            val refractoryOpen = item.timestampNs >= item.state.refractoryUntilNs
+            if (spiked != (refractoryOpen && thresholdMargin > 0f)) {
+                GLES31.glUnmapBuffer(GLES31.GL_SHADER_STORAGE_BUFFER)
+                fail("GPU spike decision is inconsistent with its threshold margin")
             }
             val old = item.state
             val next: AndroidNeuronState
@@ -293,8 +303,10 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
             layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
             layout(std430, binding = 0) readonly buffer InputBuffer { vec4 inputData[]; };
             layout(std430, binding = 1) writeonly buffer OutputBuffer { vec4 outputData[]; };
+            uniform int uCount;
             void main() {
                 uint i = gl_GlobalInvocationID.x;
+                if (i >= uint(uCount)) return;
                 vec4 stateInput = inputData[i * 2u];
                 vec4 flags = inputData[i * 2u + 1u];
                 float p = stateInput.x;
@@ -307,9 +319,9 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
                 float threshold = clamp(1.0 + 0.5 * decayedA, 1.0, 2.0);
                 bool spike = flags.x > 0.5 && nextP >= threshold;
                 if (spike) {
-                    outputData[i] = vec4(0.0, clamp(decayedA + 0.15, 0.0, 1.0), 1.0, 0.0);
+                    outputData[i] = vec4(0.0, clamp(decayedA + 0.15, 0.0, 1.0), 1.0, nextP - threshold);
                 } else {
-                    outputData[i] = vec4(nextP, clamp(decayedA, 0.0, 1.0), 0.0, 0.0);
+                    outputData[i] = vec4(nextP, clamp(decayedA, 0.0, 1.0), 0.0, nextP - threshold);
                 }
             }
         """
