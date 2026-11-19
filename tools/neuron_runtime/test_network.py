@@ -529,6 +529,25 @@ class PopulationRegistryTests(unittest.TestCase):
         state = network.export_checkpoint_state()
         self.assertEqual(state["feature_states"]["pattern"].pattern_observations, 1)
 
+
+    def test_pattern_counter_overflow_rolls_back_complete_timestamp(self):
+        from tools.neuron_runtime.neuron_features import NeuronFeatureState, NeuronRole
+        exhausted = NeuronFeatureState(pattern_observations=(1 << 64) - 1)
+        network = NetworkRuntime(
+            {"pattern": NeuronRuntime({"left": 1.0, "right": 1.0})},
+            population_roles={"pattern": NeuronRole.PATTERN},
+            feature_states={"pattern": exhausted},
+        )
+        network.schedule_input(1, "pattern", "left", "left", 0.4)
+        network.schedule_input(1, "pattern", "right", "right", 0.4)
+        before = network.neuron_states["pattern"]
+        with self.assertRaises(NetworkRuntimeError):
+            network.run()
+        self.assertEqual(network.neuron_states["pattern"], before)
+        self.assertEqual(network.feature_states["pattern"], exhausted)
+        self.assertEqual(network.pending_events, 2)
+        self.assertEqual(network.current_time_ns, 0)
+
     def test_runtime_checkpoint_carries_population_roles(self):
         from tools.neuron_runtime.neuron_features import NeuronRole
         network = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})}, population_roles={"n": NeuronRole.MEMORY})
