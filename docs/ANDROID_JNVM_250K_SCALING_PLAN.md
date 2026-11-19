@@ -4,7 +4,7 @@
 
 The target architecture is a sparse network with up to 250,000 neuron records. The target is a structural capacity, not a promise that 250,000 neurons can all be active in RAM or that the current Android runtime already supports this count.
 
-**Status: preparation only.** The current Android runtime remains capped at 10,000 neurons, 100,000 connections and 100,000 pending events. The 250,000-neuron target is not yet implemented or verified. Do not change the global limit by editing one constant: several existing topologies use the current 10,000-neuron range as part of their stable ID layout.
+**Status: separate storage foundation implemented; full ANS runtime integration not yet implemented or verified.** The legacy AndroidSparseNeuronNetwork remains capped at 10,000 neurons, 100,000 connections and 100,000 pending events. A new independent AndroidJnvM250kStore now defines and initializes a separate 250,000-row SQLite neuron store, sparse edge storage, bounded paged reads and an atomic disk-backed event queue. This does not mean the full ANS cognitive runtime can yet execute across 250,000 neurons. Do not change the global legacy limit: several existing topologies use the current 10,000-neuron range as part of their stable ID layout.
 
 ## Existing architecture findings
 
@@ -14,6 +14,20 @@ The target architecture is a sparse network with up to 250,000 neuron records. T
 - The current MAX_NEURONS = 10,000 is also used by the legacy dialogue topology. That topology places 9,000 input neurons, 996 hidden neurons and four readout neurons at fixed ID ranges. Changing the global value would silently move the output range and invalidate existing ID assumptions.
 - The hybrid V2 topology is also deliberately built around a fixed 10,000-neuron population and fixed population ranges. It must retain its own topology-specific size.
 - The connection table originally had an index on source_id, but target-side incoming-edge counts and grouping queries had no matching index. Schema V13 adds connections_target_idx while preserving existing rows.
+
+## Implemented 250k storage foundation
+
+The branch now contains:
+- `AndroidJnvM250kProfile`: independent profile ID/version, 250,000 neuron capacity, bounded page sizes, and explicit graph/event limits.
+- `AndroidJnvM250kStore`: a separate SQLite database (`jarvis_ans100_jnvm_sparse_250k_v1.db`) with no reuse of the legacy dialogue database.
+- Initialization inserts neuron rows in batches of 1,000 and can resume after interruption. Repeated initialization returns early when the full initialized range is present.
+- Neuron state is updated directly in SQLite. Neuron pages are read with bounded keyset pagination.
+- Sparse connections are stored as rows, indexed by source and target, and read in bounded pages.
+- Per-neuron degree limits are 16 outgoing and 32 incoming connections. These are conservative engineering bounds for the first storage profile, not measured optimal values. They cap theoretical outgoing edges at 4,000,000 across 250,000 neurons.
+- Delayed events are stored in SQLite with a time index. Pending queue capacity is 100,000; one enqueue call is limited to 512 events; one timestamp group is limited to 512 events.
+- Timestamp commit validates that the complete persisted group is consumed, then atomically deletes consumed events, writes changed neuron states, inserts generated events and advances the model clock.
+
+Not yet implemented: the 250k scheduler/compute loop, hot-set LRU integration for this new database, feature-state persistence, population/specialization layout, learning/plasticity integration, CPU/GPU backend routing, settings UI selection and device-level performance measurements. The existing 1/2/4/8 MiB RAM preference currently governs the legacy network cache only; it must not be described as controlling the new 250k profile until the runtime integration is complete.
 
 ## Required design before enabling 250,000
 
