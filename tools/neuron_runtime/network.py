@@ -21,6 +21,7 @@ from .neuron_features import (
     NeuronFeatureError, NeuronFeatureInput, NeuronFeatureState,
     SynapticMemoryState, NeuronRole, effective_excitatory_gain,
     effective_synaptic_memory_gain, update_neuron_features, update_synaptic_memory,
+    update_pattern_memory,
 )
 
 _U64_MAX = (1 << 64) - 1
@@ -362,8 +363,23 @@ class NetworkRuntime:
                         excitatory_events = [event for event in events if not event.inhibitory]
                         inhibitory_events = [event for event in events if event.inhibitory]
                         prior_feature = self._feature_states.get(node)
-                        feature_state = prior_feature or (NeuronFeatureState() if inhibitory_events else None)
+                        role = self._population_registry.role_for(node)
+                        feature_state = prior_feature or (
+                            NeuronFeatureState()
+                            if inhibitory_events or role in (NeuronRole.MEMORY, NeuronRole.PATTERN)
+                            else None
+                        )
                         prior_traces = self._synaptic_memories.get(node, {})
+                        active_synapses = sorted({event.target_synapse_id for event in excitatory_events})
+                        pattern_signature = 0
+                        if role == NeuronRole.PATTERN and len(active_synapses) >= 2:
+                            signature_bytes = hashlib.sha256("\\0".join(active_synapses).encode("utf-8")).digest()[:8]
+                            pattern_signature = int.from_bytes(signature_bytes, "big") or 1
+                        pattern_match_gain = 1.0
+                        if (role == NeuronRole.PATTERN and feature_state is not None
+                                and pattern_signature != 0
+                                and pattern_signature == feature_state.pattern_signature):
+                            pattern_match_gain += 0.20 * feature_state.pattern_trace
                         inhibitory_drive = 1.0
                         for event in inhibitory_events:
                             inhibitory_drive *= 1.0 - event.strength
@@ -378,7 +394,12 @@ class NetworkRuntime:
                             memory_gain = effective_synaptic_memory_gain(
                                 prior_traces.get(event.target_synapse_id, SynapticMemoryState())
                             )
-                            remembered_strength = min(1.0, event.strength * memory_gain)
+                            if role == NeuronRole.MEMORY:
+                                other_traces = [trace.coactivation_trace for synapse_id, trace in prior_traces.items()
+                                                if synapse_id != event.target_synapse_id]
+                                if other_traces:
+                                    memory_gain = min(1.60, memory_gain * (1.0 + 0.15 * (sum(other_traces) / len(other_traces))))
+                            remembered_strength = min(1.0, event.strength * memory_gain * pattern_match_gain)
                             if feature_state is None:
                                 effective_strength = remembered_strength
                             else:
@@ -416,15 +437,20 @@ class NetworkRuntime:
                                     inhibitory_drive=inhibitory_drive,
                                 ),
                             )
+                            if role == NeuronRole.PATTERN:
+                                updated_features = update_pattern_memory(updated_features, pattern_signature)
                             feature_candidates[node] = updated_features
                             traces = dict(prior_traces)
                             by_synapse: dict[str, list[float]] = {}
                             for event in excitatory_events:
                                 by_synapse.setdefault(event.target_synapse_id, []).append(event.strength)
                             for synapse_id, strengths in by_synapse.items():
+                                coactivation = max(strengths)
+                                if role == NeuronRole.PATTERN and pattern_signature:
+                                    coactivation = min(1.0, coactivation * (1.0 + 0.25 * updated_features.pattern_trace))
                                 traces[synapse_id] = update_synaptic_memory(
                                     traces.get(synapse_id, SynapticMemoryState()),
-                                    coactivation=max(strengths),
+                                    coactivation=coactivation,
                                     prediction_success=1.0 - updated_features.prediction_error,
                                     reward=0.0,
                                 )
