@@ -18,17 +18,31 @@ The benchmark performs warm-ups separately, collects multiple samples, uses medi
 
 Speedup ratio is CPU median latency divided by the selected mode median latency. Percentage faster/slower is `(speedup ratio - 1) * 100`. For example, 1.25x is 25% faster; 0.80x is 20% slower.
 
+## Android CPU adapter
+
+`app/src/main/java/org/jarvis/ans100/alpha/data/AndroidCpuComputeBenchmark.kt` adds a bounded CPU-only benchmark over the real isolated Android `ANS100StandaloneBenchmarkRuntime`. It resets the isolated lexical benchmark database before each warm-up and measured sample, runs the same input without supervised labels, and checks a deterministic result signature across samples. It reports the median of the runtime's inference-duration measurements, processed neural events per second, device model, and Android API level. Database reset/topology initialization are excluded from inference timing; the timed runtime duration includes lexical encoding, the SQLite-backed neural event loop, readout, and hypothesis update.
+
+The default is one warm-up and five measured runs. Inputs are limited to 2,048 characters, warm-ups to three, and measured runs to 3–9. This is a bounded diagnostic benchmark, not a long held-out evaluation. The CPU baseline is always 1.0x / 0% relative to itself.
+
 ## GPU and hybrid status
 
-No GPU kernel, Android GPU adapter, or hybrid partitioner is implemented by this increment. The Python reference network is CPU-executed. GPU-only and CPU+GPU must remain unavailable in the UI until actual device adapters execute the same workload and pass result-equivalence checks. GPU timing must include synchronization and, for hybrid mode, relevant data-transfer and partition overhead.
+No GPU kernel, Android GPU adapter, or hybrid partitioner is implemented. GPU-only and CPU+GPU therefore remain unavailable; the adapter explicitly reports this rather than silently substituting CPU.
+
+Android supports GPU compute through Vulkan (NDK) and OpenGL ES 3.1 compute. Vulkan requires native initialization, selection of a physical device and compute queue, shader compilation, dispatch, and completion synchronization. GLES 3.1 compute is accessible through Android SDK bindings. The project should choose one real compute path after runtime device capability checks, not infer compute support from the Android version alone.
+
+The existing Android ANS runtime is SQLite-backed and commits each timestamp atomically. A practical first acceleration boundary is the deterministic per-neuron candidate calculation for one timestamp: CPU retains queue grouping, synapse lookup/event generation, SQLite transaction and commit; a GPU kernel may calculate candidate neuron state/spike decisions for the same grouped inputs. The GPU result must be returned and validated before the existing atomic commit. This makes CPU+GPU a genuine split. A GPU-only neural-arithmetic mode would require the entire neuron-state update kernel to execute on GPU, while CPU still performs host orchestration and persistence; it must never be labelled GPU-only if only a small unrelated calculation is offloaded.
+
+For hybrid mode, partitioning overhead, input/output transfer, synchronization, and queue wait time must be included. A GPU path is enabled only after its output matches CPU results on deterministic parity fixtures, including simultaneous same-timestamp inputs, refractory boundaries, threshold crossings, and generated spikes.
 
 ## Android integration gates
 
-1. Implement a CPU adapter over Android ANS runtime and verify deterministic outputs.
-2. Implement a real GPU adapter only with supported Android APIs/kernels and explicit completion synchronization.
-3. Implement a hybrid adapter with documented partitioning and transfer costs.
-4. Record device model, runtime/backend, precision, thermal/battery/RAM context, and sample distributions.
-5. Expose the three modes and benchmark screen only after adapters pass correctness checks.
-6. Start with short bounded tests; do not run long held-out experiments as part of a benchmark.
+1. Run the Android CPU adapter on-device and verify repeatable signatures and bounded resource use.
+2. Extract a pure per-neuron candidate calculation from the Android timestamp loop without changing its transaction boundary.
+3. Add deterministic CPU parity fixtures for the extracted calculation.
+4. Implement and synchronize a Vulkan or GLES 3.1 compute adapter; do not enable it based only on a feature flag.
+5. Add hybrid partitioning with transfer-inclusive timing and CPU/GPU result equivalence.
+6. Record device model, runtime/backend, precision, thermal/battery/RAM context, and sample distributions.
+7. Expose the three modes in Android UI only after the corresponding adapters pass correctness checks.
+8. Keep device runs short and bounded; do not run long held-out experiments as part of a compute benchmark.
 
 No Android device benchmark or GPU acceleration claim has been made.
