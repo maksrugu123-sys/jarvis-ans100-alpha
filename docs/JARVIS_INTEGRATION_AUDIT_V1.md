@@ -19,6 +19,8 @@
 | Network restore | INTEGRATED at source level | Sidecars are restored from the same pinned JPVR snapshot and validated with the network checkpoint |
 
 ## 2. Existing but not yet connected to a full execution role
+| Attention batch policy | IMPLEMENTED UTILITY, NOT INTEGRATED | Deterministic ranking by salience/uncertainty/prediction error with wait-cycle aging is available in `attention_scheduler.py`; NetworkRuntime does not yet call it and no CPU/event budget is allocated. |
+
 
 | Component | Current status | Missing connection |
 |---|---|---|
@@ -49,7 +51,7 @@
 1. Run the focused network, JPVR store and coordinator tests after explicit approval; fix actual failures before expanding.
 2. Add focused tests for sidecar rollback, persistence and reward updates.
 3. Add a separately validated per-synapse learning/credit-assignment rule for synaptic memory; retain the canonical synapse weight as the source of truth.
-4. Implement true attention-aware compute-budget allocation with starvation protection and explicit deferred-work semantics; current attention modulation changes signal strength only. Then expand bounded transition memory for PREDICTOR; add a dedicated inhibitory population model only if experiments justify it.
+4. Attention budget policy foundation: `attention_scheduler.py` now ranks candidate neuron batches using salience, uncertainty and prediction error, with wait-cycle aging and explicit deferred IDs. It is NOT wired into `NetworkRuntime`; real compute-budget allocation remains unimplemented until resumable per-neuron timestamp transactions and atomic JPVR persistence of the active timestamp/deferred cursor are added. Then expand bounded transition memory for PREDICTOR; add a dedicated inhibitory population model only if experiments justify it.
 5. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
 6. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
 7. Integrate storage-backed bounded residency before raising logical neuron limits.
