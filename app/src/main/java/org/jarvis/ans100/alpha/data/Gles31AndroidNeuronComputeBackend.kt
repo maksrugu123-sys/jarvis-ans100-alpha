@@ -28,7 +28,6 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
 
     override val backendName: String = "gles31-compute-fp32"
 
-    private val appContext = context.applicationContext
     private var ownerThreadId: Long? = null
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
@@ -313,19 +312,23 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
 
     @Synchronized
     override fun close() {
+        if (ownerThreadId != null && ownerThreadId != Thread.currentThread().id) {
+            throw IllegalStateException("GLES backend must be closed on its initializing thread")
+        }
         if (closed.compareAndSet(false, true)) releaseGl()
     }
 
     private fun releaseGl() {
         if (display != EGL14.EGL_NO_DISPLAY) {
             if (eglContext != EGL14.EGL_NO_CONTEXT && surface != EGL14.EGL_NO_SURFACE) {
+                EGL14.eglMakeCurrent(display, surface, surface, eglContext)
+                if (program != 0) GLES31.glDeleteProgram(program)
+                val ids = intArrayOf(inputBuffer, outputBuffer)
+                if (inputBuffer != 0 || outputBuffer != 0) GLES31.glDeleteBuffers(2, ids, 0)
                 EGL14.eglMakeCurrent(
                     display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT,
                 )
             }
-            if (program != 0) GLES31.glDeleteProgram(program)
-            val ids = intArrayOf(inputBuffer, outputBuffer)
-            if (inputBuffer != 0 || outputBuffer != 0) GLES31.glDeleteBuffers(2, ids, 0)
             if (surface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, surface)
             if (eglContext != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(display, eglContext)
             EGL14.eglTerminate(display)
