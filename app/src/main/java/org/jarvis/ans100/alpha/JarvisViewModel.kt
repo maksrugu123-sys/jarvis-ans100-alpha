@@ -295,7 +295,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val ans100BenchmarkRuntime by ans100BenchmarkRuntimeDelegate
     /** Separate SQLite namespace; never shares or migrates the legacy dialogue graph. */
     private val hybridNeuronNetworkDelegate = lazy {
-        AndroidHybridTopologyV2.open(application.applicationContext)
+        val context = application.applicationContext
+        val computeMode = org.jarvis.ans100.alpha.data.AndroidNeuronComputeModePreferences(context).load()
+        val computeBackend = org.jarvis.ans100.alpha.data.AndroidNeuronComputeBackendFactory.create(
+            context,
+            computeMode,
+        )
+        AndroidHybridTopologyV2.open(context, computeBackend = computeBackend)
     }
     private val hybridNeuronNetwork by hybridNeuronNetworkDelegate
     @Volatile private var latestHybridFeedback: Pair<String, String>? = null
