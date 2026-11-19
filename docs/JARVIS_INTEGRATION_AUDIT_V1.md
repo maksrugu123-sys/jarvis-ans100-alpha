@@ -26,7 +26,7 @@
 | `SynapticMemoryState.coactivation_trace` | INTEGRATED, bounded activation | Prior coactivation applies a small capped gain to later input on the same synapse; canonical weight is unchanged |
 | `SynapticMemoryState.predictive_trace` | INTEGRATED, bounded activation | Prior prediction-success trace contributes to the same capped later-input gain; this is not a sequence model |
 | `SynapticMemoryState.reward_trace` | PARTIALLY_INTEGRATED | Positive reward trace contributes to later activation gain, but does not yet drive a separate credit-assignment or learning-rate rule |
-| `NeuronRole` / `NeuronPopulationRegistry` | PARTIALLY INTEGRATED | Immutable registry groups neurons, validates explicit excitatory/inhibitory source roles, requires contradiction-role inhibitory output, and routes attention-role salience. Memory, pattern and predictor roles remain typed groups pending dedicated operators. |
+| `NeuronRole` / `NeuronPopulationRegistry` | INTEGRATED, topology-level | Immutable registry is persisted in scheduler V4 and restored atomically; validates excitatory/inhibitory source roles, requires contradiction-role inhibitory output, and routes attention-role salience. Memory, pattern and predictor roles remain typed groups pending dedicated operators. |
 | `KnowledgeStatus` and `resolve_evidence()` | IMPLEMENTED UTILITY | Four-valued evidence resolution exists, but no evidence store or Reasoning Engine consumes it |
 | `context_match` | PARTIALLY_INTEGRATED | Current input is mean event attention, not a semantic/context embedding or persistent context model |
 | `inhibition` | INTEGRATED, bounded event drive | Explicit inhibitory connections produce separate delayed events, combine bounded same-timestamp drive, gate concurrent excitation, and update persisted feature inhibition; no biological interneuron population is claimed |
@@ -46,7 +46,7 @@
 1. Run the focused network, JPVR store and coordinator tests after explicit approval; fix actual failures before expanding.
 2. Add focused tests for sidecar rollback, persistence and reward updates.
 3. Add a separately validated per-synapse learning/credit-assignment rule for synaptic memory; retain the canonical synapse weight as the source of truth.
-4. Add population roles and a small registry only when role-specific execution behavior exists, including a dedicated inhibitory population if justified by experiments.
+4. Implement bounded MEMORY and PATTERN execution operators on top of the now-persisted population registry; add a dedicated inhibitory population model only if experiments justify it.
 5. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
 6. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
 7. Integrate storage-backed bounded residency before raising logical neuron limits.
