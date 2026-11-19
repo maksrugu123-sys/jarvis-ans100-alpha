@@ -3302,6 +3302,11 @@ private fun SettingsPanel(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Text(
+                            "Короткий тест трёх размеров пакета (32 / 128 / 256). Он измеряет только вычисление LIF-DT, а не скорость полного мышления ANS. Для более честного результата дай телефону остыть и закрой тяжёлые приложения.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Button(
                             onClick = { benchmarkViewModel.runNeuronComputeBenchmark() },
                             enabled = !benchmarkViewModel.neuronComputeBenchmarkBusyState.value,
