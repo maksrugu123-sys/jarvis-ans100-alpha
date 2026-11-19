@@ -100,6 +100,6 @@ Next engineering gates:
 - `INHIBITORY` sources may emit only inhibitory connections.
 - `CONTRADICTION` sources must have at least one inhibitory output route.
 - `ATTENTION` sources propagate at least their connection strength as event attention salience.
-- `MEMORY` and `PATTERN` now have bounded Python reference operators; `PREDICTOR` remains typed membership only pending a sequence-prediction operator.
+- `MEMORY`, `PATTERN` and `PREDICTOR` now have bounded Python reference operators. PREDICTOR is a one-step persistence baseline, not a general sequence learner.
 
 Runtime checkpoint export carries role assignments. JPVR scheduler snapshot V4 persists every neuron role deterministically and restores/validates the registry against the restored topology. V2/V3 snapshots remain readable and default all roles to `COORDINATOR`. Five registry tests and three JPVR population-persistence tests were authored and NOT RUN. No Android parity is claimed.
