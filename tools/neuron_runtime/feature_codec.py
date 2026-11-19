@@ -16,7 +16,7 @@ from .neuron_features import (
 )
 
 _FORMAT = "JARVIS_NEURON_FEATURE_SIDECAR"
-_VERSION = 1
+_VERSION = 2
 
 
 class FeatureCodecError(ValueError):
@@ -104,7 +104,8 @@ def decode_feature_sidecar(
         "format", "version", "neuron_id", "neuron_features", "synaptic_memory"
     }:
         raise FeatureCodecError("sidecar top-level fields mismatch")
-    if doc["format"] != _FORMAT or isinstance(doc["version"], bool) or doc["version"] != _VERSION:
+    version = doc["version"]
+    if doc["format"] != _FORMAT or isinstance(version, bool) or version not in (1, _VERSION):
         raise FeatureCodecError("unsupported feature sidecar format/version")
     neuron_id = doc["neuron_id"]
     if (not isinstance(neuron_id, str) or not neuron_id.strip() or "\x00" in neuron_id
@@ -114,7 +115,9 @@ def decode_feature_sidecar(
         raise FeatureCodecError("sidecar neuron_id does not match requested neuron")
     raw_state = doc["neuron_features"]
     expected_state = set(NeuronFeatureState.__dataclass_fields__)
-    if not isinstance(raw_state, dict) or set(raw_state) != expected_state:
+    legacy_state = expected_state - {"pattern_signature", "pattern_trace", "pattern_observations"}
+    accepted_state = legacy_state if version == 1 else expected_state
+    if not isinstance(raw_state, dict) or set(raw_state) != accepted_state:
         raise FeatureCodecError("neuron feature fields mismatch")
     try:
         state = NeuronFeatureState(**raw_state)
