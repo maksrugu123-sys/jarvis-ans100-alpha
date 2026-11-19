@@ -26,7 +26,7 @@
 | `SynapticMemoryState.coactivation_trace` | INTEGRATED, bounded activation | Prior coactivation applies a small capped gain to later input on the same synapse; canonical weight is unchanged |
 | `SynapticMemoryState.predictive_trace` | INTEGRATED, bounded activation | Prior prediction-success trace contributes to the same capped later-input gain; this is not a sequence model |
 | `SynapticMemoryState.reward_trace` | PARTIALLY_INTEGRATED | Positive reward trace contributes to later activation gain, but does not yet drive a separate credit-assignment or learning-rate rule |
-| `NeuronRole` | DESIGNED / DECLARATIVE | Role enum exists, but no population registry or role-specific routing/behavior is connected |
+| `NeuronRole` / `NeuronPopulationRegistry` | PARTIALLY INTEGRATED | Immutable registry groups neurons, validates explicit excitatory/inhibitory source roles, requires contradiction-role inhibitory output, and routes attention-role salience. Memory, pattern and predictor roles remain typed groups pending dedicated operators. |
 | `KnowledgeStatus` and `resolve_evidence()` | IMPLEMENTED UTILITY | Four-valued evidence resolution exists, but no evidence store or Reasoning Engine consumes it |
 | `context_match` | PARTIALLY_INTEGRATED | Current input is mean event attention, not a semantic/context embedding or persistent context model |
 | `inhibition` | INTEGRATED, bounded event drive | Explicit inhibitory connections produce separate delayed events, combine bounded same-timestamp drive, gate concurrent excitation, and update persisted feature inhibition; no biological interneuron population is claimed |
@@ -62,3 +62,8 @@
 - Authored tests are not executed tests.
 
 Update this audit whenever a mechanism moves from declarative utility to real execution use.
+
+
+## Population registry increment
+
+`NeuronPopulationRegistry` is an immutable topology-level mapping. Unassigned neurons default to `COORDINATOR`. `EXCITATORY` and `INHIBITORY` source roles constrain emitted route types. `CONTRADICTION` requires an inhibitory output route. `ATTENTION` sources propagate their connection strength as minimum event-attention salience. `MEMORY`, `PATTERN`, and `PREDICTOR` currently provide typed grouping only; dedicated operators are not yet implemented. Runtime checkpoint export carries roles, but JPVR scheduler snapshots do not yet persist this registry. Five focused tests were authored and NOT RUN.
