@@ -440,3 +440,44 @@ class NetworkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class PopulationRegistryTests(unittest.TestCase):
+    def test_registry_groups_specialized_roles(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        from tools.neuron_runtime.population import NeuronPopulationRegistry
+        registry = NeuronPopulationRegistry(("m", "p", "a"), {"m": "memory", "p": "pattern", "a": "attention"})
+        self.assertEqual(registry.members(NeuronRole.MEMORY), ("m",))
+        self.assertEqual(registry.members("pattern"), ("p",))
+        self.assertEqual(registry.role_for("a"), NeuronRole.ATTENTION)
+
+    def test_excitatory_and_inhibitory_roles_constrain_routes(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        neurons = {"s": NeuronRuntime({"ext": 1.0}), "t": NeuronRuntime({"in": 1.0})}
+        with self.assertRaises(NetworkRuntimeError):
+            NetworkRuntime(neurons, [NetworkConnection("bad", "s", "t", None, 1, signal_type="inhibitory")], population_roles={"s": NeuronRole.EXCITATORY})
+        with self.assertRaises(NetworkRuntimeError):
+            NetworkRuntime(neurons, [NetworkConnection("bad", "s", "t", "in", 1)], population_roles={"s": NeuronRole.INHIBITORY})
+
+    def test_contradiction_role_requires_inhibitory_route(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        neurons = {"c": NeuronRuntime({"ext": 1.0}), "t": NeuronRuntime({"in": 1.0})}
+        with self.assertRaises(NetworkRuntimeError):
+            NetworkRuntime(neurons, population_roles={"c": NeuronRole.CONTRADICTION})
+        network = NetworkRuntime(neurons, [NetworkConnection("s", "c", "t", None, 1, signal_type="inhibitory")], population_roles={"c": NeuronRole.CONTRADICTION})
+        self.assertEqual(network.population_registry.role_for("c"), NeuronRole.CONTRADICTION)
+
+    def test_attention_role_propagates_salience(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        neurons = {"a": NeuronRuntime({"ext": 1.0}), "t": NeuronRuntime({"in": 1.0})}
+        network = NetworkRuntime(neurons, [NetworkConnection("focus", "a", "t", "in", 1, strength=0.4, attention=0.1)], population_roles={"a": NeuronRole.ATTENTION})
+        network.schedule_input(0, "a", "ext", "start", 1.0)
+        network.run(max_timestamps=1)
+        pending = network.export_checkpoint_state()["pending_events"]
+        self.assertEqual(pending[0].attention, 0.4)
+
+    def test_runtime_checkpoint_carries_population_roles(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        network = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})}, population_roles={"n": NeuronRole.MEMORY})
+        state = network.export_checkpoint_state()
+        self.assertEqual(state["population_roles"]["n"], NeuronRole.MEMORY)
