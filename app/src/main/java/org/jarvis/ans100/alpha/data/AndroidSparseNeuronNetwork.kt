@@ -901,7 +901,11 @@ class AndroidSparseNeuronNetwork(
     override fun close() {
         hot.clear()
         hotFeatures.clear()
-        store.close()
+        try {
+            (computeBackend as? Closeable)?.close()
+        } finally {
+            store.close()
+        }
     }
 
     /** Read the persisted sparse cognitive state for diagnostics and focused tests. */
