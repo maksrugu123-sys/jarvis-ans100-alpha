@@ -24,8 +24,8 @@ The branch now contains:
 - Neuron state is updated directly in SQLite. Neuron pages are read with bounded keyset pagination.
 - Sparse connections are stored as rows, indexed by source and target, and read in bounded pages.
 - Per-neuron degree limits are 16 outgoing and 32 incoming connections. These are conservative engineering bounds for the first storage profile, not measured optimal values. They cap theoretical outgoing edges at 4,000,000 across 250,000 neurons.
-- Delayed events are stored in SQLite with a time index. Pending queue capacity is 100,000; one enqueue call is limited to 512 events; one timestamp group is limited to 512 events.
-- Timestamp commit validates that the complete persisted group is consumed, then atomically deletes consumed events, writes changed neuron states, inserts generated events and advances the model clock.
+- Delayed events are stored in SQLite with a time index. Pending queue capacity is 100,000; one enqueue call is limited to 512 events; one timestamp group is limited to 512 events. Generated fan-out is bounded at 8,192 events per timestamp (512 processed events × 16 outgoing edges per neuron).
+- Timestamp commit validates that the complete persisted group is consumed, then atomically deletes consumed events, writes changed neuron states, inserts generated events and advances the model clock. Generated events must be later than the committed timestamp; a commit cannot recycle consumed event IDs.
 
 Not yet implemented: the 250k scheduler/compute loop, hot-set LRU integration for this new database, feature-state persistence, population/specialization layout, learning/plasticity integration, CPU/GPU backend routing, settings UI selection and device-level performance measurements. The existing 1/2/4/8 MiB RAM preference currently governs the legacy network cache only; it must not be described as controlling the new 250k profile until the runtime integration is complete.
 
