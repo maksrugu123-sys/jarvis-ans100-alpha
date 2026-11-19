@@ -34,7 +34,7 @@ The event loop still groups all events at one timestamp, sums each target neuron
 
 This pure function is the CPU reference contract for a future GPU implementation. GPU parity must match potential decay, adaptation decay, input clamping, threshold comparison, refractory gating, spike sequence increment, reset potential, and overflow rejection. Simultaneous inputs remain aggregated by the CPU before the kernel call; a future accelerator must receive the same aggregate and cannot process simultaneous events sequentially.
 
-Eight JVM unit tests cover subthreshold decay, threshold crossing, refractory gating, invalid time/input, spike-counter overflow, batch ordering/reference equivalence, input-state isolation on failure, and rejection of invalid backend spike transitions. They are authored but have not been run. No GPU kernel exists yet.
+Eight JVM unit tests cover subthreshold decay, threshold crossing, refractory gating, invalid time/input, spike-counter overflow, batch ordering/reference equivalence, input-state isolation on failure, and rejection of invalid backend spike transitions. They are authored but have not been run.
 
 ## Experimental Android GPU backend
 
@@ -46,20 +46,28 @@ The GPU uses FP32 while the reference kernel uses Kotlin Double. Before acceptin
 
 `AndroidNeuronComputeModes.kt` defines explicit `CPU_ONLY`, `GPU_ONLY` and `CPU_GPU` choices. GPU-only runs on a dedicated EGL worker thread. CPU+GPU partitions timestamp batches with at least two candidates into non-empty halves and executes the GPU and CPU partitions concurrently, then restores the original candidate order. A one-candidate batch is deliberately processed by CPU because GPU launch/readback overhead would dominate; this is counted in `AndroidHybridComputeStats.cpuOnlySmallBatches`, separately from actual GPU batches/candidates. GPU-only never falls back to CPU. The factory does not silently substitute another mode.
 
+## Android CPU / GPU / hybrid kernel benchmark
+
+`AndroidNeuronKernelComputeBenchmark.kt` adds a bounded in-app comparison launched from Settings → Speed. It runs deterministic candidate batches of 32, 128 and 256 neurons by default, with one untimed warm-up and three measured samples per backend. The sample order rotates between CPU, GPU and CPU + GPU to reduce systematic ordering/thermal bias. It reports median latency, candidates per second, speedup ratio and percentage faster/slower against the CPU median.
+
+Every backend receives the same immutable input states, timestamps and already-aggregated input values. Each output is checked against the CPU reference: spike decisions and integer metadata must match exactly; potential and adaptation must remain within 0.00005. A backend that fails initialization, qualification, execution or parity is marked unavailable with its reason; its timing is not published. GPU timings include input upload, shader dispatch, synchronization and readback. Hybrid timings include worker scheduling and both concurrent partitions. The hybrid report also shows measured CPU/GPU candidate counts and GPU batch count; warm-up counters are reset before measured samples.
+
+This benchmark isolates the LIF-DT batch kernel and backend overhead. It does **not** measure full ANS reasoning, SQLite persistence, event propagation, language-model inference, battery drain, or sustained thermal throttling. A faster kernel result must not be described as equivalent acceleration of the complete JARVIS application. Results are generated only on the user's device; no synthetic performance numbers are inserted.
+
 ## Current integration boundary and limitations
 
 The backend is injectable through the existing `AndroidSparseNeuronNetwork(computeBackend=...)` constructor. The Settings → Speed panel now exposes CPU, GPU and CPU + GPU choices; `AndroidNeuronComputeModePreferences` persists the selection independently of the language-model GPU toggle. The normal hybrid ANS runtime reads the selected mode when its lazy network is initialized, and the network closes its owned backend with the SQLite store. If the network was already initialized when the user changes the selection, the app must be restarted for the new mode to take effect. `AndroidNeuronComputeModesTest.kt` adds JVM tests for actual partition assignment, output-order restoration, observable CPU scheduling for one-candidate hybrid batches, and propagation of GPU failures without CPU fallback. `Gles31AndroidNeuronComputeBackendInstrumentedTest.kt` adds an on-device shader/readback parity test that skips only when the device does not advertise GLES 3.1. Both test suites are authored but have not been run. The existing language-model GPU toggle is separate and does not control ANS neuron compute.
 
-No GPU kernel is enabled by default. CPU remains the default reference backend. No GPU/hybrid benchmark, Android device execution, GLES shader compilation on a real device, battery/thermal measurement, or APK build has been run. The experimental GPU backend must not yet be treated as production-ready or as proof that this device supports compute shaders.
+No GPU kernel is enabled by default. CPU remains the default reference backend. The in-app kernel benchmark and report UI are implemented but have not yet been run on a device. No measured GPU/hybrid speedup, Android device execution, GLES shader compilation on the target phone, battery/thermal measurement, or APK build has been completed. The experimental GPU backend must not yet be treated as production-ready or as proof that this device supports compute shaders.
 
 ## Android integration gates
 
-1. Run the Android CPU adapter on-device and verify repeatable signatures and bounded resource use.
-2. Run JVM tests for the pure kernel and Android instrumentation tests for EGL initialization, shader compilation, buffer mapping, and candidate parity.
-3. Verify qualification and fail-closed behavior on the target device; record exact GLES version and GPU renderer.
-4. Integrate persisted mode selection into the ANS runtime construction path and expose it separately from the language-model GPU setting.
-5. Measure identical workloads in CPU-only, GPU-only and true concurrent CPU+GPU modes, including upload, dispatch, synchronization, readback and partition overhead.
-6. Check longer-run state drift, threshold-edge cases, spike sequence/refractory boundaries, and timestamp batches of varying sizes.
+1. Run JVM tests for the pure kernel and hybrid partition contract.
+2. Run the Android instrumentation test for EGL initialization, shader compilation, buffer mapping and CPU parity.
+3. Run the in-app bounded kernel benchmark on the target phone and inspect which backends passed qualification.
+4. Repeat at several batch sizes and compare median latency, throughput and measured CPU/GPU partition counts.
+5. Check longer-run state drift, threshold-edge cases, spike sequence/refractory boundaries, and timestamp batches of varying sizes.
+6. Separately measure full-network performance, SQLite costs, battery use and thermal throttling before making application-level speed claims.
 7. Record device model, runtime/backend, precision, thermal/battery/RAM context, and sample distributions.
 8. Keep device runs short and bounded; do not run long held-out experiments as part of a compute benchmark.
 
