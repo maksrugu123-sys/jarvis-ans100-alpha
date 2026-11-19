@@ -53,7 +53,7 @@ Legacy dialogue and hybrid V2 must continue using their existing 10,000-neuron I
 
 ### 3. Bound sparse connectivity explicitly
 
-The current global limit of 100,000 connections is too low to describe a 250,000-neuron network with useful sparse connectivity. However, increasing it to an arbitrary multi-million number is unsafe: the current outgoing() method materializes all outgoing connections for one neuron, and each spike can generate events.
+The legacy runtime limit of 100,000 connections is too low to describe a 250,000-neuron network with useful sparse connectivity. The new profile therefore has a separate per-neuron degree contract and disk-backed edge table. Do not increase the legacy global limit: its outgoing() method materializes all outgoing connections for one neuron, and each spike can generate events. The new store caps one source at 16 outgoing edges and one target at 32 incoming edges; these first-pass limits still need device measurements.
 
 Before choosing a global edge limit:
 - define and enforce a maximum outgoing degree per neuron;
@@ -81,13 +81,19 @@ The event queue must apply backpressure before writes exceed its configured cap.
 
 ## Safe implementation sequence
 
-1. Add storage indexes and migration coverage needed by sparse lookups. (V13 currently adds the target index.)
-2. Introduce topology-specific capacity descriptors without changing existing 10k behavior.
-3. Add a separate 250k database initializer that writes neuron rows in bounded transactions/batches and never creates dense adjacency structures.
-4. Add explicit per-neuron degree limits and connection admission/backpressure.
-5. Refactor outgoing-edge retrieval and event generation to enforce the per-neuron and per-run memory bounds.
-6. Add tests for 250,000 sparse neuron IDs, maximum-degree rejection, restart persistence, bounded queue behavior, and legacy topology compatibility.
-7. Measure on the target device before enabling 250k by default or raising the user-selectable RAM budget.
+Completed in the current branch:
+1. Add the target-side SQLite index to legacy schema V13 without changing legacy topology limits.
+2. Add an independent 250k profile descriptor and database identity.
+3. Add bounded-batch neuron initialization, paged neuron/edge reads and SQLite-backed sparse edges.
+4. Enforce per-neuron incoming/outgoing degree limits.
+5. Add a bounded disk-backed event queue and atomic timestamp commit contract.
+
+Remaining before the new profile can run ANS:
+6. Add a JNVM LRU working set to the new store and connect it to the configurable RAM budget without loading all 250k states.
+7. Add a topology descriptor with explicit population/role ID ranges and specialization rules.
+8. Integrate the LIF-DT scheduler, CPU/GPU compute backend, feature-state persistence, learning and plasticity against the new store.
+9. Add Android database integration tests for interrupted initialization, restart persistence, degree rejection, event backpressure, full timestamp atomicity and legacy database isolation.
+10. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
 
 ## Verification rules
 
