@@ -21,6 +21,11 @@ object AndroidJnvM250kProfile {
     const val MAX_PAGE_SIZE = 512
     const val INITIALIZATION_BATCH_SIZE = 1_000
 
+    /** Disk-backed queue limits; each timestamp remains one atomic unit. */
+    const val MAX_PENDING_EVENTS = 100_000
+    const val MAX_EVENTS_PER_TIMESTAMP = 512
+    const val MAX_EVENTS_PER_ENQUEUE = 512
+
     fun requireNeuronId(neuronId: Int) {
         require(neuronId in 0 until NEURON_CAPACITY) {
             "neuron ID is outside the 250,000-neuron profile"
