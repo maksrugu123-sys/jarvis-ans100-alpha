@@ -62,6 +62,9 @@ class NeuronFeatureState:
     inhibition: float = 0.0
     context_match: float = 0.0
     observations: int = 0
+    pattern_signature: int = 0
+    pattern_trace: float = 0.0
+    pattern_observations: int = 0
 
     def validate(self) -> None:
         if (isinstance(self.sensitivity, bool)
@@ -70,8 +73,12 @@ class NeuronFeatureState:
                 or not 0.5 <= self.sensitivity <= 2.0):
             raise NeuronFeatureError("sensitivity must be a finite real number in [0.5, 2]")
         for name in ("memory_trace", "prediction_error", "confidence", "uncertainty",
-                     "plasticity", "inhibition", "context_match"):
+                     "plasticity", "inhibition", "context_match", "pattern_trace"):
             _unit(name, getattr(self, name))
+        for name in ("observations", "pattern_signature", "pattern_observations"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= (1 << 64) - 1:
+                raise NeuronFeatureError(f"{name} exceeds unsigned 64-bit range")
         if isinstance(self.observations, bool) or not isinstance(self.observations, int):
             raise NeuronFeatureError("observations must be a non-negative integer")
         if not 0 <= self.observations <= (1 << 64) - 1:
@@ -156,7 +163,48 @@ def update_neuron_features(
         uncertainty=uncertainty, plasticity=plasticity,
         inhibition=inhibition, context_match=observation.context_similarity,
         observations=state.observations + 1,
+        pattern_signature=state.pattern_signature,
+        pattern_trace=state.pattern_trace,
+        pattern_observations=state.pattern_observations,
     )
+
+
+def update_pattern_memory(
+    state: NeuronFeatureState, signature: int, *, decay: float = 0.90,
+    increment: float = 0.10,
+) -> NeuronFeatureState:
+    """Track recurrence of the latest exact coactivation signature in O(1) state.
+
+    A changed signature starts a new trace; a repeated signature reinforces it.
+    Empty (zero) signatures only decay the trace and do not erase the last key.
+    """
+    if not isinstance(state, NeuronFeatureState):
+        raise NeuronFeatureError("state must be NeuronFeatureState")
+    state.validate()
+    if isinstance(signature, bool) or not isinstance(signature, int) or not 0 <= signature <= (1 << 64) - 1:
+        raise NeuronFeatureError("pattern signature must be an unsigned 64-bit integer")
+    decay = _unit("pattern decay", decay)
+    increment = _unit("pattern increment", increment)
+    if signature == 0:
+        return NeuronFeatureState(
+            **{
+                **{name: getattr(state, name) for name in NeuronFeatureState.__dataclass_fields__},
+                "pattern_trace": _clamp(state.pattern_trace * decay),
+            }
+        )
+    if state.pattern_observations == (1 << 64) - 1:
+        raise NeuronFeatureError("pattern observation counter exhausted")
+    repeated = signature == state.pattern_signature
+    trace = _clamp(state.pattern_trace * decay + increment) if repeated else increment
+    return NeuronFeatureState(
+        **{
+            **{name: getattr(state, name) for name in NeuronFeatureState.__dataclass_fields__},
+            "pattern_signature": signature,
+            "pattern_trace": trace,
+            "pattern_observations": state.pattern_observations + 1,
+        }
+    )
+
 
 @dataclass(frozen=True, slots=True)
 class SynapticMemoryState:
