@@ -24,6 +24,9 @@ class AndroidNeuronComputeModesTest {
             assertEquals(listOf(1, 2, 3), gpu.receivedNeuronIds)
             assertEquals(listOf(1, 2, 3, 4, 5), results.map { it.state.neuronId })
             assertEquals(3, gpu.receivedCount)
+            assertEquals(1, backend.stats().gpuBatches)
+            assertEquals(3, backend.stats().gpuCandidates)
+            assertEquals(2, backend.stats().cpuCandidates)
         } finally {
             backend.close()
         }
