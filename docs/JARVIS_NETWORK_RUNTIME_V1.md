@@ -1,6 +1,6 @@
 # JARVIS Network Runtime V1 — bounded multi-neuron event loop
 
-**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 39 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
+**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 42 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
 
 ## Runtime execution
 
@@ -21,7 +21,7 @@ For a neuron with feature state:
 - Sensitivity and inhibition gate each incoming excitatory signal through `effective_excitatory_gain`; output is clamped to [0, 1].
 - Sensitivity adaptation uses negative feedback: activity below the configured target raises sensitivity, while activity above target lowers it.
 - The sidecar's meta-plasticity value scales STDP/R-STDP local learning rates through a bounded runtime parameter adapter. Oracle safety caps remain unchanged; without a sidecar the scale is exactly 1.0.
-- After a successful candidate neuron update, activity, the prior memory trace, and event attention update bounded confidence, uncertainty, prediction-error, memory, inhibition, and context fields.
+- Event attention contributes a bounded input gain of `1.0 + 0.25 * attention` (maximum +25%) before the final [0, 1] signal clamp. After a successful candidate neuron update, activity, the prior memory trace, and event attention update bounded confidence, uncertainty, prediction-error, memory, inhibition, and context fields.
 - Touched excitatory synapses receive bounded coactivation and predictive traces.
 - Reward operations update the optional reward trace without silently changing canonical STDP/R-STDP weights.
 - Explicit inhibitory connections create separate delayed inhibitory events. Same-timestamp inhibitory strengths combine as a bounded probabilistic union, gate simultaneous excitatory inputs before the neuron update, and update the target's persistent inhibition feature. Inhibitory events do not enter excitatory STDP or claim an excitatory target synapse.
@@ -73,7 +73,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 - rejection of boolean and non-finite sensitivity;
 - caller-state isolation and deterministic input ordering.
 
-The network suite (41 authored tests), feature codec suite (7 authored tests), JPVR network persistence suite (15 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
+The network suite (42 authored tests), feature codec suite (7 authored tests), JPVR network persistence suite (15 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
 
 Suggested focused verification when explicitly approved:
 
@@ -88,7 +88,7 @@ Next engineering gates:
 2. Add differential Python/Kotlin golden vectors for feature updates and input gating.
 3. Integrate sidecar state into Android's SQLite timestamp transaction without weakening atomicity.
 4. Connect bounded working-set paging to network execution only after the group-commit boundary is preserved.
-5. Develop prediction and uncertainty into actual hypothesis generation/competition, with independent evidence.
+5. Implement true attention-aware compute-budget scheduling with starvation protection. The current attention gain changes signal salience only; it does not yet prioritize execution or allocate CPU/event budgets. Then develop prediction and uncertainty into actual hypothesis generation/competition, with independent evidence.
 6. Increase logical capacity only through staged indexed storage and measured resource gates.
 
 
@@ -99,7 +99,7 @@ Next engineering gates:
 - `EXCITATORY` sources may emit only excitatory connections.
 - `INHIBITORY` sources may emit only inhibitory connections.
 - `CONTRADICTION` sources must have at least one inhibitory output route.
-- `ATTENTION` sources propagate at least their connection strength as event attention salience.
+- `ATTENTION` sources propagate at least their connection strength as event attention salience; event attention then applies a bounded +0–25% gain to incoming signals.
 - `MEMORY`, `PATTERN` and `PREDICTOR` now have bounded Python reference operators. PREDICTOR is a one-step persistence baseline, not a general sequence learner.
 
 Runtime checkpoint export carries role assignments. JPVR scheduler snapshot V4 persists every neuron role deterministically and restores/validates the registry against the restored topology. V2/V3 snapshots remain readable and default all roles to `COORDINATOR`. Five registry tests and three JPVR population-persistence tests were authored and NOT RUN. No Android parity is claimed.
