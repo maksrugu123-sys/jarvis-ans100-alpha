@@ -64,7 +64,7 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
         require(warmupRuns in MIN_WARMUP_RUNS..MAX_WARMUP_RUNS)
         require(measuredRuns in MIN_MEASURED_RUNS..MAX_MEASURED_RUNS)
 
-        val results = batchSizes.map(::benchmarkBatch)
+        val results = batchSizes.map { batchSize -> benchmarkBatch(batchSize, warmupRuns, measuredRuns) }
         return AndroidNeuronKernelBenchmarkReport(
             deviceModel = Build.MODEL ?: "unknown",
             androidApiLevel = Build.VERSION.SDK_INT,
@@ -74,7 +74,11 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
         )
     }
 
-    private fun benchmarkBatch(batchSize: Int): AndroidNeuronKernelBatchResult {
+    private fun benchmarkBatch(
+        batchSize: Int,
+        warmupRuns: Int,
+        measuredRuns: Int,
+    ): AndroidNeuronKernelBatchResult {
         val inputs = createInputs(batchSize)
         val cpuReference = CpuAndroidNeuronComputeBackend.processBatch(inputs)
         val cpuSamples = ArrayList<Long>()
