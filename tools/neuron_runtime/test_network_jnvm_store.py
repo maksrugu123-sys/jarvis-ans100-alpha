@@ -83,7 +83,10 @@ class NetworkJNVMStoreTests(unittest.TestCase):
             {"source": NeuronRuntime({"external": 1.0})},
             feature_states={"source": NeuronFeatureState(sensitivity=1.4, memory_trace=0.3,
                                                        pattern_signature=987654, pattern_trace=0.72,
-                                                       pattern_observations=9)},
+                                                       pattern_observations=9, predictor_expected_signature=12345,
+                                                       predictor_confidence=0.65,
+                                                       predictor_observations=12,
+                                                       predictor_hits=8)},
             population_roles={"source": NeuronRole.PATTERN},
             synaptic_memories={"source": {"external": SynapticMemoryState(
                 coactivation_trace=0.2, predictive_trace=0.4, reward_trace=0.1,
