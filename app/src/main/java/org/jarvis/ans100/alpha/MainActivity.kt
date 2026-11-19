@@ -145,6 +145,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var ansNeuronComputeMode by remember(neuronComputePreferences) {
         mutableStateOf(neuronComputePreferences.load())
     }
+    val neuronRamPreferences = remember(context) { org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences(context) }
+    var ansNeuronRamBudgetMb by remember(neuronRamPreferences) { mutableIntStateOf(neuronRamPreferences.loadMegabytes()) }
     var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
     var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
     var backgroundEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) }
@@ -685,6 +687,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                     ansNeuronComputeMode = mode
                                     neuronComputePreferences.save(mode)
                                 },
+                                ansNeuronRamBudgetMb = ansNeuronRamBudgetMb,
+                                onAnsNeuronRamBudgetChange = { mb -> neuronRamPreferences.saveMegabytes(mb); ansNeuronRamBudgetMb = mb },
                                 onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
                                 onDownloadModel = viewModel::downloadConversationModel,
                                 onCancelDownload = viewModel::cancelConversationModelDownload,
@@ -3085,6 +3089,8 @@ private fun SettingsPanel(
     onGpuChange: (Boolean) -> Unit,
     ansNeuronComputeMode: org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode,
     onAnsNeuronComputeModeChange: (org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode) -> Unit,
+    ansNeuronRamBudgetMb: Int,
+    onAnsNeuronRamBudgetChange: (Int) -> Unit,
     onSelectModel: () -> Unit,
     onDownloadModel: () -> Unit,
     onCancelDownload: () -> Unit,
@@ -3268,6 +3274,23 @@ private fun SettingsPanel(
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SectionHeading("Вычислитель нейронов ANS-100", "CPU · GPU · совместная работа")
+                        Text("Память рабочего набора нейронов", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Лимит управляемого кэша состояний ANS. Остальная память приложения, SQLite и графический драйвер учитываются отдельно; Android не резервирует выбранный объём.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences.ALLOWED_BUDGETS_MB.forEach { mb ->
+                                FilterChip(selected = ansNeuronRamBudgetMb == mb, onClick = { onAnsNeuronRamBudgetChange(mb) }, label = { Text("${mb} МБ") })
+                            }
+                        }
+                        val hotSetCapacity = org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(ansNeuronRamBudgetMb)
+                        Text(
+                            "Выбрано: ${ansNeuronRamBudgetMb} МБ · расчётная ёмкость кэша: ${hotSetCapacity} нейронов. Применяется при следующем создании сети.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             FilterChip(
                                 selected = ansNeuronComputeMode == org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.CPU_ONLY,
