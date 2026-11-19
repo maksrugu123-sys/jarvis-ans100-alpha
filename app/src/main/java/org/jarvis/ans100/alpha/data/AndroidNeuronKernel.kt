@@ -9,7 +9,7 @@ import kotlin.math.exp
  * This is the CPU reference implementation and the parity contract for future
  * GPU kernels. The caller remains responsible for atomic persistence.
  */
-internal object AndroidNeuronKernel {
+object AndroidNeuronKernel {
     data class Input(
         val state: AndroidNeuronState,
         val timestampNs: Long,
@@ -96,12 +96,12 @@ internal object AndroidNeuronKernel {
  * Batch boundary for CPU/GPU implementations. A backend receives the exact
  * timestamp-aggregated candidates and must return results in identical order.
  */
-internal interface AndroidNeuronComputeBackend {
+interface AndroidNeuronComputeBackend {
     val backendName: String
     fun processBatch(inputs: List<AndroidNeuronKernel.Input>): List<AndroidNeuronKernel.Result>
 }
 
-internal object CpuAndroidNeuronComputeBackend : AndroidNeuronComputeBackend {
+object CpuAndroidNeuronComputeBackend : AndroidNeuronComputeBackend {
     override val backendName: String = "cpu-reference"
 
     override fun processBatch(
