@@ -146,7 +146,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
         mutableStateOf(neuronComputePreferences.load())
     }
     val neuronRamPreferences = remember(context) { org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences(context) }
-    var ansNeuronRamBudgetMb by remember(neuronRamPreferences) { mutableStateOf(neuronRamPreferences.loadMegabytes()) }
+    val neuronRamProfile = remember(context) {
+        org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPolicy.inspect(context)
+    }
+    var ansNeuronRamBudgetMb by remember(neuronRamPreferences, neuronRamProfile.maximumBudgetMb) {
+        mutableStateOf(neuronRamPreferences.loadMegabytes(neuronRamProfile.maximumBudgetMb))
+    }
     var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
     var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
     var backgroundEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) }
@@ -688,7 +693,14 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                     neuronComputePreferences.save(mode)
                                 },
                                 ansNeuronRamBudgetMb = ansNeuronRamBudgetMb,
-                                onAnsNeuronRamBudgetChange = { mb -> neuronRamPreferences.saveMegabytes(mb); ansNeuronRamBudgetMb = mb },
+                                ansNeuronRamBudgetMaxMb = neuronRamProfile.maximumBudgetMb,
+                                ansNeuronRamDeviceSummary = neuronRamProfile.summary,
+                                onAnsNeuronRamBudgetChange = { mb ->
+                                    if (mb <= neuronRamProfile.maximumBudgetMb) {
+                                        neuronRamPreferences.saveMegabytes(mb)
+                                        ansNeuronRamBudgetMb = mb
+                                    }
+                                },
                                 onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
                                 onDownloadModel = viewModel::downloadConversationModel,
                                 onCancelDownload = viewModel::cancelConversationModelDownload,
@@ -3090,6 +3102,8 @@ private fun SettingsPanel(
     ansNeuronComputeMode: org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode,
     onAnsNeuronComputeModeChange: (org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode) -> Unit,
     ansNeuronRamBudgetMb: Int,
+    ansNeuronRamBudgetMaxMb: Int,
+    ansNeuronRamDeviceSummary: String,
     onAnsNeuronRamBudgetChange: (Int) -> Unit,
     onSelectModel: () -> Unit,
     onDownloadModel: () -> Unit,
@@ -3276,14 +3290,25 @@ private fun SettingsPanel(
                         SectionHeading("Вычислитель нейронов ANS-100", "CPU · GPU · совместная работа")
                         Text("Память рабочего набора нейронов", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Лимит управляемого кэша состояний ANS. Остальная память приложения, SQLite и графический драйвер учитываются отдельно; Android не резервирует выбранный объём.",
+                            "Максимум рассчитывается по физической RAM, доступной памяти и классу памяти Android-приложения. Используется консервативный лимит; это не резервирование RAM.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Text(
+                            ansNeuronRamDeviceSummary,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Автоматический максимум устройства: ${ansNeuronRamBudgetMaxMb} МБ",
+                            fontWeight = FontWeight.Medium,
+                        )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences.ALLOWED_BUDGETS_MB.forEach { mb ->
-                                FilterChip(selected = ansNeuronRamBudgetMb == mb, onClick = { onAnsNeuronRamBudgetChange(mb) }, label = { Text("${mb} МБ") })
-                            }
+                            org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences.ALLOWED_BUDGETS_MB
+                                .filter { it <= ansNeuronRamBudgetMaxMb }
+                                .forEach { mb ->
+                                    FilterChip(selected = ansNeuronRamBudgetMb == mb, onClick = { onAnsNeuronRamBudgetChange(mb) }, label = { Text("${mb} МБ") })
+                                }
                         }
                         val hotSetCapacity = org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences.hotSetCapacityFor(ansNeuronRamBudgetMb)
                         Text(
