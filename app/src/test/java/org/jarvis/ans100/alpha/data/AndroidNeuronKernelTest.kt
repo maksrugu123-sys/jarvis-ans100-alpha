@@ -113,4 +113,26 @@ class AndroidNeuronKernelTest {
         assertEquals(before, initial)
     }
 
+    @Test
+    fun backendCandidateValidationRejectsImpossibleSpikeTransition() {
+        val input = AndroidNeuronKernel.Input(
+            state = AndroidNeuronState(neuronId = 21),
+            timestampNs = 4_000_000L,
+            input = 1.2,
+        )
+        val invalid = AndroidNeuronKernel.Result(
+            state = AndroidNeuronState(
+                neuronId = 21,
+                potential = 0.4,
+                lastUpdateNs = 4_000_000L,
+                refractoryUntilNs = 6_000_000L,
+                spikeSequence = 1L,
+            ),
+            spiked = true,
+        )
+        assertFailsWith<AndroidNeuronNetworkException> {
+            AndroidNeuronKernel.validateCandidate(input, invalid)
+        }
+    }
+
 }
