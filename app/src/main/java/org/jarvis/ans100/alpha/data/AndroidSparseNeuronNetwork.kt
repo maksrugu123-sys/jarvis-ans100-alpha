@@ -916,37 +916,8 @@ class AndroidSparseNeuronNetwork(
         timestampNs: Long,
         input: Double,
     ): Pair<AndroidNeuronState, Boolean> {
-        if (timestampNs < state.lastUpdateNs) {
-            throw AndroidNeuronNetworkException("neuron event time moved backwards")
-        }
-        val elapsed = timestampNs - state.lastUpdateNs
-        val decayedPotential = state.potential * exp(-elapsed.toDouble() / TAU_MEMBRANE_NS)
-        val decayedAdaptation = state.adaptation * exp(-elapsed.toDouble() / TAU_ADAPTATION_NS)
-        val potential = (decayedPotential + input).coerceIn(POTENTIAL_MIN, POTENTIAL_MAX)
-        val threshold = (BASE_THRESHOLD + ADAPTATION_GAIN * decayedAdaptation)
-            .coerceIn(BASE_THRESHOLD, MAX_THRESHOLD)
-        val spiked = timestampNs >= state.refractoryUntilNs && potential >= threshold
-        if (!spiked) {
-            return AndroidNeuronState(
-                neuronId = state.neuronId,
-                potential = potential,
-                adaptation = decayedAdaptation.coerceIn(0.0, 1.0),
-                lastUpdateNs = timestampNs,
-                refractoryUntilNs = state.refractoryUntilNs,
-                spikeSequence = state.spikeSequence,
-            ) to false
-        }
-        if (state.spikeSequence == Long.MAX_VALUE ||
-            timestampNs > Long.MAX_VALUE - REFRACTORY_NS
-        ) throw AndroidNeuronNetworkException("neuron spike counter or refractory clock would overflow")
-        return AndroidNeuronState(
-            neuronId = state.neuronId,
-            potential = RESET_POTENTIAL,
-            adaptation = (decayedAdaptation + ADAPTATION_PER_SPIKE).coerceIn(0.0, 1.0),
-            lastUpdateNs = timestampNs,
-            refractoryUntilNs = timestampNs + REFRACTORY_NS,
-            spikeSequence = state.spikeSequence + 1L,
-        ) to true
+        val candidate = AndroidNeuronKernel.process(state, timestampNs, input)
+        return candidate.state to candidate.spiked
     }
 
     companion object {
