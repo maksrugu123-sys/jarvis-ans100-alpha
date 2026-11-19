@@ -29,6 +29,30 @@ object AndroidNeuronKernel {
 
     fun processBatch(inputs: List<Input>): List<Result> = inputs.map(::processOne)
 
+    fun validateCandidate(input: Input, result: Result) {
+        val previous = input.state
+        val candidate = result.state
+        if (candidate.neuronId != previous.neuronId ||
+            candidate.lastUpdateNs != input.timestampNs
+        ) {
+            throw AndroidNeuronNetworkException("compute backend returned a mismatched neuron candidate")
+        }
+        if (result.spiked) {
+            if (previous.spikeSequence == Long.MAX_VALUE ||
+                input.timestampNs > Long.MAX_VALUE - REFRACTORY_NS ||
+                candidate.spikeSequence != previous.spikeSequence + 1L ||
+                candidate.potential != RESET_POTENTIAL ||
+                candidate.refractoryUntilNs != input.timestampNs + REFRACTORY_NS
+            ) {
+                throw AndroidNeuronNetworkException("compute backend returned an invalid spike transition")
+            }
+        } else if (candidate.spikeSequence != previous.spikeSequence ||
+            candidate.refractoryUntilNs != previous.refractoryUntilNs
+        ) {
+            throw AndroidNeuronNetworkException("compute backend changed spike metadata without a spike")
+        }
+    }
+
     private fun processOne(input: Input): Result {
         val state = input.state
         val timestampNs = input.timestampNs
