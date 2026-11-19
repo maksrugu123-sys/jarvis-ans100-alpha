@@ -194,7 +194,7 @@ internal interface AndroidNeuronStateStore : Closeable {
 class AndroidSparseNeuronNetwork(
     context: Context,
     private val databaseName: String = DEFAULT_DATABASE_NAME,
-    private val hotSetCapacity: Int = DEFAULT_HOT_SET_CAPACITY,
+    private val hotSetCapacity: Int = AndroidNeuronRamBudgetPreferences(context).loadHotSetCapacity(),
     private val cognitiveFeaturesEnabled: Boolean = false,
     private val computeBackend: AndroidNeuronComputeBackend = CpuAndroidNeuronComputeBackend,
 ) : Closeable {
