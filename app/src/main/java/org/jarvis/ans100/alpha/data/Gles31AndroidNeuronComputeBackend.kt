@@ -101,6 +101,7 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
             inputBuffer = ids[0]
             outputBuffer = ids[1]
             checkGl("GPU buffer creation")
+            qualifyBackend()
         } catch (error: AndroidNeuronNetworkException) {
             releaseGl()
             throw error
@@ -109,6 +110,56 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
             throw AndroidNeuronNetworkException(
                 "GLES 3.1 compute initialization failed: ${error.message ?: error.javaClass.simpleName}",
             )
+        }
+    }
+
+    /**
+     * A short CPU-reference qualification runs before the adapter accepts real
+     * work. Spike decisions and integer metadata must match; FP32 state values
+     * must remain within the documented tolerance.
+     */
+    private fun qualifyBackend() {
+        val fixtures = listOf(
+            AndroidNeuronKernel.Input(
+                AndroidNeuronState(neuronId = 101, potential = 0.25, adaptation = 0.2),
+                10_000_000L, 0.2,
+            ),
+            AndroidNeuronKernel.Input(
+                AndroidNeuronState(neuronId = 102, potential = 0.2, adaptation = 0.1),
+                5_000_000L, 1.2,
+            ),
+            AndroidNeuronKernel.Input(
+                AndroidNeuronState(
+                    neuronId = 103, potential = 0.4, adaptation = 0.3,
+                    refractoryUntilNs = 10_000_000L,
+                ),
+                9_000_000L, 1.4,
+            ),
+            AndroidNeuronKernel.Input(
+                AndroidNeuronState(neuronId = 104, potential = -0.5, adaptation = 0.8),
+                100_000_000L, 0.25,
+            ),
+            // Represents the CPU-aggregated result of simultaneous same-time inputs.
+            AndroidNeuronKernel.Input(
+                AndroidNeuronState(neuronId = 105, potential = 0.1, adaptation = 0.05),
+                20_000_000L, 0.72,
+            ),
+        )
+        val gpuResults = dispatch(fixtures)
+        val cpuResults = CpuAndroidNeuronComputeBackend.processBatch(fixtures)
+        for (index in fixtures.indices) {
+            val actual = gpuResults[index]
+            val expected = cpuResults[index]
+            if (actual.spiked != expected.spiked ||
+                actual.state.neuronId != expected.state.neuronId ||
+                actual.state.lastUpdateNs != expected.state.lastUpdateNs ||
+                actual.state.refractoryUntilNs != expected.state.refractoryUntilNs ||
+                actual.state.spikeSequence != expected.state.spikeSequence ||
+                kotlin.math.abs(actual.state.potential - expected.state.potential) > STATE_TOLERANCE ||
+                kotlin.math.abs(actual.state.adaptation - expected.state.adaptation) > STATE_TOLERANCE
+            ) {
+                fail("GPU compute failed CPU-reference qualification fixture ${index + 1}")
+            }
         }
     }
 
@@ -297,6 +348,7 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
         private const val ADAPTATION_PER_SPIKE = 0.15
         // Conservative fail-closed zone around the FP32 threshold.
         private const val THRESHOLD_GUARD = 0.0002
+        private const val STATE_TOLERANCE = 0.00005
 
         private const val COMPUTE_SHADER = """
             #version 310 es
