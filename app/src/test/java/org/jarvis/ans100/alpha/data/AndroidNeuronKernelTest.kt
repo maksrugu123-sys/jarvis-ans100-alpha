@@ -76,4 +76,41 @@ class AndroidNeuronKernelTest {
             )
         }
     }
+    @Test
+    fun batchBackendPreservesInputOrderAndMatchesSingleNeuronReference() {
+        val inputs = listOf(
+            AndroidNeuronKernel.Input(AndroidNeuronState(neuronId = 8), 1_000_000L, 0.4),
+            AndroidNeuronKernel.Input(AndroidNeuronState(neuronId = 2), 2_000_000L, 1.2),
+            AndroidNeuronKernel.Input(AndroidNeuronState(neuronId = 5, potential = 0.3), 3_000_000L, 0.2),
+        )
+        val batch = CpuAndroidNeuronComputeBackend.processBatch(inputs)
+        assertEquals(inputs.size, batch.size)
+        inputs.indices.forEach { index ->
+            assertEquals(
+                AndroidNeuronKernel.process(
+                    inputs[index].state,
+                    inputs[index].timestampNs,
+                    inputs[index].input,
+                ),
+                batch[index],
+            )
+        }
+        assertEquals(listOf(8, 2, 5), batch.map { it.state.neuronId })
+    }
+
+    @Test
+    fun batchFailureDoesNotMutateInputStates() {
+        val initial = AndroidNeuronState(neuronId = 11, potential = 0.4)
+        val before = initial.copy()
+        assertFailsWith<AndroidNeuronNetworkException> {
+            AndroidNeuronKernel.processBatch(
+                listOf(
+                    AndroidNeuronKernel.Input(initial, 1_000_000L, 0.2),
+                    AndroidNeuronKernel.Input(AndroidNeuronState(neuronId = 12, lastUpdateNs = 9L), 1L, 0.1),
+                ),
+            )
+        }
+        assertEquals(before, initial)
+    }
+
 }
