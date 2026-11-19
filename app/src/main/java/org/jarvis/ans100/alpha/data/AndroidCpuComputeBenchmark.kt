@@ -2,9 +2,7 @@ package org.jarvis.ans100.alpha.data
 
 import android.content.Context
 import android.os.Build
-import android.os.SystemClock
 import java.io.Closeable
-import kotlin.math.roundToLong
 
 enum class AndroidComputeMode {
     CPU,
@@ -69,16 +67,15 @@ class AndroidCpuComputeBenchmark(context: Context) : Closeable {
             var expected: CpuRunSignature? = null
             fun executeOnce(): Pair<CpuRunSignature, Long> {
                 runtime.resetLearnedState()
-                val started = SystemClock.elapsedRealtimeNanos()
                 val result = runtime.runTask(
                     taskId = BENCHMARK_TASK_ID,
                     inputText = inputText,
                     trainingLabel = null,
                     coldStart = false,
                 )
-                val elapsed = (SystemClock.elapsedRealtimeNanos() - started).coerceAtLeast(1L)
                 check(result.completed) { "ANS-100 CPU benchmark did not drain its event queue" }
                 check(result.processedEvents > 0) { "ANS-100 CPU benchmark processed no neural events" }
+                check(result.inferenceDurationNs > 0L) { "ANS-100 CPU benchmark returned an invalid inference duration" }
                 val signature = CpuRunSignature(
                     answer = result.answer,
                     readoutStatus = result.readoutStatus,
@@ -99,7 +96,7 @@ class AndroidCpuComputeBenchmark(context: Context) : Closeable {
                 else check(previous == signature) {
                     "ANS-100 CPU benchmark output changed between identical fresh-state runs"
                 }
-                return signature to elapsed
+                return signature to result.inferenceDurationNs
             }
 
             repeat(warmupRuns) { executeOnce() }
