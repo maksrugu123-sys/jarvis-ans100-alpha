@@ -14,6 +14,8 @@ class FeatureCodecTests(unittest.TestCase):
             confidence=0.7, uncertainty=0.2, plasticity=0.8,
             inhibition=0.1, context_match=0.9, observations=42,
             pattern_signature=123456, pattern_trace=0.65, pattern_observations=7,
+            predictor_expected_signature=789, predictor_confidence=0.55,
+            predictor_observations=11, predictor_hits=8,
         )
         traces = {
             "syn-b": SynapticMemoryState(0.2, 0.3, 0.4),
@@ -47,6 +49,21 @@ class FeatureCodecTests(unittest.TestCase):
         self.assertEqual(decoded[1].pattern_signature, 0)
         self.assertEqual(decoded[1].pattern_trace, 0.0)
         self.assertEqual(decoded[1].pattern_observations, 0)
+
+
+    def test_version_two_sidecar_migrates_predictor_fields_to_defaults(self):
+        import json
+        encoded = encode_feature_sidecar("legacy-v2", NeuronFeatureState())
+        document = json.loads(encoded)
+        document["version"] = 2
+        for key in ("predictor_expected_signature", "predictor_confidence",
+                    "predictor_observations", "predictor_hits"):
+            document["neuron_features"].pop(key)
+        decoded = decode_feature_sidecar(json.dumps(document).encode("utf-8"))
+        self.assertEqual(decoded[1].predictor_expected_signature, 0)
+        self.assertEqual(decoded[1].predictor_confidence, 0.0)
+        self.assertEqual(decoded[1].predictor_observations, 0)
+        self.assertEqual(decoded[1].predictor_hits, 0)
 
     def test_rejects_wrong_neuron_identity(self):
         encoded = encode_feature_sidecar("a", NeuronFeatureState())
