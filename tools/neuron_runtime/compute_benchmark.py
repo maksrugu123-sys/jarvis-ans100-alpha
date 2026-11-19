@@ -27,7 +27,7 @@ class BackendMeasurement:
 class BenchmarkComparison:
     baseline_mode: str
     measurements: Mapping[str, BackendMeasurement]
-    speedup_percent: Mapping[str, float]
+    speedup_ratio: Mapping[str, float]
     faster_than_baseline_percent: Mapping[str, float]
 
 
