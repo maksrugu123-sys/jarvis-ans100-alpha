@@ -30,7 +30,7 @@ class AndroidNeuronComputeModesTest {
     }
 
     @Test
-    fun hybridRejectsSingleCandidateInsteadOfPretendingBothBackendsWorked() {
+    fun hybridRoutesSingleCandidateToCpuAndRecordsTheDecision() {
         val gpu = RecordingBackend()
         val backend = CpuGpuAndroidNeuronComputeBackend(gpu)
         try {
@@ -39,10 +39,11 @@ class AndroidNeuronComputeModesTest {
                 timestampNs = 1L,
                 input = 0.1,
             )
-            assertFailsWith<AndroidNeuronNetworkException> {
-                backend.processBatch(listOf(input))
-            }
+            val results = backend.processBatch(listOf(input))
+            assertEquals(listOf(9), results.map { it.state.neuronId })
             assertEquals(emptyList(), gpu.receivedNeuronIds)
+            assertEquals(1, backend.stats().cpuOnlySmallBatches)
+            assertEquals(0, backend.stats().gpuBatches)
         } finally {
             backend.close()
         }
