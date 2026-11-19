@@ -42,7 +42,7 @@ Important limitations:
 
 `NetworkRuntime.export_checkpoint_state()` includes neuron state, sidecars, pending events, topology, queue/run limits, and model clock. `restore_checkpoint_state()` validates and reconstructs these values.
 
-`JPVRNetworkJNVMStore.save_timestamp()` persists changed neuron records, their optional sidecars, the scheduler snapshot (including excitatory/inhibitory topology and typed pending events), and all corresponding COW index mutations in one JPVR typed transaction / COMMIT. Scheduler snapshot V3 is written for this event contract; V2 scheduler snapshots remain readable as excitatory-only topology. The scheduler contains a complete neuron-record-version manifest. Restore reads the scheduler and every neuron from one pinned JPVR snapshot and rejects version drift.
+`JPVRNetworkJNVMStore.save_timestamp()` persists changed neuron records, their optional sidecars, the scheduler snapshot (including excitatory/inhibitory topology and typed pending events), and all corresponding COW index mutations in one JPVR typed transaction / COMMIT. Scheduler snapshot V4 persists the complete neuron population-role registry in the same atomic group COMMIT. V3 snapshots remain readable with their excitatory/inhibitory event contract; V2 snapshots remain readable as excitatory-only topology. Legacy snapshots receive the safe `COORDINATOR` role for every neuron. The scheduler contains a complete neuron-record-version manifest. Restore reads the scheduler and every neuron from one pinned JPVR snapshot and rejects version drift.
 
 `NetworkJNVMCoordinator`:
 - restores one coherent network snapshot;
@@ -72,7 +72,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 - rejection of boolean and non-finite sensitivity;
 - caller-state isolation and deterministic input ordering.
 
-The network suite (30 authored tests), JPVR network persistence suite (10 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
+The network suite (30 authored tests), JPVR network persistence suite (13 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
 
 Suggested focused verification when explicitly approved:
 
@@ -101,4 +101,4 @@ Next engineering gates:
 - `ATTENTION` sources propagate at least their connection strength as event attention salience.
 - `MEMORY`, `PATTERN`, and `PREDICTOR` currently have typed membership only; dedicated operators are future work.
 
-Runtime checkpoint export carries role assignments; callers must pass them into restore. JPVR scheduler snapshots do not yet persist population roles. Five registry tests were authored and NOT RUN. No Android parity is claimed.
+Runtime checkpoint export carries role assignments. JPVR scheduler snapshot V4 persists every neuron role deterministically and restores/validates the registry against the restored topology. V2/V3 snapshots remain readable and default all roles to `COORDINATOR`. Five registry tests and three JPVR population-persistence tests were authored and NOT RUN. No Android parity is claimed.
