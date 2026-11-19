@@ -315,6 +315,12 @@ class AndroidJnvM250kStore(
         require(consumed.all { it.timeNs == timestampNs })
         require(consumed.map { it.eventId }.toSet().size == consumed.size)
         require(generated.map { it.eventId }.toSet().size == generated.size)
+        require(generated.all { it.timeNs > timestampNs }) {
+            "generated events must be scheduled after the committed timestamp"
+        }
+        require(changedStates.map { it.neuronId }.toSet().size == changedStates.size) {
+            "timestamp commit cannot contain duplicate neuron states"
+        }
         consumed.forEach { AndroidJnvM250kProfile.requireNeuronId(it.targetNeuronId) }
         generated.forEach { AndroidJnvM250kProfile.requireNeuronId(it.targetNeuronId) }
         changedStates.forEach { AndroidJnvM250kProfile.requireNeuronId(it.neuronId) }
@@ -324,6 +330,14 @@ class AndroidJnvM250kStore(
         try {
             val clock = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'").toLong()
             if (timestampNs <= clock) throw AndroidNeuronNetworkException("250k model clock must advance monotonically")
+            val persistedGroupSize = scalar(
+                db,
+                "SELECT COUNT(*) FROM events WHERE time_ns=?",
+                arrayOf(timestampNs.toString()),
+            )
+            if (persistedGroupSize != consumed.size.toLong()) {
+                throw AndroidNeuronNetworkException("250k timestamp commit must consume the complete persisted timestamp group")
+            }
             for (event in consumed) {
                 if (db.delete(
                         "events",
