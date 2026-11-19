@@ -86,15 +86,6 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
         var hybridFailure: String? = null
 
         try {
-            // CPU is always the reference and must complete before other modes are considered.
-            repeat(warmupRuns) { verify(cpuReference, CpuAndroidNeuronComputeBackend.processBatch(inputs)) }
-            repeat(measuredRuns) {
-                val start = SystemClock.elapsedRealtimeNanos()
-                val output = CpuAndroidNeuronComputeBackend.processBatch(inputs)
-                cpuSamples += SystemClock.elapsedRealtimeNanos() - start
-                verify(cpuReference, output)
-            }
-
             gpuBackend = runCatching {
                 AndroidNeuronComputeBackendFactory.create(appContext, AndroidNeuronComputeMode.GPU_ONLY)
             }.getOrElse {
@@ -108,25 +99,83 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
                 null
             }
 
-            if (gpuBackend != null) {
-                gpuFailure = measureBackend(
-                    backend = gpuBackend,
-                    inputs = inputs,
-                    reference = cpuReference,
-                    warmupRuns = warmupRuns,
-                    measuredRuns = measuredRuns,
-                    samples = gpuSamples,
-                )
+            // Warm each available backend first. GPU context creation, shader compile,
+            // CPU-reference qualification and JIT effects are deliberately excluded.
+            repeat(warmupRuns) {
+                verify(cpuReference, CpuAndroidNeuronComputeBackend.processBatch(inputs))
+                gpuBackend?.let { backend ->
+                    try {
+                        verify(cpuReference, backend.processBatch(inputs))
+                    } catch (error: Throwable) {
+                        gpuFailure = conciseError(error)
+                        (backend as? Closeable)?.close()
+                        gpuBackend = null
+                    }
+                }
+                hybridBackend?.let { backend ->
+                    try {
+                        verify(cpuReference, backend.processBatch(inputs))
+                    } catch (error: Throwable) {
+                        hybridFailure = conciseError(error)
+                        (backend as? Closeable)?.close()
+                        hybridBackend = null
+                    }
+                }
             }
-            if (hybridBackend != null) {
-                hybridFailure = measureBackend(
-                    backend = hybridBackend,
-                    inputs = inputs,
-                    reference = cpuReference,
-                    warmupRuns = warmupRuns,
-                    measuredRuns = measuredRuns,
-                    samples = hybridSamples,
-                )
+
+            // Interleave modes and rotate their order on each repetition to reduce
+            // systematic thermal/order bias. Every measured sample includes the
+            // complete backend call, including GPU transfers and readback.
+            repeat(measuredRuns) { sampleIndex ->
+                val order = listOf(
+                    AndroidNeuronComputeMode.CPU_ONLY,
+                    AndroidNeuronComputeMode.GPU_ONLY,
+                    AndroidNeuronComputeMode.CPU_GPU,
+                ).let { modes ->
+                    modes.drop(sampleIndex % modes.size) + modes.take(sampleIndex % modes.size)
+                }
+                for (mode in order) {
+                    when (mode) {
+                        AndroidNeuronComputeMode.CPU_ONLY -> {
+                            val startNs = SystemClock.elapsedRealtimeNanos()
+                            val output = CpuAndroidNeuronComputeBackend.processBatch(inputs)
+                            cpuSamples += SystemClock.elapsedRealtimeNanos() - startNs
+                            verify(cpuReference, output)
+                        }
+                        AndroidNeuronComputeMode.GPU_ONLY -> {
+                            val backend = gpuBackend ?: continue
+                            try {
+                                val startNs = SystemClock.elapsedRealtimeNanos()
+                                val output = backend.processBatch(inputs)
+                                val elapsed = SystemClock.elapsedRealtimeNanos() - startNs
+                                verify(cpuReference, output)
+                                check(elapsed > 0L)
+                                gpuSamples += elapsed
+                            } catch (error: Throwable) {
+                                gpuFailure = conciseError(error)
+                                gpuSamples.clear()
+                                (backend as? Closeable)?.close()
+                                gpuBackend = null
+                            }
+                        }
+                        AndroidNeuronComputeMode.CPU_GPU -> {
+                            val backend = hybridBackend ?: continue
+                            try {
+                                val startNs = SystemClock.elapsedRealtimeNanos()
+                                val output = backend.processBatch(inputs)
+                                val elapsed = SystemClock.elapsedRealtimeNanos() - startNs
+                                verify(cpuReference, output)
+                                check(elapsed > 0L)
+                                hybridSamples += elapsed
+                            } catch (error: Throwable) {
+                                hybridFailure = conciseError(error)
+                                hybridSamples.clear()
+                                (backend as? Closeable)?.close()
+                                hybridBackend = null
+                            }
+                        }
+                    }
+                }
             }
         } finally {
             (gpuBackend as? Closeable)?.close()
@@ -157,31 +206,6 @@ class AndroidNeuronKernelComputeBenchmark(context: Context) : Closeable {
             hybridSpeedupRatio = hybrid?.let { cpu.medianLatencyNs.toDouble() / it.medianLatencyNs.toDouble() },
             hybridFasterThanCpuPercent = hybrid?.let { fasterPercent(cpu.medianLatencyNs, it.medianLatencyNs) },
         )
-    }
-
-    private fun measureBackend(
-        backend: AndroidNeuronComputeBackend,
-        inputs: List<AndroidNeuronKernel.Input>,
-        reference: List<AndroidNeuronKernel.Result>,
-        warmupRuns: Int,
-        measuredRuns: Int,
-        samples: MutableList<Long>,
-    ): String? {
-        return try {
-            repeat(warmupRuns) { verify(reference, backend.processBatch(inputs)) }
-            repeat(measuredRuns) {
-                val start = SystemClock.elapsedRealtimeNanos()
-                val output = backend.processBatch(inputs)
-                val elapsed = SystemClock.elapsedRealtimeNanos() - start
-                verify(reference, output)
-                check(elapsed > 0L) { "monotonic timer returned a non-positive duration" }
-                samples += elapsed
-            }
-            null
-        } catch (error: Throwable) {
-            samples.clear()
-            conciseError(error)
-        }
     }
 
     private fun verify(
