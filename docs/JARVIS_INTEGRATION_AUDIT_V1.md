@@ -29,7 +29,7 @@
 | `MEMORY` population | INTEGRATED, bounded associative recall | Uses the mean persisted coactivation trace of other synapses on the same neuron as capped cross-synaptic priming; this is not pair-specific episodic recall and adds no unbounded history. |
 | `PATTERN` population | INTEGRATED, bounded exact-pattern recurrence | Hashes the length-prefixed sorted active synapse IDs into a deterministic 64-bit signature; keeps only the latest signature, a decaying recurrence trace and a bounded counter in feature sidecar V2. V1 sidecars migrate with zero defaults. |
 | `PREDICTOR` population | INTEGRATED, one-step persistence baseline | Predicts recurrence of the latest observed active-synapse signature; tracks bounded confidence/hit counters and modulates input by at most +15% / -10%. This is not a general sequence model. |
-| `NeuronRole` / `NeuronPopulationRegistry` | INTEGRATED, topology-level | Immutable registry is persisted in scheduler V4 and restored atomically; validates excitatory/inhibitory source roles, requires contradiction-role inhibitory output, and routes attention-role salience. PREDICTOR has a bounded one-step persistence operator; multi-step transition memory and general sequence modeling remain future work. |
+| `NeuronRole` / `NeuronPopulationRegistry` | INTEGRATED, topology-level | Immutable registry is persisted in scheduler V4 and restored atomically; validates excitatory/inhibitory source roles, requires contradiction-role inhibitory output, and routes attention-role salience. Incoming event attention applies a bounded 0–25% signal gain before clamping. This is signal modulation, NOT compute-budget scheduling. PREDICTOR has a bounded one-step persistence operator; multi-step transition memory and general sequence modeling remain future work. |
 | `KnowledgeStatus` and `resolve_evidence()` | IMPLEMENTED UTILITY | Four-valued evidence resolution exists, but no evidence store or Reasoning Engine consumes it |
 | `context_match` | PARTIALLY_INTEGRATED | Current input is mean event attention, not a semantic/context embedding or persistent context model |
 | `inhibition` | INTEGRATED, bounded event drive | Explicit inhibitory connections produce separate delayed events, combine bounded same-timestamp drive, gate concurrent excitation, and update persisted feature inhibition; no biological interneuron population is claimed |
@@ -49,7 +49,7 @@
 1. Run the focused network, JPVR store and coordinator tests after explicit approval; fix actual failures before expanding.
 2. Add focused tests for sidecar rollback, persistence and reward updates.
 3. Add a separately validated per-synapse learning/credit-assignment rule for synaptic memory; retain the canonical synapse weight as the source of truth.
-4. Implement explicit attention-budget allocation and richer bounded transition memory for PREDICTOR; add a dedicated inhibitory population model only if experiments justify it.
+4. Implement true attention-aware compute-budget allocation with starvation protection and explicit deferred-work semantics; current attention modulation changes signal strength only. Then expand bounded transition memory for PREDICTOR; add a dedicated inhibitory population model only if experiments justify it.
 5. Build the evidence store and hypothesis lifecycle around the existing four-valued evidence utility.
 6. Port the proven state/update contract to Android SQLite with a single timestamp transaction boundary.
 7. Integrate storage-backed bounded residency before raising logical neuron limits.
