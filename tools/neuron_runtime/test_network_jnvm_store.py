@@ -264,6 +264,48 @@ class NetworkJNVMStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_network_scheduler_snapshot(json.dumps(document).encode("utf-8"))
 
+
+    def test_scheduler_v3_remains_readable_with_coordinator_defaults(self):
+        import json
+        from tools.neuron_runtime.network_jnvm_store import (
+            encode_network_scheduler_snapshot, decode_network_scheduler_snapshot,
+        )
+
+        runtime = make_network()
+        payload = encode_network_scheduler_snapshot(
+            "legacy-v3", runtime, clock_epoch_id=EPOCH,
+            neuron_record_versions={"source": 1, "target": 1},
+        )
+        document = json.loads(payload)
+        document["format"] = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V3"
+        document["schema_version"] = 3
+        document.pop("population_roles")
+        snapshot = decode_network_scheduler_snapshot(json.dumps(document).encode("utf-8"))
+        self.assertEqual(set(snapshot.population_roles.values()), {"coordinator"})
+
+    def test_scheduler_v2_remains_readable_as_excitatory_only(self):
+        import json
+        from tools.neuron_runtime.network_jnvm_store import (
+            encode_network_scheduler_snapshot, decode_network_scheduler_snapshot,
+        )
+
+        runtime = make_network()
+        payload = encode_network_scheduler_snapshot(
+            "legacy-v2", runtime, clock_epoch_id=EPOCH,
+            neuron_record_versions={"source": 1, "target": 1},
+        )
+        document = json.loads(payload)
+        document["format"] = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V2"
+        document["schema_version"] = 2
+        document.pop("population_roles")
+        for connection in document["connections"]:
+            connection.pop("signal_type")
+        for event in document["pending_events"]:
+            event.pop("inhibitory")
+        snapshot = decode_network_scheduler_snapshot(json.dumps(document).encode("utf-8"))
+        self.assertEqual(set(snapshot.population_roles.values()), {"coordinator"})
+        self.assertTrue(all(connection.signal_type == "excitatory" for connection in snapshot.connections))
+
     def test_pending_inhibitory_route_is_persisted_and_restored(self):
         runtime = NetworkRuntime(
             {
