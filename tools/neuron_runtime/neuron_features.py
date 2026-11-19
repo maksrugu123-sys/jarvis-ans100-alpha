@@ -17,6 +17,10 @@ class NeuronRole(str, Enum):
     CONFIDENCE = "confidence"
     INHIBITORY = "inhibitory"
     COORDINATOR = "coordinator"
+    PATTERN = "pattern"
+    ATTENTION = "attention"
+    CONTRADICTION = "contradiction"
+    EXCITATORY = "excitatory"
 
 class KnowledgeStatus(str, Enum):
     SUPPORTED = "supported"
