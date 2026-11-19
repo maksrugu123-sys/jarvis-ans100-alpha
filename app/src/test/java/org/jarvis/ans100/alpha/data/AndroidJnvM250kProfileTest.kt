@@ -37,6 +37,7 @@ class AndroidJnvM250kProfileTest {
         assertEquals(100_000, AndroidJnvM250kProfile.MAX_PENDING_EVENTS)
         assertEquals(512, AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
         assertEquals(512, AndroidJnvM250kProfile.MAX_EVENTS_PER_ENQUEUE)
+        assertEquals(8_192, AndroidJnvM250kProfile.MAX_GENERATED_EVENTS_PER_TIMESTAMP)
     }
 
     @Test
