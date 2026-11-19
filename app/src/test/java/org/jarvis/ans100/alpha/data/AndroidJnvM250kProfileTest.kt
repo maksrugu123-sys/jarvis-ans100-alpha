@@ -31,6 +31,21 @@ class AndroidJnvM250kProfileTest {
     }
 
     @Test
+    fun sparseAndEventBudgetsAreExplicitlyBounded() {
+        assertEquals(16, AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON)
+        assertEquals(32, AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON)
+        assertEquals(100_000, AndroidJnvM250kProfile.MAX_PENDING_EVENTS)
+        assertEquals(512, AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
+        assertEquals(512, AndroidJnvM250kProfile.MAX_EVENTS_PER_ENQUEUE)
+    }
+
+    @Test
+    fun defaultDatabaseIsSeparateFromLegacyDialogueStore() {
+        assertEquals("jarvis_ans100_jnvm_sparse_250k_v1.db", AndroidJnvM250kProfile.DATABASE_NAME)
+        assertEquals(false, AndroidJnvM250kProfile.DATABASE_NAME == AndroidSparseNeuronNetwork.DEFAULT_DATABASE_NAME)
+    }
+
+    @Test
     fun legacyDialogueCapacityIsNotChanged() {
         assertEquals(10_000, AndroidSparseNeuronNetwork.MAX_NEURONS)
         assertEquals(250_000, AndroidJnvM250kProfile.NEURON_CAPACITY)
