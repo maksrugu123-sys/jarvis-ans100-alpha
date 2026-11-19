@@ -40,8 +40,9 @@ data class AndroidComputeBenchmarkReport(
  * initialization are setup, not timed inference. The timed region includes the
  * actual encoder, SQLite-backed neural event loop, readout and hypothesis update.
  *
- * GPU and hybrid modes deliberately remain unavailable until real kernels and
- * correctness-gated adapters are implemented. This class never falls back.
+ * This is intentionally a full-runtime CPU-only benchmark. The isolated LIF-DT
+ * kernel benchmark is a separate measurement and must not be presented as
+ * full-runtime GPU or hybrid acceleration. This class never falls back.
  */
 class AndroidCpuComputeBenchmark(context: Context) : Closeable {
     private val appContext = context.applicationContext
@@ -128,12 +129,12 @@ class AndroidCpuComputeBenchmark(context: Context) : Closeable {
                     AndroidComputeModeAvailability(
                         AndroidComputeMode.GPU,
                         false,
-                        "GPU compute kernel and Android GPU adapter are not implemented yet.",
+                        "The standalone full-ANS benchmark runtime has no GPU execution path; see the separate LIF-DT kernel benchmark.",
                     ),
                     AndroidComputeModeAvailability(
                         AndroidComputeMode.CPU_GPU,
                         false,
-                        "Hybrid partitioner and synchronized CPU/GPU adapter are not implemented yet.",
+                        "The standalone full-ANS benchmark runtime has no hybrid execution path; see the separate LIF-DT kernel benchmark.",
                     ),
                 ),
             )
