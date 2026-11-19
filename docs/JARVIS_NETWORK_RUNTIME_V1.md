@@ -1,6 +1,6 @@
 # JARVIS Network Runtime V1 — bounded multi-neuron event loop
 
-**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 29 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
+**Status:** the Python reference event loop, sparse cognitive sidecars, and single-container JPVR group checkpoint/coordinator path are implemented at source level. The network test module contains 39 tests, AUTHORED / NOT RUN. No claim of production readiness, Android parity, device verification, or measured scaling is made.
 
 ## Runtime execution
 
@@ -26,14 +26,14 @@ For a neuron with feature state:
 - Reward operations update the optional reward trace without silently changing canonical STDP/R-STDP weights.
 - Explicit inhibitory connections create separate delayed inhibitory events. Same-timestamp inhibitory strengths combine as a bounded probabilistic union, gate simultaneous excitatory inputs before the neuron update, and update the target's persistent inhibition feature. Inhibitory events do not enter excitatory STDP or claim an excitatory target synapse.
 
-Neurons without a feature sidecar retain the baseline signal path. A sidecar is optional and sparse; it does not enlarge the 40-byte base numerical payload.
+Neurons without a feature sidecar and without MEMORY/PATTERN roles retain the baseline signal path. MEMORY and PATTERN roles automatically initialize their sparse feature sidecar. Sidecars remain outside the 40-byte base numerical payload.
 
 Important limitations:
 - Confidence is an internal ranking signal, not a calibrated probability.
 - The current prediction baseline is the prior bounded memory trace, not a learned sequence model.
 - Context similarity currently uses mean event-attention.
 - Inhibitory routing is an explicit event pathway, but it is still a simple scalar drive/gate, not a biologically detailed inhibitory population or interneuron model. Source neurons are not yet assigned a dedicated inhibitory role.
-- Synaptic memory traces now provide bounded facilitation to later activation; they do not yet provide a distinct per-synapse credit-assignment or learning-rate rule.
+- Synaptic memory traces provide bounded same-synapse facilitation. MEMORY-role neurons additionally receive capped cross-synaptic priming from the mean coactivation trace of their other synapses; this is a coarse associative cue, not pair-specific episodic recall. PATTERN-role neurons hash each same-timestamp active synapse set to a deterministic 64-bit signature, retain only the latest signature plus a decaying recurrence trace/counter, and apply a small bounded gain when that exact signature repeats. Pattern state is stored in feature sidecar V2; V1 sidecars migrate with zeroed pattern fields. These mechanisms do not yet provide a distinct per-synapse credit-assignment or learning-rate rule.
 - The sidecar does not yet implement full predictive coding, hypothesis competition, or causal reasoning.
 - Android Kotlin feature parity and UI controls are not integrated.
 - Feature activation is currently selected by supplying sidecar state at runtime; there is no complete user-facing per-mechanism configuration system.
@@ -57,7 +57,7 @@ This is a single-writer Python reference path. The coordinator still holds the c
 
 ## Verification state
 
-`tools/neuron_runtime/test_network.py` contains 30 authored tests, including:
+`tools/neuron_runtime/test_network.py` contains 39 authored tests, including:
 - topology and endpoint validation;
 - deterministic same-timestamp batching;
 - delayed multi-neuron propagation;
@@ -66,13 +66,14 @@ This is a single-writer Python reference path. The coordinator still holds the c
 - sidecar input modulation and memory update;
 - inhibitory route validation, same-timestamp suppression, feature-state creation, runtime checkpoint round-trip, and failed-timestamp rollback;
 - feature-counter rollback;
+- MEMORY cross-synaptic priming, PATTERN exact-signature recurrence, and pattern-counter timestamp rollback;
 - inhibition and sensitivity behavior;
 - negative-feedback sensitivity adaptation;
 - meta-plasticity propagation into STDP learning parameters;
 - rejection of boolean and non-finite sensitivity;
 - caller-state isolation and deterministic input ordering.
 
-The network suite (33 authored tests), feature codec suite (6 authored tests), JPVR network persistence suite (15 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
+The network suite (39 authored tests), feature codec suite (6 authored tests), JPVR network persistence suite (15 authored tests), coordinator tests, and full repository suite have **NOT RUN** in this increment. No build, CI, held-out experiment, benchmark, or Android device measurement was run.
 
 Suggested focused verification when explicitly approved:
 
@@ -99,6 +100,6 @@ Next engineering gates:
 - `INHIBITORY` sources may emit only inhibitory connections.
 - `CONTRADICTION` sources must have at least one inhibitory output route.
 - `ATTENTION` sources propagate at least their connection strength as event attention salience.
-- `MEMORY`, `PATTERN`, and `PREDICTOR` currently have typed membership only; dedicated operators are future work.
+- `MEMORY` and `PATTERN` now have bounded Python reference operators; `PREDICTOR` remains typed membership only pending a sequence-prediction operator.
 
 Runtime checkpoint export carries role assignments. JPVR scheduler snapshot V4 persists every neuron role deterministically and restores/validates the registry against the restored topology. V2/V3 snapshots remain readable and default all roles to `COORDINATOR`. Five registry tests and three JPVR population-persistence tests were authored and NOT RUN. No Android parity is claimed.
