@@ -19,8 +19,7 @@ class AndroidJnvM250kWorkingSet(
     context: Context,
     private val store: AndroidJnvM250kStore,
 ) : Closeable {
-    private val appContext = context.applicationContext
-    private val ramBudget = AndroidNeuronRamBudgetPreferences(appContext)
+    private val ramBudget = AndroidNeuronRamBudgetPreferences(context.applicationContext)
     private val hot = LinkedHashMap<Int, AndroidNeuronState>(INITIAL_CAPACITY, LOAD_FACTOR, true)
     private var hotSetCapacity = ramBudget.loadHotSetCapacity()
 
