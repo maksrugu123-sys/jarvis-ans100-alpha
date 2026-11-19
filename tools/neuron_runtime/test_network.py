@@ -548,6 +548,42 @@ class PopulationRegistryTests(unittest.TestCase):
         self.assertEqual(network.pending_events, 2)
         self.assertEqual(network.current_time_ns, 0)
 
+
+    def test_predictor_learns_one_step_persistence_and_updates_confidence(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        network = NetworkRuntime(
+            {"predictor": NeuronRuntime({"left": 1.0, "right": 1.0})},
+            population_roles={"predictor": NeuronRole.PREDICTOR},
+        )
+        network.schedule_input(1, "predictor", "left", "left-1", 0.4)
+        network.run()
+        first = network.feature_states["predictor"]
+        self.assertNotEqual(first.predictor_expected_signature, 0)
+        self.assertEqual(first.predictor_observations, 0)
+        network.schedule_input(2, "predictor", "left", "left-2", 0.4)
+        network.run()
+        second = network.feature_states["predictor"]
+        self.assertEqual(second.predictor_observations, 1)
+        self.assertEqual(second.predictor_hits, 1)
+        self.assertGreater(second.predictor_confidence, 0.0)
+        network.schedule_input(3, "predictor", "right", "right-3", 0.4)
+        network.run()
+        third = network.feature_states["predictor"]
+        self.assertEqual(third.predictor_observations, 2)
+        self.assertEqual(third.predictor_hits, 1)
+        self.assertLess(third.predictor_confidence, second.predictor_confidence)
+
+    def test_predictor_state_survives_runtime_checkpoint(self):
+        from tools.neuron_runtime.neuron_features import NeuronRole
+        network = NetworkRuntime(
+            {"predictor": NeuronRuntime({"left": 1.0})},
+            population_roles={"predictor": NeuronRole.PREDICTOR},
+        )
+        network.schedule_input(1, "predictor", "left", "left-1", 0.4)
+        network.run()
+        state = network.export_checkpoint_state()["feature_states"]["predictor"]
+        self.assertNotEqual(state.predictor_expected_signature, 0)
+
     def test_runtime_checkpoint_carries_population_roles(self):
         from tools.neuron_runtime.neuron_features import NeuronRole
         network = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})}, population_roles={"n": NeuronRole.MEMORY})
