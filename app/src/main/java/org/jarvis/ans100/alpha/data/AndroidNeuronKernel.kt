@@ -1,0 +1,79 @@
+package org.jarvis.ans100.alpha.data
+
+import kotlin.math.exp
+
+/**
+ * Pure deterministic LIF-DT candidate calculation.
+ *
+ * No database, cache, event queue, clock mutation, or side effects live here.
+ * This is the CPU reference implementation and the parity contract for future
+ * GPU kernels. The caller remains responsible for atomic persistence.
+ */
+internal object AndroidNeuronKernel {
+    data class Result(
+        val state: AndroidNeuronState,
+        val spiked: Boolean,
+    )
+
+    fun process(
+        state: AndroidNeuronState,
+        timestampNs: Long,
+        input: Double,
+    ): Result {
+        require(input.isFinite()) { "neuron input must be finite" }
+        if (timestampNs < state.lastUpdateNs) {
+            throw AndroidNeuronNetworkException("neuron event time moved backwards")
+        }
+
+        val elapsed = timestampNs - state.lastUpdateNs
+        val decayedPotential = state.potential * exp(-elapsed.toDouble() / TAU_MEMBRANE_NS)
+        val decayedAdaptation = state.adaptation * exp(-elapsed.toDouble() / TAU_ADAPTATION_NS)
+        val potential = (decayedPotential + input).coerceIn(POTENTIAL_MIN, POTENTIAL_MAX)
+        val threshold = (BASE_THRESHOLD + ADAPTATION_GAIN * decayedAdaptation)
+            .coerceIn(BASE_THRESHOLD, MAX_THRESHOLD)
+        val spiked = timestampNs >= state.refractoryUntilNs && potential >= threshold
+
+        if (!spiked) {
+            return Result(
+                state = AndroidNeuronState(
+                    neuronId = state.neuronId,
+                    potential = potential,
+                    adaptation = decayedAdaptation.coerceIn(0.0, 1.0),
+                    lastUpdateNs = timestampNs,
+                    refractoryUntilNs = state.refractoryUntilNs,
+                    spikeSequence = state.spikeSequence,
+                ),
+                spiked = false,
+            )
+        }
+
+        if (state.spikeSequence == Long.MAX_VALUE ||
+            timestampNs > Long.MAX_VALUE - REFRACTORY_NS
+        ) {
+            throw AndroidNeuronNetworkException("neuron spike counter or refractory clock would overflow")
+        }
+
+        return Result(
+            state = AndroidNeuronState(
+                neuronId = state.neuronId,
+                potential = RESET_POTENTIAL,
+                adaptation = (decayedAdaptation + ADAPTATION_PER_SPIKE).coerceIn(0.0, 1.0),
+                lastUpdateNs = timestampNs,
+                refractoryUntilNs = timestampNs + REFRACTORY_NS,
+                spikeSequence = state.spikeSequence + 1L,
+            ),
+            spiked = true,
+        )
+    }
+
+    private const val POTENTIAL_MIN = -2.0
+    private const val POTENTIAL_MAX = 2.0
+    private const val RESET_POTENTIAL = 0.0
+    private const val BASE_THRESHOLD = 1.0
+    private const val MAX_THRESHOLD = 2.0
+    private const val ADAPTATION_GAIN = 0.5
+    private const val ADAPTATION_PER_SPIKE = 0.15
+    private const val TAU_MEMBRANE_NS = 20_000_000L
+    private const val TAU_ADAPTATION_NS = 100_000_000L
+    private const val REFRACTORY_NS = 2_000_000L
+}
