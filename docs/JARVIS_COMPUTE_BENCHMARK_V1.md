@@ -80,7 +80,7 @@ The Speed settings expose a persisted 1 / 2 / 4 / 8 MiB budget for the managed n
 
 This is not a reservation or hard cap on total Android process memory. SQLite pages, connection/index structures, GPU driver allocations, temporary buffers, Kotlin/ART object overhead outside the managed hot set, and the rest of the app consume additional memory. The 2,048-byte figure is a planning allowance, not a measured per-neuron heap size. Android may still reclaim or terminate the process under system memory pressure. The selected budget is loaded when a new AndroidSparseNeuronNetwork instance is created and is re-evaluated by an existing network at the next compute-run boundary or stats refresh.
 
-The current Android network remains limited to 10,000 neurons and 100,000 connections. This preference does not itself raise those structural limits or complete the planned 250,000-neuron migration.
+The current Android network remains limited to 10,000 neurons and 100,000 connections. This preference does not itself raise those structural limits or complete the planned 250,000-neuron migration. The SQLite schema is now V13 and adds an index on connections.target_id for incoming-edge counts and target-side graph queries. This is a backward-compatible lookup optimization only; it does not raise neuron, connection or event-queue limits. The staged migration requirements are documented in docs/ANDROID_JNVM_250K_SCALING_PLAN.md.
 
 
 ## Device-aware Android neuron RAM ceiling
