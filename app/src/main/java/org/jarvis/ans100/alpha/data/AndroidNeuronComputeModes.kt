@@ -86,8 +86,8 @@ data class AndroidHybridComputeStats(
 /**
  * Genuine split execution: the GPU computes the first partition while the CPU
  * computes the remaining partition concurrently. Results are reassembled in
- * the caller's original order. This is intentionally not used for batches with
- * fewer than two candidates because both processors must receive real work.
+ * the caller's original order. Single-candidate batches are explicitly routed
+ * to CPU and counted, because a GPU dispatch would cost more than the work.
  */
 class CpuGpuAndroidNeuronComputeBackend private constructor(
     private val gpu: AndroidNeuronComputeBackend,
