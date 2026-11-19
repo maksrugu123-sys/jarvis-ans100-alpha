@@ -16,12 +16,14 @@ from tools.jpvr_reference.typed_transaction import BlobRecordInput, DataRecordIn
 from .jpvr_adapter import make_neuron_runtime_record_input, neuron_runtime_object_id
 from .jpvr_store import LOCATOR_BLOB, LOCATOR_DATA, JPVRNeuronCheckpointStore, NeuronCheckpointLocator, _new_id, _tree_id, encode_neuron_checkpoint_locator
 from .network import MAX_NETWORK_CONNECTIONS, MAX_NETWORK_NEURONS, NetworkConnection, NetworkRuntime, NetworkRuntimeError
+from .neuron_features import NeuronRole
 
 SCHEDULER_RECORD_TYPE = 0x0103
 SCHEDULER_SCHEMA_ID = 0x4A4E5343
-SCHEDULER_SCHEMA_VERSION = 3
-SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V3"
-_LEGACY_SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V2"
+SCHEDULER_SCHEMA_VERSION = 4
+SCHEDULER_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V4"
+_LEGACY_SCHEDULER_V3_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V3"
+_LEGACY_SCHEDULER_V2_FORMAT = "JARVIS_NETWORK_SCHEDULER_SNAPSHOT_V2"
 SCHEDULER_LOCATOR_MAGIC = b"JNSL"
 SCHEDULER_LOCATOR_VERSION = 2
 SCHEDULER_LOCATOR = struct.Struct("<4sHBBHHI16sQQIQQ16s16s")
@@ -54,6 +56,7 @@ class NetworkSchedulerSnapshot:
     max_events_per_run: int
     current_time_ns: int
     has_processed: bool
+    population_roles: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -213,6 +216,7 @@ def encode_network_scheduler_snapshot(
             "max_events_per_run": state["max_events_per_run"],
             "current_time_ns": state["current_time_ns"],
             "has_processed": state["has_processed"],
+            "population_roles": {key: role.value for key, role in sorted(state["population_roles"].items())},
         }
         encoded = json.dumps(document, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("utf-8", errors="strict")
     except JPVRNetworkJNVMError:
@@ -241,11 +245,15 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         "neuron_record_versions", "connections", "pending_events", "max_pending_events", "max_events_per_run",
         "current_time_ns", "has_processed",
     }
-    top = _exact_object("scheduler", doc, common_fields)
-    version = top["schema_version"]
-    legacy = top["format"] == _LEGACY_SCHEDULER_FORMAT and version == 2
+    if not isinstance(doc, dict):
+        raise JPVRNetworkJNVMError("scheduler must be a JSON object")
+    version = doc.get("schema_version")
+    expected_fields = common_fields | ({"population_roles"} if version == 4 else set())
+    top = _exact_object("scheduler", doc, expected_fields)
+    legacy_v2 = top["format"] == _LEGACY_SCHEDULER_V2_FORMAT and version == 2
+    legacy_v3 = top["format"] == _LEGACY_SCHEDULER_V3_FORMAT and version == 3
     current = top["format"] == SCHEDULER_FORMAT and version == SCHEDULER_SCHEMA_VERSION
-    if isinstance(version, bool) or not (legacy or current):
+    if isinstance(version, bool) or not (legacy_v2 or legacy_v3 or current):
         raise JPVRNetworkJNVMError("unsupported scheduler format/version")
     network_id = _id("network_id", top["network_id"])
     epoch_text = top["clock_epoch_id"]
@@ -285,7 +293,7 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
             "connection_id", "source_neuron_id", "target_neuron_id",
             "target_synapse_id", "delay_ns", "strength", "attention",
         }
-        if not legacy:
+        if not legacy_v2:
             connection_fields.add("signal_type")
         row = _exact_object("connection", item, connection_fields)
         signal_type = row.get("signal_type", "excitatory")
@@ -328,7 +336,7 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
             "time_ns", "event_id", "target_neuron_id", "target_synapse_id",
             "strength", "attention",
         }
-        if not legacy:
+        if not legacy_v2:
             event_fields.add("inhibitory")
         row = _exact_object("pending event", item, event_fields)
         t = _uint("event time_ns", row["time_ns"])
@@ -369,9 +377,22 @@ def decode_network_scheduler_snapshot(payload: bytes | bytearray | memoryview) -
         keys.append((t, event_id, target_neuron, target_synapse or "", inhibitory))
     if keys != sorted(keys):
         raise JPVRNetworkJNVMError("pending events are not in canonical order")
+    if current:
+        raw_roles = top["population_roles"]
+        if not isinstance(raw_roles, dict) or set(raw_roles) != set(neuron_ids):
+            raise JPVRNetworkJNVMError("population_roles must cover every neuron exactly once")
+        population_roles = {}
+        for neuron_id in neuron_ids:
+            try:
+                population_roles[neuron_id] = NeuronRole(raw_roles[neuron_id]).value
+            except (TypeError, ValueError) as exc:
+                raise JPVRNetworkJNVMError(f"unknown population role for {neuron_id!r}") from exc
+    else:
+        population_roles = {neuron_id: NeuronRole.COORDINATOR.value for neuron_id in neuron_ids}
     return NetworkSchedulerSnapshot(
         network_id, epoch, neuron_ids, MappingProxyType(neuron_record_versions),
         tuple(connections), tuple(pending), queue_limit, run_limit, current_time, has_processed,
+        MappingProxyType(population_roles),
     )
 
 
@@ -384,7 +405,7 @@ def _validate_locator(locator: NetworkSchedulerLocator) -> None:
     _uint("schema_version", locator.schema_version, 65535)
     if locator.storage_kind not in (LOCATOR_DATA, LOCATOR_BLOB):
         raise JPVRNetworkJNVMError("unknown scheduler storage kind")
-    if (locator.record_type, locator.schema_id) != (SCHEDULER_RECORD_TYPE, SCHEDULER_SCHEMA_ID) or locator.schema_version not in (2, SCHEDULER_SCHEMA_VERSION):
+    if (locator.record_type, locator.schema_id) != (SCHEDULER_RECORD_TYPE, SCHEDULER_SCHEMA_ID) or locator.schema_version not in (2, 3, SCHEDULER_SCHEMA_VERSION):
         raise JPVRNetworkJNVMError("scheduler locator schema mismatch")
     for name, value in (("object_id", locator.object_id), ("commit_id", locator.commit_id), ("transaction_id", locator.transaction_id)):
         if not isinstance(value, bytes) or len(value) != 16 or value == bytes(16):
@@ -554,6 +575,7 @@ class JPVRNetworkJNVMStore:
                 has_processed=scheduler.snapshot.has_processed,
                 feature_states=feature_states,
                 synaptic_memories=synaptic_memories,
+                population_roles=scheduler.snapshot.population_roles,
             )
         except NetworkRuntimeError as exc:
             raise JPVRNetworkJNVMError(f"persisted scheduler is incompatible with neuron states: {exc}") from exc
