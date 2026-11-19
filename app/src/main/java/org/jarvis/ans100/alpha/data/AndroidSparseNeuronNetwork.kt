@@ -605,13 +605,7 @@ class AndroidSparseNeuronNetwork(
             for (index in candidateContexts.indices) {
                 val context = candidateContexts[index]
                 val result = candidateResults[index]
-                if (result.state.neuronId != context.targetId ||
-                    result.state.lastUpdateNs != timestamp
-                ) {
-                    throw AndroidNeuronNetworkException(
-                        "compute backend ${computeBackend.backendName} returned a mismatched neuron candidate",
-                    )
-                }
+                AndroidNeuronKernel.validateCandidate(kernelInputs[index], result)
                 val targetId = context.targetId
                 val targetEvents = context.targetEvents
                 val previousFeatures = context.previousFeatures
