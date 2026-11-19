@@ -93,3 +93,10 @@ The Android settings screen derives the selectable maximum from three runtime me
 The conservative ceiling is the minimum of 8% of the app memory class, 10% of currently available RAM, and 3% of physical RAM, rounded down to a supported budget step (1/2/4/8 MB). The current implementation caps the managed hot set at 4,096 resident neurons (8 MB at the planning allowance of 2,048 bytes per resident neuron), so the selectable ceiling cannot exceed 8 MB until that structural limit is redesigned.
 
 The profile is sampled when the app creates its settings state and again whenever a new Android sparse neuron network loads its hot-set capacity. A previously saved value above the current device ceiling is clamped at use time. This is a planning ceiling for the managed neuron-state cache, not a reservation, not a process-wide memory cap, and not a measured per-neuron heap footprint. Runtime memory pressure can still change after sampling.
+
+
+## Dynamic JNVM hot-set resizing
+
+An existing `AndroidSparseNeuronNetwork` now re-samples the device RAM profile before every compute run and before reporting network stats. It applies the currently selected preference against the latest device ceiling. The core-state and feature-state access-order caches are resized together under the network's synchronized API. Shrinking removes least-recently-used clean cache snapshots; timestamp updates are committed to SQLite before cache publication, so trimming does not discard uncommitted neuron changes. Growing the budget allows subsequent cache fills without deleting persisted state.
+
+The public `refreshRamBudget()` method can be called after settings changes or when the app returns to the foreground. `updateHotSetCapacity()` is a bounded explicit override for controlled orchestration and tests; a later automatic refresh returns to the persisted device-aware preference. Runtime refresh occurs at compute-run boundaries, not in the middle of a timestamp transaction.
