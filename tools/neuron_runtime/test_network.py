@@ -475,6 +475,21 @@ class PopulationRegistryTests(unittest.TestCase):
         self.assertEqual(pending[0].attention, 0.4)
 
 
+    def test_attention_salience_modulates_input_with_a_hard_gain_bound(self):
+        baseline = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})})
+        attended = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})})
+        baseline.schedule_input(1, "n", "in", "plain", 0.4, attention=0.0)
+        attended.schedule_input(1, "n", "in", "focused", 0.4, attention=1.0)
+        baseline.run()
+        attended.run()
+        self.assertGreater(attended.neuron_states["n"].u, baseline.neuron_states["n"].u)
+
+        saturated = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})})
+        saturated.schedule_input(1, "n", "in", "max-focus", 1.0, attention=1.0)
+        saturated.run()
+        self.assertLessEqual(saturated.neuron_states["n"].u, 1.0)
+
+
     def test_memory_role_uses_cross_synaptic_association(self):
         from tools.neuron_runtime.neuron_features import NeuronRole, SynapticMemoryState
         neurons = {"memory": NeuronRuntime({"seen": 1.0, "cue": 1.0})}
