@@ -25,6 +25,8 @@ object AndroidJnvM250kProfile {
     const val MAX_PENDING_EVENTS = 100_000
     const val MAX_EVENTS_PER_TIMESTAMP = 512
     const val MAX_EVENTS_PER_ENQUEUE = 512
+    const val MAX_GENERATED_EVENTS_PER_TIMESTAMP =
+        MAX_EVENTS_PER_TIMESTAMP * MAX_OUTGOING_CONNECTIONS_PER_NEURON
 
     fun requireNeuronId(neuronId: Int) {
         require(neuronId in 0 until NEURON_CAPACITY) {
