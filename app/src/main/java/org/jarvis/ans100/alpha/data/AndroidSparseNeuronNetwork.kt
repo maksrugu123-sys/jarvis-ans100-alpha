@@ -196,6 +196,7 @@ class AndroidSparseNeuronNetwork(
     private val databaseName: String = DEFAULT_DATABASE_NAME,
     private val hotSetCapacity: Int = DEFAULT_HOT_SET_CAPACITY,
     private val cognitiveFeaturesEnabled: Boolean = false,
+    private val computeBackend: AndroidNeuronComputeBackend = CpuAndroidNeuronComputeBackend,
 ) : Closeable {
     private val store: AndroidNeuronStateStore
     private val hot = LinkedHashMap<Int, AndroidNeuronState>(hotSetCapacity, 0.75f, true)
@@ -566,8 +567,18 @@ class AndroidSparseNeuronNetwork(
             val changedFeatures = LinkedHashMap<Int, ANS100NeuronFeatureState>()
             val generated = mutableListOf<AndroidNeuronEvent>()
 
-            // Build detached candidates. Nothing in the resident cache changes
-            // until the store has atomically committed the complete timestamp.
+            data class CandidateContext(
+                val targetId: Int,
+                val targetEvents: List<AndroidNeuronEvent>,
+                val previousFeatures: ANS100NeuronFeatureState?,
+                val targetCoreTainted: Boolean,
+            )
+
+            val candidateContexts = ArrayList<CandidateContext>(byTarget.size)
+            val kernelInputs = ArrayList<AndroidNeuronKernel.Input>(byTarget.size)
+
+            // Aggregate simultaneous events on CPU, then hand one detached,
+            // ordered candidate per target neuron to the selected compute backend.
             for ((targetId, targetEvents) in byTarget.toSortedMap()) {
                 val previous = stateFor(targetId)
                 val previousFeatures = if (cognitiveFeaturesEnabled) featureStateFor(targetId) else null
@@ -575,9 +586,37 @@ class AndroidSparseNeuronNetwork(
                 val effectiveInput = previousFeatures?.let {
                     rawInput * it.sensitivity * (1.0 - it.inhibition)
                 } ?: rawInput
-                val result = processNeuron(previous, timestamp, effectiveInput)
+                candidateContexts += CandidateContext(
+                    targetId = targetId,
+                    targetEvents = targetEvents,
+                    previousFeatures = previousFeatures,
+                    targetCoreTainted = previous.coreTainted || targetEvents.any { it.coreTainted },
+                )
+                kernelInputs += AndroidNeuronKernel.Input(previous, timestamp, effectiveInput)
+            }
+
+            val candidateResults = computeBackend.processBatch(kernelInputs)
+            if (candidateResults.size != candidateContexts.size) {
+                throw AndroidNeuronNetworkException(
+                    "compute backend ${computeBackend.backendName} returned an incomplete candidate batch",
+                )
+            }
+
+            for (index in candidateContexts.indices) {
+                val context = candidateContexts[index]
+                val result = candidateResults[index]
+                if (result.state.neuronId != context.targetId ||
+                    result.state.lastUpdateNs != timestamp
+                ) {
+                    throw AndroidNeuronNetworkException(
+                        "compute backend ${computeBackend.backendName} returned a mismatched neuron candidate",
+                    )
+                }
+                val targetId = context.targetId
+                val targetEvents = context.targetEvents
+                val previousFeatures = context.previousFeatures
                 if (previousFeatures != null) {
-                    val activity = if (result.second) 1.0 else effectiveInput.coerceIn(0.0, 1.0)
+                    val activity = if (result.spiked) 1.0 else kernelInputs[index].input.coerceIn(0.0, 1.0)
                     changedFeatures[targetId] = ANS100NeuronFeatures.update(
                         previousFeatures,
                         ANS100NeuronFeatureInput(
@@ -586,11 +625,10 @@ class AndroidSparseNeuronNetwork(
                         ),
                     )
                 }
-                val targetCoreTainted = previous.coreTainted || targetEvents.any { it.coreTainted }
-                val updatedState = result.first.copy(coreTainted = targetCoreTainted)
+                val updatedState = result.state.copy(coreTainted = context.targetCoreTainted)
                 changed[targetId] = updatedState
-                if (targetCoreTainted) coreTaintedNeuronIds += targetId
-                if (result.second) {
+                if (context.targetCoreTainted) coreTaintedNeuronIds += targetId
+                if (result.spiked) {
                     // These events were delivered to a target that spiked at this timestamp.
                     // Simultaneous inputs share coarse eligibility; this is not causal attribution.
                     targetEvents.forEach { event ->
@@ -599,16 +637,16 @@ class AndroidSparseNeuronNetwork(
                     val spikeSequence = updatedState.spikeSequence
                     spikes += targetId to spikeSequence
                     if (spikingNeuronIds != null && spikeCounts != null) {
-                        val index = populationIndex(targetId)
-                        if (index >= 0) {
-                            spikingNeuronIds[index].add(targetId)
-                            spikeCounts[index]++
+                        val indexInPopulation = populationIndex(targetId)
+                        if (indexInPopulation >= 0) {
+                            spikingNeuronIds[indexInPopulation].add(targetId)
+                            spikeCounts[indexInPopulation]++
                         }
                     }
                     val outgoingConnections = store.outgoing(targetId)
                     if (outgoingEventCounts != null) {
-                        val index = populationIndex(targetId)
-                        if (index >= 0) outgoingEventCounts[index] += outgoingConnections.size
+                        val indexInPopulation = populationIndex(targetId)
+                        if (indexInPopulation >= 0) outgoingEventCounts[indexInPopulation] += outgoingConnections.size
                     }
                     for (connection in outgoingConnections) {
                         if (timestamp > Long.MAX_VALUE - connection.delayNs) {
@@ -624,7 +662,6 @@ class AndroidSparseNeuronNetwork(
                     }
                 }
             }
-
             store.commitTimestamp(timestamp, group, generated, changed.values, changedFeatures)
             // The durable COMMIT succeeded. Only now publish candidates to the
             // LRU and permit clean least-recently-used states to be evicted.
