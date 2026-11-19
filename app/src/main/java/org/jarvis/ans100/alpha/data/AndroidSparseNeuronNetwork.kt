@@ -194,10 +194,12 @@ internal interface AndroidNeuronStateStore : Closeable {
 class AndroidSparseNeuronNetwork(
     context: Context,
     private val databaseName: String = DEFAULT_DATABASE_NAME,
-    private val hotSetCapacity: Int = AndroidNeuronRamBudgetPreferences(context).loadHotSetCapacity(),
+    hotSetCapacity: Int = AndroidNeuronRamBudgetPreferences(context).loadHotSetCapacity(),
     private val cognitiveFeaturesEnabled: Boolean = false,
     private val computeBackend: AndroidNeuronComputeBackend = CpuAndroidNeuronComputeBackend,
 ) : Closeable {
+    private val appContext = context.applicationContext
+    private var hotSetCapacity = hotSetCapacity
     private val store: AndroidNeuronStateStore
     private val hot = LinkedHashMap<Int, AndroidNeuronState>(hotSetCapacity, 0.75f, true)
     private val hotFeatures = LinkedHashMap<Int, ANS100NeuronFeatureState>(hotSetCapacity, 0.75f, true)
@@ -221,7 +223,7 @@ class AndroidSparseNeuronNetwork(
 
     init {
         require(hotSetCapacity in 1..MAX_HOT_SET_CAPACITY)
-        store = AndroidNeuronSqliteStore(context.applicationContext, databaseName)
+        store = AndroidNeuronSqliteStore(appContext, databaseName)
     }
 
     @Synchronized
@@ -517,6 +519,7 @@ class AndroidSparseNeuronNetwork(
     ): AndroidNeuronRunResult {
         require(maxEvents in 1..MAX_EVENTS_PER_RUN)
         require(maxTimestamps in 1..MAX_TIMESTAMPS_PER_RUN)
+        refreshRamBudgetInternal()
         var processedEvents = 0
         var processedBatches = 0
         var timestamps = 0
@@ -894,8 +897,54 @@ class AndroidSparseNeuronNetwork(
         require(contextId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
     }
 
+    /**
+     * Re-sample Android memory pressure and safely resize the in-memory JNVM
+     * working set. Cache entries are clean: state changes are committed to
+     * SQLite before publish(), so LRU trimming never discards uncommitted state.
+     *
+     * Call this after a settings change or when the app returns to the foreground.
+     */
     @Synchronized
-    fun stats(): AndroidNeuronNetworkStats = store.stats(hot.size, hotSetCapacity)
+    fun refreshRamBudget(): Int = refreshRamBudgetInternal()
+
+    /**
+     * Explicit bounded override for tests and controlled runtime orchestration.
+     * Shrinking evicts least-recently-used clean cache entries only.
+     */
+    @Synchronized
+    fun updateHotSetCapacity(capacity: Int): Int {
+        require(capacity in 1..MAX_HOT_SET_CAPACITY)
+        resizeHotSet(capacity)
+        return hotSetCapacity
+    }
+
+    private fun refreshRamBudgetInternal(): Int {
+        val recommended = AndroidNeuronRamBudgetPreferences(appContext).loadHotSetCapacity()
+        resizeHotSet(recommended)
+        return hotSetCapacity
+    }
+
+    private fun resizeHotSet(capacity: Int) {
+        require(capacity in 1..MAX_HOT_SET_CAPACITY)
+        hotSetCapacity = capacity
+        trimLeastRecentlyUsed(hot, capacity)
+        trimLeastRecentlyUsed(hotFeatures, capacity)
+    }
+
+    private fun <T> trimLeastRecentlyUsed(cache: LinkedHashMap<Int, T>, capacity: Int) {
+        while (cache.size > capacity) {
+            val eldest = cache.entries.iterator()
+            if (!eldest.hasNext()) return
+            eldest.next()
+            eldest.remove()
+        }
+    }
+
+    @Synchronized
+    fun stats(): AndroidNeuronNetworkStats {
+        refreshRamBudgetInternal()
+        return store.stats(hot.size, hotSetCapacity)
+    }
 
     @Synchronized
     override fun close() {
@@ -911,6 +960,7 @@ class AndroidSparseNeuronNetwork(
     /** Read the persisted sparse cognitive state for diagnostics and focused tests. */
     @Synchronized
     fun neuronFeatureState(neuronId: Int): ANS100NeuronFeatureState? {
+        refreshRamBudgetInternal()
         if (!cognitiveFeaturesEnabled) return null
         hotFeatures[neuronId]?.let { return it }
         return store.loadFeatureState(neuronId)?.also(::publishFeature)
