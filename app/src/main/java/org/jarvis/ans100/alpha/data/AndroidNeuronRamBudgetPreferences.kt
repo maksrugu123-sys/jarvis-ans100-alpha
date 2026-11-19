@@ -34,7 +34,7 @@ class AndroidNeuronRamBudgetPreferences(context: Context) {
         const val DEFAULT_BUDGET_MB = 4
         const val ESTIMATED_BYTES_PER_RESIDENT_NEURON = 2_048
         const val MAX_HOT_SET_CAPACITY = 4_096
-        val ALLOWED_BUDGETS_MB = listOf(1, 2, 4, 8, 16)
+        val ALLOWED_BUDGETS_MB = listOf(1, 2, 4, 8)
         private const val PREFERENCES_NAME = "ans_neuron_ram_budget_v1"
         private const val KEY_BUDGET_MB = "managed_hot_set_budget_mb"
 
