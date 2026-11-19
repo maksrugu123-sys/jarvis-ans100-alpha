@@ -139,6 +139,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var settingsCategory by rememberSaveable { mutableStateOf("appearance") }
     val context = LocalContext.current
     val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
+    val neuronComputePreferences = remember(context) {
+        org.jarvis.ans100.alpha.data.AndroidNeuronComputeModePreferences(context)
+    }
+    var ansNeuronComputeMode by remember(neuronComputePreferences) {
+        mutableStateOf(neuronComputePreferences.load())
+    }
     var accentChoice by remember(uiPreferences) { mutableStateOf(uiPreferences.getString("accent", "blue") ?: "blue") }
     var glowEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean("flowing_glow", true)) }
     var backgroundEnabled by remember(uiPreferences) { mutableStateOf(uiPreferences.getBoolean(JarvisBackgroundService.KEY_ENABLED, false)) }
@@ -674,6 +680,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 conversation = ui.conversation,
                                 gpuEnabled = ui.conversation.gpuEnabled,
                                 onGpuChange = viewModel::setGpuEnabled,
+                                ansNeuronComputeMode = ansNeuronComputeMode,
+                                onAnsNeuronComputeModeChange = { mode ->
+                                    ansNeuronComputeMode = mode
+                                    neuronComputePreferences.save(mode)
+                                },
                                 onSelectModel = { modelLauncher.launch(arrayOf("*/*")) },
                                 onDownloadModel = viewModel::downloadConversationModel,
                                 onCancelDownload = viewModel::cancelConversationModelDownload,
@@ -3072,6 +3083,8 @@ private fun SettingsPanel(
     conversation: LocalConversationUiState,
     gpuEnabled: Boolean,
     onGpuChange: (Boolean) -> Unit,
+    ansNeuronComputeMode: org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode,
+    onAnsNeuronComputeModeChange: (org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode) -> Unit,
     onSelectModel: () -> Unit,
     onDownloadModel: () -> Unit,
     onCancelDownload: () -> Unit,
@@ -3254,6 +3267,41 @@ private fun SettingsPanel(
             "speed" -> {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionHeading("Вычислитель нейронов ANS-100", "CPU · GPU · совместная работа")
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(
+                                selected = ansNeuronComputeMode == org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.CPU_ONLY,
+                                onClick = { onAnsNeuronComputeModeChange(org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.CPU_ONLY) },
+                                label = { Text("CPU") },
+                            )
+                            FilterChip(
+                                selected = ansNeuronComputeMode == org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.GPU_ONLY,
+                                onClick = { onAnsNeuronComputeModeChange(org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.GPU_ONLY) },
+                                label = { Text("GPU") },
+                            )
+                            FilterChip(
+                                selected = ansNeuronComputeMode == org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.CPU_GPU,
+                                onClick = { onAnsNeuronComputeModeChange(org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.CPU_GPU) },
+                                label = { Text("CPU + GPU") },
+                            )
+                        }
+                        Text(
+                            when (ansNeuronComputeMode) {
+                                org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.CPU_ONLY ->
+                                    "CPU — стабильный эталонный режим."
+                                org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.GPU_ONLY ->
+                                    "GPU — вычисления LIF-DT выполняются на GPU. Если GLES 3.1 или проверка точности недоступны, ANS сообщит об ошибке без перехода на CPU."
+                                org.jarvis.ans100.alpha.data.AndroidNeuronComputeMode.CPU_GPU ->
+                                    "CPU + GPU — крупные временные пакеты делятся между CPU и GPU параллельно; одиночные кандидаты обрабатываются CPU и учитываются отдельно."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "Выбор сохраняется. Он применяется при следующей инициализации нейронной сети; если сеть уже запущена, перезапусти приложение. Это отдельная настройка от GPU языковой модели.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         SectionHeading("Скорость ответа", "измерения на этом устройстве")
                         if (conversation.lastTurnDurationMs <= 0L) {
                             Text("Пока нет измерений. Отправь сообщение в чат, чтобы JARVIS записал время загрузки модели и генерации.")
