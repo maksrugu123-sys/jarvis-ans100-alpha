@@ -21,7 +21,7 @@ from .neuron_features import (
     NeuronFeatureError, NeuronFeatureInput, NeuronFeatureState,
     SynapticMemoryState, NeuronRole, effective_excitatory_gain,
     effective_synaptic_memory_gain, update_neuron_features, update_synaptic_memory,
-    update_pattern_memory,
+    update_pattern_memory, effective_prediction_gain, update_sequence_predictor,
 )
 
 _U64_MAX = (1 << 64) - 1
@@ -366,7 +366,7 @@ class NetworkRuntime:
                         role = self._population_registry.role_for(node)
                         feature_state = prior_feature or (
                             NeuronFeatureState()
-                            if inhibitory_events or role in (NeuronRole.MEMORY, NeuronRole.PATTERN)
+                            if inhibitory_events or role in (NeuronRole.MEMORY, NeuronRole.PATTERN, NeuronRole.PREDICTOR)
                             else None
                         )
                         prior_traces = self._synaptic_memories.get(node, {})
@@ -375,6 +375,13 @@ class NetworkRuntime:
                         if role == NeuronRole.PATTERN and len(active_synapses) >= 2:
                             signature_bytes = hashlib.sha256(b"".join(len(encoded).to_bytes(4, "big") + encoded for encoded in (name.encode("utf-8") for name in active_synapses))).digest()[:8]
                             pattern_signature = int.from_bytes(signature_bytes, "big") or 1
+                        predictor_signature = 0
+                        if role == NeuronRole.PREDICTOR and active_synapses:
+                            encoded_names = (name.encode("utf-8") for name in active_synapses)
+                            signature_bytes = hashlib.sha256(b"".join(len(encoded).to_bytes(4, "big") + encoded for encoded in encoded_names)).digest()[:8]
+                            predictor_signature = int.from_bytes(signature_bytes, "big") or 1
+                        predictor_gain = (effective_prediction_gain(feature_state, predictor_signature)
+                                          if role == NeuronRole.PREDICTOR and feature_state is not None else 1.0)
                         pattern_match_gain = 1.0
                         if (role == NeuronRole.PATTERN and feature_state is not None
                                 and pattern_signature != 0
@@ -399,7 +406,7 @@ class NetworkRuntime:
                                                 if synapse_id != event.target_synapse_id]
                                 if other_traces:
                                     memory_gain = min(1.60, memory_gain * (1.0 + 0.15 * (sum(other_traces) / len(other_traces))))
-                            remembered_strength = min(1.0, event.strength * memory_gain * pattern_match_gain)
+                            remembered_strength = min(1.0, event.strength * memory_gain * pattern_match_gain * predictor_gain)
                             if feature_state is None:
                                 effective_strength = remembered_strength
                             else:
@@ -439,6 +446,8 @@ class NetworkRuntime:
                             )
                             if role == NeuronRole.PATTERN:
                                 updated_features = update_pattern_memory(updated_features, pattern_signature)
+                            if role == NeuronRole.PREDICTOR:
+                                updated_features = update_sequence_predictor(updated_features, predictor_signature)
                             feature_candidates[node] = updated_features
                             traces = dict(prior_traces)
                             by_synapse: dict[str, list[float]] = {}
