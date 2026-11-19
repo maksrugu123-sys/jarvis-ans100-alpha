@@ -48,7 +48,7 @@ The GPU uses FP32 while the reference kernel uses Kotlin Double. Before acceptin
 
 ## Current integration boundary and limitations
 
-The backend is injectable through the existing `AndroidSparseNeuronNetwork(computeBackend=...)` constructor. The new factory creates the requested backend, but the app's user-facing settings, persisted mode selection and normal runtime construction are not yet wired to that factory. The existing language-model GPU toggle is separate and does not control ANS neuron compute.
+The backend is injectable through the existing `AndroidSparseNeuronNetwork(computeBackend=...)` constructor. `AndroidNeuronComputeModesTest.kt` adds JVM tests for actual partition assignment, output-order restoration, rejection of one-candidate hybrid batches, and propagation of GPU failures without CPU fallback; these tests are authored but have not been run. The new factory creates the requested backend, but the app's user-facing settings, persisted mode selection and normal runtime construction are not yet wired to that factory. The existing language-model GPU toggle is separate and does not control ANS neuron compute.
 
 No GPU kernel is enabled by default. CPU remains the default reference backend. No GPU/hybrid benchmark, Android device execution, GLES shader compilation on a real device, battery/thermal measurement, or APK build has been run. The experimental GPU backend must not yet be treated as production-ready or as proof that this device supports compute shaders.
 
