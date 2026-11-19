@@ -16,9 +16,10 @@ from typing import Mapping, Sequence
 from tools.numerical_oracle.jarvis_oracle import OracleInputError
 
 from .runtime import NeuronRuntime, NeuronRuntimeError, RewardUpdate, RuntimeStep, SynapticInput
+from .population import NeuronPopulationRegistry
 from .neuron_features import (
     NeuronFeatureError, NeuronFeatureInput, NeuronFeatureState,
-    SynapticMemoryState, effective_excitatory_gain,
+    SynapticMemoryState, NeuronRole, effective_excitatory_gain,
     effective_synaptic_memory_gain, update_neuron_features, update_synaptic_memory,
 )
 
@@ -138,6 +139,7 @@ class NetworkRuntime:
         max_events_per_run: int = _DEFAULT_RUN_LIMIT,
         feature_states: Mapping[str, NeuronFeatureState] | None = None,
         synaptic_memories: Mapping[str, Mapping[str, SynapticMemoryState]] | None = None,
+        population_roles: Mapping[str, NeuronRole | str] | None = None,
     ) -> None:
         if not isinstance(neurons, Mapping) or not neurons:
             raise NetworkRuntimeError("neurons must be a non-empty mapping")
@@ -218,6 +220,11 @@ class NetworkRuntime:
         self._outgoing = {key: tuple(sorted(value, key=lambda c: c.connection_id)) for key, value in outgoing.items()}
         self._connections = tuple(connections)
         self._owned_synapses = owned
+        try:
+            self._population_registry = NeuronPopulationRegistry(tuple(self._neurons), population_roles or {})
+            self._population_registry.validate_routes(self._connections)
+        except ValueError as exc:
+            raise NetworkRuntimeError(f"invalid neuron population configuration: {exc}") from exc
         self._queue: list[_Event] = []
         self._pending_ids: set[str] = set()
         self._running = False
@@ -248,6 +255,10 @@ class NetworkRuntime:
     @property
     def synaptic_memories(self) -> Mapping[str, Mapping[str, SynapticMemoryState]]:
         return {neuron_id: dict(traces) for neuron_id, traces in self._synaptic_memories.items()}
+
+    @property
+    def population_registry(self) -> NeuronPopulationRegistry:
+        return self._population_registry
 
     @property
     def current_time_ns(self) -> int:
@@ -429,9 +440,13 @@ class NetworkRuntime:
                                 raise NetworkRuntimeError("propagated event timestamp overflows u64")
                             raw_id = f"{node}\0{step.spike_sequence}\0{conn.connection_id}".encode()
                             event_id = _INTERNAL_PREFIX + hashlib.sha256(raw_id).hexdigest()
+                            source_role = self._population_registry.role_for(node)
+                            routed_attention = float(conn.attention)
+                            if source_role == NeuronRole.ATTENTION:
+                                routed_attention = max(routed_attention, float(conn.strength))
                             generated.append(_Event(timestamp + conn.delay_ns, event_id,
                                 conn.target_neuron_id, conn.target_synapse_id,
-                                float(conn.strength), float(conn.attention),
+                                float(conn.strength), routed_attention,
                                 conn.signal_type == "inhibitory"))
                     new_ids = [e.event_id for e in generated]
                     if len(new_ids) != len(set(new_ids)) or any(eid in self._pending_ids for eid in new_ids):
@@ -508,6 +523,7 @@ class NetworkRuntime:
             "neurons": {key: deepcopy(value) for key, value in self._neurons.items()},
             "feature_states": deepcopy(self._feature_states),
             "synaptic_memories": deepcopy(self._synaptic_memories),
+            "population_roles": dict(self._population_registry.roles),
             "connections": tuple(self._connections),
             "pending_events": tuple(sorted(self._queue)),
             "max_pending_events": self._queue_limit,
@@ -529,6 +545,7 @@ class NetworkRuntime:
         has_processed: bool,
         feature_states: Mapping[str, NeuronFeatureState] | None = None,
         synaptic_memories: Mapping[str, Mapping[str, SynapticMemoryState]] | None = None,
+        population_roles: Mapping[str, NeuronRole | str] | None = None,
     ) -> "NetworkRuntime":
         """Rebuild a network only after validating its complete scheduler state.
 
@@ -548,6 +565,7 @@ class NetworkRuntime:
             max_events_per_run=max_events_per_run,
             feature_states=feature_states,
             synaptic_memories=synaptic_memories,
+            population_roles=population_roles,
         )
         if current_time_ns < result._current_time_ns:
             raise NetworkRuntimeError("network clock precedes a persisted neuron or synapse clock")
