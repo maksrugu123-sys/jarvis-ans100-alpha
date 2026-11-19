@@ -438,8 +438,6 @@ class NetworkTests(unittest.TestCase):
 
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
 
 
 class PopulationRegistryTests(unittest.TestCase):
@@ -481,3 +479,5 @@ class PopulationRegistryTests(unittest.TestCase):
         network = NetworkRuntime({"n": NeuronRuntime({"in": 1.0})}, population_roles={"n": NeuronRole.MEMORY})
         state = network.export_checkpoint_state()
         self.assertEqual(state["population_roles"]["n"], NeuronRole.MEMORY)
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
