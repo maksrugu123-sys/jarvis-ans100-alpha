@@ -51,8 +51,9 @@ data class AndroidJnvM250kSynapseUpdate(
  *
  * It is consumed by AndroidJnvM250kRuntime, while the legacy
  * AndroidSparseNeuronNetwork remains isolated on its existing 10k layouts.
- * The 250k runtime currently provides LIF-DT execution and fixed-weight signal
- * propagation; its learning tables and cognitive lifecycle are not integrated.
+ * The 250k runtime provides bounded LIF-DT execution, sparse signal propagation
+ * and persisted pair-based STDP. R-STDP and the full cognitive lifecycle remain
+ * outside this storage/runtime layer.
  */
 class AndroidJnvM250kStore(
     context: Context,
