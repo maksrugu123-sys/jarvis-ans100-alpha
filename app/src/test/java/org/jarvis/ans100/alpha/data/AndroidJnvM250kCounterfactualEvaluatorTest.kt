@@ -75,6 +75,7 @@ class AndroidJnvM250kCounterfactualEvaluatorTest {
             limits = AndroidJnvM250kCounterfactualEvaluator.Limits(maxTimestampsPerReplay = 1),
         )
         assertFalse(report.baselineComplete)
-        assertFalse(report.candidates.single().counterfactualComplete)
+        // Suppressing the only edge leaves no pending event, so that replay is complete.
+        assertTrue(report.candidates.single().counterfactualComplete)
     }
 }
