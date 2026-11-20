@@ -82,6 +82,9 @@ class AndroidJnvM250kRewardAttribution(
         var legacyUnweightedReward: Boolean = false,
         var counterfactualDecisionJson: String? = null,
         var counterfactualContextJson: String? = null,
+        var recordedRuntimeBatches: Long = 0L,
+        var lastRunPendingEvents: Int = 0,
+        var lastRunBudgetExhausted: Boolean = false,
     )
 
     private var activeEpisode: Episode? = journal?.loadRecoverable()?.let(::decodeEpisode)
@@ -134,7 +137,13 @@ class AndroidJnvM250kRewardAttribution(
         check(currentEpisode.pendingReward == null) { "episode reward is pending; retry finishEpisode instead of recording more activity" }
         val episode = copyEpisode(currentEpisode)
         require(result.omittedCausalLinks >= 0)
+        require(result.processedEvents >= 0 && result.pendingEvents >= 0)
         require(result.currentTimeNs >= 0L)
+        episode.lastRunPendingEvents = result.pendingEvents
+        episode.lastRunBudgetExhausted = result.budgetExhausted
+        if (result.processedEvents > 0) {
+            episode.recordedRuntimeBatches = saturatedAdd(episode.recordedRuntimeBatches, 1L)
+        }
         require(result.emittedSpikes.all {
             it.spikeSequence >= 0L && it.timestampNs >= 0L &&
                 it.neuronId in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY
@@ -348,6 +357,7 @@ class AndroidJnvM250kRewardAttribution(
         val contextJson = episode.counterfactualContextJson
             ?: error("episode has no persisted pre-action decision snapshot")
         val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
+        requireCompletedDecisionRuntime(episode)
         val scores = responseScoresFor(episode)
         val candidateIds = scores.entries
             .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
@@ -396,6 +406,7 @@ class AndroidJnvM250kRewardAttribution(
             check(episode.pendingReward == null) {
                 "episode already has a different reward path pending; retry it with its original API"
             }
+            if (episode.counterfactualContextJson != null) requireCompletedDecisionRuntime(episode)
             val allScores = responseScoresFor(episode)
             val evaluatedIds = report.candidates.mapTo(LinkedHashSet()) { it.connectionId }
             val scores = allScores.filterKeys { it in evaluatedIds }
@@ -452,6 +463,15 @@ class AndroidJnvM250kRewardAttribution(
             rewardResult = result,
             replayedPersistedDecision = replayed,
         )
+    }
+
+    private fun requireCompletedDecisionRuntime(episode: Episode) {
+        require(episode.recordedRuntimeBatches > 0L) {
+            "decision episode has no completed 250k runtime batch"
+        }
+        require(episode.lastRunPendingEvents == 0 && !episode.lastRunBudgetExhausted) {
+            "decision episode still has pending events or an exhausted runtime budget"
+        }
     }
 
     private fun responseScoresFor(episode: Episode): Map<String, Double> {
@@ -663,6 +683,9 @@ class AndroidJnvM250kRewardAttribution(
             put("contested_responses", episode.contestedTargetResponses)
             put("ambiguous_target_responses", episode.ambiguousTargetResponses)
             put("next_order", episode.nextOrder)
+            put("recorded_runtime_batches", episode.recordedRuntimeBatches)
+            put("last_run_pending_events", episode.lastRunPendingEvents)
+            put("last_run_budget_exhausted", episode.lastRunBudgetExhausted)
             if (episode.pendingReward == null) put("pending_reward", JSONObject.NULL)
             else put("pending_reward", episode.pendingReward!!)
             if (episode.counterfactualDecisionJson == null) put("counterfactual_decision", JSONObject.NULL)
@@ -702,6 +725,9 @@ class AndroidJnvM250kRewardAttribution(
             counterfactualContextJson = if (
                 snapshotVersion >= 6 && !json.isNull("counterfactual_context")
             ) json.getJSONObject("counterfactual_context").toString() else null,
+            recordedRuntimeBatches = if (snapshotVersion >= 7) json.getLong("recorded_runtime_batches") else 0L,
+            lastRunPendingEvents = if (snapshotVersion >= 7) json.getInt("last_run_pending_events") else 0,
+            lastRunBudgetExhausted = if (snapshotVersion >= 7) json.getBoolean("last_run_budget_exhausted") else false,
         )
         require(episode.id == record.episodeId && episode.id.matches(SAFE_ID))
         require(episode.actionId.matches(SAFE_ID))
@@ -714,7 +740,8 @@ class AndroidJnvM250kRewardAttribution(
             episode.observedLinks >= 0L && episode.omittedLinks >= 0L &&
                 episode.unansweredTransmissions >= 0L && episode.unobservedTransmissions >= 0L &&
                 episode.runtimeOmittedTransmissions >= 0L && episode.contestedTargetResponses >= 0L &&
-                episode.ambiguousTargetResponses >= 0L && episode.nextOrder >= 0L
+                episode.ambiguousTargetResponses >= 0L && episode.nextOrder >= 0L &&
+                episode.recordedRuntimeBatches >= 0L && episode.lastRunPendingEvents >= 0
         )
         val candidates = json.getJSONArray("candidates")
         require(candidates.length() <= maxTrackedConnections)
@@ -827,7 +854,7 @@ class AndroidJnvM250kRewardAttribution(
         const val DEFAULT_MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         private const val MIN_SUPPORTED_SNAPSHOT_VERSION = 2
-        private const val SNAPSHOT_VERSION = 6
+        private const val SNAPSHOT_VERSION = 7
         const val TARGET_RESPONSE_WINDOW_NS = 100_000_000L
         const val MAX_RESPONSE_CREDIT = 1_000_000.0
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
