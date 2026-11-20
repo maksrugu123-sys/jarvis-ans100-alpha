@@ -89,6 +89,88 @@ class AndroidJnvM250kRuntime(
     }
 
     /**
+     * Captures a detached pre-action graph for one selected ANS decision.
+     *
+     * This must run before scheduleInputs/run. It rejects a non-empty event
+     * queue, stale inputs, excessive graph reachability and snapshots that
+     * cannot be represented completely within the replay bounds.
+     */
+    @Synchronized
+    fun captureDecisionEpisodeContext(
+        decision: ANS100Decision,
+        externalInputs: List<AndroidNeuronEvent>,
+        outcomeNeuronIds: Set<Int>,
+        maxGraphDepth: Int = DEFAULT_COUNTERFACTUAL_GRAPH_DEPTH,
+    ): AndroidJnvM250kDecisionEpisodeContext {
+        require(decision.status == ANS100DecisionStatus.SELECTED && decision.selectedCandidateId != null) {
+            "counterfactual episode requires a selected ANS decision"
+        }
+        require(maxGraphDepth in 1..MAX_COUNTERFACTUAL_GRAPH_DEPTH)
+        require(externalInputs.isNotEmpty() &&
+            externalInputs.size <= AndroidJnvM250kDecisionEpisodeContext.MAX_INPUTS)
+        require(externalInputs.map { it.eventId }.distinct().size == externalInputs.size)
+        require(outcomeNeuronIds.isNotEmpty() &&
+            outcomeNeuronIds.size <= AndroidJnvM250kDecisionEpisodeContext.MAX_OUTCOME_NEURONS)
+        outcomeNeuronIds.forEach(AndroidJnvM250kProfile::requireNeuronId)
+
+        val before = store.stats()
+        check(before.pendingEvents == 0) {
+            "counterfactual snapshot requires an empty persisted event queue"
+        }
+        require(externalInputs.all { it.timeNs > before.currentTimeNs }) {
+            "decision inputs must be later than the committed JNVM model clock"
+        }
+
+        val edges = LinkedHashMap<String, AndroidNeuronConnection>()
+        val visitedSources = LinkedHashSet<Int>()
+        var frontier = externalInputs.mapTo(sortedSetOf()) { it.targetNeuronId }
+        var depth = 0
+        while (frontier.isNotEmpty() && depth < maxGraphDepth) {
+            val batch = frontier.filterNot { it in visitedSources }.toSortedSet()
+            if (batch.isEmpty()) break
+            val remaining = AndroidJnvM250kDecisionEpisodeContext.MAX_CONNECTIONS - edges.size
+            check(remaining > 0) {
+                "reachable counterfactual graph exceeds the bounded edge snapshot"
+            }
+            val page = store.outgoingConnectionsFor(batch, remaining)
+            val next = sortedSetOf<Int>()
+            for (edge in page) {
+                check(edges.put(edge.connectionId, edge) == null) {
+                    "counterfactual graph contains duplicate connection IDs"
+                }
+                next += edge.targetNeuronId
+            }
+            visitedSources += batch
+            frontier = next.filterNot { it in visitedSources }.toSortedSet()
+            depth++
+        }
+        check(frontier.isEmpty()) {
+            "counterfactual graph depth exceeds the configured complete-snapshot bound"
+        }
+        check(edges.isNotEmpty()) { "selected decision has no reachable synapses to evaluate" }
+
+        val stateIds = LinkedHashSet<Int>()
+        stateIds += externalInputs.map { it.targetNeuronId }
+        edges.values.forEach { edge ->
+            stateIds += edge.sourceNeuronId
+            stateIds += edge.targetNeuronId
+        }
+        stateIds += outcomeNeuronIds
+        check(stateIds.size <= AndroidJnvM250kDecisionEpisodeContext.MAX_NEURONS) {
+            "reachable counterfactual graph exceeds the bounded neuron snapshot"
+        }
+        val states = store.loadNeuronStates(stateIds)
+        return AndroidJnvM250kDecisionEpisodeContext(
+            decisionTurnId = decision.turnId,
+            selectedCandidateId = decision.selectedCandidateId,
+            initialStates = states,
+            connections = edges.values.toList(),
+            externalInputs = externalInputs.toList(),
+            outcomeNeuronIds = outcomeNeuronIds.toSet(),
+        ).also { it.validateAgainst(decision) }
+    }
+
+    /**
      * Processes complete timestamp groups only. If the next group would exceed
      * maxEvents, it remains untouched in SQLite for the next run call.
      */
@@ -337,6 +419,8 @@ class AndroidJnvM250kRuntime(
         const val DEFAULT_MAX_TIMESTAMPS_PER_RUN = 32
         const val MAX_TIMESTAMPS_PER_RUN = 1_024
         const val MAX_CAUSAL_LINKS_PER_RUN = 256
+        const val DEFAULT_COUNTERFACTUAL_GRAPH_DEPTH = 16
+        const val MAX_COUNTERFACTUAL_GRAPH_DEPTH = 16
 
         /** Initial pair-based STDP parameters; research defaults, not tuned values. */
         const val STDP_TRACE_TAU_NS = 20_000_000.0
