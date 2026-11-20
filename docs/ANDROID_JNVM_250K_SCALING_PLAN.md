@@ -125,11 +125,10 @@ Completed in the current branch:
 5. Add a bounded disk-backed event queue and atomic timestamp commit contract.
 
 Remaining before the new profile can run ANS:
-6. Add a JNVM LRU working set to the new store and connect it to the configurable RAM budget without loading all 250k states.
-7. Add a topology descriptor with explicit population/role ID ranges and specialization rules.
-8. Integrate the LIF-DT scheduler, CPU/GPU compute backend, feature-state persistence, learning and plasticity against the new store.
-9. Add Android database integration tests for interrupted initialization, restart persistence, degree rejection, event backpressure, full timestamp atomicity and legacy database isolation.
-10. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
+6. Build a deterministic sparse connection initializer within the route matrix, with reproducible seeds, per-route quotas and bounded batches.
+7. Integrate the LIF-DT scheduler, CPU/GPU compute backend, feature-state persistence, learning and plasticity against the new store and population descriptor.
+8. Add Android database integration tests for interrupted initialization, restart persistence, degree rejection, event backpressure, full timestamp atomicity, working-set cache/database coherence, route enforcement and legacy database isolation.
+9. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
 
 ## Verification rules
 
