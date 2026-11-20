@@ -208,3 +208,16 @@ Per invocation the runtime caps processed input events at 8,192 and timestamp gr
 
 Important boundary: the isolated 250k runtime now performs pair-based STDP and bounded reward-modulated STDP with persisted eligibility traces and idempotent reward receipts. It still lacks automatic reward attribution from the cognitive decision lifecycle, feature-state extensions, the full cognitive hypothesis lifecycle, and evidence of useful task learning. Instrumentation coverage is authored but not run; no Android build or device measurement has been performed.
 
+## Durable reward-episode journal
+
+`AndroidJnvM250kEpisodeJournal` now stores the active episode snapshot in a separate versioned SQLite database. The persisted snapshot contains the action and episode IDs, bounded Space-Saving candidate sketch, ordered signal path, observed/omitted counters and next insertion order. The episode bridge can be constructed with `AndroidJnvM250kRewardAttribution.persistent(context, applyReward)`; it restores the latest recoverable episode when recreated after process death.
+
+Reward completion uses a two-phase recovery protocol across the journal and the JNVM store:
+
+1. The journal writes `REWARD_PENDING` and the exact reward scalar before calling the synapse reward API.
+2. The JNVM store applies the reward under its stable `episode-{id}` receipt.
+3. The journal marks the episode `FINISHED` only after the reward call returns.
+
+If the process stops between steps 2 and 3, the restored episode retries the same reward ID and exact connection-ID set; the JNVM receipt prevents double application. A pending reward cannot be changed or aborted. Episodes with no recorded transmissions still cannot be rewarded. The journal allows one active episode at a time and prunes old completed/aborted records, retaining a bounded recent history.
+
+The journal is intentionally a separate database, so it is not a cross-database atomic transaction. Correct retry behavior depends on the existing durable idempotent reward receipt in the JNVM store. `AndroidJnvM250kEpisodeJournalInstrumentedTest` covers recovery of an open episode and retry of a reward-pending episode after recreating the attribution object. These instrumentation tests are authored but **not run**. No APK build, Android device test, or performance experiment has been run.
