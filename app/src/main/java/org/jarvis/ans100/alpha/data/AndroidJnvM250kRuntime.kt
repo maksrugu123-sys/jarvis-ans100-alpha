@@ -66,7 +66,7 @@ class AndroidJnvM250kRuntime(
         maxEvents: Int = DEFAULT_MAX_EVENTS_PER_RUN,
         maxTimestamps: Int = DEFAULT_MAX_TIMESTAMPS_PER_RUN,
     ): AndroidJnvM250kRunResult {
-        require(maxEvents in 1..AndroidJnvM250kProfile.MAX_PENDING_EVENTS)
+        require(maxEvents in 1..MAX_EVENTS_PER_RUN)
         require(maxTimestamps in 1..MAX_TIMESTAMPS_PER_RUN)
 
         workingSet.refreshRamBudget()
@@ -165,6 +165,8 @@ class AndroidJnvM250kRuntime(
         }
 
         val stats = store.stats()
+        val currentHotSetCapacity = workingSet.capacity()
+        val currentResidentCount = workingSet.residentCount()
         return AndroidJnvM250kRunResult(
             processedEvents = processedEvents,
             processedNeuronBatches = processedBatches,
@@ -172,8 +174,8 @@ class AndroidJnvM250kRuntime(
             pendingEvents = stats.pendingEvents,
             budgetExhausted = exhausted,
             currentTimeNs = stats.currentTimeNs,
-            residentNeuronCount = workingSet.residentCount(),
-            hotSetCapacity = workingSet.capacity(),
+            residentNeuronCount = currentResidentCount,
+            hotSetCapacity = currentHotSetCapacity,
             computeBackend = computeBackend.backendName,
         )
     }
@@ -187,6 +189,7 @@ class AndroidJnvM250kRuntime(
 
     companion object {
         const val DEFAULT_MAX_EVENTS_PER_RUN = 512
+        const val MAX_EVENTS_PER_RUN = 8_192
         const val DEFAULT_MAX_TIMESTAMPS_PER_RUN = 32
         const val MAX_TIMESTAMPS_PER_RUN = 1_024
     }
