@@ -21,6 +21,8 @@ data class AndroidJnvM250kCausalLink(
     val sourceNeuronId: Int,
     val targetNeuronId: Int,
     val timestampNs: Long,
+    /** Scheduled arrival time at the target, including synaptic delay. */
+    val arrivalTimestampNs: Long = timestampNs,
 ) {
     init {
         require(connectionId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
@@ -28,6 +30,7 @@ data class AndroidJnvM250kCausalLink(
         AndroidJnvM250kProfile.requireNeuronId(targetNeuronId)
         require(sourceNeuronId != targetNeuronId)
         require(timestampNs >= 0L)
+        require(arrivalTimestampNs >= timestampNs)
     }
 }
 
@@ -195,6 +198,7 @@ class AndroidJnvM250kRuntime(
                             sourceNeuronId = spike.neuronId,
                             targetNeuronId = connection.targetNeuronId,
                             timestampNs = timestamp,
+                            arrivalTimestampNs = timestamp + connection.delayNs,
                         )
                     } else {
                         omittedCausalLinks++
