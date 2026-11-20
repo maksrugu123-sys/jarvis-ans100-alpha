@@ -110,5 +110,61 @@ class AndroidJnvM250kRewardAttributionTest {
         assertTrue(runCatching { attribution.recordRun(runResult(listOf(link("bad/id", 1, 2)))) }.isFailure)
     }
 
-    @Test\n    fun transmissionWithoutTargetResponseCannotReceiveReward() {\n        val attribution = AndroidJnvM250kRewardAttribution(\n            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 10L) },\n        )\n        attribution.beginEpisode("no-response", "action")\n        attribution.recordRun(runResult(listOf(link("silent-edge", 1, 2)), emitTargetResponses = false))\n        assertTrue(runCatching { attribution.finishEpisode(1.0) }.exceptionOrNull() is IllegalArgumentException)\n        assertTrue(attribution.hasActiveEpisode())\n    }\n\n    @Test\n    fun competingInputsSplitOneTargetResponseInsteadOfBothClaimingFullCredit() {\n        var received = emptySet<String>()\n        val attribution = AndroidJnvM250kRewardAttribution(\n            applyReward = { id, _, ids -> received = ids; AndroidJnvM250kRewardResult(id, ids.size, false, 12L) },\n        )\n        attribution.beginEpisode("competition", "action")\n        attribution.recordRun(runResult(listOf(link("edge-a", 1, 9), link("edge-b", 2, 9))))\n        val result = attribution.finishEpisode(0.8)\n        assertEquals(setOf("edge-a", "edge-b"), received)\n        assertEquals(0.5, result.responseScores.getValue("edge-a"), 0.000001)\n        assertEquals(0.5, result.responseScores.getValue("edge-b"), 0.000001)\n        assertEquals(1L, result.contestedTargetResponses)\n    }\n\n    @Test\n    fun unrelatedTargetSpikeDoesNotConfirmTransmission() {\n        val attribution = AndroidJnvM250kRewardAttribution(\n            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 10L) },\n        )\n        attribution.beginEpisode("wrong-target", "action")\n        attribution.recordRun(runResult(\n            listOf(link("edge-a", 1, 2)),\n            explicitSpikes = listOf(AndroidJnvM250kSpike(3, 1L, 11L)),\n        ))\n        assertTrue(runCatching { attribution.finishEpisode(0.5) }.isFailure)\n    }\n\n    private fun link(id: String, source: Int, target: Int) = AndroidJnvM250kCausalLink(id, source, target, 10L, 10L)\n    private fun runResult(\n        links: List<AndroidJnvM250kCausalLink>,\n        omitted: Int = 0,\n        emitTargetResponses: Boolean = true,\n        explicitSpikes: List<AndroidJnvM250kSpike>? = null,\n    ): AndroidJnvM250kRunResult {\n        val spikes = explicitSpikes ?: if (emitTargetResponses) links.distinctBy { it.targetNeuronId }.map {\n            AndroidJnvM250kSpike(it.targetNeuronId, 1L, it.arrivalTimestampNs + 1L)\n        } else emptyList()\n        return AndroidJnvM250kRunResult(\n            processedEvents=1, processedNeuronBatches=1, emittedSpikes=spikes,\n            pendingEvents=0, budgetExhausted=false,\n            currentTimeNs=maxOf(10L, spikes.maxOfOrNull { it.timestampNs } ?: 10L),\n            residentNeuronCount=1, hotSetCapacity=8, computeBackend="test",\n            causalLinks=links, omittedCausalLinks=omitted,\n        )\n    }
+    @Test
+    fun transmissionWithoutTargetResponseCannotReceiveReward() {
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 10L) },
+        )
+        attribution.beginEpisode("no-response", "action")
+        attribution.recordRun(runResult(listOf(link("silent-edge", 1, 2)), emitTargetResponses = false))
+        assertTrue(runCatching { attribution.finishEpisode(1.0) }.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(attribution.hasActiveEpisode())
+    }
+
+    @Test
+    fun competingInputsSplitOneTargetResponseInsteadOfBothClaimingFullCredit() {
+        var received = emptySet<String>()
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> received = ids; AndroidJnvM250kRewardResult(id, ids.size, false, 12L) },
+        )
+        attribution.beginEpisode("competition", "action")
+        attribution.recordRun(runResult(listOf(link("edge-a", 1, 9), link("edge-b", 2, 9))))
+        val result = attribution.finishEpisode(0.8)
+        assertEquals(setOf("edge-a", "edge-b"), received)
+        assertEquals(0.5, result.responseScores.getValue("edge-a"), 0.000001)
+        assertEquals(0.5, result.responseScores.getValue("edge-b"), 0.000001)
+        assertEquals(1L, result.contestedTargetResponses)
+    }
+
+    @Test
+    fun unrelatedTargetSpikeDoesNotConfirmTransmission() {
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 10L) },
+        )
+        attribution.beginEpisode("wrong-target", "action")
+        attribution.recordRun(runResult(
+            listOf(link("edge-a", 1, 2)),
+            explicitSpikes = listOf(AndroidJnvM250kSpike(3, 1L, 11L)),
+        ))
+        assertTrue(runCatching { attribution.finishEpisode(0.5) }.isFailure)
+    }
+
+    private fun link(id: String, source: Int, target: Int) = AndroidJnvM250kCausalLink(id, source, target, 10L, 10L)
+    private fun runResult(
+        links: List<AndroidJnvM250kCausalLink>,
+        omitted: Int = 0,
+        emitTargetResponses: Boolean = true,
+        explicitSpikes: List<AndroidJnvM250kSpike>? = null,
+    ): AndroidJnvM250kRunResult {
+        val spikes = explicitSpikes ?: if (emitTargetResponses) links.distinctBy { it.targetNeuronId }.map {
+            AndroidJnvM250kSpike(it.targetNeuronId, 1L, it.arrivalTimestampNs + 1L)
+        } else emptyList()
+        return AndroidJnvM250kRunResult(
+            processedEvents=1, processedNeuronBatches=1, emittedSpikes=spikes,
+            pendingEvents=0, budgetExhausted=false,
+            currentTimeNs=maxOf(10L, spikes.maxOfOrNull { it.timestampNs } ?: 10L),
+            residentNeuronCount=1, hotSetCapacity=8, computeBackend="test",
+            causalLinks=links, omittedCausalLinks=omitted,
+        )
+    }
 }
