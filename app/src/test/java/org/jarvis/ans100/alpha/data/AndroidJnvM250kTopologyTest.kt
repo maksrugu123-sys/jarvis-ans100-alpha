@@ -70,10 +70,46 @@ class AndroidJnvM250kTopologyTest {
         assertEquals(false, AndroidJnvM250kTopology.allowsConnection(12, 12))
     }
 
-    @Test
+    @Test(expected = IllegalArgumentException::class)
     fun routeValidationRejectsOutOfRangeIds() {
-        assertThrows(IllegalArgumentException::class.java) {
-            AndroidJnvM250kTopology.requireAllowedConnection(-1, 20_000)
-        }
+        AndroidJnvM250kTopology.requireAllowedConnection(-1, 20_000)
+    }
+
+    @Test
+    fun sparseInitializerIsReproducibleAndKeepsBatchesBounded() {
+        val first = AndroidJnvM250kSparseConnectionInitializer
+            .batches(seed = 42L, batchSize = 32)
+            .take(3)
+            .flatten()
+            .toList()
+        val second = AndroidJnvM250kSparseConnectionInitializer
+            .batches(seed = 42L, batchSize = 32)
+            .take(3)
+            .flatten()
+            .toList()
+
+        assertEquals(96, first.size)
+        assertEquals(first, second)
+        assertTrue(first.all { AndroidJnvM250kTopology.allowsConnection(it.sourceNeuronId, it.targetNeuronId) })
+        assertTrue(first.all { it.sourceNeuronId != it.targetNeuronId })
+    }
+
+    @Test
+    fun sparseInitializerUsesStableUniqueIdsAndHonorsRequestedFanout() {
+        val edges = AndroidJnvM250kSparseConnectionInitializer
+            .batches(seed = 7L, batchSize = 64, fanoutPerRoute = 2)
+            .first()
+
+        assertEquals(64, edges.size)
+        assertEquals(64, edges.map { it.connectionId }.toSet().size)
+        assertTrue(edges.all { it.weight == 0.5 && it.delayNs == 1_000_000L })
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun sparseInitializerRejectsFanoutThatExceedsOutgoingDegreeLimit() {
+        AndroidJnvM250kSparseConnectionInitializer.batches(
+            seed = 1L,
+            fanoutPerRoute = 5,
+        )
     }
 }
