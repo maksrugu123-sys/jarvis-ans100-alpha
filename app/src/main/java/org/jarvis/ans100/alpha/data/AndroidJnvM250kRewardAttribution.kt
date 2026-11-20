@@ -26,7 +26,7 @@ class AndroidJnvM250kRewardAttribution(
     private val maxCreditedConnections: Int = DEFAULT_MAX_CREDITED_CONNECTIONS,
     private val maxTrackedConnections: Int = DEFAULT_MAX_TRACKED_CONNECTIONS,
     private val journal: AndroidJnvM250kEpisodeJournal? = null,
-) {
+) : Closeable {
     private data class Candidate(
         val connectionId: String,
         var estimatedTransmissions: Long,
@@ -128,6 +128,11 @@ class AndroidJnvM250kRewardAttribution(
 
     @Synchronized
     fun trackedConnectionCount(): Int = activeEpisode?.candidates?.size ?: 0
+
+    @Synchronized
+    override fun close() {
+        journal?.close()
+    }
 
     private fun addCandidate(episode: Episode, connectionId: String) {
         require(connectionId.matches(CONNECTION_ID)) { "unsafe connection ID in runtime transmission" }
