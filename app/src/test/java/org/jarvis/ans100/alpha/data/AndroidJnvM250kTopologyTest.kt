@@ -52,4 +52,28 @@ class AndroidJnvM250kTopologyTest {
             )
         }
     }
+
+    @Test
+    fun cognitiveSignalRoutesAllowExpectedForwardAndFeedbackPaths() {
+        assertTrue(AndroidJnvM250kTopology.allowsConnection(0, 20_000))
+        assertTrue(AndroidJnvM250kTopology.allowsConnection(70_000, 115_000))
+        assertTrue(AndroidJnvM250kTopology.allowsConnection(115_000, 175_000))
+        assertTrue(AndroidJnvM250kTopology.allowsConnection(175_000, 115_000))
+        assertTrue(AndroidJnvM250kTopology.allowsConnection(215_000, 240_000))
+        assertTrue(AndroidJnvM250kTopology.allowsConnection(240_000, 230_000))
+    }
+
+    @Test
+    fun disallowedRoutesAndSelfConnectionsAreRejected() {
+        assertEquals(false, AndroidJnvM250kTopology.allowsConnection(0, 240_000))
+        assertEquals(false, AndroidJnvM250kTopology.allowsConnection(20_000, 155_000))
+        assertEquals(false, AndroidJnvM250kTopology.allowsConnection(12, 12))
+    }
+
+    @Test
+    fun routeValidationRejectsOutOfRangeIds() {
+        assertThrows(IllegalArgumentException::class.java) {
+            AndroidJnvM250kTopology.requireAllowedConnection(-1, 20_000)
+        }
+    }
 }
