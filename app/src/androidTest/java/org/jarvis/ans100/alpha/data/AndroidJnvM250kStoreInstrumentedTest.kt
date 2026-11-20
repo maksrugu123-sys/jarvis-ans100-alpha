@@ -219,6 +219,7 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 )
                 val learningRun = learningRuntime.run(maxEvents = 1, maxTimestamps = 1)
                 assertEquals(listOf(sourceZeroTarget), learningRun.emittedSpikes.map { it.neuronId })
+                assertEquals(setOf(sourceZeroTarget), learningRun.ambiguousTargetSpikeNeuronIds)
 
                 val afterStdp = store.outgoingPage(0, limit = 16)
                     .single { it.targetNeuronId == sourceZeroTarget }
