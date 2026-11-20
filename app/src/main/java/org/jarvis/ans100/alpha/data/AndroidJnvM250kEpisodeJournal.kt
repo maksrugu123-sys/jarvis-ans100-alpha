@@ -125,9 +125,9 @@ class AndroidJnvM250kEpisodeJournal(context: Context) : Closeable {
                 "CREATE TABLE episodes (" +
                     "episode_id TEXT PRIMARY KEY, payload TEXT NOT NULL, " +
                     "state TEXT NOT NULL CHECK(state IN ('OPEN','REWARD_PENDING','FINISHED','ABORTED')), " +
-                    "reward REAL, created_at_ms INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000))",
+                    "reward REAL)",
             )
-            db.execSQL("CREATE INDEX episodes_state_idx ON episodes(state, rowid)")
+            db.execSQL("CREATE INDEX episodes_state_idx ON episodes(state)")
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
