@@ -84,9 +84,10 @@ class AndroidJnvM250kWorkingSet(
         consumed: List<AndroidNeuronEvent>,
         generated: List<AndroidNeuronEvent>,
         changedStates: Collection<AndroidNeuronState>,
+        changedSynapses: Collection<AndroidJnvM250kSynapseUpdate> = emptyList(),
     ) {
         refreshRamBudgetInternal()
-        store.commitTimestamp(timestampNs, consumed, generated, changedStates)
+        store.commitTimestamp(timestampNs, consumed, generated, changedStates, changedSynapses)
         changedStates.forEach { hot[it.neuronId] = it }
         trimToCapacity()
     }
