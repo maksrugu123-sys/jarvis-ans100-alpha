@@ -33,8 +33,8 @@ data class AndroidJnvM250kRunResult(
  * consumed events, changed neuron states, generated events and model time.
  *
  * Sparse STDP is applied at committed timestamps using persisted pre/post
- * traces. Reward-modulated STDP (R-STDP) and structural edge growth remain
- * separate future integrations.
+ * traces. Reward-modulated STDP applies bounded, idempotent scalar rewards to
+ * eligibility traces on an explicitly credited local neuron set.
  */
 class AndroidJnvM250kRuntime(
     context: Context,
@@ -195,6 +195,25 @@ class AndroidJnvM250kRuntime(
         )
     }
 
+    /**
+     * Applies delayed scalar feedback to synapses adjacent to the credited
+     * neurons. Call after the relevant action/episode has reached its result.
+     * Reusing rewardId is safe: the SQLite receipt prevents double learning.
+     */
+    @Synchronized
+    fun applyReward(
+        rewardId: String,
+        reward: Double,
+        rewardedNeuronIds: Set<Int>,
+    ): AndroidJnvM250kRewardResult = store.applyReward(
+        rewardId = rewardId,
+        reward = reward,
+        rewardedNeuronIds = rewardedNeuronIds,
+        timestampNs = store.stats().currentTimeNs,
+        traceTauNs = STDP_TRACE_TAU_NS,
+        learningRate = RSTDP_LEARNING_RATE,
+    )
+
     private fun calculateStdpUpdates(
         timestampNs: Long,
         spikes: List<AndroidJnvM250kSpike>,
@@ -210,13 +229,16 @@ class AndroidJnvM250kRuntime(
             val decay = exp(-elapsedNs.toDouble() / STDP_TRACE_TAU_NS)
             val decayedPre = (snapshot.preTrace * decay).coerceIn(0.0, AndroidJnvM250kStore.MAX_STDP_TRACE)
             val decayedPost = (snapshot.postTrace * decay).coerceIn(0.0, AndroidJnvM250kStore.MAX_STDP_TRACE)
+            val decayedEligibility = (snapshot.eligibility * decay).coerceIn(-AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY, AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY)
             val sourceSpiked = snapshot.connection.sourceNeuronId in spikingIds
             val targetSpiked = snapshot.connection.targetNeuronId in spikingIds
             // Post-after-pre potentiates; pre-after-post depresses.
             // Both terms use traces from before this timestamp's spike increments.
             val potentiation = if (targetSpiked) STDP_A_PLUS * decayedPre else 0.0
             val depression = if (sourceSpiked) STDP_A_MINUS * decayedPost else 0.0
-            val nextWeight = (snapshot.connection.weight + potentiation - depression).coerceIn(0.0, 1.0)
+            val localDelta = potentiation - depression
+            val nextWeight = (snapshot.connection.weight + localDelta).coerceIn(0.0, 1.0)
+            val nextEligibility = (decayedEligibility + localDelta).coerceIn(-AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY, AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY)
             val nextPre = (decayedPre + if (sourceSpiked) 1.0 else 0.0)
                 .coerceAtMost(AndroidJnvM250kStore.MAX_STDP_TRACE)
             val nextPost = (decayedPost + if (targetSpiked) 1.0 else 0.0)
@@ -226,6 +248,7 @@ class AndroidJnvM250kRuntime(
                 weight = nextWeight,
                 preTrace = nextPre,
                 postTrace = nextPost,
+                eligibility = nextEligibility,
                 lastUpdateNs = timestampNs,
             )
         }
@@ -249,5 +272,7 @@ class AndroidJnvM250kRuntime(
         const val STDP_TRACE_TAU_NS = 20_000_000.0
         const val STDP_A_PLUS = 0.01
         const val STDP_A_MINUS = 0.012
+        /** Reward gain applied to the bounded, decaying STDP eligibility trace. */
+        const val RSTDP_LEARNING_RATE = 0.1
     }
 }
