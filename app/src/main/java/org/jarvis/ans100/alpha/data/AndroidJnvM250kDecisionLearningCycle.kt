@@ -50,7 +50,7 @@ class AndroidJnvM250kDecisionLearningCycle(
         maxEvents: Int = AndroidJnvM250kRuntime.DEFAULT_MAX_EVENTS_PER_RUN,
         maxTimestamps: Int = AndroidJnvM250kRuntime.DEFAULT_MAX_TIMESTAMPS_PER_RUN,
     ): AndroidJnvM250kRunResult {
-        check(attribution.hasActiveEpisode()) { "begin or recover a decision episode before running" }
+        check(attribution.hasDecisionEpisodeContext()) { "begin or recover a decision-bound episode before running" }
         val result = runtime.run(maxEvents, maxTimestamps)
         attribution.recordRun(result)
         return result
@@ -67,7 +67,7 @@ class AndroidJnvM250kDecisionLearningCycle(
         policy: AndroidJnvM250kCounterfactualRewardGate.Policy =
             AndroidJnvM250kCounterfactualRewardGate.Policy(),
     ): AndroidJnvM250kCounterfactualFinishResult {
-        check(attribution.hasActiveEpisode()) { "there is no active decision episode to finish" }
+        check(attribution.hasDecisionEpisodeContext()) { "there is no active decision-bound episode to finish" }
         require(observedReward.isFinite() && observedReward in -1.0..1.0)
         return attribution.finishEpisodeWithCounterfactual(observedReward, policy)
     }
@@ -79,6 +79,6 @@ class AndroidJnvM250kDecisionLearningCycle(
      */
     @Synchronized
     fun resumeRecoveredEpisode() {
-        check(attribution.hasActiveEpisode()) { "there is no recoverable decision episode" }
+        check(attribution.hasDecisionEpisodeContext()) { "there is no recoverable decision-bound episode" }
     }
 }
