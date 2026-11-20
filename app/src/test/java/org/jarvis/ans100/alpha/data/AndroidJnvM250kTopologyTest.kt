@@ -112,4 +112,24 @@ class AndroidJnvM250kTopologyTest {
             fanoutPerRoute = 5,
         )
     }
+
+    @Test
+    fun sparseInitializerCursorResumesWithoutRepeatingOrSkippingEdges() {
+        val initial = AndroidJnvM250kSparseConnectionInitializer.initialCheckpoint(seed = 991L)
+        val first = AndroidJnvM250kSparseConnectionInitializer.nextBatch(initial, batchSize = 13)
+        val resumed = AndroidJnvM250kSparseConnectionInitializer.nextBatch(first.checkpoint, batchSize = 17)
+        val uninterrupted = AndroidJnvM250kSparseConnectionInitializer.nextBatch(initial, batchSize = 30)
+
+        assertEquals(uninterrupted.connections, first.connections + resumed.connections)
+        assertEquals(uninterrupted.checkpoint, resumed.checkpoint)
+        assertEquals(30, first.connections.size + resumed.connections.size)
+    }
+
+    @Test
+    fun sparseInitializerCheckpointIsCanonicalAtCompletion() {
+        val initial = AndroidJnvM250kSparseConnectionInitializer.initialCheckpoint(seed = 3L)
+        val one = AndroidJnvM250kSparseConnectionInitializer.nextBatch(initial, batchSize = 1)
+        assertEquals(false, one.checkpoint.completed)
+        assertEquals(0, one.checkpoint.cursor.routeIndex)
+    }
 }
