@@ -16,6 +16,7 @@ data class AndroidJnvM250kAttributionResult(
     val responseScores: Map<String, Double>,
     val unansweredTransmissions: Long,
     val contestedTargetResponses: Long,
+    val observationCoverage: Double,
     val rewardResult: AndroidJnvM250kRewardResult,
 )
 
@@ -62,6 +63,7 @@ class AndroidJnvM250kRewardAttribution(
         var observedLinks: Long = 0L,
         var omittedLinks: Long = 0L,
         var unansweredTransmissions: Long = 0L,
+        var unobservedTransmissions: Long = 0L,
         var contestedTargetResponses: Long = 0L,
         var nextOrder: Long = 0L,
         var pendingReward: Double? = null,
@@ -94,6 +96,7 @@ class AndroidJnvM250kRewardAttribution(
         check(episode.pendingReward == null) { "episode reward is pending; retry finishEpisode instead of recording more activity" }
         require(result.omittedCausalLinks >= 0)
         episode.omittedLinks = saturatedAdd(episode.omittedLinks, result.omittedCausalLinks.toLong())
+        episode.unobservedTransmissions = saturatedAdd(episode.unobservedTransmissions, result.omittedCausalLinks.toLong())
 
         data class TimelineEvent(
             val timestampNs: Long,
@@ -191,9 +194,13 @@ class AndroidJnvM250kRewardAttribution(
                 .thenBy { it.firstSeenOrder },
         ).take(maxCreditedConnections)
         val credited = selected.mapTo(LinkedHashSet()) { it.connectionId }
+        val knownTransmissionTotal = episode.observedLinks + episode.unobservedTransmissions
+        val coverage = if (knownTransmissionTotal == 0L) 0.0 else
+            (episode.observedLinks.toDouble() / knownTransmissionTotal.toDouble()).coerceIn(0.0, 1.0)
         val scores = selected.associate { candidate ->
-            candidate.connectionId to
-                (candidate.responseCredit / candidate.responseCount.toDouble()).coerceIn(0.0, 1.0)
+            candidate.connectionId to (
+                (candidate.responseCredit / candidate.responseCount.toDouble()).coerceIn(0.0, 1.0) * coverage
+            ).coerceIn(0.0, 1.0)
         }
 
         if (pending == null) {
@@ -214,6 +221,7 @@ class AndroidJnvM250kRewardAttribution(
             responseScores = scores,
             unansweredTransmissions = episode.unansweredTransmissions + episode.pending.size,
             contestedTargetResponses = episode.contestedTargetResponses,
+            observationCoverage = coverage,
             rewardResult = rewardResult,
         )
         activeEpisode = null
@@ -306,6 +314,7 @@ class AndroidJnvM250kRewardAttribution(
             put("observed_links", episode.observedLinks)
             put("omitted_links", episode.omittedLinks)
             put("unanswered_transmissions", episode.unansweredTransmissions)
+            put("unobserved_transmissions", episode.unobservedTransmissions)
             put("contested_responses", episode.contestedTargetResponses)
             put("next_order", episode.nextOrder)
             if (episode.pendingReward == null) put("pending_reward", JSONObject.NULL)
@@ -325,6 +334,7 @@ class AndroidJnvM250kRewardAttribution(
             observedLinks = json.getLong("observed_links"),
             omittedLinks = json.getLong("omitted_links"),
             unansweredTransmissions = json.getLong("unanswered_transmissions"),
+            unobservedTransmissions = json.getLong("unobserved_transmissions"),
             contestedTargetResponses = json.getLong("contested_responses"),
             nextOrder = json.getLong("next_order"),
             pendingReward = if (json.isNull("pending_reward")) null else json.getDouble("pending_reward"),
@@ -333,7 +343,7 @@ class AndroidJnvM250kRewardAttribution(
         require(episode.actionId.matches(SAFE_ID))
         require(
             episode.observedLinks >= 0L && episode.omittedLinks >= 0L &&
-                episode.unansweredTransmissions >= 0L &&
+                episode.unansweredTransmissions >= 0L && episode.unobservedTransmissions >= 0L &&
                 episode.contestedTargetResponses >= 0L && episode.nextOrder >= 0L
         )
         val candidates = json.getJSONArray("candidates")
