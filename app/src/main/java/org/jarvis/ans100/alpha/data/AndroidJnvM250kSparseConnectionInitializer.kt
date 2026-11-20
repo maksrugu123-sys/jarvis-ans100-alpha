@@ -77,7 +77,7 @@ object AndroidJnvM250kSparseConnectionInitializer {
             "connection batch size must be between 1 and ${AndroidJnvM250kProfile.MAX_PAGE_SIZE}"
         }
         validateConfiguration(checkpoint.fanoutPerRoute, checkpoint.delayNs, checkpoint.weight)
-        validateCursor(checkpoint.cursor)
+        validateCursor(checkpoint.cursor, checkpoint.fanoutPerRoute)
         require(checkpoint.completed == (checkpoint.cursor.routeIndex == orderedRoutes.size)) {
             "checkpoint completion flag does not match its cursor"
         }
@@ -168,7 +168,7 @@ object AndroidJnvM250kSparseConnectionInitializer {
         return AndroidJnvM250kInitializationCursor(routeIndex, if (sourceNeuronId == 0) first else sourceNeuronId, slotIndex)
     }
 
-    private fun validateCursor(cursor: AndroidJnvM250kInitializationCursor) {
+    private fun validateCursor(cursor: AndroidJnvM250kInitializationCursor, fanoutPerRoute: Int) {
         require(cursor.routeIndex <= orderedRoutes.size) { "initializer route cursor is out of range" }
         if (cursor.routeIndex == orderedRoutes.size) {
             require(cursor.sourceNeuronId == 0 && cursor.slotIndex == 0) { "completed cursor must be canonical" }
@@ -178,7 +178,7 @@ object AndroidJnvM250kSparseConnectionInitializer {
         require(cursor.sourceNeuronId in sourceRange.firstNeuronId..sourceRange.lastNeuronIdInclusive) {
             "initializer source cursor is outside the current route"
         }
-        require(cursor.slotIndex < AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON) {
+        require(cursor.slotIndex < fanoutPerRoute) {
             "initializer slot cursor is out of range"
         }
     }
