@@ -54,7 +54,7 @@ data class AndroidNeuronEvent(
     init {
         require(eventId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$")))
         require(timeNs >= 0L && targetNeuronId >= 0)
-        require(strength.isFinite() && strength in 0.0..1.0)
+        require(strength.isFinite() && strength in -1.0..1.0)
     }
 }
 
