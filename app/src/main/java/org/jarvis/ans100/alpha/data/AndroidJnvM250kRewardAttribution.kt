@@ -16,6 +16,7 @@ data class AndroidJnvM250kAttributionResult(
     val responseScores: Map<String, Double>,
     val unansweredTransmissions: Long,
     val contestedTargetResponses: Long,
+    val ambiguousTargetResponses: Long,
     val observationCoverage: Double,
     val rewardResult: AndroidJnvM250kRewardResult,
 )
@@ -66,6 +67,7 @@ class AndroidJnvM250kRewardAttribution(
         var unobservedTransmissions: Long = 0L,
         var runtimeOmittedTransmissions: Long = 0L,
         var contestedTargetResponses: Long = 0L,
+        var ambiguousTargetResponses: Long = 0L,
         var nextOrder: Long = 0L,
         var pendingReward: Double? = null,
         var legacyUnweightedReward: Boolean = false,
@@ -107,10 +109,18 @@ class AndroidJnvM250kRewardAttribution(
             val timestampNs: Long,
             val link: AndroidJnvM250kCausalLink? = null,
             val spike: AndroidJnvM250kSpike? = null,
+            val ambiguous: Boolean = false,
         )
+        require(result.ambiguousTargetSpikeNeuronIds.all { it in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY })
         val timeline = ArrayList<TimelineEvent>(result.causalLinks.size + result.emittedSpikes.size)
         result.causalLinks.forEach { timeline += TimelineEvent(it.arrivalTimestampNs, link = it) }
-        result.emittedSpikes.forEach { timeline += TimelineEvent(it.timestampNs, spike = it) }
+        result.emittedSpikes.forEach { spike ->
+            timeline += TimelineEvent(
+                timestampNs = spike.timestampNs,
+                spike = spike,
+                ambiguous = spike.neuronId in result.ambiguousTargetSpikeNeuronIds,
+            )
+        }
         // At an equal timestamp, process arriving synaptic input before the target spike.
         timeline.sortWith(compareBy<TimelineEvent> { it.timestampNs }.thenBy { if (it.link != null) 0 else 1 })
 
@@ -143,6 +153,16 @@ class AndroidJnvM250kRewardAttribution(
                     spike.timestampNs - it.arrivalTimestampNs <= TARGET_RESPONSE_WINDOW_NS
             }
             if (matching.isEmpty()) continue
+            if (event.ambiguous) {
+                episode.ambiguousTargetResponses = saturatedAdd(episode.ambiguousTargetResponses, 1L)
+                episode.unobservedTransmissions = saturatedAdd(
+                    episode.unobservedTransmissions,
+                    matching.size.toLong(),
+                )
+                val ambiguousIds = matching.mapTo(HashSet()) { it.connectionId }
+                episode.pending.removeAll { it.connectionId in ambiguousIds }
+                continue
+            }
             val share = 1.0 / matching.size.toDouble()
             for (transmission in matching) {
                 val candidate = episode.candidates[transmission.connectionId] ?: continue
@@ -231,6 +251,7 @@ class AndroidJnvM250kRewardAttribution(
             responseScores = scores,
             unansweredTransmissions = saturatedAdd(episode.unansweredTransmissions, episode.pending.size.toLong()),
             contestedTargetResponses = episode.contestedTargetResponses,
+            ambiguousTargetResponses = episode.ambiguousTargetResponses,
             observationCoverage = coverage,
             rewardResult = rewardResult,
         )
@@ -336,6 +357,7 @@ class AndroidJnvM250kRewardAttribution(
             put("unobserved_transmissions", episode.unobservedTransmissions)
             put("runtime_omitted_transmissions", episode.runtimeOmittedTransmissions)
             put("contested_responses", episode.contestedTargetResponses)
+            put("ambiguous_target_responses", episode.ambiguousTargetResponses)
             put("next_order", episode.nextOrder)
             if (episode.pendingReward == null) put("pending_reward", JSONObject.NULL)
             else put("pending_reward", episode.pendingReward!!)
@@ -362,6 +384,7 @@ class AndroidJnvM250kRewardAttribution(
             unobservedTransmissions = json.getLong("unobserved_transmissions"),
             runtimeOmittedTransmissions = if (snapshotVersion >= 3) json.getLong("runtime_omitted_transmissions") else 0L,
             contestedTargetResponses = json.getLong("contested_responses"),
+            ambiguousTargetResponses = if (snapshotVersion >= 4) json.getLong("ambiguous_target_responses") else 0L,
             nextOrder = json.getLong("next_order"),
             pendingReward = if (json.isNull("pending_reward")) null else json.getDouble("pending_reward"),
             legacyUnweightedReward = json.optBoolean("legacy_unweighted_reward", false),
@@ -371,7 +394,8 @@ class AndroidJnvM250kRewardAttribution(
         require(
             episode.observedLinks >= 0L && episode.omittedLinks >= 0L &&
                 episode.unansweredTransmissions >= 0L && episode.unobservedTransmissions >= 0L &&
-                episode.runtimeOmittedTransmissions >= 0L && episode.contestedTargetResponses >= 0L && episode.nextOrder >= 0L
+                episode.runtimeOmittedTransmissions >= 0L && episode.contestedTargetResponses >= 0L &&
+                episode.ambiguousTargetResponses >= 0L && episode.nextOrder >= 0L
         )
         val candidates = json.getJSONArray("candidates")
         require(candidates.length() <= maxTrackedConnections)
@@ -478,7 +502,7 @@ class AndroidJnvM250kRewardAttribution(
         const val DEFAULT_MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         private const val MIN_SUPPORTED_SNAPSHOT_VERSION = 2
-        private const val SNAPSHOT_VERSION = 3
+        private const val SNAPSHOT_VERSION = 4
         const val TARGET_RESPONSE_WINDOW_NS = 100_000_000L
         const val MAX_RESPONSE_CREDIT = 1_000_000.0
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
