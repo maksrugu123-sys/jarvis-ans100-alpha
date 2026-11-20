@@ -150,41 +150,66 @@ class AndroidJnvM250kStore(
 
     @Synchronized
     fun registerConnection(connection: AndroidNeuronConnection) {
-        AndroidJnvM250kProfile.requireNeuronId(connection.sourceNeuronId)
-        AndroidJnvM250kProfile.requireNeuronId(connection.targetNeuronId)
-        AndroidJnvM250kTopology.requireAllowedConnection(
-            connection.sourceNeuronId,
-            connection.targetNeuronId,
-        )
+        registerConnections(listOf(connection))
+    }
+
+    /**
+     * Persists one bounded graph batch in a single transaction. Degree checks
+     * include both already-persisted edges and all edges in this batch.
+     */
+    @Synchronized
+    fun registerConnections(connections: List<AndroidNeuronConnection>) {
+        require(connections.isNotEmpty() && connections.size <= AndroidJnvM250kProfile.MAX_PAGE_SIZE) {
+            "connection batch must contain 1..${AndroidJnvM250kProfile.MAX_PAGE_SIZE} edges"
+        }
+        require(connections.map { it.connectionId }.toSet().size == connections.size) {
+            "connection IDs must be unique within a batch"
+        }
+        connections.forEach { connection ->
+            AndroidJnvM250kProfile.requireNeuronId(connection.sourceNeuronId)
+            AndroidJnvM250kProfile.requireNeuronId(connection.targetNeuronId)
+            AndroidJnvM250kTopology.requireAllowedConnection(
+                connection.sourceNeuronId,
+                connection.targetNeuronId,
+            )
+        }
+        val outgoingAdds = connections.groupingBy { it.sourceNeuronId }.eachCount()
+        val incomingAdds = connections.groupingBy { it.targetNeuronId }.eachCount()
         requireInitialized()
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
-            val outgoing = scalar(
-                db,
-                "SELECT COUNT(*) FROM connections WHERE source_id=?",
-                arrayOf(connection.sourceNeuronId.toString()),
-            )
-            val incoming = scalar(
-                db,
-                "SELECT COUNT(*) FROM connections WHERE target_id=?",
-                arrayOf(connection.targetNeuronId.toString()),
-            )
-            if (outgoing >= AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON) {
-                throw AndroidNeuronBackpressureException("source neuron reached the sparse outgoing-degree limit")
+            for ((sourceId, added) in outgoingAdds) {
+                val existing = scalar(
+                    db,
+                    "SELECT COUNT(*) FROM connections WHERE source_id=?",
+                    arrayOf(sourceId.toString()),
+                )
+                if (existing + added > AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON) {
+                    throw AndroidNeuronBackpressureException("source neuron reached the sparse outgoing-degree limit")
+                }
             }
-            if (incoming >= AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON) {
-                throw AndroidNeuronBackpressureException("target neuron reached the sparse incoming-degree limit")
+            for ((targetId, added) in incomingAdds) {
+                val existing = scalar(
+                    db,
+                    "SELECT COUNT(*) FROM connections WHERE target_id=?",
+                    arrayOf(targetId.toString()),
+                )
+                if (existing + added > AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON) {
+                    throw AndroidNeuronBackpressureException("target neuron reached the sparse incoming-degree limit")
+                }
             }
-            val values = ContentValues().apply {
-                put("connection_id", connection.connectionId)
-                put("source_id", connection.sourceNeuronId)
-                put("target_id", connection.targetNeuronId)
-                put("delay_ns", connection.delayNs)
-                put("weight", connection.weight)
-            }
-            if (db.insertWithOnConflict("connections", null, values, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
-                throw AndroidNeuronNetworkException("connection ID already exists in the 250k profile")
+            for (connection in connections) {
+                val values = ContentValues().apply {
+                    put("connection_id", connection.connectionId)
+                    put("source_id", connection.sourceNeuronId)
+                    put("target_id", connection.targetNeuronId)
+                    put("delay_ns", connection.delayNs)
+                    put("weight", connection.weight)
+                }
+                if (db.insertWithOnConflict("connections", null, values, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
+                    throw AndroidNeuronNetworkException("connection ID already exists in the 250k profile")
+                }
             }
             db.setTransactionSuccessful()
         } finally {
