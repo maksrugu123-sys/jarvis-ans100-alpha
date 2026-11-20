@@ -193,5 +193,5 @@ The topology's provisional inhibitory polarity now affects signal transmission: 
 
 Per invocation the runtime caps processed input events at 8,192 and timestamp groups at 1,024; each timestamp remains capped at 512 inputs and generated propagation remains capped at 8,192 events. The working set is rechecked against the device RAM policy and only event-target states are loaded. The compute backend is injectable, with CPU reference as the default. GPU/hybrid selection is not automatically enabled by this runtime yet.
 
-Important boundary: the isolated 250k runtime now performs pair-based STDP and persists its weights/traces, but it does not yet implement reward-modulated STDP (R-STDP), feature-state extensions, the full cognitive hypothesis lifecycle, or prove useful cognition. Instrumentation coverage is authored but not run; no Android build or device measurement has been performed.
+Important boundary: the isolated 250k runtime now performs pair-based STDP and bounded reward-modulated STDP with persisted eligibility traces and idempotent reward receipts. It still lacks automatic reward attribution from the cognitive decision lifecycle, feature-state extensions, the full cognitive hypothesis lifecycle, and evidence of useful task learning. Instrumentation coverage is authored but not run; no Android build or device measurement has been performed.
 
