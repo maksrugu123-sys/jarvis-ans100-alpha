@@ -202,7 +202,7 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 assertEquals(0.0, traceBeforePost.postTrace, 0.000001)
 
                 learningRuntime.scheduleInputs(
-                    listOf(AndroidNeuronEvent("stdp-post-event", 2_000_000L, sourceZeroTarget, 1.0)),
+                    listOf(AndroidNeuronEvent("stdp-post-event", 10_000_000L, sourceZeroTarget, 1.0)),
                 )
                 val learningRun = learningRuntime.run(maxEvents = 1, maxTimestamps = 1)
                 assertEquals(listOf(sourceZeroTarget), learningRun.emittedSpikes.map { it.neuronId })
