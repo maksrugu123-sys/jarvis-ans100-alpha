@@ -1,67 +1,46 @@
 package org.jarvis.ans100.alpha.data
 
-/**
- * Result of converting one completed action episode into bounded R-STDP credit.
- *
- * Credited IDs are candidates selected from synapses that actually transmitted
- * during the episode. This is activity-based attribution, not a claim that the
- * selected neurons were the sole causes of the external outcome.
- */
+/** Result of applying an episode outcome to exact synapses observed transmitting. */
 data class AndroidJnvM250kAttributionResult(
     val episodeId: String,
     val actionId: String,
-    val creditedNeuronIds: Set<Int>,
+    val creditedConnectionIds: Set<String>,
+    val signalPathConnectionIds: List<String>,
     val observedLinks: Long,
     val omittedLinks: Long,
     val rewardResult: AndroidJnvM250kRewardResult,
 )
 
 /**
- * Bounded episode-level bridge between observed sparse signal transmissions
- * and the existing idempotent R-STDP reward API.
- *
- * The caller must:
- * 1. begin an episode when an action/decision is committed;
- * 2. record every runtime result belonging to that episode;
- * 3. finish it once the external outcome is known.
- *
- * This coordinator is deliberately in-memory in this first version. Its
- * candidate table uses a bounded Space-Saving frequency sketch, so long
- * episodes cannot accumulate an unbounded map of up to 250k neuron IDs. It
- * never fabricates a path from population labels or mere co-activity. Only
- * endpoints of recorded transmissions become candidate credited IDs. The
- * downstream store currently rewards all eligible synapses adjacent to those
- * IDs, not only the exact transmitted connection IDs.
+ * Bounded episode-level bridge from actual runtime transmissions to exact
+ * synapse-level R-STDP credit. It records emitted connection IDs, not merely
+ * endpoint neurons. An emitted edge is evidence of transmission, not proof
+ * that the edge alone caused the external outcome or that its target spiked.
  */
 class AndroidJnvM250kRewardAttribution(
-    private val applyReward: (rewardId: String, reward: Double, neuronIds: Set<Int>) -> AndroidJnvM250kRewardResult,
-    private val maxCreditedNeurons: Int = DEFAULT_MAX_CREDITED_NEURONS,
-    private val maxTrackedNeurons: Int = DEFAULT_MAX_TRACKED_NEURONS,
+    private val applyReward: (rewardId: String, reward: Double, connectionIds: Set<String>) -> AndroidJnvM250kRewardResult,
+    private val maxCreditedConnections: Int = DEFAULT_MAX_CREDITED_CONNECTIONS,
+    private val maxTrackedConnections: Int = DEFAULT_MAX_TRACKED_CONNECTIONS,
 ) {
     private data class Candidate(
-        val neuronId: Int,
+        val connectionId: String,
         var estimatedTransmissions: Long,
         val firstSeenOrder: Long,
     )
-
     private data class Episode(
         val id: String,
         val actionId: String,
-        val candidates: LinkedHashMap<Int, Candidate> = LinkedHashMap(),
+        val candidates: LinkedHashMap<String, Candidate> = LinkedHashMap(),
+        val path: ArrayList<String> = ArrayList(),
         var observedLinks: Long = 0L,
         var omittedLinks: Long = 0L,
         var nextOrder: Long = 0L,
     )
-
     private var activeEpisode: Episode? = null
 
     init {
-        require(maxCreditedNeurons in 1..MAX_CREDITED_NEURONS) {
-            "credited neuron bound must be 1..$MAX_CREDITED_NEURONS"
-        }
-        require(maxTrackedNeurons in maxCreditedNeurons..MAX_TRACKED_NEURONS) {
-            "tracked neuron bound must be maxCreditedNeurons..$MAX_TRACKED_NEURONS"
-        }
+        require(maxCreditedConnections in 1..MAX_CREDITED_CONNECTIONS)
+        require(maxTrackedConnections in maxCreditedConnections..MAX_TRACKED_CONNECTIONS)
     }
 
     @Synchronized
@@ -72,10 +51,7 @@ class AndroidJnvM250kRewardAttribution(
         activeEpisode = Episode(episodeId, actionId)
     }
 
-    /**
-     * Records direct transmissions emitted by this runtime run. The runtime
-     * caps links per run; omitted counts are carried into the episode summary.
-     */
+    /** Records ordered direct transmissions reported by one runtime run. */
     @Synchronized
     fun recordRun(result: AndroidJnvM250kRunResult) {
         val episode = activeEpisode ?: error("begin an episode before recording runtime activity")
@@ -83,36 +59,30 @@ class AndroidJnvM250kRewardAttribution(
         episode.omittedLinks = saturatedAdd(episode.omittedLinks, result.omittedCausalLinks.toLong())
         for (link in result.causalLinks) {
             episode.observedLinks = saturatedAdd(episode.observedLinks, 1L)
-            addCandidate(episode, link.sourceNeuronId)
-            addCandidate(episode, link.targetNeuronId)
+            addCandidate(episode, link.connectionId)
+            if (episode.path.size < maxTrackedConnections) episode.path += link.connectionId
+            else episode.omittedLinks = saturatedAdd(episode.omittedLinks, 1L)
         }
     }
 
-    /**
-     * Applies one outcome reward to the most frequently observed endpoints,
-     * with first-seen order as a deterministic tie-breaker. On failure the
-     * episode remains open so the caller can correct/retry the operation.
-     */
+    /** Applies outcome only to observed connection IDs; failure leaves episode retryable. */
     @Synchronized
     fun finishEpisode(reward: Double): AndroidJnvM250kAttributionResult {
-        require(reward.isFinite() && reward in -1.0..1.0) {
-            "episode reward must be finite and within [-1, 1]"
-        }
+        require(reward.isFinite() && reward in -1.0..1.0)
         val episode = activeEpisode ?: error("there is no active reward episode")
         require(episode.candidates.isNotEmpty()) {
-            "episode has no recorded synapse transmissions; no neurons can be credited"
+            "episode has no recorded synapse transmissions; no connections can be credited"
         }
-
         val credited = episode.candidates.values
             .sortedWith(compareByDescending<Candidate> { it.estimatedTransmissions }.thenBy { it.firstSeenOrder })
-            .take(maxCreditedNeurons)
-            .mapTo(LinkedHashSet()) { it.neuronId }
-
+            .take(maxCreditedConnections)
+            .mapTo(LinkedHashSet()) { it.connectionId }
         val rewardResult = applyReward("episode-${episode.id}", reward, credited)
         val result = AndroidJnvM250kAttributionResult(
             episodeId = episode.id,
             actionId = episode.actionId,
-            creditedNeuronIds = credited,
+            creditedConnectionIds = credited,
+            signalPathConnectionIds = episode.path.toList(),
             observedLinks = episode.observedLinks,
             omittedLinks = episode.omittedLinks,
             rewardResult = rewardResult,
@@ -126,46 +96,40 @@ class AndroidJnvM250kRewardAttribution(
         check(activeEpisode != null) { "there is no active reward episode" }
         activeEpisode = null
     }
-
     @Synchronized
     fun hasActiveEpisode(): Boolean = activeEpisode != null
-
     @Synchronized
-    fun trackedCandidateCount(): Int = activeEpisode?.candidates?.size ?: 0
+    fun trackedConnectionCount(): Int = activeEpisode?.candidates?.size ?: 0
 
-    private fun addCandidate(episode: Episode, neuronId: Int) {
-        AndroidJnvM250kProfile.requireNeuronId(neuronId)
-        val existing = episode.candidates[neuronId]
-        if (existing != null) {
-            existing.estimatedTransmissions = saturatedAdd(existing.estimatedTransmissions, 1L)
+    private fun addCandidate(episode: Episode, connectionId: String) {
+        require(connectionId.matches(CONNECTION_ID)) { "unsafe connection ID in runtime transmission" }
+        val current = episode.candidates[connectionId]
+        if (current != null) {
+            current.estimatedTransmissions = saturatedAdd(current.estimatedTransmissions, 1L)
             return
         }
-        if (episode.candidates.size < maxTrackedNeurons) {
-            episode.candidates[neuronId] = Candidate(neuronId, 1L, episode.nextOrder++)
+        if (episode.candidates.size < maxTrackedConnections) {
+            episode.candidates[connectionId] = Candidate(connectionId, 1L, episode.nextOrder++)
             return
         }
-
-        // Space-Saving replacement: retain frequent endpoints without allowing
-        // the episode map to grow with the full 250k neuron ID space.
-        val leastFrequent = episode.candidates.values.minWithOrNull(
+        val least = episode.candidates.values.minWithOrNull(
             compareBy<Candidate> { it.estimatedTransmissions }.thenBy { it.firstSeenOrder },
         ) ?: return
-        episode.candidates.remove(leastFrequent.neuronId)
-        episode.candidates[neuronId] = Candidate(
-            neuronId = neuronId,
-            estimatedTransmissions = saturatedAdd(leastFrequent.estimatedTransmissions, 1L),
-            firstSeenOrder = episode.nextOrder++,
+        episode.candidates.remove(least.connectionId)
+        episode.candidates[connectionId] = Candidate(
+            connectionId, saturatedAdd(least.estimatedTransmissions, 1L), episode.nextOrder++,
         )
     }
 
-    private fun saturatedAdd(left: Long, right: Long): Long =
-        if (Long.MAX_VALUE - left < right) Long.MAX_VALUE else left + right
+    private fun saturatedAdd(a: Long, b: Long): Long =
+        if (Long.MAX_VALUE - a < b) Long.MAX_VALUE else a + b
 
     companion object {
-        const val DEFAULT_MAX_CREDITED_NEURONS = 32
-        const val MAX_CREDITED_NEURONS = 32
-        const val DEFAULT_MAX_TRACKED_NEURONS = 256
-        const val MAX_TRACKED_NEURONS = 1_024
+        const val DEFAULT_MAX_CREDITED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
+        const val MAX_CREDITED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
+        const val DEFAULT_MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
+        const val MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+        private val CONNECTION_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     }
 }

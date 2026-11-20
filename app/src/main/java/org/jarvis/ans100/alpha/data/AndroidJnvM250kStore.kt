@@ -849,6 +849,138 @@ class AndroidJnvM250kStore(
         }
     }
 
+    /**
+     * Applies one reward only to the exact, explicitly credited connection IDs. The reward is accepted only at the current model clock, so it
+     * cannot leap over pending events. A durable receipt makes retries safe.
+     */
+    @Synchronized
+    fun applyRewardToConnections(
+        rewardId: String,
+        reward: Double,
+        connectionIds: Set<String>,
+        timestampNs: Long,
+        traceTauNs: Double,
+        learningRate: Double,
+    ): AndroidJnvM250kRewardResult {
+        require(rewardId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(reward.isFinite() && reward in -1.0..1.0)
+        require(connectionIds.isNotEmpty() && connectionIds.size <= MAX_REWARDED_SYNAPSES)
+        connectionIds.forEach {
+            require(it.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"))) {
+                "connection ID must be a safe stable identifier"
+            }
+        }
+        require(timestampNs >= 0L)
+        require(traceTauNs.isFinite() && traceTauNs > 0.0)
+        require(learningRate.isFinite() && learningRate in 0.0..1.0)
+        requireInitialized()
+
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val creditedIds = "connections:" + connectionIds.sorted().joinToString(",")
+            val priorReceipt = db.rawQuery(
+                "SELECT affected_synapses, reward, credited_neurons FROM reward_receipts WHERE reward_id=?",
+                arrayOf(rewardId),
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    if (cursor.getDouble(1) != reward ||
+                        cursor.getString(2) != creditedIds
+                    ) {
+                        throw AndroidNeuronNetworkException("250k reward ID was replayed with different feedback")
+                    }
+                    cursor.getInt(0)
+                } else null
+            }
+            val clock = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'").toLong()
+            if (priorReceipt != null) {
+                db.setTransactionSuccessful()
+                return AndroidJnvM250kRewardResult(rewardId, priorReceipt, true, clock)
+            }
+            if (timestampNs != clock) {
+                throw AndroidNeuronNetworkException("250k reward must be applied at the current committed model time")
+            }
+            if (scalar(db, "SELECT COUNT(*) FROM reward_receipts") >= MAX_REWARD_RECEIPTS) {
+                throw AndroidNeuronBackpressureException("250k reward receipt history is full")
+            }
+
+            val ordered = connectionIds.sorted()
+            val placeholders = List(ordered.size) { "?" }.joinToString(",")
+            val args = ordered.map { it.toString() }.toTypedArray()
+            val rows = ArrayList<AndroidJnvM250kRewardSynapseRow>(MAX_REWARDED_SYNAPSES + 1)
+            db.rawQuery(
+                "SELECT c.connection_id, c.weight, l.pre_trace, l.post_trace, l.eligibility, l.last_update_ns " +
+                    "FROM connections c JOIN synapse_learning l ON l.connection_id=c.connection_id " +
+                    "WHERE c.connection_id IN ($placeholders) " +
+                    "ORDER BY c.connection_id LIMIT ?",
+                args + arrayOf((MAX_REWARDED_SYNAPSES + 1).toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    rows += AndroidJnvM250kRewardSynapseRow(
+                        connectionId = cursor.getString(0),
+                        weight = cursor.getDouble(1),
+                        preTrace = cursor.getDouble(2),
+                        postTrace = cursor.getDouble(3),
+                        eligibility = cursor.getDouble(4),
+                        lastUpdateNs = cursor.getLong(5),
+                    )
+                }
+            }
+            if (rows.size > MAX_REWARDED_SYNAPSES) {
+                throw AndroidNeuronBackpressureException("250k reward credit set exceeds its bounded synapse limit")
+            }
+
+            var affected = 0
+            for (index in rows.indices) {
+                val row = rows[index]
+                if (row.lastUpdateNs > timestampNs) {
+                    throw AndroidNeuronNetworkException("250k reward trace is newer than the model clock")
+                }
+                val decay = kotlin.math.exp(-(timestampNs - row.lastUpdateNs).toDouble() / traceTauNs)
+                val preTrace = (row.preTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
+                val postTrace = (row.postTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
+                val eligibility = (row.eligibility * decay).coerceIn(-MAX_RSTDP_ELIGIBILITY, MAX_RSTDP_ELIGIBILITY)
+                val nextWeight = (row.weight + reward * learningRate * eligibility).coerceIn(0.0, 1.0)
+                val nextEligibility = if (reward == 0.0) eligibility else 0.0
+                if (reward != 0.0 && eligibility != 0.0) affected += 1
+                if (db.update(
+                        "connections",
+                        ContentValues().apply { put("weight", nextWeight) },
+                        "connection_id=?",
+                        arrayOf(row.connectionId),
+                    ) != 1
+                ) throw AndroidNeuronNetworkException("250k rewarded synapse disappeared before commit")
+                if (db.update(
+                        "synapse_learning",
+                        ContentValues().apply {
+                            put("pre_trace", preTrace)
+                            put("post_trace", postTrace)
+                            put("eligibility", nextEligibility)
+                            put("last_update_ns", timestampNs)
+                        },
+                        "connection_id=?",
+                        arrayOf(row.connectionId),
+                    ) != 1
+                ) throw AndroidNeuronNetworkException("250k rewarded synapse trace disappeared before commit")
+            }
+            db.insertOrThrow(
+                "reward_receipts",
+                null,
+                ContentValues().apply {
+                    put("reward_id", rewardId)
+                    put("timestamp_ns", timestampNs)
+                    put("reward", reward)
+                    put("credited_neurons", creditedIds)
+                    put("affected_synapses", affected)
+                },
+            )
+            db.setTransactionSuccessful()
+            return AndroidJnvM250kRewardResult(rewardId, affected, false, clock)
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     @Synchronized
     fun stats(): AndroidJnvM250kStats {
         val db = helper.readableDatabase

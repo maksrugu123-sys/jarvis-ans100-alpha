@@ -252,6 +252,24 @@ class AndroidJnvM250kRuntime(
         learningRate = RSTDP_LEARNING_RATE,
     )
 
+    /**
+     * Applies delayed feedback only to the exact synapses that transmitted in
+     * the completed episode. No neighboring edge is selected implicitly.
+     */
+    @Synchronized
+    fun applyRewardToConnections(
+        rewardId: String,
+        reward: Double,
+        connectionIds: Set<String>,
+    ): AndroidJnvM250kRewardResult = store.applyRewardToConnections(
+        rewardId = rewardId,
+        reward = reward,
+        connectionIds = connectionIds,
+        timestampNs = store.stats().currentTimeNs,
+        traceTauNs = STDP_TRACE_TAU_NS,
+        learningRate = RSTDP_LEARNING_RATE,
+    )
+
     private fun calculateStdpUpdates(
         timestampNs: Long,
         spikes: List<AndroidJnvM250kSpike>,

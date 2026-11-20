@@ -179,18 +179,18 @@ These are initial engineering parameters, not scientifically tuned values. This 
 - Weight updates, trace decay/consumption and the reward receipt are committed in one SQLite transaction.
 
 This implements the R-STDP mechanism and a caller-facing feedback hook, but not automatic credit assignment: the higher-level ANS decision/reasoning lifecycle does not yet determine which neurons deserve reward or punishment. A caller must supply the credited neuron IDs. This is not yet evidence that the network learns a useful task. Positive/negative reward and replay tests are authored but not executed; no Android build or device experiment has been run.
-## Episode-level reward attribution bridge
+## Exact synapse-level episode reward attribution
 
-The branch now includes `AndroidJnvM250kCausalLink` and `AndroidJnvM250kRewardAttribution` as a bounded bridge between runtime signal propagation and the persisted R-STDP API:
+The episode bridge now credits exact connection_id values observed in runtime transmissions rather than converting transmissions into endpoint neuron IDs:
 
-- Each runtime run exposes up to 256 direct synapse transmissions emitted by actual source-neuron spikes. A transmission records connection ID, source ID, target ID and model timestamp. Excess links are counted in `omittedCausalLinks`; the runtime does not allocate an unbounded trace.
-- A caller opens an episode with stable episode/action IDs, records each `AndroidJnvM250kRunResult` produced while that action is being evaluated, and finishes the episode after its external outcome is known.
-- Only endpoints of observed transmissions become candidate credited neuron IDs. A Space-Saving frequency sketch caps the episode table at 256 IDs by default (hard maximum 1,024), so a long episode cannot grow a map toward all 250,000 neurons. It ranks estimated transmission frequency, breaks ties by first-seen order, and sends at most 32 IDs to `AndroidJnvM250kRuntime.applyReward`.
-- The current store-level R-STDP API updates every eligible synapse touching those credited neurons, not only the exact connection IDs captured in the episode. This is bounded neighborhood credit, so unrelated adjacent edges can also be affected; exact connection-ID credit remains a follow-up improvement. The existing SQLite reward receipt still makes the final R-STDP application idempotent.
-- Episodes are currently held in memory only. The bridge is not yet wired to the app's higher-level decision/action lifecycle, and an episode cannot currently resume after process death. The recorded link means a signal was emitted over an edge; it does not prove the target later spiked or that this edge was the sole cause of the external result.
-- Pure unit tests cover bounded candidate memory, frequent-neuron retention, credit selection, no-transmission rejection, retry behavior and episode lifecycle. An Android instrumentation assertion checks that the runtime reports a real emitted source-to-target transmission.
+- Each recorded link contributes its exact connection ID to a bounded Space-Saving frequency sketch. The episode also retains an ordered connection-ID path up to the configured bound.
+- The default credited/tracked connection bound is 1,536, matching the store's maximum rewarded-synapse batch. IDs are validated and admitted only from emitted causal-link records.
+- AndroidJnvM250kRuntime.applyRewardToConnections and AndroidJnvM250kStore.applyRewardToConnections apply R-STDP only to those exact IDs. SQL selects connection_id IN (...); adjacent but unobserved connections are not selected.
+- Reward receipts encode the selection namespace as connections: plus sorted IDs. Exact-connection receipts remain distinct from legacy neuron-set receipts and preserve idempotent replay validation.
+- The legacy applyReward(..., rewardedNeuronIds) API remains available for compatibility; it still rewards eligible synapses adjacent to supplied neurons. The episode bridge no longer calls that API.
+- The ordered path records emitted transmissions, not proof that each edge caused the final outcome. Target spikes, competing paths, and counterfactual contribution are not inferred. Episodes remain in-memory and are not wired to the higher-level app decision lifecycle.
 
-This is the first explicit activity-based candidate-credit path, not full causal inference or autonomous reward-source validation. The coordinator requires a higher-level caller to associate runtime runs with an action and supply the external outcome. Tests are authored, not run.
+This is exact selection of observed synapses, not full causal inference. Unit tests cover exact-ID selection, ordered path retention, bounded tracking, no-transmission rejection, retry behavior and identifier validation. Tests are authored but not executed; no Android build or device experiment has been run.
 
 ## Android SQLite integration test authored
 
