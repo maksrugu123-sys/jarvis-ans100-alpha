@@ -269,3 +269,33 @@ The app's higher-level action/decision controller does not yet own this lifecycl
 This is a controlled counterfactual *model replay*, not a faithful replay of the complete production runtime. It currently does not reproduce online STDP/eligibility updates, external environment feedback, unprovided hidden state, asynchronous app actions or GPU/hybrid backend behavior. It assumes the supplied snapshot and input stream are complete and deterministic. If either branch is incomplete, its score must not be treated as a validated effect. The evaluator is not yet wired into `AndroidJnvM250kRewardAttribution` or the app decision lifecycle, and its score must not automatically change R-STDP credit.
 
 Unit tests are authored for an edge that changes the selected outcome, an unrelated edge, input snapshot immutability, hard candidate bounds and incomplete replay reporting. Tests are **not run**; no APK build or Android device experiment was run.
+
+## Counterfactual-gated reward policy
+
+`AndroidJnvM250kCounterfactualRewardGate` adds a fail-closed policy for using replay sensitivity as a bounded per-edge reward multiplier:
+
+- The baseline replay must be complete. Each selected candidate's counterfactual replay must also be complete.
+- Positive reward is accepted only when suppressing the edge reduces the selected outcome-spike count (`outcomeSpikeDelta > 0`). Negative reward requires the opposite direction (`outcomeSpikeDelta < 0`). Zero reward never produces credits.
+- By default, an edge must change the outcome by at least one spike, have sensitivity >= 0.25, and have response-score × sensitivity >= 0.10.
+- The final per-edge multiplier is `responseScore * sensitivityScore`, clamped to [0, 1]. Missing candidates, incomplete replays, no outcome change, weak sensitivity, weak combined confidence and direction mismatch are explicitly rejected.
+- `applyIfTrusted` invokes the supplied exact-edge reward callback only when at least one edge passes every check. The callback receives only accepted connection IDs and their filtered multipliers; otherwise it is not called. The caller must supply a stable reward ID so the JNVM store's durable receipt can make retries idempotent.
+
+Example for an explicitly managed, separate counterfactual-gated learning operation:
+
+```kotlin
+val gated = AndroidJnvM250kCounterfactualRewardGate.applyIfTrusted(
+    rewardId = "counterfactual-episode-42",
+    reward = outcomeReward,
+    responseScores = observedResponseScores,
+    report = counterfactualReport,
+) { id, reward, credits ->
+    runtime.applyRewardToConnections(id, reward, credits.keys, credits)
+}
+if (!gated.decision.mayApplyReward) {
+    // Keep the episode out of R-STDP; inspect gated.decision.rejected.
+}
+```
+
+Important integration boundary: the gate is a pure policy plus an opt-in guarded callback; it is not yet wired into the durable episode journal or `AndroidJnvM250kRewardAttribution.finishEpisode`. Do not apply both the existing episode reward and this gated reward to the same episode. The next integration step must persist the counterfactual report/decision (or its canonical accepted-credit map) alongside `REWARD_PENDING`, so process-death retries use exactly the same decision and reward receipt. Until then, use the gate only in a separately identified experiment path with its own stable reward ID.
+
+Five JVM unit tests cover positive/negative reward direction, incomplete baseline and candidate rejection, missing/weak evidence, zero reward, and callback suppression/filtering. Tests are authored but **not run**; no APK build, Android instrumentation run or device experiment was performed.
