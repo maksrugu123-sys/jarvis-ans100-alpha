@@ -156,7 +156,7 @@ class AndroidJnvM250kCognitiveController(
         check(result.processedEvents > 0 || result.pendingEvents > 0) {
             "runtime made no progress; refusing to mark an empty episode as completed"
         }
-        if (result.pendingEvents == 0 && result.processedEvents > 0) {
+        if (result.pendingEvents == 0 && result.processedEvents > 0 && !result.budgetExhausted) {
             phase = Phase.AWAITING_OUTCOME
         }
         return Progress(phase, result, batchesRecorded)
@@ -194,7 +194,7 @@ class AndroidJnvM250kCognitiveController(
         activeConceptIds: Set<String>,
         decodedCandidates: List<ANS100NeuralAssociationDecoder.Candidate>,
         ledger: ANS100NeuralHypothesisLedger? = hypothesisLedger,
-        pairScanComplete: Boolean = true,
+        pairScanComplete: Boolean = false,
     ): HypothesisObservation {
         check(phase == Phase.AWAITING_OUTCOME) {
             "hypotheses can be committed only after the decision runtime queue is drained"
