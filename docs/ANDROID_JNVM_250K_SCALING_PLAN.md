@@ -81,7 +81,7 @@ The sparse initializer now exposes a durable next-edge cursor: route index, sour
 
 The coordinator intentionally performs one batch per call; the application should schedule another bounded worker step while `complete == false`, rather than running the entire graph generation in one long task. The generator remains lazy and does not hold the full graph in RAM. This is resumable storage logic, not proof of successful Android background scheduling or SQLite behavior on the target phone. Unit tests are authored but not run.
 
-## Required design before enabling 250,000
+## 250k runtime integration and app-enablement gaps
 
 ### 1. Separate structural capacity from topology identity
 
@@ -140,7 +140,7 @@ Completed in the current branch:
 4. Enforce per-neuron incoming/outgoing degree limits.
 5. Add a bounded disk-backed event queue and atomic timestamp commit contract.
 
-Remaining before the new profile can run ANS:
+Remaining before enabling the new profile in the app:
 6. Partially covered by `AndroidJnvM250kStoreInstrumentedTest`: full-profile initialization/idempotency, batched graph persistence, close/reopen checkpoint recovery, stale-checkpoint rejection, duplicate-ID transaction rollback, timestamp atomicity and partial-checkpoint corruption. Still add focused coverage for degree rejection, event backpressure, working-set cache/database coherence, route enforcement and legacy database isolation.
 7. Initial LIF-DT event execution and CPU-backend integration are now implemented in `AndroidJnvM250kRuntime`: complete timestamp groups are aggregated by target, computed through the existing validated kernel, propagated over persisted outgoing edges, and atomically committed through the bounded working set. Signed event strengths now represent inhibitory propagation from the 20% inhibitory population allocation. Still integrate and verify GPU/hybrid backend selection, feature-state persistence, STDP/R-STDP learning and structural plasticity for the 250k profile.
 8. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
@@ -148,8 +148,8 @@ Remaining before the new profile can run ANS:
 ## Verification rules
 
 Until the above sequence is complete:
-- report the runtime as **10,000-neuron capacity**, not 250,000;
-- do not claim that the 250k topology is running;
+- report the existing app-integrated legacy runtime as **10,000-neuron capacity** until an explicit app-level profile switch is added;
+- distinguish the isolated 250k LIF-DT runtime prototype from a fully integrated cognitive network; do not claim full 250k ANS cognition is running;
 - do not extrapolate full-network speed from the isolated LIF-DT kernel benchmark;
 - keep Android builds, device benchmarks and heavy tests opt-in;
 - distinguish authored tests from tests actually executed.
