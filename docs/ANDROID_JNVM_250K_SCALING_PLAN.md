@@ -29,6 +29,25 @@ The branch now contains:
 
 Implemented after the storage foundation: `AndroidJnvM250kWorkingSet` adds a separate access-order LRU cache for neuron core state. It reads one neuron on a cache miss, writes state through to SQLite before publishing it in RAM, and delegates timestamp commits to the store before updating cached snapshots. It reuses the existing device-aware 1/2/4/8 MiB preference and rechecks the current device ceiling when its capacity is queried, when a state is accessed, and before writes/commits. Shrinking the budget evicts least-recently-used clean snapshots; SQLite remains authoritative. The wrapper intentionally does not own/close the store. Runtime callers must route state reads and writes through the working set; direct writes to the store while the cache is alive can make resident snapshots stale. The current unit tests cover budget-to-capacity mapping and the shared LRU trimming helper; they do not yet exercise the working set against a real Android SQLite database.\n\nStill not implemented: the 250k scheduler/compute loop, feature-state persistence, population/specialization layout, learning/plasticity integration, CPU/GPU backend routing, settings UI selection and device-level performance measurements. The 2,048-byte-per-resident-neuron value is only a planning allowance inherited from the existing RAM-budget policy, not a measured heap footprint. The 1/2/4/8 MiB values bound this managed core-state cache only, not total app RAM.
 
+## Implemented 250k population descriptor
+
+`AndroidJnvM250kTopology` now defines ten stable, mutually exclusive ID ranges covering the full 250,000-neuron profile:
+
+| Population | ID range | Count |
+|---|---:|---:|
+| Perception | 0–19,999 | 20,000 |
+| Memory | 20,000–69,999 | 50,000 |
+| Pattern detection | 70,000–114,999 | 45,000 |
+| Prediction | 115,000–154,999 | 40,000 |
+| Attention | 155,000–174,999 | 20,000 |
+| Contradiction | 175,000–189,999 | 15,000 |
+| Context | 190,000–214,999 | 25,000 |
+| Confidence | 215,000–229,999 | 15,000 |
+| Coordination | 230,000–239,999 | 10,000 |
+| Action selection | 240,000–249,999 | 10,000 |
+
+Excitatory/inhibitory polarity is an orthogonal deterministic property, not an eleventh population: one in every five IDs within each population is provisionally inhibitory (20%), with the rest excitatory. These population sizes and the 80/20 polarity split are initial engineering allocations, not biologically validated or experimentally optimized values. The descriptor validates that ranges are contiguous, non-overlapping and cover exactly 250,000 IDs. It does not yet instantiate neurons, create inter-population connections, or integrate specialization with learning and runtime scheduling.
+
 ## Required design before enabling 250,000
 
 ### 1. Separate structural capacity from topology identity
