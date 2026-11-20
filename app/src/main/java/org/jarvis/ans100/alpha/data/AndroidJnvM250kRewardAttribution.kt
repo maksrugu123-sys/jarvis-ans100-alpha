@@ -117,7 +117,10 @@ class AndroidJnvM250kRewardAttribution(
             val spike: AndroidJnvM250kSpike? = null,
             val ambiguous: Boolean = false,
         )
-        require(result.ambiguousTargetSpikeNeuronIds.all { it in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY })
+        val emittedSpikeIds = result.emittedSpikes.mapTo(HashSet()) { it.neuronId }
+        require(result.ambiguousTargetSpikeNeuronIds.all {
+            it in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY && it in emittedSpikeIds
+        })
         val timeline = ArrayList<TimelineEvent>(result.causalLinks.size + result.emittedSpikes.size)
         result.causalLinks.forEach { timeline += TimelineEvent(it.arrivalTimestampNs, link = it) }
         result.emittedSpikes.forEach { spike ->
@@ -231,6 +234,7 @@ class AndroidJnvM250kRewardAttribution(
         val assessedTransmissions = (episode.observedLinks - episode.unobservedTransmissions).coerceAtLeast(0L)
         val coverage = if (knownTransmissionTotal == 0L) 0.0 else
             (assessedTransmissions.toDouble() / knownTransmissionTotal.toDouble()).coerceIn(0.0, 1.0)
+        require(coverage > 0.0) { "no assessed transmission evidence remains after ambiguity and bounded-trace losses" }
         val scores = selected.associate { candidate ->
             candidate.connectionId to (
                 (candidate.responseCredit / candidate.responseCount.toDouble()).coerceIn(0.0, 1.0) * coverage
