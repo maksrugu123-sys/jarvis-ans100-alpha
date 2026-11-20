@@ -277,12 +277,20 @@ class AndroidJnvM250kStore(
     private fun readInitializerMetadata(db: SQLiteDatabase): Map<String, String>? {
         val keys = listOf("seed", "fanout", "delay_ns", "weight", "route", "source", "slot", "completed")
         val values = LinkedHashMap<String, String>()
+        var found = 0
         for (key in keys) {
             val value = db.rawQuery(
                 "SELECT value FROM metadata WHERE key=?",
                 arrayOf("sparse_initializer_v1_$key"),
-            ).use { if (it.moveToFirst()) it.getString(0) else null } ?: return null
-            values[key] = value
+            ).use { if (it.moveToFirst()) it.getString(0) else null }
+            if (value != null) {
+                found += 1
+                values[key] = value
+            }
+        }
+        if (found == 0) return null
+        if (found != keys.size) {
+            throw AndroidNeuronNetworkException("250k sparse initializer checkpoint is incomplete")
         }
         return values
     }
