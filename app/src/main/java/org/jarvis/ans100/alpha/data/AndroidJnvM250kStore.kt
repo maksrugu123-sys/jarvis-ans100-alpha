@@ -768,6 +768,9 @@ class AndroidJnvM250kStore(
             if (timestampNs != clock) {
                 throw AndroidNeuronNetworkException("250k reward must be applied at the current committed model time")
             }
+            if (scalar(db, "SELECT COUNT(*) FROM reward_receipts") >= MAX_REWARD_RECEIPTS) {
+                throw AndroidNeuronBackpressureException("250k reward receipt history is full")
+            }
 
             val ordered = rewardedNeuronIds.sorted()
             val placeholders = List(ordered.size) { "?" }.joinToString(",")
@@ -945,6 +948,7 @@ class AndroidJnvM250kStore(
         const val MAX_STDP_TRACE = 1_000.0
         const val MAX_RSTDP_ELIGIBILITY = 100.0
         const val MAX_REWARD_NEURONS = 32
+        const val MAX_REWARD_RECEIPTS = 100_000
         const val MAX_REWARDED_SYNAPSES = MAX_REWARD_NEURONS * (AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON + AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON)
 
         private fun readState(cursor: Cursor) = AndroidNeuronState(
