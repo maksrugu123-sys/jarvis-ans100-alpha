@@ -35,7 +35,7 @@ class AndroidJnvM250kDecisionLearningCycle(
         attribution.beginDecisionEpisode(episodeId, decision, context)
         try {
             runtime.scheduleInputs(context.externalInputs)
-        } catch (failure: Throwable) {
+        } catch (failure: RuntimeException) {
             // scheduleInputs is one bounded atomic enqueue; on failure, retire
             // the OPEN journal entry so no reward can be assigned to it.
             attribution.abortEpisode()
