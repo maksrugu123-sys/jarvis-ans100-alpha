@@ -129,6 +129,53 @@ class AndroidJnvM250kStoreInstrumentedTest {
             assertEquals(10L, store.stats().currentTimeNs)
             assertEquals(listOf(generatedEvent), store.nextTimestampEvents())
 
+            // Run real LIF-DT through the 250k store and bounded working set.
+            // Neuron 4 is inhibitory under the deterministic population polarity rule.
+            assertEquals(
+                AndroidJnvM250kTopology.Polarity.INHIBITORY,
+                AndroidJnvM250kTopology.polarityFor(4),
+            )
+            val existingSourceFourTargets = store.outgoingPage(4, limit = 16).map { it.targetNeuronId }.toSet()
+            val sourceZeroTarget = firstBatch.connections.first { it.sourceNeuronId == 0 }.targetNeuronId
+            val inhibitoryTarget = (20_000..20_031).first {
+                it !in existingSourceFourTargets && it != sourceZeroTarget
+            }
+            store.registerConnection(
+                AndroidNeuronConnection(
+                    connectionId = "runtime-inhibitory-probe",
+                    sourceNeuronId = 4,
+                    targetNeuronId = inhibitoryTarget,
+                    delayNs = 1_000_000L,
+                    weight = 0.5,
+                ),
+            )
+
+            AndroidJnvM250kRuntime(context, store).use { runtime ->
+                runtime.scheduleInputs(
+                    listOf(
+                        AndroidNeuronEvent("runtime-input-excitatory", 100L, 0, 1.2),
+                        AndroidNeuronEvent("runtime-input-inhibitory", 100L, 4, 1.2),
+                    ),
+                )
+                val sourceRun = runtime.run(maxEvents = 2, maxTimestamps = 1)
+                assertEquals(2, sourceRun.processedEvents)
+                assertEquals(setOf(0, 4), sourceRun.emittedSpikes.map { it.neuronId }.toSet())
+                assertTrue(sourceRun.residentNeuronCount <= sourceRun.hotSetCapacity)
+
+                val propagated = store.nextTimestampEvents()
+                assertNotNull(propagated)
+                val inhibitorySignal = propagated!!.single {
+                    it.eventId.endsWith("runtime-inhibitory-probe")
+                }
+                assertEquals(-0.5, inhibitorySignal.strength, 0.000001)
+
+                val targetRun = runtime.run(maxEvents = propagated.size, maxTimestamps = 1)
+                assertEquals(propagated.size, targetRun.processedEvents)
+                val inhibitedState = store.loadNeuronPage(inhibitoryTarget - 1, 1).single()
+                assertEquals(-0.5, inhibitedState.potential, 0.000001)
+                assertEquals("cpu-reference", targetRun.computeBackend)
+            }
+
             // Partial checkpoint metadata is treated as corruption, never as a
             // fresh run that could silently duplicate already committed edges.
             store.close()
