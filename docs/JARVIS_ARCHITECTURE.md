@@ -5082,3 +5082,24 @@ tools/task_validation/structural_plasticity_eval_v1.py воспроизводи�
 
 
 **Implementation note (adapter V1):** Android already has `ANS100BenchmarkTraceAdapter.kt`, which exports LIF activity and Core heuristic provenance while keeping the canonical answer null. The Python benchmark adapter validates this exact schema and strips evaluator-only fields from model inputs. The Kotlin adapter is not yet called by `JarvisViewModel`; automatic app trace capture/export remains unimplemented. Current policy-level decisions cannot be scored as semantic answers.
+
+
+## 3.55 Decision-bound counterfactual learning bridge for the 250k JNVM profile
+
+**Status:** source implementation added on `experiment/jarvis-integrated-prototype-v1`; tests AUTHORED / NOT RUN; no build/device verification. This is an opt-in adapter around the independent 250k runtime, not a claim that the ordinary Android chat route now uses 250k neurons.
+
+`AndroidJnvM250kRuntime.captureDecisionEpisodeContext` accepts only an `ANS100DecisionStatus.SELECTED` decision. Before scheduling any input, it requires an empty persisted runtime queue and captures a bounded reachable graph from the external-input target neurons. The snapshot is limited to 16 graph levels, 512 edges, 512 neuron states, 512 input events and 128 outcome neurons. If the graph is truncated by any bound, capture fails rather than evaluating an incomplete graph as complete.
+
+`AndroidJnvM250kDecisionEpisodeContext` binds the pre-action state, edge list, exact external input batch and outcome/readout neuron IDs to the decision turn and selected candidate ID. The context is stored in the SQLite episode journal (snapshot schema V7) before the runtime inputs are enqueued. The journal also stores per-run completion status and the counterfactual gate decision/accepted per-edge credits.
+
+`AndroidJnvM250kDecisionLearningCycle` provides the explicit sequence:
+1. `begin`: capture the pre-action snapshot, validate the selected decision, persist the episode, and enqueue the exact captured inputs.
+2. `run`: execute one bounded 250k runtime batch and immediately append its spikes/transmissions to the durable episode attribution record.
+3. `finish`: require at least one completed batch and no pending/exhausted runtime work; rank response-supported connections, evaluate at most eight counterfactual edge suppressions, then apply only gate-approved exact-edge R-STDP credits.
+4. `resumeRecoveredEpisode`: resume an OPEN or REWARD_PENDING episode from the durable journal; pending rewards reuse the exact persisted reward ID and credit map.
+
+Only an externally observed outcome may be passed as the scalar reward. ANS's own candidate activation, predicted outcome or uncalibrated confidence is not an outcome label. ABSTAINED and NEEDS_CLARIFICATION decisions cannot begin reward episodes.
+
+**Integration and fidelity limits:** the ordinary Android dialogue route still uses a separate 10k hybrid topology; MainActivity does not automatically instantiate this 250k bridge. The caller must map the selected candidate to the correct 250k input projection and outcome/readout neuron IDs. Runtime timestamp commits and episode telemetry are separate SQLite transactions; a process death after a runtime commit but before `recordRun` persists may lose that batch's attribution evidence. Counterfactual replay remains a CPU LIF-DT model replay without online STDP, environment feedback or unprovided state; it is not proof of real-world causality. GPU/hybrid runtime execution is not reproduced in the counterfactual evaluator.
+
+Added JVM context-invariant tests and Android journal tests for selected-decision persistence/replay, rejection of abstained decisions, incomplete runtime refusal and bounded snapshot validation. Tests are AUTHORED / NOT RUN. No Gradle build, APK/AAB, CI, instrumentation run or device measurement was performed. Detailed API and limitations: `docs/ANDROID_JNVM_250K_SCALING_PLAN.md`.
