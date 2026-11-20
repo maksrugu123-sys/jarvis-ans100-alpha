@@ -79,7 +79,7 @@ object AndroidJnvM250kTopology {
     }
 
     fun validate() {
-        require(POPULATION_RANGES.size == Population.entries.size) {
+        require(POPULATION_RANGES.size == Population.values().size) {
             "every 250k population must have exactly one ID range"
         }
         var expectedFirst = 0
