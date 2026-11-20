@@ -140,6 +140,110 @@ class AndroidJnvM250kEpisodeJournalInstrumentedTest {
         }
     }
 
+    @Test
+    fun counterfactualDecisionAndExactCreditsSurviveRewardRetry() {
+        context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        val episodeId = "cf-${UUID.randomUUID().toString().replace("-", "")}"
+        val first = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids -> error("unweighted reward must never run: $id $ids") },
+            applyWeightedReward = { _, _, _ -> error("simulate process interruption after durable decision") },
+        )
+        first.beginEpisode(episodeId, "action-counterfactual")
+        first.recordRun(runResult(listOf(link("edge-gated"))))
+        val trustedReport = AndroidJnvM250kCounterfactualEvaluator.Report(
+            candidates = listOf(
+                AndroidJnvM250kCounterfactualEvaluator.CandidateEffect(
+                    connectionId = "edge-gated",
+                    baselineOutcomeSpikes = 2,
+                    counterfactualOutcomeSpikes = 1,
+                    outcomeSpikeDelta = 1,
+                    sensitivityScore = 0.5,
+                    baselineComplete = true,
+                    counterfactualComplete = true,
+                ),
+            ),
+            baselineProcessedEvents = 1,
+            baselineProcessedTimestamps = 1,
+            baselineComplete = true,
+        )
+        assertTrue(runCatching {
+            first.finishEpisodeWithCounterfactual(0.75, trustedReport)
+        }.isFailure)
+        first.close()
+
+        var replayedCredits = emptyMap<String, Double>()
+        val recovered = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids -> error("unweighted reward must never run: $id $ids") },
+            applyWeightedReward = { id, reward, credits ->
+                assertEquals("counterfactual-episode-$episodeId", id)
+                assertEquals(0.75, reward, 0.0)
+                replayedCredits = credits
+                AndroidJnvM250kRewardResult(id, credits.size, true, 25L)
+            },
+        )
+        val changedReport = trustedReport.copy(
+            candidates = listOf(trustedReport.candidates.single().copy(
+                outcomeSpikeDelta = -1,
+                counterfactualOutcomeSpikes = 3,
+                sensitivityScore = 0.9,
+            )),
+        )
+        try {
+            val result = recovered.finishEpisodeWithCounterfactual(0.75, changedReport)
+            assertTrue(result.replayedPersistedDecision)
+            assertEquals(mapOf("edge-gated" to 0.5), replayedCredits)
+            assertEquals(mapOf("edge-gated" to 0.5), result.decision.acceptedCredits)
+            assertTrue(!recovered.hasActiveEpisode())
+        } finally {
+            recovered.close()
+            context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        }
+    }
+
+    @Test
+    fun rejectedCounterfactualDecisionIsTerminalAndNeverCallsReward() {
+        context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        val first = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids -> error("rejected decision must not reward: $id $ids") },
+            applyWeightedReward = { id, _, credits ->
+                error("rejected decision must not reward: $id $credits")
+            },
+        )
+        first.beginEpisode("cf-reject-${UUID.randomUUID().toString().replace("-", "")}", "action")
+        first.recordRun(runResult(listOf(link("edge-rejected"))))
+        val incomplete = AndroidJnvM250kCounterfactualEvaluator.Report(
+            candidates = listOf(
+                AndroidJnvM250kCounterfactualEvaluator.CandidateEffect(
+                    connectionId = "edge-rejected",
+                    baselineOutcomeSpikes = 1,
+                    counterfactualOutcomeSpikes = 0,
+                    outcomeSpikeDelta = 1,
+                    sensitivityScore = 1.0,
+                    baselineComplete = false,
+                    counterfactualComplete = true,
+                ),
+            ),
+            baselineProcessedEvents = 1,
+            baselineProcessedTimestamps = 1,
+            baselineComplete = false,
+        )
+        try {
+            val result = first.finishEpisodeWithCounterfactual(1.0, incomplete)
+            assertTrue(!result.decision.mayApplyReward)
+            assertTrue(result.decision.rejected.values.all {
+                it == AndroidJnvM250kCounterfactualRewardGate.Rejection.BASELINE_INCOMPLETE
+            })
+            assertEquals(null, result.rewardResult)
+            assertTrue(!first.hasActiveEpisode())
+        } finally {
+            first.close()
+            context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        }
+    }
+
     private fun link(id: String) = AndroidJnvM250kCausalLink(
         connectionId = id,
         sourceNeuronId = 1,
