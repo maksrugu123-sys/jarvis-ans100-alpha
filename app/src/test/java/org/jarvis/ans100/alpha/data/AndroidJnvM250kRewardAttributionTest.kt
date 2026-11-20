@@ -87,15 +87,15 @@ class AndroidJnvM250kRewardAttributionTest {
         assertTrue(runCatching { attribution.beginEpisode("bad/id", "action") }.isFailure)
         attribution.beginEpisode("bounded", "action")
         assertTrue(runCatching { attribution.beginEpisode("second", "action") }.isFailure)
-        val links = (0..30).map { i -> link("edge-$i", 100, 101+i) } +
-            listOf(link("edge-0", 100, 101), link("edge-0", 100, 101))
+        val links = List(10) { link("edge-0", 100, 101) } +
+            (1..30).map { i -> link("edge-$i", 100, 101+i) }
         attribution.recordRun(runResult(links))
         assertEquals(3, attribution.trackedConnectionCount())
         val result = attribution.finishEpisode(1.0)
         assertEquals(2, result.creditedConnectionIds.size)
         assertTrue("edge-0" in result.creditedConnectionIds)
         assertEquals(3, result.signalPathConnectionIds.size)
-        assertEquals(31L, result.omittedLinks)
+        assertEquals(38L, result.omittedLinks)
         attribution.beginEpisode("after", "action")
         attribution.abortEpisode()
         assertFalse(attribution.hasActiveEpisode())

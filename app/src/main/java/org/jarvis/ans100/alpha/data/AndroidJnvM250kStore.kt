@@ -797,6 +797,9 @@ class AndroidJnvM250kStore(
             if (rows.size > MAX_REWARDED_SYNAPSES) {
                 throw AndroidNeuronBackpressureException("250k reward credit set exceeds its bounded synapse limit")
             }
+            if (rows.size != ordered.size) {
+                throw AndroidNeuronNetworkException("250k exact reward references a missing connection or learning trace")
+            }
 
             var affected = 0
             for (index in rows.indices) {
