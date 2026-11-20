@@ -3378,3 +3378,8 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 **Limitations:** the bridge is not instantiated by MainActivity; the normal Android chat route remains on the separate 10k hybrid topology. A caller must map the selected candidate to 250k input and outcome neuron IDs. Runtime timestamp commit and attribution journal write are separate database transactions, so a process death between them can lose a batch's telemetry. Counterfactual replay is CPU LIF-DT only and omits online STDP and environment feedback; it is model sensitivity evidence, not real-world causal proof. No Android performance or useful-learning evidence exists.
 
 **Next step:** add an explicit caller from the ANS decision orchestration route only after a validated mapping exists between candidate slots, 250k input projections and outcome/readout neurons; then run focused tests/build/device validation only with separate user authorization.
+
+
+### 2026-11-20 follow-up — Verify the bounded SQLite snapshot reader
+
+Added `selectedDecisionSnapshotCaptureReadsCompleteBoundedReachableGraph` to `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidJnvM250kStoreInstrumentedTest.kt`. It initializes the isolated 250k store, persists a two-edge reachable path, verifies the runtime captures the exact three pre-action neuron states/edges/input/outcome set, and verifies a too-shallow graph bound fails closed. The test is **AUTHORED, NOT RUN**; full 250k initialization, Gradle, APK, CI and device execution remain unperformed. Documentation was synchronized in `ANDROID_JNVM_250K_SCALING_PLAN.md` and `JARVIS_ARCHITECTURE.md` §3.55.
