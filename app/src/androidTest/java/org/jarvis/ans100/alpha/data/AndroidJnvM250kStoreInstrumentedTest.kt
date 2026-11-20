@@ -249,6 +249,14 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     store.outgoingPage(0, limit = 16).single { it.targetNeuronId == sourceZeroTarget }.weight,
                     0.000001,
                 )
+                val conflictingRewardId = runCatching {
+                    resumedRuntime.applyReward(
+                        rewardId = "reward-positive-once",
+                        reward = -1.0,
+                        rewardedNeuronIds = setOf(sourceZeroTarget),
+                    )
+                }.exceptionOrNull()
+                assertTrue("a reward ID cannot be reused for different feedback", conflictingRewardId is AndroidNeuronNetworkException)
 
                 // A second postsynaptic spike reuses the still-decaying pre-trace,
                 // creating fresh positive eligibility for a punishment probe.
