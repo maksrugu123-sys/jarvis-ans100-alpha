@@ -67,6 +67,7 @@ class AndroidJnvM250kRewardAttribution(
         var contestedTargetResponses: Long = 0L,
         var nextOrder: Long = 0L,
         var pendingReward: Double? = null,
+        var legacyUnweightedReward: Boolean = false,
     )
 
     private var activeEpisode: Episode? = journal?.loadRecoverable()?.let(::decodeEpisode)
@@ -208,8 +209,12 @@ class AndroidJnvM250kRewardAttribution(
             journal?.prepareReward(episode.id, encodeEpisode(episode), reward)
         }
         val rewardId = "episode-${episode.id}"
-        val rewardResult = applyWeightedReward?.invoke(rewardId, reward, scores)
-            ?: applyReward(rewardId, reward, credited)
+        val rewardResult = if (episode.legacyUnweightedReward) {
+            applyReward(rewardId, reward, credited)
+        } else {
+            applyWeightedReward?.invoke(rewardId, reward, scores)
+                ?: applyReward(rewardId, reward, credited)
+        }
         journal?.complete(episode.id)
         val result = AndroidJnvM250kAttributionResult(
             episodeId = episode.id,
@@ -306,8 +311,10 @@ class AndroidJnvM250kRewardAttribution(
         val path = JSONArray()
         episode.path.forEach { path.put(it) }
         return JSONObject().apply {
+            put("snapshot_version", SNAPSHOT_VERSION)
             put("episode_id", episode.id)
             put("action_id", episode.actionId)
+            put("legacy_unweighted_reward", episode.legacyUnweightedReward)
             put("candidates", candidates)
             put("pending", pending)
             put("path", path)
@@ -328,6 +335,8 @@ class AndroidJnvM250kRewardAttribution(
 
     private fun decodeEpisode(record: AndroidJnvM250kEpisodeJournal.Record): Episode {
         val json = JSONObject(record.payload)
+        if (!json.has("snapshot_version")) return decodeLegacyEpisode(record, json)
+        require(json.getInt("snapshot_version") == SNAPSHOT_VERSION) { "unsupported episode snapshot version" }
         val episode = Episode(
             id = json.getString("episode_id"),
             actionId = json.getString("action_id"),
@@ -338,6 +347,7 @@ class AndroidJnvM250kRewardAttribution(
             contestedTargetResponses = json.getLong("contested_responses"),
             nextOrder = json.getLong("next_order"),
             pendingReward = if (json.isNull("pending_reward")) null else json.getDouble("pending_reward"),
+            legacyUnweightedReward = json.optBoolean("legacy_unweighted_reward", false),
         )
         require(episode.id == record.episodeId && episode.id.matches(SAFE_ID))
         require(episode.actionId.matches(SAFE_ID))
@@ -393,6 +403,55 @@ class AndroidJnvM250kRewardAttribution(
         return episode
     }
 
+    /**
+     * Older open episodes did not retain target IDs or response evidence, so
+     * they are restored without reward-eligible candidates. A REWARD_PENDING
+     * legacy episode must replay its original unweighted receipt unchanged.
+     */
+    private fun decodeLegacyEpisode(
+        record: AndroidJnvM250kEpisodeJournal.Record,
+        json: JSONObject,
+    ): Episode {
+        val episode = Episode(
+            id = json.getString("episode_id"),
+            actionId = json.getString("action_id"),
+            observedLinks = json.getLong("observed_links"),
+            omittedLinks = json.getLong("omitted_links"),
+            nextOrder = json.getLong("next_order"),
+            pendingReward = if (json.isNull("pending_reward")) null else json.getDouble("pending_reward"),
+            legacyUnweightedReward = record.state == "REWARD_PENDING",
+        )
+        require(episode.id == record.episodeId && episode.id.matches(SAFE_ID))
+        require(episode.actionId.matches(SAFE_ID))
+        require(episode.observedLinks >= 0L && episode.omittedLinks >= 0L && episode.nextOrder >= 0L)
+        val candidates = json.getJSONArray("candidates")
+        if (record.state == "REWARD_PENDING") {
+            require(record.reward != null && episode.pendingReward == record.reward)
+            require(candidates.length() in 1..maxTrackedConnections)
+            for (index in 0 until candidates.length()) {
+                val item = candidates.getJSONObject(index)
+                val id = item.getString("id")
+                val count = item.getLong("count")
+                val order = item.getLong("order")
+                require(id.matches(CONNECTION_ID) && count > 0L && order >= 0L)
+                require(episode.candidates.put(
+                    id,
+                    Candidate(id, 0, count, 1L, count.toDouble().coerceAtMost(MAX_RESPONSE_CREDIT), order),
+                ) == null)
+            }
+        } else {
+            require(record.state == "OPEN" && episode.pendingReward == null)
+        }
+        val path = json.getJSONArray("path")
+        require(path.length() <= maxTrackedConnections)
+        for (index in 0 until path.length()) {
+            val id = path.getString(index)
+            require(id.matches(CONNECTION_ID))
+            episode.path += id
+        }
+        return episode
+    }
+
     private fun saturatedAdd(a: Long, b: Long): Long =
         if (Long.MAX_VALUE - a < b) Long.MAX_VALUE else a + b
 
@@ -401,6 +460,7 @@ class AndroidJnvM250kRewardAttribution(
         const val MAX_CREDITED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val DEFAULT_MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
+        private const val SNAPSHOT_VERSION = 2
         const val TARGET_RESPONSE_WINDOW_NS = 100_000_000L
         const val MAX_RESPONSE_CREDIT = 1_000_000.0
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
