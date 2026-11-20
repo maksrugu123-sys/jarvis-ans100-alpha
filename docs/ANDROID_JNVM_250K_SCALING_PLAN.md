@@ -141,10 +141,9 @@ Completed in the current branch:
 5. Add a bounded disk-backed event queue and atomic timestamp commit contract.
 
 Remaining before the new profile can run ANS:
-6. Add a persisted initializer checkpoint/resume coordinator and Android SQLite integration tests for batched graph creation, interruption, restart, duplicate prevention, degree rejection, event backpressure, timestamp atomicity, working-set cache/database coherence, route enforcement and legacy database isolation.
+6. Add Android SQLite integration tests for batched graph creation, process interruption/restart, checkpoint atomicity, duplicate prevention, degree rejection, event backpressure, timestamp atomicity, working-set cache/database coherence, route enforcement and legacy database isolation.
 7. Integrate the LIF-DT scheduler, CPU/GPU compute backend, feature-state persistence, learning and plasticity against the new store and population descriptor.
-8. Add Android database integration tests for interrupted initialization, restart persistence, degree rejection, event backpressure, full timestamp atomicity, working-set cache/database coherence, route enforcement and legacy database isolation.
-9. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
+8. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
 
 ## Verification rules
 
