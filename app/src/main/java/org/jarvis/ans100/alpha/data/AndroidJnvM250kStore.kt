@@ -868,6 +868,7 @@ class AndroidJnvM250kStore(
         timestampNs: Long,
         traceTauNs: Double,
         learningRate: Double,
+        connectionCredits: Map<String, Double> = emptyMap(),
     ): AndroidJnvM250kRewardResult {
         require(rewardId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
         require(reward.isFinite() && reward in -1.0..1.0)
@@ -880,6 +881,10 @@ class AndroidJnvM250kStore(
         require(timestampNs >= 0L)
         require(traceTauNs.isFinite() && traceTauNs > 0.0)
         require(learningRate.isFinite() && learningRate in 0.0..1.0)
+        if (connectionCredits.isNotEmpty()) {
+            require(connectionCredits.keys == connectionIds) { "per-connection credit keys must exactly match the rewarded connection IDs" }
+            connectionCredits.values.forEach { require(it.isFinite() && it in 0.0..1.0) }
+        }
         requireInitialized()
 
         val db = helper.writableDatabase
