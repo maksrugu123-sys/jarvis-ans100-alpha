@@ -63,9 +63,9 @@ data class AndroidJnvM250kRewardResult(
  *
  * It is consumed by AndroidJnvM250kRuntime, while the legacy
  * AndroidSparseNeuronNetwork remains isolated on its existing 10k layouts.
- * The 250k runtime provides bounded LIF-DT execution, sparse signal propagation
- * and persisted pair-based STDP. R-STDP and the full cognitive lifecycle remain
- * outside this storage/runtime layer.
+ * The 250k runtime provides bounded LIF-DT execution, sparse signal propagation,
+ * persisted pair-based STDP and bounded reward-modulated STDP. Automatic reward
+ * attribution and the full cognitive lifecycle remain outside this layer.
  */
 class AndroidJnvM250kStore(
     context: Context,
