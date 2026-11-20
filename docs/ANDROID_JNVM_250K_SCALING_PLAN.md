@@ -142,7 +142,7 @@ Completed in the current branch:
 
 Remaining before the new profile can run ANS:
 6. Partially covered by `AndroidJnvM250kStoreInstrumentedTest`: full-profile initialization/idempotency, batched graph persistence, close/reopen checkpoint recovery, stale-checkpoint rejection, duplicate-ID transaction rollback, timestamp atomicity and partial-checkpoint corruption. Still add focused coverage for degree rejection, event backpressure, working-set cache/database coherence, route enforcement and legacy database isolation.
-7. Integrate the LIF-DT scheduler, CPU/GPU compute backend, feature-state persistence, learning and plasticity against the new store and population descriptor.
+7. Initial LIF-DT event execution and CPU-backend integration are now implemented in `AndroidJnvM250kRuntime`: complete timestamp groups are aggregated by target, computed through the existing validated kernel, propagated over persisted outgoing edges, and atomically committed through the bounded working set. Signed event strengths now represent inhibitory propagation from the 20% inhibitory population allocation. Still integrate and verify GPU/hybrid backend selection, feature-state persistence, STDP/R-STDP learning and structural plasticity for the 250k profile.
 8. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
 
 ## Verification rules
@@ -159,4 +159,14 @@ Until the above sequence is complete:
 `AndroidJnvM250kStoreInstrumentedTest` adds opt-in Android instrumentation coverage against the real SQLite implementation. It initializes the complete 250,000-row profile once, checks initialization idempotency, commits a bounded sparse-edge batch with its checkpoint, closes and reopens the database, and verifies the saved cursor and edges. It also verifies that a stale worker cannot advance the cursor, that a duplicate-ID failure rolls back an earlier insert in the same batch, that timestamp processing commits consumed/generated events, neuron state and model time together, that an invalid consumed-event set rolls back, and that partially deleted checkpoint metadata fails closed.
 
 This is intentionally an instrumentation test because the production store depends on Android SQLite. It performs full 250k initialization and should not be added to lightweight JVM smoke-test runs. The test is authored but **not executed**; database restart, rollback and corruption handling therefore remain unverified on a real Android runtime until the instrumentation test is deliberately run.
+
+## First executable 250k LIF-DT runtime
+
+`AndroidJnvM250kRuntime` is the first event-driven execution layer over the independent SQLite profile. It accepts bounded input batches, processes one complete timestamp group at a time, aggregates signed input per target neuron, uses the existing validated `AndroidNeuronKernel` and injectable compute backend, then propagates spikes over persisted outgoing edges. Neuron state is read and published through `AndroidJnvM250kWorkingSet`; the store remains authoritative and each timestamp is committed atomically before the runtime advances its clock.
+
+The topology's provisional inhibitory polarity now affects signal transmission: excitatory source neurons emit positive event strengths, inhibitory source neurons emit negative strengths. `AndroidNeuronEvent.strength` therefore accepts the signed interval [-1, 1], while the LIF-DT kernel already supports signed finite input. The instrumentation test exercises both signs, checks that an over-budget timestamp group is left untouched, and verifies that an inhibitory signal lowers its target's membrane potential.
+
+Per invocation the runtime caps processed input events at 8,192 and timestamp groups at 1,024; each timestamp remains capped at 512 inputs and generated propagation remains capped at 8,192 events. The working set is rechecked against the device RAM policy and only event-target states are loaded. The compute backend is injectable, with CPU reference as the default. GPU/hybrid selection is not automatically enabled by this runtime yet.
+
+Important boundary: this is LIF-DT activation and fixed-weight signal propagation, not yet a learning network. It does not currently update synaptic weights with STDP/R-STDP, persist feature-state extensions, run the full cognitive hypothesis lifecycle, or prove useful cognition. Instrumentation coverage is authored but not run; no Android build or device measurement has been performed.
 
