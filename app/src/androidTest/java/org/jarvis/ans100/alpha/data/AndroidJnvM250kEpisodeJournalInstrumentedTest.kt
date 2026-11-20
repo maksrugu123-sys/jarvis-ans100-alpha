@@ -244,6 +244,111 @@ class AndroidJnvM250kEpisodeJournalInstrumentedTest {
         }
     }
 
+    @Test
+    fun selectedDecisionSnapshotIsPersistedAndAutomaticallyReplayedAfterRestart() {
+        context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        val episodeId = "decision-${UUID.randomUUID().toString().replace("-", "")}"
+        val decision = ANS100Decision(
+            turnId = "turn-counterfactual",
+            topologyVersion = ANS100TopologyVersion.HYBRID_SPARSE_POPULATIONS_V1,
+            status = ANS100DecisionStatus.SELECTED,
+            candidates = listOf(
+                ANS100Candidate(
+                    candidateId = "answer",
+                    summary = "Ответить на запрос",
+                    supportingEvidenceIds = emptyList(),
+                ),
+            ),
+            selectedCandidateId = "answer",
+            responseGoal = "Подготовить ответ",
+        )
+        val snapshot = AndroidJnvM250kDecisionEpisodeContext(
+            decisionTurnId = decision.turnId,
+            selectedCandidateId = "answer",
+            initialStates = mapOf(
+                1 to AndroidNeuronState(1),
+                2 to AndroidNeuronState(2),
+                3 to AndroidNeuronState(3),
+            ),
+            connections = listOf(
+                AndroidNeuronConnection("edge-outcome", 1, 2, 1L, 1.0),
+                AndroidNeuronConnection("edge-unrelated", 1, 3, 1L, 1.0),
+            ),
+            externalInputs = listOf(AndroidNeuronEvent("decision-input", 1L, 1, 1.0)),
+            outcomeNeuronIds = setOf(2),
+        )
+        val first = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids -> error("unweighted path must not run: $id $ids") },
+            applyWeightedReward = { _, _, _ -> error("simulate process death after durable gate decision") },
+        )
+        first.beginDecisionEpisode(episodeId, decision, snapshot)
+        first.recordRun(runResult(listOf(link("edge-outcome"))))
+        assertTrue(runCatching { first.finishEpisodeWithCounterfactual(0.8) }.isFailure)
+        first.close()
+
+        var replayed = emptyMap<String, Double>()
+        val recovered = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids -> error("unweighted path must not run: $id $ids") },
+            applyWeightedReward = { id, reward, credits ->
+                assertEquals("counterfactual-episode-$episodeId", id)
+                assertEquals(0.8, reward, 0.0)
+                replayed = credits
+                AndroidJnvM250kRewardResult(id, credits.size, true, 30L)
+            },
+        )
+        try {
+            val result = recovered.finishEpisodeWithCounterfactual(
+                0.8,
+                AndroidJnvM250kCounterfactualRewardGate.Policy(minimumSensitivity = 0.9),
+            )
+            assertTrue(result.replayedPersistedDecision)
+            assertEquals(mapOf("edge-outcome" to 1.0), replayed)
+            assertEquals(replayed, result.decision.acceptedCredits)
+            assertTrue(!recovered.hasActiveEpisode())
+        } finally {
+            recovered.close()
+            context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        }
+    }
+
+    @Test
+    fun decisionEpisodeRejectsAbstainedOrMismatchedDecisionBeforeOpeningJournal() {
+        context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        val attribution = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 1L) },
+        )
+        val contextSnapshot = AndroidJnvM250kDecisionEpisodeContext(
+            decisionTurnId = "turn-not-selected",
+            selectedCandidateId = "answer",
+            initialStates = mapOf(1 to AndroidNeuronState(1), 2 to AndroidNeuronState(2)),
+            connections = listOf(AndroidNeuronConnection("edge", 1, 2, 1L, 1.0)),
+            externalInputs = listOf(AndroidNeuronEvent("input", 1L, 1, 1.0)),
+            outcomeNeuronIds = setOf(2),
+        )
+        val abstained = ANS100Decision(
+            turnId = "turn-not-selected",
+            topologyVersion = ANS100TopologyVersion.HYBRID_SPARSE_POPULATIONS_V1,
+            status = ANS100DecisionStatus.ABSTAINED,
+            candidates = listOf(
+                ANS100Candidate("answer", "Ответ", emptyList()),
+            ),
+            abstentionReason = "Недостаточно оснований",
+            responseGoal = "Воздержаться",
+        )
+        try {
+            assertTrue(runCatching {
+                attribution.beginDecisionEpisode("not-selected", abstained, contextSnapshot)
+            }.isFailure)
+            assertTrue(!attribution.hasActiveEpisode())
+        } finally {
+            attribution.close()
+            context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        }
+    }
+
     private fun link(id: String) = AndroidJnvM250kCausalLink(
         connectionId = id,
         sourceNeuronId = 1,
