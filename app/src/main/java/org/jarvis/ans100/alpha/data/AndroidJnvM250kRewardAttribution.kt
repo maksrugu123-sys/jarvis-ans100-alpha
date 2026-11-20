@@ -81,6 +81,8 @@ class AndroidJnvM250kRewardAttribution(
         var pendingReward: Double? = null,
         var legacyUnweightedReward: Boolean = false,
         var counterfactualDecisionJson: String? = null,
+        var counterfactualContextJson: String? = null,
+        var counterfactualContextJson: String? = null,
     )
 
     private var activeEpisode: Episode? = journal?.loadRecoverable()?.let(::decodeEpisode)
@@ -96,6 +98,29 @@ class AndroidJnvM250kRewardAttribution(
         require(actionId.matches(SAFE_ID)) { "actionId must be a safe stable identifier" }
         check(activeEpisode == null) { "finish or abort the active reward episode first" }
         val episode = Episode(episodeId, actionId)
+        journal?.begin(episodeId, encodeEpisode(episode))
+        activeEpisode = episode
+    }
+
+    /**
+     * Opens an episode directly from a selected ANS decision and its durable
+     * pre-action JNVM snapshot. The snapshot is committed before any runtime input.
+     */
+    @Synchronized
+    fun beginDecisionEpisode(
+        episodeId: String,
+        decision: ANS100Decision,
+        context: AndroidJnvM250kDecisionEpisodeContext,
+    ) {
+        require(episodeId.matches(SAFE_ID)) { "episodeId must be a safe stable identifier" }
+        context.validateAgainst(decision)
+        check(activeEpisode == null) { "finish or abort the active reward episode first" }
+        val actionId = "decision-" + context.selectedCandidateId
+            .replace(Regex("[^A-Za-z0-9._-]"), "-")
+            .take(52)
+        val episode = Episode(episodeId, actionId).apply {
+            counterfactualContextJson = context.toJson().toString()
+        }
         journal?.begin(episodeId, encodeEpisode(episode))
         activeEpisode = episode
     }
@@ -293,6 +318,53 @@ class AndroidJnvM250kRewardAttribution(
      * before reward application. A recovered pending episode always replays
      * that stored map; a newly supplied report/policy cannot alter it.
      */
+    /**
+     * Runs the counterfactual replay from the exact pre-action snapshot stored
+     * with beginDecisionEpisode, then durably applies only the gated edge credits.
+     *
+     * On a recovered REWARD_PENDING episode, the stored decision is replayed
+     * without recomputing the report.
+     */
+    @Synchronized
+    fun finishEpisodeWithCounterfactual(
+        reward: Double,
+        policy: AndroidJnvM250kCounterfactualRewardGate.Policy =
+            AndroidJnvM250kCounterfactualRewardGate.Policy(),
+    ): AndroidJnvM250kCounterfactualFinishResult {
+        require(reward.isFinite() && reward in -1.0..1.0)
+        val episode = activeEpisode ?: error("there is no active reward episode")
+        if (episode.counterfactualDecisionJson != null) {
+            // The durable decision, not a newly computed report, is authoritative on retry.
+            return finishEpisodeWithCounterfactual(
+                reward = reward,
+                report = AndroidJnvM250kCounterfactualEvaluator.Report(
+                    candidates = emptyList(),
+                    baselineProcessedEvents = 0,
+                    baselineProcessedTimestamps = 0,
+                    baselineComplete = true,
+                ),
+                policy = policy,
+            )
+        }
+        val contextJson = episode.counterfactualContextJson
+            ?: error("episode has no persisted pre-action decision snapshot")
+        val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
+        val scores = responseScoresFor(episode)
+        val candidateIds = scores.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
+            .take(AndroidJnvM250kCounterfactualEvaluator.DEFAULT_MAX_CANDIDATES)
+            .mapTo(LinkedHashSet()) { it.key }
+        require(candidateIds.isNotEmpty()) { "no observed target-response candidates are available for replay" }
+        val report = AndroidJnvM250kCounterfactualEvaluator.evaluate(
+            initialStates = context.initialStates,
+            connections = context.connections,
+            externalInputs = context.externalInputs,
+            candidateConnectionIds = candidateIds,
+            outcomeNeuronIds = context.outcomeNeuronIds,
+        )
+        return finishEpisodeWithCounterfactual(reward, report, policy)
+    }
+
     @Synchronized
     fun finishEpisodeWithCounterfactual(
         reward: Double,
@@ -326,6 +398,24 @@ class AndroidJnvM250kRewardAttribution(
                 "episode already has a different reward path pending; retry it with its original API"
             }
             val scores = responseScoresFor(episode)
+            episode.counterfactualContextJson?.let { contextJson ->
+                val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
+                context.validateAgainstDecisionIdentity(
+                    turnId = context.decisionTurnId,
+                    selectedCandidateId = context.selectedCandidateId,
+                )
+                val expectedIds = scores.entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
+                    .take(AndroidJnvM250kCounterfactualEvaluator.DEFAULT_MAX_CANDIDATES)
+                    .mapTo(LinkedHashSet()) { it.key }
+                require(report == AndroidJnvM250kCounterfactualEvaluator.evaluate(
+                    initialStates = context.initialStates,
+                    connections = context.connections,
+                    externalInputs = context.externalInputs,
+                    candidateConnectionIds = expectedIds,
+                    outcomeNeuronIds = context.outcomeNeuronIds,
+                )) { "counterfactual report does not match the persisted pre-action snapshot" }
+            }
             decision = AndroidJnvM250kCounterfactualRewardGate.evaluate(
                 reward = reward,
                 responseScores = scores,
@@ -580,6 +670,8 @@ class AndroidJnvM250kRewardAttribution(
             else put("pending_reward", episode.pendingReward!!)
             if (episode.counterfactualDecisionJson == null) put("counterfactual_decision", JSONObject.NULL)
             else put("counterfactual_decision", JSONObject(episode.counterfactualDecisionJson!!))
+            if (episode.counterfactualContextJson == null) put("counterfactual_context", JSONObject.NULL)
+            else put("counterfactual_context", JSONObject(episode.counterfactualContextJson!!))
         }.toString().also {
             require(it.length <= AndroidJnvM250kEpisodeJournal.MAX_PAYLOAD_CHARS) {
                 "episode snapshot exceeds the durable journal bound"
@@ -610,6 +702,9 @@ class AndroidJnvM250kRewardAttribution(
             counterfactualDecisionJson = if (
                 snapshotVersion >= 5 && !json.isNull("counterfactual_decision")
             ) json.getJSONObject("counterfactual_decision").toString() else null,
+            counterfactualContextJson = if (
+                snapshotVersion >= 6 && !json.isNull("counterfactual_context")
+            ) json.getJSONObject("counterfactual_context").toString() else null,
         )
         require(episode.id == record.episodeId && episode.id.matches(SAFE_ID))
         require(episode.actionId.matches(SAFE_ID))
@@ -730,7 +825,7 @@ class AndroidJnvM250kRewardAttribution(
         const val DEFAULT_MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         private const val MIN_SUPPORTED_SNAPSHOT_VERSION = 2
-        private const val SNAPSHOT_VERSION = 5
+        private const val SNAPSHOT_VERSION = 6
         const val TARGET_RESPONSE_WINDOW_NS = 100_000_000L
         const val MAX_RESPONSE_CREDIT = 1_000_000.0
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
