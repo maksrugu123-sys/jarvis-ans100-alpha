@@ -65,6 +65,14 @@ Excitatory/inhibitory polarity is an orthogonal deterministic property, not an e
 
 The matrix is directional: a route A → B does not automatically permit B → A. Self-connections are rejected. `AndroidJnvM250kStore.registerConnection` now checks the route policy before persisting an edge, while the existing per-neuron limits still cap outgoing degree at 16 and incoming degree at 32. This prevents arbitrary cross-population wiring but does not yet generate a useful graph automatically, assign learned weights, or execute signals. Route coverage and boundary cases have unit tests authored but not run.
 
+## Implemented deterministic sparse connection initializer
+
+`AndroidJnvM250kSparseConnectionInitializer` now emits a reproducible initial graph lazily in bounded batches. It uses a stable route ordering, a fixed SplitMix64 seed mixer (not Kotlin's version-dependent `Random`), stable connection IDs, deterministic target assignment, configurable batch size, per-route fan-out, delay and initial weight. It does not materialize a full edge list, adjacency map or 250k-sized degree array.
+
+The default emits one edge per source neuron for each allowed outgoing population route. The initializer checks the theoretical per-neuron outgoing and incoming degree bounds before returning a sequence, and each generated edge is checked against the route policy. A caller can persist each batch through `AndroidJnvM250kStore.registerConnection`; the sequence can be regenerated from the same seed, but a production resume/checkpoint coordinator is still needed to persist the last completed route/source/slot cursor and avoid replaying already committed batches after process death.
+
+The default graph is a deterministic structural scaffold with neutral weight 0.5 and 1 ms delay. It is not learned connectivity, does not prove useful cognitive behavior, and has not been run against the Android SQLite store. Initializer unit tests are authored but not run.
+
 ## Required design before enabling 250,000
 
 ### 1. Separate structural capacity from topology identity
