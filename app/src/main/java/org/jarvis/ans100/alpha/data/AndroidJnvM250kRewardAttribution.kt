@@ -94,27 +94,40 @@ class AndroidJnvM250kRewardAttribution(
         require(result.omittedCausalLinks >= 0)
         episode.omittedLinks = saturatedAdd(episode.omittedLinks, result.omittedCausalLinks.toLong())
 
-        for (link in result.causalLinks) {
-            episode.observedLinks = saturatedAdd(episode.observedLinks, 1L)
-            val candidate = addCandidate(episode, link)
-            if (episode.path.size < maxTrackedConnections) episode.path += link.connectionId
-            else episode.omittedLinks = saturatedAdd(episode.omittedLinks, 1L)
+        data class TimelineEvent(
+            val timestampNs: Long,
+            val link: AndroidJnvM250kCausalLink? = null,
+            val spike: AndroidJnvM250kSpike? = null,
+        )
+        val timeline = ArrayList<TimelineEvent>(result.causalLinks.size + result.emittedSpikes.size)
+        result.causalLinks.forEach { timeline += TimelineEvent(it.arrivalTimestampNs, link = it) }
+        result.emittedSpikes.forEach { timeline += TimelineEvent(it.timestampNs, spike = it) }
+        // At an equal timestamp, process arriving synaptic input before the target spike.
+        timeline.sortWith(compareBy<TimelineEvent> { it.timestampNs }.thenBy { if (it.link != null) 0 else 1 })
 
-            if (candidate != null) {
-                if (episode.pending.size < maxTrackedConnections) {
-                    episode.pending += PendingTransmission(
-                        connectionId = link.connectionId,
-                        targetNeuronId = link.targetNeuronId,
-                        arrivalTimestampNs = link.arrivalTimestampNs,
-                    )
-                } else {
-                    episode.omittedLinks = saturatedAdd(episode.omittedLinks, 1L)
+        for (event in timeline) {
+            val link = event.link
+            if (link != null) {
+                episode.observedLinks = saturatedAdd(episode.observedLinks, 1L)
+                val candidate = addCandidate(episode, link)
+                if (episode.path.size < maxTrackedConnections) episode.path += link.connectionId
+                else episode.omittedLinks = saturatedAdd(episode.omittedLinks, 1L)
+
+                if (candidate != null && episode.pending.none { it.connectionId == link.connectionId }) {
+                    if (episode.pending.size < maxTrackedConnections) {
+                        episode.pending += PendingTransmission(
+                            connectionId = link.connectionId,
+                            targetNeuronId = link.targetNeuronId,
+                            arrivalTimestampNs = link.arrivalTimestampNs,
+                        )
+                    } else {
+                        episode.omittedLinks = saturatedAdd(episode.omittedLinks, 1L)
+                    }
                 }
+                continue
             }
-        }
 
-        val spikes = result.emittedSpikes.sortedBy { it.timestampNs }
-        for (spike in spikes) {
+            val spike = event.spike ?: continue
             val matching = episode.pending.filter {
                 it.targetNeuronId == spike.neuronId &&
                     it.arrivalTimestampNs <= spike.timestampNs &&
@@ -131,8 +144,8 @@ class AndroidJnvM250kRewardAttribution(
             if (matching.size > 1) {
                 episode.contestedTargetResponses = saturatedAdd(episode.contestedTargetResponses, 1L)
             }
-            val matched = matching.toHashSet()
-            episode.pending.removeAll { it in matched }
+            val matchedIds = matching.mapTo(HashSet()) { it.connectionId }
+            episode.pending.removeAll { it.connectionId in matchedIds }
         }
 
         val observedClock = maxOf(
@@ -148,8 +161,8 @@ class AndroidJnvM250kRewardAttribution(
                 episode.unansweredTransmissions,
                 expired.size.toLong(),
             )
-            val expiredSet = expired.toHashSet()
-            episode.pending.removeAll { it in expiredSet }
+            val expiredIds = expired.mapTo(HashSet()) { it.connectionId }
+            episode.pending.removeAll { it.connectionId in expiredIds }
         }
         journal?.saveOpen(episode.id, encodeEpisode(episode))
     }
