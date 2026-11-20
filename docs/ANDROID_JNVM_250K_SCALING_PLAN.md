@@ -48,6 +48,23 @@ Implemented after the storage foundation: `AndroidJnvM250kWorkingSet` adds a sep
 
 Excitatory/inhibitory polarity is an orthogonal deterministic property, not an eleventh population: one in every five IDs within each population is provisionally inhibitory (20%), with the rest excitatory. These population sizes and the 80/20 polarity split are initial engineering allocations, not biologically validated or experimentally optimized values. The descriptor validates that ranges are contiguous, non-overlapping and cover exactly 250,000 IDs. It does not yet instantiate neurons, create inter-population connections, or integrate specialization with learning and runtime scheduling.
 
+## Implemented sparse inter-population route policy
+
+`AndroidJnvM250kTopology` now defines an explicit directed route matrix between populations. The initial graph supports the following information flow:
+
+- Perception → memory, pattern detection, attention and context.
+- Memory → memory, pattern detection, prediction and context.
+- Pattern detection → pattern detection, prediction, memory and confidence.
+- Prediction → contradiction, confidence, attention and memory.
+- Attention → perception, memory, prediction and action selection.
+- Contradiction → prediction, memory and confidence.
+- Context → memory, pattern detection, prediction and attention.
+- Confidence → action selection and coordination.
+- Coordination → action selection and memory.
+- Action selection → coordination and perception (feedback path).
+
+The matrix is directional: a route A → B does not automatically permit B → A. Self-connections are rejected. `AndroidJnvM250kStore.registerConnection` now checks the route policy before persisting an edge, while the existing per-neuron limits still cap outgoing degree at 16 and incoming degree at 32. This prevents arbitrary cross-population wiring but does not yet generate a useful graph automatically, assign learned weights, or execute signals. Route coverage and boundary cases have unit tests authored but not run.
+
 ## Required design before enabling 250,000
 
 ### 1. Separate structural capacity from topology identity
