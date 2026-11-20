@@ -18,9 +18,10 @@ data class AndroidJnvM250kStats(
 /**
  * Independent disk-backed structural store for the 250k sparse profile.
  *
- * It is intentionally not wired into AndroidSparseNeuronNetwork yet: legacy
- * dialogue/hybrid ID layouts and their learning tables remain isolated until
- * the scalable event scheduler and topology contract are integrated.
+ * It is consumed by AndroidJnvM250kRuntime, while the legacy
+ * AndroidSparseNeuronNetwork remains isolated on its existing 10k layouts.
+ * The 250k runtime currently provides LIF-DT execution and fixed-weight signal
+ * propagation; its learning tables and cognitive lifecycle are not integrated.
  */
 class AndroidJnvM250kStore(
     context: Context,
