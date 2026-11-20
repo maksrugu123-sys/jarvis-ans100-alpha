@@ -57,6 +57,17 @@ object AndroidJnvM250kCounterfactualRewardGate {
         require(reward.isFinite() && reward in -1.0..1.0)
         require(responseScores.keys.all { it.matches(CONNECTION_ID) })
         require(responseScores.values.all { it.isFinite() && it in 0.0..1.0 })
+        require(report.candidates.map { it.connectionId }.toSet().size == report.candidates.size) {
+            "counterfactual report contains duplicate candidate IDs"
+        }
+        require(report.candidates.all { effect ->
+            effect.connectionId.matches(CONNECTION_ID) &&
+                effect.baselineOutcomeSpikes >= 0 &&
+                effect.counterfactualOutcomeSpikes >= 0 &&
+                effect.outcomeSpikeDelta == effect.baselineOutcomeSpikes - effect.counterfactualOutcomeSpikes &&
+                effect.sensitivityScore.isFinite() && effect.sensitivityScore in 0.0..1.0
+        }) { "counterfactual report contains invalid effect data" }
+        require(report.baselineProcessedEvents >= 0 && report.baselineProcessedTimestamps >= 0)
 
         if (!report.baselineComplete) {
             return Decision(
