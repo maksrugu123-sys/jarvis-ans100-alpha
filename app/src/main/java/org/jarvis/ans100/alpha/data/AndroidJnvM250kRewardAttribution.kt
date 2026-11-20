@@ -277,6 +277,13 @@ class AndroidJnvM250kRewardAttribution(
             compareBy<Candidate> { it.estimatedTransmissions }.thenBy { it.firstSeenOrder },
         ) ?: return null
         episode.candidates.remove(least.connectionId)
+        val evictedPendingCount = episode.pending.count { it.connectionId == least.connectionId }
+        if (evictedPendingCount > 0) {
+            episode.unobservedTransmissions = saturatedAdd(
+                episode.unobservedTransmissions,
+                evictedPendingCount.toLong(),
+            )
+        }
         episode.pending.removeAll { it.connectionId == least.connectionId }
         return Candidate(
             connectionId = link.connectionId,
