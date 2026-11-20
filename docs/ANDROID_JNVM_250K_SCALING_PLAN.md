@@ -206,7 +206,7 @@ The topology's provisional inhibitory polarity now affects signal transmission: 
 
 Per invocation the runtime caps processed input events at 8,192 and timestamp groups at 1,024; each timestamp remains capped at 512 inputs and generated propagation remains capped at 8,192 events. The working set is rechecked against the device RAM policy and only event-target states are loaded. The compute backend is injectable, with CPU reference as the default. GPU/hybrid selection is not automatically enabled by this runtime yet.
 
-Important boundary: the isolated 250k runtime now performs pair-based STDP and bounded reward-modulated STDP with persisted eligibility traces and idempotent reward receipts. It still lacks automatic reward attribution from the cognitive decision lifecycle, feature-state extensions, the full cognitive hypothesis lifecycle, and evidence of useful task learning. Instrumentation coverage is authored but not run; no Android build or device measurement has been performed.
+Important boundary: the isolated 250k runtime now performs pair-based STDP and bounded reward-modulated STDP with persisted eligibility traces and idempotent reward receipts. An opt-in decision-bound attribution bridge is now present, but MainActivity does not instantiate it automatically. Feature-state extensions, the full cognitive hypothesis lifecycle, and evidence of useful task learning remain incomplete. Instrumentation coverage is authored but not run; no Android build or device measurement has been performed.
 
 ## Durable reward-episode journal
 
@@ -230,11 +230,11 @@ When several distinct tracked connections arrive at the same target before one t
 
 The resulting per-connection response score is the average share of matched target responses, conservatively multiplied by transmission-observation coverage (`assessed / (observed + runtime-omitted)`), where `assessed` excludes pending transmissions lost when the bounded candidate sketch evicts a connection or when a target spike is confounded by an external input. This matters because the runtime caps returned causal links per run and the candidate sketch is bounded: unobserved or evicted transmissions may include competing inputs. The score is passed to `applyRewardToConnections` as a bounded 0..1 per-edge credit multiplier. SQLite applies `reward * credit * learningRate * eligibility` to that exact edge, and the idempotent receipt includes the canonical per-edge credit values so a retry with different scores is rejected. The legacy unweighted exact-edge API remains compatible.
 
-These are temporal response and competition heuristics, not true counterfactual causality. The runtime does not yet replay an episode with one connection disabled, compare the target's membrane trajectory, or prove that a specific edge was necessary or sufficient. The attribution remains an opt-in bridge; higher-level decision lifecycle wiring is still required. Unit and Android instrumentation tests have been added or updated for silent transmissions, unrelated spikes, competing inputs, weighted reward receipt replay, and persistent recovery. Tests are authored but **not run**; no build or device experiment was run.
+These are temporal response and competition heuristics, not true counterfactual causality. The separate evaluator now replays a bounded pre-action graph with one candidate connection disabled, but does not reproduce online STDP, environment feedback or the complete target membrane history. The decision-bound cycle is opt-in and is not instantiated by MainActivity. Unit and Android instrumentation tests have been added or updated for silent transmissions, unrelated spikes, competing inputs, weighted reward receipt replay, and persistent recovery. Tests are authored but **not run**; no build or device experiment was run.
 
 Target spikes whose timestamp group also contains an external/non-runtime-generated input are marked ambiguous by the runtime. Such a spike cannot confirm any pending synapse candidate; the affected pending paths are counted as unassessed and reduce coverage. This avoids automatically crediting a synapse when a direct input could have caused the same spike. The event-origin check currently relies on the runtime's generated synaptic event-ID format, so it is a conservative engineering marker rather than a cryptographic provenance guarantee.
 
-Minimal integration contract: create one persistent attribution object for an episode, call `recordRun(runtime.run(...))` once for each completed runtime batch in that episode, then call `finishEpisode(outcomeReward)` only after the action outcome is known. Wire both callbacks so normal fallback remains exact-edge unweighted and the weighted callback forwards the score map to the runtime:
+Legacy manual integration contract (without counterfactual replay): create one persistent attribution object for an episode, call `recordRun(runtime.run(...))` once for each completed runtime batch, then call `finishEpisode(outcomeReward)` only after the action outcome is known. For a selected ANS decision with a captured pre-action snapshot, use `AndroidJnvM250kDecisionLearningCycle` below instead. Wire both callbacks so normal fallback remains exact-edge unweighted and the weighted callback forwards the score map to the runtime:
 
 ```kotlin
 val attribution = AndroidJnvM250kRewardAttribution.persistent(
@@ -314,9 +314,9 @@ The decision-context invariant tests and Android journal-recovery tests are AUTH
 
 ## Durable counterfactual decision in the episode journal
 
-`AndroidJnvM250kRewardAttribution.finishEpisodeWithCounterfactual(reward, report, policy)` is the opt-in durable path for gated learning:
+`AndroidJnvM250kRewardAttribution.finishEpisodeWithCounterfactual(reward, policy)` automatically replays the persisted pre-action snapshot for a decision-bound episode. The lower-level `finishEpisodeWithCounterfactual(reward, report, policy)` remains available for manually supplied reports on legacy episodes:
 
-- It derives response scores from the episode's own target-response evidence and evaluates the counterfactual gate once.
+- It derives response scores from the episode's own target-response evidence, ranks at most eight candidates for replay, and evaluates the counterfactual gate once.
 - Before calling weighted R-STDP, the episode snapshot stores the stable reward ID, scalar reward, exact accepted connection IDs and multipliers, rejected IDs/reasons, policy thresholds, and a bounded summary of the counterfactual report.
 - If the process stops after the journal write but before reward completion, recovery reuses the stored accepted-credit map. A newly supplied report or policy cannot change that retry decision; the JNVM reward receipt protects against duplicate application.
 - A rejected decision is persisted as terminal journal state `REJECTED`. Neither weighted nor unweighted reward callbacks run.
