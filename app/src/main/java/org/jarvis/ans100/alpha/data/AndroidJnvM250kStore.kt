@@ -737,10 +737,21 @@ class AndroidJnvM250kStore(
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
+            val creditedIds = rewardedNeuronIds.sorted().joinToString(",")
             val priorReceipt = db.rawQuery(
-                "SELECT affected_synapses FROM reward_receipts WHERE reward_id=?",
+                "SELECT affected_synapses, timestamp_ns, reward, credited_neurons FROM reward_receipts WHERE reward_id=?",
                 arrayOf(rewardId),
-            ).use { if (it.moveToFirst()) it.getInt(0) else null }
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    if (cursor.getLong(1) != timestampNs ||
+                        cursor.getDouble(2) != reward ||
+                        cursor.getString(3) != creditedIds
+                    ) {
+                        throw AndroidNeuronNetworkException("250k reward ID was replayed with different feedback")
+                    }
+                    cursor.getInt(0)
+                } else null
+            }
             val clock = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'").toLong()
             if (priorReceipt != null) {
                 db.setTransactionSuccessful()
@@ -818,6 +829,7 @@ class AndroidJnvM250kStore(
                     put("reward_id", rewardId)
                     put("timestamp_ns", timestampNs)
                     put("reward", reward)
+                    put("credited_neurons", creditedIds)
                     put("affected_synapses", affected)
                 },
             )
@@ -909,7 +921,7 @@ class AndroidJnvM250kStore(
             db.execSQL(
                 "CREATE TABLE reward_receipts (" +
                     "reward_id TEXT PRIMARY KEY, timestamp_ns INTEGER NOT NULL, reward REAL NOT NULL, " +
-                    "affected_synapses INTEGER NOT NULL)",
+                    "credited_neurons TEXT NOT NULL, affected_synapses INTEGER NOT NULL)",
             )
         }
 
