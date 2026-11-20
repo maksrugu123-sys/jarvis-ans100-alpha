@@ -411,6 +411,61 @@ class AndroidJnvM250kStore(
         ) throw AndroidNeuronNetworkException("250k profile neuron state update did not affect exactly one row")
     }
 
+    /** Reads an exact bounded set of pre-action neuron states. */
+    @Synchronized
+    fun loadNeuronStates(neuronIds: Set<Int>): Map<Int, AndroidNeuronState> {
+        require(neuronIds.isNotEmpty() && neuronIds.size <= AndroidJnvM250kDecisionEpisodeContext.MAX_NEURONS)
+        neuronIds.forEach(AndroidJnvM250kProfile::requireNeuronId)
+        requireInitialized()
+        val ordered = neuronIds.sorted()
+        val placeholders = List(ordered.size) { "?" }.joinToString(",")
+        val result = LinkedHashMap<Int, AndroidNeuronState>(ordered.size)
+        helper.readableDatabase.rawQuery(
+            "SELECT neuron_id, potential, adaptation, last_update_ns, refractory_until_ns, spike_sequence, core_tainted " +
+                "FROM neurons WHERE neuron_id IN ($placeholders) ORDER BY neuron_id",
+            ordered.map(Int::toString).toTypedArray(),
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val state = readState(cursor)
+                result[state.neuronId] = state
+            }
+        }
+        check(result.keys == neuronIds) {
+            "pre-action snapshot could not read every requested neuron state"
+        }
+        return result
+    }
+
+    /**
+     * Reads all outgoing edges for a bounded source set. Fails rather than
+     * silently truncating the graph when the requested edge budget is exceeded.
+     */
+    @Synchronized
+    fun outgoingConnectionsFor(
+        sourceNeuronIds: Set<Int>,
+        maxEdges: Int = AndroidJnvM250kDecisionEpisodeContext.MAX_CONNECTIONS,
+    ): List<AndroidNeuronConnection> {
+        require(sourceNeuronIds.isNotEmpty() && sourceNeuronIds.size <= AndroidJnvM250kDecisionEpisodeContext.MAX_NEURONS)
+        require(maxEdges in 1..AndroidJnvM250kDecisionEpisodeContext.MAX_CONNECTIONS)
+        sourceNeuronIds.forEach(AndroidJnvM250kProfile::requireNeuronId)
+        requireInitialized()
+        val ordered = sourceNeuronIds.sorted()
+        val placeholders = List(ordered.size) { "?" }.joinToString(",")
+        val args = ordered.map(Int::toString).toTypedArray()
+        val result = ArrayList<AndroidNeuronConnection>(minOf(maxEdges, 128))
+        helper.readableDatabase.rawQuery(
+            "SELECT connection_id, source_id, target_id, delay_ns, weight FROM connections " +
+                "WHERE source_id IN ($placeholders) ORDER BY source_id, connection_id LIMIT ?",
+            args + (maxEdges + 1).toString(),
+        ).use { cursor ->
+            while (cursor.moveToNext()) result += readConnection(cursor)
+        }
+        check(result.size <= maxEdges) {
+            "reachable counterfactual graph exceeds its bounded edge snapshot"
+        }
+        return result
+    }
+
     /** Returns a bounded page ordered by neuron ID; no full-table materialization. */
     @Synchronized
     fun loadNeuronPage(afterNeuronId: Int = -1, limit: Int = AndroidJnvM250kProfile.DEFAULT_PAGE_SIZE): List<AndroidNeuronState> {
