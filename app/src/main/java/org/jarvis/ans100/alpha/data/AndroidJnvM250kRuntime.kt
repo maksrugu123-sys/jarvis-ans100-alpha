@@ -42,6 +42,10 @@ data class AndroidJnvM250kRunResult(
     val residentNeuronCount: Int,
     val hotSetCapacity: Int,
     val computeBackend: String,
+    /** Direct synapse transmissions observed in this run, capped at 256. */
+    val causalLinks: List<AndroidJnvM250kCausalLink> = emptyList(),
+    /** Transmissions omitted after the per-run causal-link cap was reached. */
+    val omittedCausalLinks: Int = 0,
 )
 
 /**
@@ -98,6 +102,8 @@ class AndroidJnvM250kRuntime(
         var exhausted = false
         var clock = store.stats().currentTimeNs
         val spikes = ArrayList<AndroidJnvM250kSpike>()
+        val causalLinks = ArrayList<AndroidJnvM250kCausalLink>(MAX_CAUSAL_LINKS_PER_RUN)
+        var omittedCausalLinks = 0
 
         while (timestamps < maxTimestamps) {
             val group = store.nextTimestampEvents() ?: break
@@ -222,6 +228,8 @@ class AndroidJnvM250kRuntime(
             residentNeuronCount = currentResidentCount,
             hotSetCapacity = currentHotSetCapacity,
             computeBackend = computeBackend.backendName,
+            causalLinks = causalLinks,
+            omittedCausalLinks = omittedCausalLinks,
         )
     }
 
@@ -297,6 +305,7 @@ class AndroidJnvM250kRuntime(
         const val MAX_EVENTS_PER_RUN = 8_192
         const val DEFAULT_MAX_TIMESTAMPS_PER_RUN = 32
         const val MAX_TIMESTAMPS_PER_RUN = 1_024
+        const val MAX_CAUSAL_LINKS_PER_RUN = 256
 
         /** Initial pair-based STDP parameters; research defaults, not tuned values. */
         const val STDP_TRACE_TAU_NS = 20_000_000.0
