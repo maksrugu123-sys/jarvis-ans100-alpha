@@ -166,6 +166,13 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 val sourceRun = runtime.run(maxEvents = 2, maxTimestamps = 1)
                 assertEquals(2, sourceRun.processedEvents)
                 assertEquals(setOf(0, 4), sourceRun.emittedSpikes.map { it.neuronId }.toSet())
+                assertTrue(
+                    "runtime must expose the actual source-to-target synapse transmission",
+                    sourceRun.causalLinks.any {
+                        it.sourceNeuronId == 0 && it.targetNeuronId == sourceZeroTarget
+                    },
+                )
+                assertTrue(sourceRun.omittedCausalLinks >= 0)
                 assertTrue(sourceRun.residentNeuronCount <= sourceRun.hotSetCapacity)
 
                 val propagated = store.nextTimestampEvents()
