@@ -218,6 +218,28 @@ class AndroidJnvM250kRewardAttributionTest {
         assertTrue(runCatching { attribution.finishEpisode(0.5) }.isFailure)
     }
 
+
+    @Test
+    fun targetSpikeMixedWithExternalInputIsNotCreditedAndReducesCoverage() {
+        var weighted = emptyMap<String, Double>()
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 12L) },
+            applyWeightedReward = { id, _, credits ->
+                weighted = credits
+                AndroidJnvM250kRewardResult(id, credits.size, false, 12L)
+            },
+        )
+        attribution.beginEpisode("ambiguous-input", "action")
+        val run = runResult(listOf(link("edge-ambiguous", 1, 2), link("edge-clear", 3, 4)))
+            .copy(ambiguousTargetSpikeNeuronIds = setOf(2))
+        attribution.recordRun(run)
+        val result = attribution.finishEpisode(0.7)
+        assertEquals(setOf("edge-clear"), result.creditedConnectionIds)
+        assertEquals(0.5, result.observationCoverage, 0.000001)
+        assertEquals(0.5, weighted.getValue("edge-clear"), 0.000001)
+        assertEquals(1L, result.ambiguousTargetResponses)
+    }
+
     private fun link(id: String, source: Int, target: Int) = AndroidJnvM250kCausalLink(id, source, target, 10L, 10L)
     private fun runResult(
         links: List<AndroidJnvM250kCausalLink>,
