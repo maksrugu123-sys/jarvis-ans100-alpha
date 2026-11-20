@@ -270,6 +270,19 @@ This is a controlled counterfactual *model replay*, not a faithful replay of the
 
 Unit tests are authored for an edge that changes the selected outcome, an unrelated edge, input snapshot immutability, hard candidate bounds and incomplete replay reporting. Tests are **not run**; no APK build or Android device experiment was run.
 
+## Durable counterfactual decision in the episode journal
+
+`AndroidJnvM250kRewardAttribution.finishEpisodeWithCounterfactual(reward, report, policy)` is the opt-in durable path for gated learning:
+
+- It derives response scores from the episode's own target-response evidence and evaluates the counterfactual gate once.
+- Before calling weighted R-STDP, the episode snapshot stores the stable reward ID, scalar reward, exact accepted connection IDs and multipliers, rejected IDs/reasons, policy thresholds, and a bounded summary of the counterfactual report.
+- If the process stops after the journal write but before reward completion, recovery reuses the stored accepted-credit map. A newly supplied report or policy cannot change that retry decision; the JNVM reward receipt protects against duplicate application.
+- A rejected decision is persisted as terminal journal state `REJECTED`. Neither weighted nor unweighted reward callbacks run.
+- The journal schema migration preserves existing OPEN, REWARD_PENDING, FINISHED and ABORTED records.
+- The gated method requires the weighted callback and refuses the legacy unweighted fallback. Ordinary `finishEpisode()` refuses to consume an episode with a persisted counterfactual decision, preventing accidental double learning through both paths.
+
+The episode journal and JNVM reward database remain separate databases, not one cross-database transaction. Retry safety therefore still depends on the JNVM store's durable idempotent reward receipt. The new method is opt-in and is not automatically connected to the app's decision controller. Instrumentation tests for exact-decision recovery and terminal rejection are authored but **not run**.
+
 ## Counterfactual-gated reward policy
 
 `AndroidJnvM250kCounterfactualRewardGate` adds a fail-closed policy for using replay sensitivity as a bounded per-edge reward multiplier:
