@@ -33,6 +33,7 @@ data class AndroidJnvM250kAttributionResult(
  */
 class AndroidJnvM250kRewardAttribution(
     private val applyReward: (rewardId: String, reward: Double, connectionIds: Set<String>) -> AndroidJnvM250kRewardResult,
+    private val applyWeightedReward: ((rewardId: String, reward: Double, connectionCredits: Map<String, Double>) -> AndroidJnvM250kRewardResult)? = null,
     private val maxCreditedConnections: Int = DEFAULT_MAX_CREDITED_CONNECTIONS,
     private val maxTrackedConnections: Int = DEFAULT_MAX_TRACKED_CONNECTIONS,
     private val journal: AndroidJnvM250kEpisodeJournal? = null,
@@ -199,7 +200,9 @@ class AndroidJnvM250kRewardAttribution(
             episode.pendingReward = reward
             journal?.prepareReward(episode.id, encodeEpisode(episode), reward)
         }
-        val rewardResult = applyReward("episode-${episode.id}", reward, credited)
+        val rewardId = "episode-${episode.id}"
+        val rewardResult = applyWeightedReward?.invoke(rewardId, reward, scores)
+            ?: applyReward(rewardId, reward, credited)
         journal?.complete(episode.id)
         val result = AndroidJnvM250kAttributionResult(
             episodeId = episode.id,
@@ -397,9 +400,11 @@ class AndroidJnvM250kRewardAttribution(
             context: Context,
             applyReward: (rewardId: String, reward: Double, connectionIds: Set<String>) -> AndroidJnvM250kRewardResult,
             maxCreditedConnections: Int = DEFAULT_MAX_CREDITED_CONNECTIONS,
+            applyWeightedReward: ((rewardId: String, reward: Double, connectionCredits: Map<String, Double>) -> AndroidJnvM250kRewardResult)? = null,
             maxTrackedConnections: Int = DEFAULT_MAX_TRACKED_CONNECTIONS,
         ): AndroidJnvM250kRewardAttribution = AndroidJnvM250kRewardAttribution(
             applyReward = applyReward,
+            applyWeightedReward = applyWeightedReward,
             maxCreditedConnections = maxCreditedConnections,
             maxTrackedConnections = maxTrackedConnections,
             journal = AndroidJnvM250kEpisodeJournal(context),
