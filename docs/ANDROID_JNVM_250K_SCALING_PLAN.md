@@ -233,3 +233,24 @@ The resulting per-connection response score is the average share of matched targ
 These are temporal response and competition heuristics, not true counterfactual causality. The runtime does not yet replay an episode with one connection disabled, compare the target's membrane trajectory, or prove that a specific edge was necessary or sufficient. The attribution remains an opt-in bridge; higher-level decision lifecycle wiring is still required. Unit and Android instrumentation tests have been added or updated for silent transmissions, unrelated spikes, competing inputs, weighted reward receipt replay, and persistent recovery. Tests are authored but **not run**; no build or device experiment was run.
 
 Target spikes whose timestamp group also contains an external/non-runtime-generated input are marked ambiguous by the runtime. Such a spike cannot confirm any pending synapse candidate; the affected pending paths are counted as unassessed and reduce coverage. This avoids automatically crediting a synapse when a direct input could have caused the same spike. The event-origin check currently relies on the runtime's generated synaptic event-ID format, so it is a conservative engineering marker rather than a cryptographic provenance guarantee.
+
+Minimal integration contract: create one persistent attribution object for an episode, call `recordRun(runtime.run(...))` once for each completed runtime batch in that episode, then call `finishEpisode(outcomeReward)` only after the action outcome is known. Wire both callbacks so normal fallback remains exact-edge unweighted and the weighted callback forwards the score map to the runtime:
+
+```kotlin
+val attribution = AndroidJnvM250kRewardAttribution.persistent(
+    context = context,
+    applyReward = { id, reward, ids ->
+        runtime.applyRewardToConnections(id, reward, ids)
+    },
+    applyWeightedReward = { id, reward, credits ->
+        runtime.applyRewardToConnections(id, reward, credits.keys, credits)
+    },
+)
+
+val runResult = runtime.run()
+attribution.recordRun(runResult)
+// After the environment reports the action outcome:
+val learningResult = attribution.finishEpisode(outcomeReward)
+```
+
+The app's higher-level action/decision controller does not yet own this lifecycle automatically; callers must currently open, feed and finish the episode explicitly.
