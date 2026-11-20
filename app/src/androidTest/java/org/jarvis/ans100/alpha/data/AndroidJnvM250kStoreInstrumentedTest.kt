@@ -284,6 +284,21 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     connectionIds = setOf(exactTargetConnection.connectionId),
                 )
                 assertEquals("exact reward must affect only its selected edge", 1, exactReward.affectedSynapses)
+                val exactWeightAfterReward = store.outgoingPage(0, limit = 16)
+                    .single { it.connectionId == exactTargetConnection.connectionId }.weight
+                val exactReplay = resumedRuntime.applyRewardToConnections(
+                    rewardId = "reward-exact-edge-once",
+                    reward = 1.0,
+                    connectionIds = setOf(exactTargetConnection.connectionId),
+                )
+                assertTrue("exact-edge reward receipt must make retries idempotent", exactReplay.replayed)
+                assertEquals(
+                    "replaying exact-edge reward must not change its weight",
+                    exactWeightAfterReward,
+                    store.outgoingPage(0, limit = 16)
+                        .single { it.connectionId == exactTargetConnection.connectionId }.weight,
+                    0.000001,
+                )
                 assertEquals(
                     "an unselected neighboring edge must remain unchanged",
                     unrelatedWeightBefore,
