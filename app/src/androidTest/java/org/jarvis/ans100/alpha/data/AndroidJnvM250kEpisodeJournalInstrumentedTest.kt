@@ -84,6 +84,62 @@ class AndroidJnvM250kEpisodeJournalInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun pendingTargetResponseWindowSurvivesAttributionRecreation() {
+        context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        val first = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 11L) },
+        )
+        first.beginEpisode("pending-${UUID.randomUUID().toString().replace("-", "")}", "action")
+        first.recordRun(
+            AndroidJnvM250kRunResult(
+                processedEvents = 1,
+                processedNeuronBatches = 1,
+                emittedSpikes = emptyList(),
+                pendingEvents = 1,
+                budgetExhausted = false,
+                currentTimeNs = 10L,
+                residentNeuronCount = 1,
+                hotSetCapacity = 8,
+                computeBackend = "instrumented-test",
+                causalLinks = listOf(link("edge-pending")),
+            ),
+        )
+        first.close()
+
+        val credited = mutableSetOf<String>()
+        val recovered = AndroidJnvM250kRewardAttribution.persistent(
+            context,
+            applyReward = { id, _, ids ->
+                credited += ids
+                AndroidJnvM250kRewardResult(id, ids.size, false, 11L)
+            },
+        )
+        try {
+            recovered.recordRun(
+                AndroidJnvM250kRunResult(
+                    processedEvents = 1,
+                    processedNeuronBatches = 1,
+                    emittedSpikes = listOf(AndroidJnvM250kSpike(2, 1L, 11L)),
+                    pendingEvents = 0,
+                    budgetExhausted = false,
+                    currentTimeNs = 11L,
+                    residentNeuronCount = 1,
+                    hotSetCapacity = 8,
+                    computeBackend = "instrumented-test",
+                ),
+            )
+            val result = recovered.finishEpisode(0.5)
+            assertEquals(setOf("edge-pending"), credited)
+            assertEquals(1.0, result.responseScores.getValue("edge-pending"), 0.000001)
+        } finally {
+            recovered.close()
+            context.deleteDatabase("jarvis_ans100_episode_journal_v1.db")
+        }
+    }
+
     private fun link(id: String) = AndroidJnvM250kCausalLink(
         connectionId = id,
         sourceNeuronId = 1,
