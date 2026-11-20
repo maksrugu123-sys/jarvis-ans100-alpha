@@ -401,7 +401,7 @@ class AndroidJnvM250kRewardAttribution(
             val scores = allScores.filterKeys { it in evaluatedIds }
             episode.counterfactualContextJson?.let { contextJson ->
                 val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
-                val expectedIds = scores.entries
+                val expectedIds = allScores.entries
                     .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
                     .take(AndroidJnvM250kCounterfactualEvaluator.DEFAULT_MAX_CANDIDATES)
                     .mapTo(LinkedHashSet()) { it.key }
