@@ -73,6 +73,14 @@ The default emits one edge per source neuron for each allowed outgoing populatio
 
 The default graph is a deterministic structural scaffold with neutral weight 0.5 and 1 ms delay. It is not learned connectivity, does not prove useful cognitive behavior, and has not been run against the Android SQLite store. Initializer unit tests are authored but not run.
 
+## Resumable sparse graph initialization
+
+The sparse initializer now exposes a durable next-edge cursor: route index, source neuron ID and fan-out slot. `AndroidJnvM250kSparseInitializationCoordinator.runNextBatch` executes one bounded step per worker invocation and checks that the requested seed and graph parameters match the persisted run.
+
+`AndroidJnvM250kStore.persistConnectionBatch` writes the batch and all checkpoint fields to the existing metadata table in the same SQLite transaction. It compares the expected previous checkpoint before writing, so a stale worker cannot silently advance the run. On process death, either both the batch and cursor commit, or neither does. A subsequent worker loads the saved cursor and regenerates only the next uncommitted batch. Partial/corrupt checkpoint metadata fails closed.
+
+The coordinator intentionally performs one batch per call; the application should schedule another bounded worker step while `complete == false`, rather than running the entire graph generation in one long task. The generator remains lazy and does not hold the full graph in RAM. This is resumable storage logic, not proof of successful Android background scheduling or SQLite behavior on the target phone. Unit tests are authored but not run.
+
 ## Required design before enabling 250,000
 
 ### 1. Separate structural capacity from topology identity
