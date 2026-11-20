@@ -28,6 +28,7 @@ class AndroidJnvM250kRewardAttributionTest {
         assertEquals(4L, result.observedLinks)
         assertEquals(2L, result.omittedLinks)
         assertEquals("action-search", result.actionId)
+        assertEquals(1.0, result.responseScores.getValue("edge-a"), 0.000001)
         assertFalse(attribution.hasActiveEpisode())
     }
 
@@ -187,6 +188,34 @@ class AndroidJnvM250kRewardAttributionTest {
         assertEquals(0.5, result.observationCoverage, 0.000001)
         assertEquals(0.25, weighted.getValue("edge-a"), 0.000001)
         assertEquals(0.25, weighted.getValue("edge-b"), 0.000001)
+    }
+
+
+    @Test
+    fun targetSpikeBeforeExpectedArrivalDoesNotConfirmTransmission() {
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 10L) },
+        )
+        attribution.beginEpisode("early-spike", "action")
+        attribution.recordRun(runResult(
+            listOf(link("edge-early", 1, 2)),
+            explicitSpikes = listOf(AndroidJnvM250kSpike(2, 1L, 9L)),
+        ))
+        assertTrue(runCatching { attribution.finishEpisode(0.5) }.isFailure)
+    }
+
+    @Test
+    fun expiredTargetResponseWindowDoesNotReceiveReward() {
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 100_000_011L) },
+        )
+        attribution.beginEpisode("expired", "action")
+        val lateRun = runResult(
+            listOf(link("edge-expired", 1, 2)),
+            emitTargetResponses = false,
+        ).copy(currentTimeNs = 100_000_011L)
+        attribution.recordRun(lateRun)
+        assertTrue(runCatching { attribution.finishEpisode(0.5) }.isFailure)
     }
 
     private fun link(id: String, source: Int, target: Int) = AndroidJnvM250kCausalLink(id, source, target, 10L, 10L)
