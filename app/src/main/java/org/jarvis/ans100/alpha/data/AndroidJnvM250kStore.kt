@@ -153,14 +153,57 @@ class AndroidJnvM250kStore(
         registerConnections(listOf(connection))
     }
 
-    /**
-     * Persists one bounded graph batch in a single transaction. Degree checks
-     * include both already-persisted edges and all edges in this batch.
-     */
+    /** Persists a bounded edge batch in one transaction. */
     @Synchronized
     fun registerConnections(connections: List<AndroidNeuronConnection>) {
+        persistConnectionBatch(connections, expectedCheckpoint = null, nextCheckpoint = null)
+    }
+
+    /**
+     * Atomically commits graph edges and the next generator cursor. A process
+     * death can therefore leave neither half of a batch committed.
+     *
+     * expectedCheckpoint is compared with the persisted cursor in the same
+     * transaction, preventing two workers from advancing a stale checkpoint.
+     */
+    @Synchronized
+    fun persistConnectionBatch(
+        connections: List<AndroidNeuronConnection>,
+        expectedCheckpoint: AndroidJnvM250kInitializationCheckpoint?,
+        nextCheckpoint: AndroidJnvM250kInitializationCheckpoint,
+    ) {
+        persistConnectionBatchInternal(connections, expectedCheckpoint, nextCheckpoint)
+    }
+
+    @Synchronized
+    fun loadConnectionInitializationCheckpoint(): AndroidJnvM250kInitializationCheckpoint? {
+        val db = helper.readableDatabase
+        val values = readInitializerMetadata(db) ?: return null
+        return try {
+            AndroidJnvM250kInitializationCheckpoint(
+                seed = values.getValue("seed").toLong(),
+                fanoutPerRoute = values.getValue("fanout").toInt(),
+                delayNs = values.getValue("delay_ns").toLong(),
+                weight = values.getValue("weight").toDouble(),
+                cursor = AndroidJnvM250kInitializationCursor(
+                    routeIndex = values.getValue("route").toInt(),
+                    sourceNeuronId = values.getValue("source").toInt(),
+                    slotIndex = values.getValue("slot").toInt(),
+                ),
+                completed = values.getValue("completed") == "1",
+            )
+        } catch (error: Exception) {
+            throw AndroidNeuronNetworkException("250k sparse initializer checkpoint is corrupt")
+        }
+    }
+
+    private fun persistConnectionBatchInternal(
+        connections: List<AndroidNeuronConnection>,
+        expectedCheckpoint: AndroidJnvM250kInitializationCheckpoint?,
+        nextCheckpoint: AndroidJnvM250kInitializationCheckpoint?,
+    ) {
         require(connections.isNotEmpty() && connections.size <= AndroidJnvM250kProfile.MAX_PAGE_SIZE) {
-            "connection batch must contain 1..${AndroidJnvM250kProfile.MAX_PAGE_SIZE} edges"
+            "connection batch must contain 1..\u0024{AndroidJnvM250kProfile.MAX_PAGE_SIZE} edges"
         }
         require(connections.map { it.connectionId }.toSet().size == connections.size) {
             "connection IDs must be unique within a batch"
@@ -168,10 +211,7 @@ class AndroidJnvM250kStore(
         connections.forEach { connection ->
             AndroidJnvM250kProfile.requireNeuronId(connection.sourceNeuronId)
             AndroidJnvM250kProfile.requireNeuronId(connection.targetNeuronId)
-            AndroidJnvM250kTopology.requireAllowedConnection(
-                connection.sourceNeuronId,
-                connection.targetNeuronId,
-            )
+            AndroidJnvM250kTopology.requireAllowedConnection(connection.sourceNeuronId, connection.targetNeuronId)
         }
         val outgoingAdds = connections.groupingBy { it.sourceNeuronId }.eachCount()
         val incomingAdds = connections.groupingBy { it.targetNeuronId }.eachCount()
@@ -179,22 +219,20 @@ class AndroidJnvM250kStore(
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
+            if (nextCheckpoint != null) {
+                val persisted = readInitializerMetadata(db)?.let(::checkpointFromMetadata)
+                if (persisted != expectedCheckpoint) {
+                    throw AndroidNeuronNetworkException("250k sparse initializer checkpoint changed; refusing stale batch")
+                }
+            }
             for ((sourceId, added) in outgoingAdds) {
-                val existing = scalar(
-                    db,
-                    "SELECT COUNT(*) FROM connections WHERE source_id=?",
-                    arrayOf(sourceId.toString()),
-                )
+                val existing = scalar(db, "SELECT COUNT(*) FROM connections WHERE source_id=?", arrayOf(sourceId.toString()))
                 if (existing + added > AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON) {
                     throw AndroidNeuronBackpressureException("source neuron reached the sparse outgoing-degree limit")
                 }
             }
             for ((targetId, added) in incomingAdds) {
-                val existing = scalar(
-                    db,
-                    "SELECT COUNT(*) FROM connections WHERE target_id=?",
-                    arrayOf(targetId.toString()),
-                )
+                val existing = scalar(db, "SELECT COUNT(*) FROM connections WHERE target_id=?", arrayOf(targetId.toString()))
                 if (existing + added > AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON) {
                     throw AndroidNeuronBackpressureException("target neuron reached the sparse incoming-degree limit")
                 }
@@ -211,9 +249,69 @@ class AndroidJnvM250kStore(
                     throw AndroidNeuronNetworkException("connection ID already exists in the 250k profile")
                 }
             }
+            if (nextCheckpoint != null) writeInitializerMetadata(db, nextCheckpoint)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    private fun checkpointFromMetadata(values: Map<String, String>) =
+        try {
+            AndroidJnvM250kInitializationCheckpoint(
+                seed = values.getValue("seed").toLong(),
+                fanoutPerRoute = values.getValue("fanout").toInt(),
+                delayNs = values.getValue("delay_ns").toLong(),
+                weight = values.getValue("weight").toDouble(),
+                cursor = AndroidJnvM250kInitializationCursor(
+                    routeIndex = values.getValue("route").toInt(),
+                    sourceNeuronId = values.getValue("source").toInt(),
+                    slotIndex = values.getValue("slot").toInt(),
+                ),
+                completed = values.getValue("completed") == "1",
+            )
+        } catch (error: Exception) {
+            throw AndroidNeuronNetworkException("250k sparse initializer checkpoint is corrupt")
+        }
+
+    private fun readInitializerMetadata(db: SQLiteDatabase): Map<String, String>? {
+        val keys = listOf("seed", "fanout", "delay_ns", "weight", "route", "source", "slot", "completed")
+        val values = LinkedHashMap<String, String>()
+        for (key in keys) {
+            val value = db.rawQuery(
+                "SELECT value FROM metadata WHERE key=?",
+                arrayOf("sparse_initializer_v1_$key"),
+            ).use { if (it.moveToFirst()) it.getString(0) else null } ?: return null
+            values[key] = value
+        }
+        return values
+    }
+
+    private fun writeInitializerMetadata(
+        db: SQLiteDatabase,
+        checkpoint: AndroidJnvM250kInitializationCheckpoint,
+    ) {
+        val cursor = checkpoint.cursor
+        val values = mapOf(
+            "seed" to checkpoint.seed.toString(),
+            "fanout" to checkpoint.fanoutPerRoute.toString(),
+            "delay_ns" to checkpoint.delayNs.toString(),
+            "weight" to checkpoint.weight.toString(),
+            "route" to cursor.routeIndex.toString(),
+            "source" to cursor.sourceNeuronId.toString(),
+            "slot" to cursor.slotIndex.toString(),
+            "completed" to if (checkpoint.completed) "1" else "0",
+        )
+        for ((key, value) in values) {
+            db.insertWithOnConflict(
+                "metadata",
+                null,
+                ContentValues().apply {
+                    put("key", "sparse_initializer_v1_$key")
+                    put("value", value)
+                },
+                SQLiteDatabase.CONFLICT_REPLACE,
+            )
         }
     }
 
