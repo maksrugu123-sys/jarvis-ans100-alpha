@@ -47,6 +47,7 @@ data class AndroidNeuronEvent(
     val eventId: String,
     val timeNs: Long,
     val targetNeuronId: Int,
+    /** Signed synaptic input: positive is excitatory, negative is inhibitory. */
     val strength: Double,
     /** Origin taint is inherited by every event emitted from a tainted neuron. */
     val coreTainted: Boolean = false,
