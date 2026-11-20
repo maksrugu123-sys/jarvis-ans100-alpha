@@ -423,7 +423,7 @@ class AndroidJnvM250kStore(
         helper.readableDatabase.rawQuery(
             "SELECT neuron_id, potential, adaptation, last_update_ns, refractory_until_ns, spike_sequence, core_tainted " +
                 "FROM neurons WHERE neuron_id IN ($placeholders) ORDER BY neuron_id",
-            ordered.map(Int::toString).toTypedArray(),
+            ordered.map { it.toString() }.toTypedArray(),
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val state = readState(cursor)
@@ -451,7 +451,7 @@ class AndroidJnvM250kStore(
         requireInitialized()
         val ordered = sourceNeuronIds.sorted()
         val placeholders = List(ordered.size) { "?" }.joinToString(",")
-        val args = ordered.map(Int::toString).toTypedArray()
+        val args = ordered.map { it.toString() }.toTypedArray()
         val result = ArrayList<AndroidNeuronConnection>(minOf(maxEdges, 128))
         helper.readableDatabase.rawQuery(
             "SELECT connection_id, source_id, target_id, delay_ns, weight FROM connections " +
