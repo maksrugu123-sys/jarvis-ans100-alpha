@@ -265,10 +265,12 @@ class AndroidJnvM250kRuntime(
         rewardId: String,
         reward: Double,
         connectionIds: Set<String>,
+        connectionCredits: Map<String, Double> = emptyMap(),
     ): AndroidJnvM250kRewardResult = store.applyRewardToConnections(
         rewardId = rewardId,
         reward = reward,
         connectionIds = connectionIds,
+        connectionCredits = connectionCredits,
         timestampNs = store.stats().currentTimeNs,
         traceTauNs = STDP_TRACE_TAU_NS,
         learningRate = RSTDP_LEARNING_RATE,
