@@ -82,7 +82,6 @@ class AndroidJnvM250kRewardAttribution(
         var legacyUnweightedReward: Boolean = false,
         var counterfactualDecisionJson: String? = null,
         var counterfactualContextJson: String? = null,
-        var counterfactualContextJson: String? = null,
     )
 
     private var activeEpisode: Episode? = journal?.loadRecoverable()?.let(::decodeEpisode)
@@ -400,10 +399,6 @@ class AndroidJnvM250kRewardAttribution(
             val scores = responseScoresFor(episode)
             episode.counterfactualContextJson?.let { contextJson ->
                 val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
-                context.validateAgainstDecisionIdentity(
-                    turnId = context.decisionTurnId,
-                    selectedCandidateId = context.selectedCandidateId,
-                )
                 val expectedIds = scores.entries
                     .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
                     .take(AndroidJnvM250kCounterfactualEvaluator.DEFAULT_MAX_CANDIDATES)
