@@ -126,10 +126,18 @@ class AndroidJnvM250kTopologyTest {
     }
 
     @Test
-    fun sparseInitializerCheckpointIsCanonicalAtCompletion() {
+    fun completedSparseInitializerCheckpointEmitsNoFurtherEdges() {
         val initial = AndroidJnvM250kSparseConnectionInitializer.initialCheckpoint(seed = 3L)
-        val one = AndroidJnvM250kSparseConnectionInitializer.nextBatch(initial, batchSize = 1)
-        assertEquals(false, one.checkpoint.completed)
-        assertEquals(0, one.checkpoint.cursor.routeIndex)
+        val completed = initial.copy(
+            cursor = AndroidJnvM250kInitializationCursor(
+                routeIndex = AndroidJnvM250kTopology.ALLOWED_ROUTES.size,
+                sourceNeuronId = 0,
+                slotIndex = 0,
+            ),
+            completed = true,
+        )
+        val result = AndroidJnvM250kSparseConnectionInitializer.nextBatch(completed, batchSize = 16)
+        assertTrue(result.connections.isEmpty())
+        assertEquals(completed, result.checkpoint)
     }
 }
