@@ -182,6 +182,11 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 assertEquals("cpu-reference", targetRun.computeBackend)
             }
 
+            // Reopen the SQLite database before reading the trace: learning
+            // state must survive a runtime/store lifecycle boundary.
+            store.close()
+            store = AndroidJnvM250kStore(context, databaseName)
+
             // The source spike at t=100 must leave a persisted pre-trace. A
             // deterministic test backend forces the later postsynaptic spike so
             // the LTP direction can be checked without depending on thresholds.
