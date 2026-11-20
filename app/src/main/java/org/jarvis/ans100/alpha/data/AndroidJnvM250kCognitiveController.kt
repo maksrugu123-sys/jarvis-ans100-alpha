@@ -3,12 +3,12 @@ package org.jarvis.ans100.alpha.data
 /**
  * Coordinates one real decision-bound JNVM episode.
  *
- * This controller deliberately does not invent perception, choose an action,
- * or infer an external-world outcome. The caller supplies the selected ANS
- * decision, its concrete input events, and the outcome readout neurons. The
- * controller captures the pre-action graph, executes the runtime, records
- * observed transmissions/responses, and delegates bounded replay plus durable
- * exact-edge reward to the episode attribution journal.
+ * The existing typed-evidence encoder and 10k hybrid population controller
+ * provide provenance-bound inputs and candidate selection. This class bridges
+ * that completed decision into the separate 250k JNVM runtime, captures the
+ * pre-action graph, records actual transmissions/responses, and delegates
+ * bounded replay plus durable exact-edge reward to the attribution journal.
+ * It does not independently interpret raw language or execute external tools/actions.
  *
  * A completed neural readout is not proof of a successful real-world action.
  * The caller must convert an independently observed outcome into a bounded
