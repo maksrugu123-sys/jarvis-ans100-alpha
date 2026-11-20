@@ -379,3 +379,10 @@ No APK build, instrumentation test, device run, or benchmark was performed for t
 After the decision bridge, the 250k runtime executes the encoded evidence events and the existing attribution/replay/gate/SQLite chain remains responsible for exact-edge learning. The 10k hybrid candidate competition is still the current action-selection authority; the 250k populations do not yet independently generate semantic hypotheses or select external tools/actions. Memory retrieval, pattern hypotheses and prediction within the 250k network still need explicit readout contracts and app-level adapters. This is not yet a fully autonomous end-to-end agent.
 
 Unit tests were added for deterministic mapping, population routing, heuristic taint and boolean polarity. They were authored but NOT RUN. No APK build, instrumentation test, device run or benchmark was performed.
+
+
+## Neural hypothesis lifecycle handoff
+
+`AndroidJnvM250kCognitiveController.observeNeuralHypotheses` now accepts bounded candidates from the existing `ANS100NeuralAssociationDecoder` after the JNVM decision queue is drained. It records the completed turn through `ANS100NeuralHypothesisEngine`, which tracks support and non-reproduction across independent turns, and can save/restore the bounded checkpoint through `ANS100NeuralHypothesisLedger`. The method reports whether persistence succeeded; without a supplied ledger, hypotheses remain in controller memory only.
+
+Important boundary: this handoff does not itself decode semantic concept pairs from the 250k runtime's spike list. The caller must provide candidates produced by the existing neural association decoder and a complete pair-scan flag. Repeated co-activation is repeatability evidence only, never proof of a true semantic relation or causal fact. A dedicated 250k concept readout/decoder is still a future integration task.
