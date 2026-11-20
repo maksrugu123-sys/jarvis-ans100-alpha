@@ -56,6 +56,66 @@ object AndroidJnvM250kTopology {
     )
 
     /**
+     * Directed population routes for the first sparse cognitive graph.
+     * The route matrix limits which systems may exchange signals; per-neuron
+     * degree limits in AndroidJnvM250kProfile bound the actual graph size.
+     */
+    data class PopulationRoute(
+        val source: Population,
+        val target: Population,
+    )
+
+    val ALLOWED_ROUTES: Set<PopulationRoute> = setOf(
+        PopulationRoute(Population.PERCEPTION, Population.MEMORY),
+        PopulationRoute(Population.PERCEPTION, Population.PATTERN_DETECTION),
+        PopulationRoute(Population.PERCEPTION, Population.ATTENTION),
+        PopulationRoute(Population.PERCEPTION, Population.CONTEXT),
+        PopulationRoute(Population.MEMORY, Population.MEMORY),
+        PopulationRoute(Population.MEMORY, Population.PATTERN_DETECTION),
+        PopulationRoute(Population.MEMORY, Population.PREDICTION),
+        PopulationRoute(Population.MEMORY, Population.CONTEXT),
+        PopulationRoute(Population.PATTERN_DETECTION, Population.PATTERN_DETECTION),
+        PopulationRoute(Population.PATTERN_DETECTION, Population.PREDICTION),
+        PopulationRoute(Population.PATTERN_DETECTION, Population.MEMORY),
+        PopulationRoute(Population.PATTERN_DETECTION, Population.CONFIDENCE),
+        PopulationRoute(Population.PREDICTION, Population.CONTRADICTION),
+        PopulationRoute(Population.PREDICTION, Population.CONFIDENCE),
+        PopulationRoute(Population.PREDICTION, Population.ATTENTION),
+        PopulationRoute(Population.PREDICTION, Population.MEMORY),
+        PopulationRoute(Population.ATTENTION, Population.PERCEPTION),
+        PopulationRoute(Population.ATTENTION, Population.MEMORY),
+        PopulationRoute(Population.ATTENTION, Population.PREDICTION),
+        PopulationRoute(Population.ATTENTION, Population.ACTION_SELECTION),
+        PopulationRoute(Population.CONTRADICTION, Population.PREDICTION),
+        PopulationRoute(Population.CONTRADICTION, Population.MEMORY),
+        PopulationRoute(Population.CONTRADICTION, Population.CONFIDENCE),
+        PopulationRoute(Population.CONTEXT, Population.MEMORY),
+        PopulationRoute(Population.CONTEXT, Population.PATTERN_DETECTION),
+        PopulationRoute(Population.CONTEXT, Population.PREDICTION),
+        PopulationRoute(Population.CONTEXT, Population.ATTENTION),
+        PopulationRoute(Population.CONFIDENCE, Population.ACTION_SELECTION),
+        PopulationRoute(Population.CONFIDENCE, Population.COORDINATION),
+        PopulationRoute(Population.COORDINATION, Population.ACTION_SELECTION),
+        PopulationRoute(Population.COORDINATION, Population.MEMORY),
+        PopulationRoute(Population.ACTION_SELECTION, Population.COORDINATION),
+        PopulationRoute(Population.ACTION_SELECTION, Population.PERCEPTION),
+    )
+
+    fun allowsConnection(sourceNeuronId: Int, targetNeuronId: Int): Boolean {
+        AndroidJnvM250kProfile.requireNeuronId(sourceNeuronId)
+        AndroidJnvM250kProfile.requireNeuronId(targetNeuronId)
+        if (sourceNeuronId == targetNeuronId) return false
+        val route = PopulationRoute(populationFor(sourceNeuronId), populationFor(targetNeuronId))
+        return route in ALLOWED_ROUTES
+    }
+
+    fun requireAllowedConnection(sourceNeuronId: Int, targetNeuronId: Int) {
+        require(allowsConnection(sourceNeuronId, targetNeuronId)) {
+            "connection is not allowed by the 250k population route policy"
+        }
+    }
+
+    /**
      * One in every five IDs is provisionally inhibitory within its population
      * (20%); all remaining IDs are excitatory (80%). This deterministic rule
      * gives stable polarity without storing a second 250k lookup table.
