@@ -49,6 +49,8 @@ data class AndroidJnvM250kRunResult(
     val causalLinks: List<AndroidJnvM250kCausalLink> = emptyList(),
     /** Transmissions omitted after the per-run causal-link cap was reached. */
     val omittedCausalLinks: Int = 0,
+    /** Target spikes that also received non-synaptic/external input in the same timestamp group. */
+    val ambiguousTargetSpikeNeuronIds: Set<Int> = emptySet(),
 )
 
 /**
@@ -107,6 +109,7 @@ class AndroidJnvM250kRuntime(
         val spikes = ArrayList<AndroidJnvM250kSpike>()
         val causalLinks = ArrayList<AndroidJnvM250kCausalLink>(MAX_CAUSAL_LINKS_PER_RUN)
         var omittedCausalLinks = 0
+        val ambiguousTargetSpikeNeuronIds = LinkedHashSet<Int>()
 
         while (timestamps < maxTimestamps) {
             val group = store.nextTimestampEvents() ?: break
@@ -160,6 +163,9 @@ class AndroidJnvM250kRuntime(
                     val spike = AndroidJnvM250kSpike(neuronId, updated.spikeSequence, timestamp)
                     spikes += spike
                     timestampSpikes += spike
+                    if (byTarget.getValue(neuronId).any { !it.eventId.matches(GENERATED_SYNAPSE_EVENT_ID) }) {
+                        ambiguousTargetSpikeNeuronIds += neuronId
+                    }
                 }
             }
 
@@ -234,6 +240,7 @@ class AndroidJnvM250kRuntime(
             computeBackend = computeBackend.backendName,
             causalLinks = causalLinks,
             omittedCausalLinks = omittedCausalLinks,
+            ambiguousTargetSpikeNeuronIds = ambiguousTargetSpikeNeuronIds,
         )
     }
 
@@ -337,5 +344,6 @@ class AndroidJnvM250kRuntime(
         const val STDP_A_MINUS = 0.012
         /** Reward gain applied to the bounded, decaying STDP eligibility trace. */
         const val RSTDP_LEARNING_RATE = 0.1
+        private val GENERATED_SYNAPSE_EVENT_ID = Regex("^j250k-spike-[0-9]+-[0-9]+-.+$")
     }
 }
