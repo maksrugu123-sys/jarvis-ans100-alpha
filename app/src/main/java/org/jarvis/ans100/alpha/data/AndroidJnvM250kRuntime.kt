@@ -119,6 +119,7 @@ class AndroidJnvM250kRuntime(
             }
 
             val changed = ArrayList<AndroidNeuronState>(results.size)
+            val timestampSpikes = ArrayList<AndroidJnvM250kSpike>()
             for (index in results.indices) {
                 val input = kernelInputs[index]
                 val result = results[index]
@@ -127,17 +128,19 @@ class AndroidJnvM250kRuntime(
                 val updated = result.state.copy(coreTainted = taintByTarget.getValue(neuronId))
                 changed += updated
                 if (result.spiked) {
-                    spikes += AndroidJnvM250kSpike(neuronId, updated.spikeSequence, timestamp)
+                    val spike = AndroidJnvM250kSpike(neuronId, updated.spikeSequence, timestamp)
+                    spikes += spike
+                    timestampSpikes += spike
                 }
             }
 
             // Decay old traces before adding current spikes: simultaneous pre/post
             // spikes have no artificial ordering.
-            val changedSynapses = calculateStdpUpdates(timestamp, spikes)
+            val changedSynapses = calculateStdpUpdates(timestamp, timestampSpikes)
             val learnedWeights = changedSynapses.associate { it.connectionId to it.weight }
             val changedByNeuron = changed.associateBy { it.neuronId }
             val generated = ArrayList<AndroidNeuronEvent>()
-            for (spike in spikes) {
+            for (spike in timestampSpikes) {
                 val updated = changedByNeuron[spike.neuronId]
                     ?: throw AndroidNeuronNetworkException("250k spike has no committed neuron candidate")
                 val outgoing = store.outgoingPage(
