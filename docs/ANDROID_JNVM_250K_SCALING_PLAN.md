@@ -254,3 +254,18 @@ val learningResult = attribution.finishEpisode(outcomeReward)
 ```
 
 The app's higher-level action/decision controller does not yet own this lifecycle automatically; callers must currently open, feed and finish the episode explicitly.
+
+## Bounded counterfactual edge replay
+
+`AndroidJnvM250kCounterfactualEvaluator` adds an isolated sensitivity experiment for up to eight candidate synapses:
+
+- It accepts detached initial neuron states, one bounded edge page, a bounded external-input snapshot and an explicit outcome-neuron set.
+- It replays the same inputs from the same initial states once with all supplied edges, then once per candidate with exactly that connection ID suppressed.
+- Both branches use the deterministic CPU LIF-DT reference kernel. Each replay has independent copied state and an isolated priority queue; no production SQLite database, working set, connection weight, eligibility trace or reward receipt is opened or mutated.
+- The report compares spikes only in the explicitly selected outcome population. A positive delta means fewer outcome spikes after suppressing the edge; a negative delta means more. The normalized sensitivity score is a replay difference, not a causal probability or reward multiplier.
+- Hard limits are eight candidate edges, 512 default replay events, 64 default timestamp groups, one 512-edge snapshot page, with configurable ceilings of 2,048 events and 256 timestamp groups. Generated fan-out is included in the per-replay work budget; a replay that hits a bound is marked incomplete.
+- Candidate IDs must exist in the supplied edge snapshot, and all edge endpoints, external-input targets and outcome neurons must have supplied initial states. Inputs must be later than each target's snapshot time.
+
+This is a controlled counterfactual *model replay*, not a faithful replay of the complete production runtime. It currently does not reproduce online STDP/eligibility updates, external environment feedback, unprovided hidden state, asynchronous app actions or GPU/hybrid backend behavior. It assumes the supplied snapshot and input stream are complete and deterministic. If either branch is incomplete, its score must not be treated as a validated effect. The evaluator is not yet wired into `AndroidJnvM250kRewardAttribution` or the app decision lifecycle, and its score must not automatically change R-STDP credit.
+
+Unit tests are authored for an edge that changes the selected outcome, an unrelated edge, input snapshot immutability, hard candidate bounds and incomplete replay reporting. Tests are **not run**; no APK build or Android device experiment was run.
