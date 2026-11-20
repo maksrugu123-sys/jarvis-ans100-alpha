@@ -15,6 +15,37 @@ data class AndroidJnvM250kStats(
     val initialized: Boolean,
 )
 
+/** Persisted eligibility traces for one sparse synapse. */
+data class AndroidJnvM250kSynapseSnapshot(
+    val connection: AndroidNeuronConnection,
+    val preTrace: Double,
+    val postTrace: Double,
+    val lastUpdateNs: Long,
+) {
+    init {
+        require(preTrace.isFinite() && preTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
+        require(postTrace.isFinite() && postTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
+        require(lastUpdateNs >= 0L)
+    }
+}
+
+/** Atomic weight + trace replacement produced by one STDP timestamp. */
+data class AndroidJnvM250kSynapseUpdate(
+    val connectionId: String,
+    val weight: Double,
+    val preTrace: Double,
+    val postTrace: Double,
+    val lastUpdateNs: Long,
+) {
+    init {
+        require(connectionId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(weight.isFinite() && weight in 0.0..1.0)
+        require(preTrace.isFinite() && preTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
+        require(postTrace.isFinite() && postTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
+        require(lastUpdateNs >= 0L)
+    }
+}
+
 /**
  * Independent disk-backed structural store for the 250k sparse profile.
  *
@@ -252,6 +283,16 @@ class AndroidJnvM250kStore(
                 if (db.insertWithOnConflict("connections", null, values, SQLiteDatabase.CONFLICT_IGNORE) == -1L) {
                     throw AndroidNeuronNetworkException("connection ID already exists in the 250k profile")
                 }
+                db.insertOrThrow(
+                    "synapse_learning",
+                    null,
+                    ContentValues().apply {
+                        put("connection_id", connection.connectionId)
+                        put("pre_trace", 0.0)
+                        put("post_trace", 0.0)
+                        put("last_update_ns", 0L)
+                    },
+                )
             }
             if (nextCheckpoint != null) writeInitializerMetadata(db, nextCheckpoint)
             db.setTransactionSuccessful()
@@ -395,6 +436,68 @@ class AndroidJnvM250kStore(
     }
 
     /**
+     * Loads only synapses touching this timestamp's pre/post spike sets.
+     * Each endpoint set is bounded by the atomic timestamp event limit; the
+     * returned union is capped by the profile's degree contract.
+     */
+    @Synchronized
+    fun loadPlasticitySynapses(
+        preSpikeNeuronIds: Set<Int>,
+        postSpikeNeuronIds: Set<Int>,
+    ): List<AndroidJnvM250kSynapseSnapshot> {
+        require(preSpikeNeuronIds.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
+        require(postSpikeNeuronIds.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
+        require(preSpikeNeuronIds.isNotEmpty() || postSpikeNeuronIds.isNotEmpty())
+        preSpikeNeuronIds.forEach(AndroidJnvM250kProfile::requireNeuronId)
+        postSpikeNeuronIds.forEach(AndroidJnvM250kProfile::requireNeuronId)
+        requireInitialized()
+
+        val result = LinkedHashMap<String, AndroidJnvM250kSynapseSnapshot>()
+        val db = helper.readableDatabase
+        fun appendFor(ids: Set<Int>, column: String) {
+            if (ids.isEmpty()) return
+            val ordered = ids.sorted()
+            val placeholders = List(ordered.size) { "?" }.joinToString(",")
+            val args = ordered.map(Int::toString).toTypedArray()
+            db.rawQuery(
+                "SELECT c.connection_id, c.source_id, c.target_id, c.delay_ns, c.weight, " +
+                    "l.pre_trace, l.post_trace, l.last_update_ns " +
+                    "FROM connections c LEFT JOIN synapse_learning l ON l.connection_id=c.connection_id " +
+                    "WHERE c.$column IN ($placeholders) ORDER BY c.connection_id",
+                args,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (cursor.isNull(5) || cursor.isNull(6) || cursor.isNull(7)) {
+                        throw AndroidNeuronNetworkException("250k synapse learning state is missing")
+                    }
+                    val connection = AndroidNeuronConnection(
+                        connectionId = cursor.getString(0),
+                        sourceNeuronId = cursor.getInt(1),
+                        targetNeuronId = cursor.getInt(2),
+                        delayNs = cursor.getLong(3),
+                        weight = cursor.getDouble(4),
+                    )
+                    result[connection.connectionId] = AndroidJnvM250kSynapseSnapshot(
+                        connection = connection,
+                        preTrace = cursor.getDouble(5),
+                        postTrace = cursor.getDouble(6),
+                        lastUpdateNs = cursor.getLong(7),
+                    )
+                }
+            }
+        }
+        appendFor(preSpikeNeuronIds, "source_id")
+        appendFor(postSpikeNeuronIds, "target_id")
+        val maximum = AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP *
+            (AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON +
+                AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON)
+        if (result.size > maximum) {
+            throw AndroidNeuronBackpressureException("250k STDP synapse batch exceeds its degree-derived bound")
+        }
+        return result.values.toList()
+    }
+
+    /**
      * Enqueues a bounded input batch. The persistent queue is larger than a
      * single scheduler page, but no API reads the entire queue into RAM.
      */
@@ -480,6 +583,7 @@ class AndroidJnvM250kStore(
         consumed: List<AndroidNeuronEvent>,
         generated: List<AndroidNeuronEvent>,
         changedStates: Collection<AndroidNeuronState>,
+        changedSynapses: Collection<AndroidJnvM250kSynapseUpdate> = emptyList(),
     ) {
         require(timestampNs >= 0L)
         require(consumed.isNotEmpty() && consumed.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
@@ -498,6 +602,12 @@ class AndroidJnvM250kStore(
         }
         require(changedStates.map { it.neuronId }.toSet().size == changedStates.size) {
             "timestamp commit cannot contain duplicate neuron states"
+        }
+        require(changedSynapses.map { it.connectionId }.toSet().size == changedSynapses.size) {
+            "timestamp commit cannot contain duplicate synapse updates"
+        }
+        require(changedSynapses.all { it.lastUpdateNs == timestampNs }) {
+            "STDP trace updates must use the committed timestamp"
         }
         consumed.forEach { AndroidJnvM250kProfile.requireNeuronId(it.targetNeuronId) }
         generated.forEach { AndroidJnvM250kProfile.requireNeuronId(it.targetNeuronId) }
@@ -536,6 +646,26 @@ class AndroidJnvM250kStore(
                 if (db.update("neurons", values, "neuron_id=?", arrayOf(state.neuronId.toString())) != 1) {
                     throw AndroidNeuronNetworkException("250k neuron disappeared before timestamp commit")
                 }
+            }
+            for (synapse in changedSynapses) {
+                if (db.update(
+                        "connections",
+                        ContentValues().apply { put("weight", synapse.weight) },
+                        "connection_id=?",
+                        arrayOf(synapse.connectionId),
+                    ) != 1
+                ) throw AndroidNeuronNetworkException("250k synapse disappeared before STDP commit")
+                if (db.update(
+                        "synapse_learning",
+                        ContentValues().apply {
+                            put("pre_trace", synapse.preTrace)
+                            put("post_trace", synapse.postTrace)
+                            put("last_update_ns", synapse.lastUpdateNs)
+                        },
+                        "connection_id=?",
+                        arrayOf(synapse.connectionId),
+                    ) != 1
+                ) throw AndroidNeuronNetworkException("250k synapse trace disappeared before STDP commit")
             }
             val remaining = scalar(db, "SELECT COUNT(*) FROM events")
             if (remaining + generated.size > AndroidJnvM250kProfile.MAX_PENDING_EVENTS) {
@@ -603,6 +733,7 @@ class AndroidJnvM250kStore(
             )
             db.execSQL("CREATE INDEX connections_source_idx ON connections(source_id, connection_id)")
             db.execSQL("CREATE INDEX connections_target_idx ON connections(target_id)")
+            createSynapseLearningTable(db)
             db.execSQL(
                 "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, " +
                     "strength REAL NOT NULL, core_tainted INTEGER NOT NULL DEFAULT 0, " +
@@ -614,7 +745,25 @@ class AndroidJnvM250kStore(
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            throw AndroidNeuronNetworkException("unsupported 250k JNVM schema migration: $oldVersion -> $newVersion")
+            if (oldVersion < 2) {
+                createSynapseLearningTable(db)
+                db.execSQL(
+                    "INSERT INTO synapse_learning(connection_id, pre_trace, post_trace, last_update_ns) " +
+                        "SELECT connection_id, 0.0, 0.0, 0 FROM connections",
+                )
+            }
+            if (newVersion > 2) {
+                throw AndroidNeuronNetworkException("unsupported 250k JNVM schema migration: $oldVersion -> $newVersion")
+            }
+        }
+
+        private fun createSynapseLearningTable(db: SQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE synapse_learning (" +
+                    "connection_id TEXT PRIMARY KEY, pre_trace REAL NOT NULL, post_trace REAL NOT NULL, " +
+                    "last_update_ns INTEGER NOT NULL, " +
+                    "FOREIGN KEY(connection_id) REFERENCES connections(connection_id) ON DELETE CASCADE)",
+            )
         }
 
         override fun onConfigure(db: SQLiteDatabase) {
@@ -623,11 +772,13 @@ class AndroidJnvM250kStore(
         }
 
         companion object {
-            private const val DATABASE_VERSION = 1
+            private const val DATABASE_VERSION = 2
         }
     }
 
     companion object {
+        const val MAX_STDP_TRACE = 1_000.0
+
         private fun readState(cursor: Cursor) = AndroidNeuronState(
             neuronId = cursor.getInt(0),
             potential = cursor.getDouble(1),
