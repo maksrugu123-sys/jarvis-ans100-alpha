@@ -123,7 +123,7 @@ class AndroidJnvM250kRuntime(
 
         val edges = LinkedHashMap<String, AndroidNeuronConnection>()
         val visitedSources = LinkedHashSet<Int>()
-        var frontier = externalInputs.mapTo(sortedSetOf()) { it.targetNeuronId }
+        var frontier = externalInputs.mapTo(sortedSetOf<Int>()) { it.targetNeuronId }
         var depth = 0
         while (frontier.isNotEmpty()) {
             val batch = frontier.filterNot { it in visitedSources }.toSortedSet()
