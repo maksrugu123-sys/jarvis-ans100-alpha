@@ -354,3 +354,18 @@ if (!gated.decision.mayApplyReward) {
 The low-level `applyIfTrusted` helper remains available for separately managed experiments. For episode-based learning, use `finishEpisodeWithCounterfactual`; do not call both the ordinary `finishEpisode` path and the gated path for the same episode. The durable path stores the canonical decision before applying the reward and replays it after process death.
 
 Six JVM unit tests cover positive/negative reward direction, incomplete baseline and candidate rejection, missing/weak evidence, zero reward, and callback suppression/filtering. Tests are authored but **not run**; no APK build, Android instrumentation run or device experiment was performed.
+
+## Decision-bound cognitive controller (V1)
+
+`AndroidJnvM250kCognitiveController` now coordinates the existing bounded runtime and durable attribution path:
+
+1. Accepts only an `ANS100Decision` with `SELECTED` status and caller-supplied external events/outcome readout neurons.
+2. Captures the pre-action graph and neuron states before scheduling inputs, then opens a journaled decision episode.
+3. Schedules the captured inputs once and processes bounded runtime batches; each actual run result is recorded by `AndroidJnvM250kRewardAttribution`.
+4. Allows outcome assessment only after the runtime reports a drained event queue and at least one event was processed.
+5. Calls the attribution layer's replay-from-persisted-snapshot path. The evaluator runs baseline and one-edge-suppressed replays; the reward gate rejects incomplete, weak, unchanged, or directionally inconsistent candidates.
+6. The attribution layer persists the exact accepted edge IDs/credits and reward identity before applying the weighted reward in SQLite.
+
+The controller is an orchestration boundary, not a complete autonomous agent. It does not yet generate perception events from raw user/environment input, independently choose actions, execute external tools/actions, or verify real-world outcomes. The caller must provide an independently observed outcome reward; neural outcome spikes alone are only the replay readout. The pre-action graph is a bounded reachable subgraph, not a full network/world snapshot. Process-death recovery remains owned by the attribution journal and must be explicitly reattached by the application layer; this V1 controller does not reconstruct its in-memory phase automatically.
+
+No APK build, instrumentation test, device run, or benchmark was performed for this addition.
