@@ -310,7 +310,7 @@ val learning = cycle.finish(observedReward)
 
 **Recovery limitation:** runtime timestamp commits and episode-journal telemetry writes are separate SQLite transactions. `run()` immediately calls `recordRun()`, but a process death in the small interval after the runtime commit and before the journal write can lose that batch's attribution telemetry. This bridge does not claim cross-database atomicity. The CPU replay also omits online STDP, environment feedback and unprovided state; it is sensitivity evidence inside the captured model, not proof of real-world causality.
 
-The decision-context invariant tests and Android journal-recovery tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, Android instrumentation or device run was performed.
+The decision-context invariant tests, Android journal-recovery tests and full-250k SQLite snapshot-capture instrumentation test are AUTHORED / NOT RUN. No Gradle build, APK, CI, Android instrumentation or device run was performed.
 
 ## Durable counterfactual decision in the episode journal
 
