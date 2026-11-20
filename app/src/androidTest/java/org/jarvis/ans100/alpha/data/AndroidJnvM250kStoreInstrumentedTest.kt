@@ -87,6 +87,49 @@ class AndroidJnvM250kStoreInstrumentedTest {
             assertEquals(64, store.stats().connectionCount)
             assertTrue(store.outgoingPage(0, limit = 16).none { it.connectionId == rollbackProbe.connectionId })
 
+            // Timestamp processing is all-or-nothing: consumed events, changed
+            // neuron state, generated events and model clock move together.
+            val inputEvents = listOf(
+                AndroidNeuronEvent("input-event-a", 10L, 20_000, 0.4),
+                AndroidNeuronEvent("input-event-b", 10L, 20_001, 0.6),
+            )
+            store.enqueueEvents(inputEvents)
+            assertEquals(inputEvents, store.nextTimestampEvents())
+            val changedState = AndroidNeuronState(
+                neuronId = 20_000,
+                potential = 0.25,
+                lastUpdateNs = 10L,
+            )
+            val generatedEvent = AndroidNeuronEvent(
+                eventId = "generated-event",
+                timeNs = 20L,
+                targetNeuronId = 20_002,
+                strength = 0.3,
+            )
+            store.commitTimestamp(
+                timestampNs = 10L,
+                consumed = inputEvents,
+                generated = listOf(generatedEvent),
+                changedStates = listOf(changedState),
+            )
+            assertEquals(10L, store.stats().currentTimeNs)
+            assertEquals(listOf(generatedEvent), store.nextTimestampEvents())
+            assertEquals(changedState, store.loadNeuronPage(19_999, 1).single())
+
+            // A missing consumed ID must roll back deletion, state, and clock.
+            val missingEvent = AndroidNeuronEvent("missing-event", 20L, 20_002, 0.3)
+            val incompleteCommitFailure = runCatching {
+                store.commitTimestamp(
+                    timestampNs = 20L,
+                    consumed = listOf(missingEvent),
+                    generated = emptyList(),
+                    changedStates = emptyList(),
+                )
+            }.exceptionOrNull()
+            assertNotNull(incompleteCommitFailure)
+            assertEquals(10L, store.stats().currentTimeNs)
+            assertEquals(listOf(generatedEvent), store.nextTimestampEvents())
+
             // Partial checkpoint metadata is treated as corruption, never as a
             // fresh run that could silently duplicate already committed edges.
             store.close()
