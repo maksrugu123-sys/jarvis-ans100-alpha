@@ -51,6 +51,7 @@ class AndroidJnvM250kDecisionLearningCycle(
         maxTimestamps: Int = AndroidJnvM250kRuntime.DEFAULT_MAX_TIMESTAMPS_PER_RUN,
     ): AndroidJnvM250kRunResult {
         check(attribution.hasDecisionEpisodeContext()) { "begin or recover a decision-bound episode before running" }
+        check(!attribution.hasPendingReward()) { "a reward is pending; retry finish instead of running more events" }
         val result = runtime.run(maxEvents, maxTimestamps)
         attribution.recordRun(result)
         return result
