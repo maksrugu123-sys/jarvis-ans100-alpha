@@ -58,6 +58,15 @@ data class AndroidJnvM250kRewardResult(
     val modelTimeNs: Long,
 )
 
+private data class AndroidJnvM250kRewardSynapseRow(
+    val connectionId: String,
+    val weight: Double,
+    val preTrace: Double,
+    val postTrace: Double,
+    val eligibility: Double,
+    val lastUpdateNs: Long,
+)
+
 /**
  * Independent disk-backed structural store for the 250k sparse profile.
  *
@@ -763,8 +772,7 @@ class AndroidJnvM250kStore(
             val ordered = rewardedNeuronIds.sorted()
             val placeholders = List(ordered.size) { "?" }.joinToString(",")
             val args = ordered.map { it.toString() }.toTypedArray()
-            val ids = ArrayList<String>(MAX_REWARDED_SYNAPSES + 1)
-            val rows = ArrayList<DoubleArray>(MAX_REWARDED_SYNAPSES + 1)
+            val rows = ArrayList<AndroidJnvM250kRewardSynapseRow>(MAX_REWARDED_SYNAPSES + 1)
             db.rawQuery(
                 "SELECT c.connection_id, c.weight, l.pre_trace, l.post_trace, l.eligibility, l.last_update_ns " +
                     "FROM connections c JOIN synapse_learning l ON l.connection_id=c.connection_id " +
@@ -773,39 +781,38 @@ class AndroidJnvM250kStore(
                 args + args + arrayOf((MAX_REWARDED_SYNAPSES + 1).toString()),
             ).use { cursor ->
                 while (cursor.moveToNext()) {
-                    ids += cursor.getString(0)
-                    rows += doubleArrayOf(
-                        cursor.getDouble(1),
-                        cursor.getDouble(2),
-                        cursor.getDouble(3),
-                        cursor.getDouble(4),
-                        cursor.getLong(5).toDouble(),
+                    rows += AndroidJnvM250kRewardSynapseRow(
+                        connectionId = cursor.getString(0),
+                        weight = cursor.getDouble(1),
+                        preTrace = cursor.getDouble(2),
+                        postTrace = cursor.getDouble(3),
+                        eligibility = cursor.getDouble(4),
+                        lastUpdateNs = cursor.getLong(5),
                     )
                 }
             }
-            if (ids.size > MAX_REWARDED_SYNAPSES) {
+            if (rows.size > MAX_REWARDED_SYNAPSES) {
                 throw AndroidNeuronBackpressureException("250k reward credit set exceeds its bounded synapse limit")
             }
 
             var affected = 0
             for (index in ids.indices) {
-                val values = rows[index]
-                val lastUpdate = values[4].toLong()
-                if (lastUpdate > timestampNs) {
+                val row = rows[index]
+                if (row.lastUpdateNs > timestampNs) {
                     throw AndroidNeuronNetworkException("250k reward trace is newer than the model clock")
                 }
-                val decay = kotlin.math.exp(-(timestampNs - lastUpdate).toDouble() / traceTauNs)
-                val preTrace = (values[1] * decay).coerceIn(0.0, MAX_STDP_TRACE)
-                val postTrace = (values[2] * decay).coerceIn(0.0, MAX_STDP_TRACE)
-                val eligibility = (values[3] * decay).coerceIn(-MAX_RSTDP_ELIGIBILITY, MAX_RSTDP_ELIGIBILITY)
-                val nextWeight = (values[0] + reward * learningRate * eligibility).coerceIn(0.0, 1.0)
+                val decay = kotlin.math.exp(-(timestampNs - row.lastUpdateNs).toDouble() / traceTauNs)
+                val preTrace = (row.preTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
+                val postTrace = (row.postTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
+                val eligibility = (row.eligibility * decay).coerceIn(-MAX_RSTDP_ELIGIBILITY, MAX_RSTDP_ELIGIBILITY)
+                val nextWeight = (row.weight + reward * learningRate * eligibility).coerceIn(0.0, 1.0)
                 val nextEligibility = if (reward == 0.0) eligibility else 0.0
                 if (reward != 0.0 && eligibility != 0.0) affected += 1
                 if (db.update(
                         "connections",
                         ContentValues().apply { put("weight", nextWeight) },
                         "connection_id=?",
-                        arrayOf(ids[index]),
+                        arrayOf(row.connectionId),
                     ) != 1
                 ) throw AndroidNeuronNetworkException("250k rewarded synapse disappeared before commit")
                 if (db.update(
