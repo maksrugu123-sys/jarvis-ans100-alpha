@@ -96,9 +96,15 @@ class AndroidJnvM250kRewardAttribution(
      */
     @Synchronized
     fun recordRun(result: AndroidJnvM250kRunResult) {
-        val episode = activeEpisode ?: error("begin or recover an episode before recording runtime activity")
-        check(episode.pendingReward == null) { "episode reward is pending; retry finishEpisode instead of recording more activity" }
+        val currentEpisode = activeEpisode ?: error("begin or recover an episode before recording runtime activity")
+        check(currentEpisode.pendingReward == null) { "episode reward is pending; retry finishEpisode instead of recording more activity" }
+        val episode = copyEpisode(currentEpisode)
         require(result.omittedCausalLinks >= 0)
+        require(result.currentTimeNs >= 0L)
+        require(result.emittedSpikes.all {
+            it.spikeSequence >= 0L && it.timestampNs >= 0L &&
+                it.neuronId in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY
+        })
         episode.omittedLinks = saturatedAdd(episode.omittedLinks, result.omittedCausalLinks.toLong())
         episode.runtimeOmittedTransmissions = saturatedAdd(
             episode.runtimeOmittedTransmissions,
@@ -194,6 +200,7 @@ class AndroidJnvM250kRewardAttribution(
             episode.pending.removeAll { it.connectionId in expiredIds }
         }
         journal?.saveOpen(episode.id, encodeEpisode(episode))
+        activeEpisode = episode
     }
 
     /**
@@ -203,7 +210,8 @@ class AndroidJnvM250kRewardAttribution(
     @Synchronized
     fun finishEpisode(reward: Double): AndroidJnvM250kAttributionResult {
         require(reward.isFinite() && reward in -1.0..1.0)
-        val episode = activeEpisode ?: error("there is no active reward episode")
+        val currentEpisode = activeEpisode ?: error("there is no active reward episode")
+        val episode = copyEpisode(currentEpisode)
         val pending = episode.pendingReward
         if (pending != null && pending != reward) {
             throw IllegalArgumentException("recovered episode has a different persisted reward; retry with the original value")
@@ -233,6 +241,8 @@ class AndroidJnvM250kRewardAttribution(
             episode.pendingReward = reward
             journal?.prepareReward(episode.id, encodeEpisode(episode), reward)
         }
+        // Publish the pending state only after its durable write succeeds.
+        activeEpisode = episode
         val rewardId = "episode-${episode.id}"
         val rewardResult = if (episode.legacyUnweightedReward) {
             applyReward(rewardId, reward, credited)
@@ -277,6 +287,12 @@ class AndroidJnvM250kRewardAttribution(
     override fun close() {
         journal?.close()
     }
+
+    private fun copyEpisode(source: Episode): Episode = source.copy(
+        candidates = LinkedHashMap(source.candidates.mapValues { (_, candidate) -> candidate.copy() }),
+        pending = ArrayList(source.pending),
+        path = ArrayList(source.path),
+    )
 
     /** Bounded Space-Saving sketch; returns null when an ID is not retained. */
     private fun addCandidate(episode: Episode, link: AndroidJnvM250kCausalLink): Candidate? {
