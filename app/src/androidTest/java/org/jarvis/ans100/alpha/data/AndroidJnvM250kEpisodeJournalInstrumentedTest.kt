@@ -94,10 +94,10 @@ class AndroidJnvM250kEpisodeJournalInstrumentedTest {
     private fun runResult(links: List<AndroidJnvM250kCausalLink>) = AndroidJnvM250kRunResult(
         processedEvents = 1,
         processedNeuronBatches = 1,
-        emittedSpikes = emptyList(),
+        emittedSpikes = links.distinctBy { it.targetNeuronId }.map {\n            AndroidJnvM250kSpike(it.targetNeuronId, 1L, it.arrivalTimestampNs + 1L)\n        },
         pendingEvents = 0,
         budgetExhausted = false,
-        currentTimeNs = 10L,
+        currentTimeNs = maxOf(10L, links.maxOfOrNull { it.arrivalTimestampNs + 1L } ?: 10L),
         residentNeuronCount = 1,
         hotSetCapacity = 8,
         computeBackend = "instrumented-test",
