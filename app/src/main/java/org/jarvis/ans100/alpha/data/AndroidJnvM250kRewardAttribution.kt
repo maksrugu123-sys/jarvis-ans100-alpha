@@ -705,6 +705,11 @@ class AndroidJnvM250kRewardAttribution(
         )
         require(episode.id == record.episodeId && episode.id.matches(SAFE_ID))
         require(episode.actionId.matches(SAFE_ID))
+        episode.counterfactualContextJson?.let { contextJson ->
+            val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
+            require(episode.actionId == "decision-" + context.selectedCandidateId
+                .replace(Regex("[^A-Za-z0-9._-]"), "-").take(52))
+        }
         require(
             episode.observedLinks >= 0L && episode.omittedLinks >= 0L &&
                 episode.unansweredTransmissions >= 0L && episode.unobservedTransmissions >= 0L &&
