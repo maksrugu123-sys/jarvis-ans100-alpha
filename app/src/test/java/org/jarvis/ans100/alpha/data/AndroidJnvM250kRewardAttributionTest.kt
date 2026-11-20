@@ -149,6 +149,24 @@ class AndroidJnvM250kRewardAttributionTest {
         assertTrue(runCatching { attribution.finishEpisode(0.5) }.isFailure)
     }
 
+
+    @Test
+    fun weightedRewardReceivesResponseConfidencePerExactConnection() {
+        var weighted = emptyMap<String, Double>()
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> error("weighted callback should be used") },
+            applyWeightedReward = { id, _, credits ->
+                weighted = credits
+                AndroidJnvM250kRewardResult(id, credits.size, false, 12L)
+            },
+        )
+        attribution.beginEpisode("weighted", "action")
+        attribution.recordRun(runResult(listOf(link("edge-a", 1, 9), link("edge-b", 2, 9))))
+        attribution.finishEpisode(0.8)
+        assertEquals(0.5, weighted.getValue("edge-a"), 0.000001)
+        assertEquals(0.5, weighted.getValue("edge-b"), 0.000001)
+    }
+
     private fun link(id: String, source: Int, target: Int) = AndroidJnvM250kCausalLink(id, source, target, 10L, 10L)
     private fun runResult(
         links: List<AndroidJnvM250kCausalLink>,
