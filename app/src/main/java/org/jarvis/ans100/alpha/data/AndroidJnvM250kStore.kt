@@ -797,9 +797,6 @@ class AndroidJnvM250kStore(
             if (rows.size > MAX_REWARDED_SYNAPSES) {
                 throw AndroidNeuronBackpressureException("250k reward credit set exceeds its bounded synapse limit")
             }
-            if (rows.size != ordered.size) {
-                throw AndroidNeuronNetworkException("250k exact reward references a missing connection or learning trace")
-            }
 
             var affected = 0
             for (index in rows.indices) {
@@ -853,8 +850,8 @@ class AndroidJnvM250kStore(
     }
 
     /**
-     * Applies one reward only to the exact, explicitly credited connection IDs. The reward is accepted only at the current model clock, so it
-     * cannot leap over pending events. A durable receipt makes retries safe.
+     * Applies a reward only to explicitly listed transmitted connection IDs.
+     * The reward must match the committed model clock; durable receipts make retries safe.
      */
     @Synchronized
     fun applyRewardToConnections(
@@ -931,6 +928,9 @@ class AndroidJnvM250kStore(
             }
             if (rows.size > MAX_REWARDED_SYNAPSES) {
                 throw AndroidNeuronBackpressureException("250k reward credit set exceeds its bounded synapse limit")
+            }
+            if (rows.size != ordered.size) {
+                throw AndroidNeuronNetworkException("250k exact reward references a missing connection or learning trace")
             }
 
             var affected = 0

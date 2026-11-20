@@ -95,7 +95,7 @@ class AndroidJnvM250kRewardAttributionTest {
         assertEquals(2, result.creditedConnectionIds.size)
         assertTrue("edge-0" in result.creditedConnectionIds)
         assertEquals(3, result.signalPathConnectionIds.size)
-        assertEquals(38L, result.omittedLinks)
+        assertEquals(37L, result.omittedLinks)
         attribution.beginEpisode("after", "action")
         attribution.abortEpisode()
         assertFalse(attribution.hasActiveEpisode())

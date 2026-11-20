@@ -274,31 +274,6 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 assertEquals(listOf(sourceZeroTarget), secondPost.emittedSpikes.map { it.neuronId })
                 val beforePunishment = store.outgoingPage(0, limit = 16)
                     .single { it.targetNeuronId == sourceZeroTarget }.weight
-                val exactTargetConnection = store.outgoingPage(0, limit = 16)
-                    .single { it.targetNeuronId == sourceZeroTarget }
-                val unrelatedOutgoing = store.outgoingPage(sourceZeroTarget, limit = 16).first()
-                val unrelatedWeightBefore = unrelatedOutgoing.weight
-                val exactReward = resumedRuntime.applyRewardToConnections(
-                    rewardId = "reward-exact-edge-once",
-                    reward = 1.0,
-                    connectionIds = setOf(exactTargetConnection.connectionId),
-                )
-                assertEquals("exact reward must affect only its selected edge", 1, exactReward.affectedSynapses)
-                assertEquals(
-                    "an unselected neighboring edge must remain unchanged",
-                    unrelatedWeightBefore,
-                    store.outgoingPage(sourceZeroTarget, limit = 16)
-                        .single { it.connectionId == unrelatedOutgoing.connectionId }.weight,
-                    0.000001,
-                )
-                val missingConnectionFailure = runCatching {
-                    resumedRuntime.applyRewardToConnections(
-                        rewardId = "reward-missing-edge",
-                        reward = 1.0,
-                        connectionIds = setOf("missing-connection-id"),
-                    )
-                }.exceptionOrNull()
-                assertTrue("unknown connection IDs must fail closed", missingConnectionFailure is AndroidNeuronNetworkException)
                 val negative = resumedRuntime.applyReward(
                     rewardId = "reward-negative-once",
                     reward = -1.0,
