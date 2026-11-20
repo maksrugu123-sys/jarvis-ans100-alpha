@@ -194,7 +194,7 @@ class AndroidJnvM250kRewardAttribution(
                 .thenBy { it.firstSeenOrder },
         ).take(maxCreditedConnections)
         val credited = selected.mapTo(LinkedHashSet()) { it.connectionId }
-        val knownTransmissionTotal = episode.observedLinks + episode.unobservedTransmissions
+        val knownTransmissionTotal = saturatedAdd(episode.observedLinks, episode.unobservedTransmissions)
         val coverage = if (knownTransmissionTotal == 0L) 0.0 else
             (episode.observedLinks.toDouble() / knownTransmissionTotal.toDouble()).coerceIn(0.0, 1.0)
         val scores = selected.associate { candidate ->
