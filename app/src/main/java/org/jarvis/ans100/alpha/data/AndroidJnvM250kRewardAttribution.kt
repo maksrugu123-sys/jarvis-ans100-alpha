@@ -25,19 +25,23 @@ data class AndroidJnvM250kAttributionResult(
  * 2. record every runtime result belonging to that episode;
  * 3. finish it once the external outcome is known.
  *
- * This coordinator is deliberately in-memory in this first version. It never
- * fabricates a causal path from population labels or mere neuron co-activity.
- * Only endpoints of recorded transmissions become candidate credited IDs.
- * The downstream store currently rewards all eligible synapses adjacent to
- * those IDs, not only the exact transmitted connection IDs.
+ * This coordinator is deliberately in-memory in this first version. Its
+ * candidate table uses a bounded Space-Saving frequency sketch, so long
+ * episodes cannot accumulate an unbounded map of up to 250k neuron IDs. It
+ * never fabricates a path from population labels or mere co-activity. Only
+ * endpoints of recorded transmissions become candidate credited IDs. The
+ * downstream store currently rewards all eligible synapses adjacent to those
+ * IDs, not only the exact transmitted connection IDs.
  */
 class AndroidJnvM250kRewardAttribution(
     private val applyReward: (rewardId: String, reward: Double, neuronIds: Set<Int>) -> AndroidJnvM250kRewardResult,
     private val maxCreditedNeurons: Int = DEFAULT_MAX_CREDITED_NEURONS,
+    private val maxTrackedNeurons: Int = DEFAULT_MAX_TRACKED_NEURONS,
 ) {
     private data class Candidate(
         val neuronId: Int,
         var transmissions: Long,
+        val estimationError: Long,
         val firstSeenOrder: Long,
     )
 
@@ -55,6 +59,9 @@ class AndroidJnvM250kRewardAttribution(
     init {
         require(maxCreditedNeurons in 1..MAX_CREDITED_NEURONS) {
             "credited neuron bound must be 1..$MAX_CREDITED_NEURONS"
+        }
+        require(maxTrackedNeurons in maxCreditedNeurons..MAX_TRACKED_NEURONS) {
+            "tracked neuron bound must be maxCreditedNeurons..$MAX_TRACKED_NEURONS"
         }
     }
 
@@ -124,14 +131,33 @@ class AndroidJnvM250kRewardAttribution(
     @Synchronized
     fun hasActiveEpisode(): Boolean = activeEpisode != null
 
+    @Synchronized
+    fun trackedCandidateCount(): Int = activeEpisode?.candidates?.size ?: 0
+
     private fun addCandidate(episode: Episode, neuronId: Int) {
         AndroidJnvM250kProfile.requireNeuronId(neuronId)
         val existing = episode.candidates[neuronId]
         if (existing != null) {
             existing.transmissions = saturatedAdd(existing.transmissions, 1L)
-        } else {
-            episode.candidates[neuronId] = Candidate(neuronId, 1L, episode.nextOrder++)
+            return
         }
+        if (episode.candidates.size < maxTrackedNeurons) {
+            episode.candidates[neuronId] = Candidate(neuronId, 1L, 0L, episode.nextOrder++)
+            return
+        }
+
+        // Space-Saving replacement: retain frequent endpoints without allowing
+        // the episode map to grow with the full 250k neuron ID space.
+        val leastFrequent = episode.candidates.values.minWithOrNull(
+            compareBy<Candidate> { it.transmissions }.thenBy { it.firstSeenOrder },
+        ) ?: return
+        episode.candidates.remove(leastFrequent.neuronId)
+        episode.candidates[neuronId] = Candidate(
+            neuronId = neuronId,
+            transmissions = saturatedAdd(leastFrequent.transmissions, 1L),
+            estimationError = leastFrequent.transmissions,
+            firstSeenOrder = episode.nextOrder++,
+        )
     }
 
     private fun saturatedAdd(left: Long, right: Long): Long =
@@ -140,6 +166,8 @@ class AndroidJnvM250kRewardAttribution(
     companion object {
         const val DEFAULT_MAX_CREDITED_NEURONS = 32
         const val MAX_CREDITED_NEURONS = 32
+        const val DEFAULT_MAX_TRACKED_NEURONS = 256
+        const val MAX_TRACKED_NEURONS = 1_024
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     }
 }
