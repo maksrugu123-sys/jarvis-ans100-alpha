@@ -2,6 +2,7 @@ package org.jarvis.ans100.alpha.data
 
 import android.content.Context
 import java.io.Closeable
+import kotlin.math.exp
 
 /** One spike emitted by the disk-backed 250k runtime. */
 data class AndroidJnvM250kSpike(
@@ -31,8 +32,9 @@ data class AndroidJnvM250kRunResult(
  * candidate batch and is published only after the store atomically commits
  * consumed events, changed neuron states, generated events and model time.
  *
- * The current graph weights are fixed scaffold values. This runtime performs
- * LIF-DT activation and signal propagation, not STDP/R-STDP weight learning.
+ * Sparse STDP is applied at committed timestamps using persisted pre/post
+ * traces. Reward-modulated STDP (R-STDP) and structural edge growth remain
+ * separate future integrations.
  */
 class AndroidJnvM250kRuntime(
     context: Context,
@@ -117,7 +119,6 @@ class AndroidJnvM250kRuntime(
             }
 
             val changed = ArrayList<AndroidNeuronState>(results.size)
-            val generated = ArrayList<AndroidNeuronEvent>()
             for (index in results.indices) {
                 val input = kernelInputs[index]
                 val result = results[index]
@@ -125,16 +126,26 @@ class AndroidJnvM250kRuntime(
                 val neuronId = candidateIds[index]
                 val updated = result.state.copy(coreTainted = taintByTarget.getValue(neuronId))
                 changed += updated
+                if (result.spiked) {
+                    spikes += AndroidJnvM250kSpike(neuronId, updated.spikeSequence, timestamp)
+                }
+            }
 
-                if (!result.spiked) continue
-                spikes += AndroidJnvM250kSpike(neuronId, updated.spikeSequence, timestamp)
-
+            // Decay old traces before adding current spikes: simultaneous pre/post
+            // spikes have no artificial ordering.
+            val changedSynapses = calculateStdpUpdates(timestamp, spikes)
+            val learnedWeights = changedSynapses.associate { it.connectionId to it.weight }
+            val changedByNeuron = changed.associateBy { it.neuronId }
+            val generated = ArrayList<AndroidNeuronEvent>()
+            for (spike in spikes) {
+                val updated = changedByNeuron[spike.neuronId]
+                    ?: throw AndroidNeuronNetworkException("250k spike has no committed neuron candidate")
                 val outgoing = store.outgoingPage(
-                    sourceNeuronId = neuronId,
+                    sourceNeuronId = spike.neuronId,
                     limit = AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON,
                 )
                 val signedPolarity = if (
-                    AndroidJnvM250kTopology.polarityFor(neuronId) ==
+                    AndroidJnvM250kTopology.polarityFor(spike.neuronId) ==
                     AndroidJnvM250kTopology.Polarity.INHIBITORY
                 ) -1.0 else 1.0
 
@@ -143,10 +154,10 @@ class AndroidJnvM250kRuntime(
                         throw AndroidNeuronNetworkException("250k propagated model timestamp overflows signed 64-bit time")
                     }
                     generated += AndroidNeuronEvent(
-                        eventId = "j250k-spike-$neuronId-${updated.spikeSequence}-${connection.connectionId}",
+                        eventId = "j250k-spike-${spike.neuronId}-${spike.spikeSequence}-${connection.connectionId}",
                         timeNs = timestamp + connection.delayNs,
                         targetNeuronId = connection.targetNeuronId,
-                        strength = connection.weight * signedPolarity,
+                        strength = (learnedWeights[connection.connectionId] ?: connection.weight) * signedPolarity,
                         coreTainted = updated.coreTainted,
                     )
                 }
@@ -156,8 +167,9 @@ class AndroidJnvM250kRuntime(
                 throw AndroidNeuronBackpressureException("250k generated-event batch exceeds its atomic processing bound")
             }
 
-            // Database commit is the publication boundary for the entire group.
-            workingSet.commitTimestamp(timestamp, group, generated, changed)
+            // Neuron states, learned weights/traces, propagated events and clock
+            // become visible together at the SQLite transaction boundary.
+            workingSet.commitTimestamp(timestamp, group, generated, changed, changedSynapses)
             processedEvents += group.size
             processedBatches += byTarget.size
             clock = timestamp
@@ -180,6 +192,41 @@ class AndroidJnvM250kRuntime(
         )
     }
 
+    private fun calculateStdpUpdates(
+        timestampNs: Long,
+        spikes: List<AndroidJnvM250kSpike>,
+    ): List<AndroidJnvM250kSynapseUpdate> {
+        if (spikes.isEmpty()) return emptyList()
+        val spikingIds = spikes.map { it.neuronId }.toSet()
+        val snapshots = store.loadPlasticitySynapses(spikingIds, spikingIds)
+        return snapshots.map { snapshot ->
+            if (snapshot.lastUpdateNs > timestampNs) {
+                throw AndroidNeuronNetworkException("250k STDP trace is newer than the model timestamp")
+            }
+            val elapsedNs = timestampNs - snapshot.lastUpdateNs
+            val decay = exp(-elapsedNs.toDouble() / STDP_TRACE_TAU_NS)
+            val decayedPre = (snapshot.preTrace * decay).coerceIn(0.0, AndroidJnvM250kStore.MAX_STDP_TRACE)
+            val decayedPost = (snapshot.postTrace * decay).coerceIn(0.0, AndroidJnvM250kStore.MAX_STDP_TRACE)
+            val sourceSpiked = snapshot.connection.sourceNeuronId in spikingIds
+            val targetSpiked = snapshot.connection.targetNeuronId in spikingIds
+            // Post-after-pre potentiates; pre-after-post depresses.
+            // Both terms use traces from before this timestamp's spike increments.
+            val potentiation = if (targetSpiked) STDP_A_PLUS * decayedPre else 0.0
+            val depression = if (sourceSpiked) STDP_A_MINUS * decayedPost else 0.0
+            val nextWeight = (snapshot.connection.weight + potentiation - depression).coerceIn(0.0, 1.0)
+            val nextPre = (decayedPre + if (sourceSpiked) 1.0 else 0.0)
+                .coerceAtMost(AndroidJnvM250kStore.MAX_STDP_TRACE)
+            val nextPost = (decayedPost + if (targetSpiked) 1.0 else 0.0)
+                .coerceAtMost(AndroidJnvM250kStore.MAX_STDP_TRACE)
+            AndroidJnvM250kSynapseUpdate(
+                connectionId = snapshot.connection.connectionId,
+                weight = nextWeight,
+                preTrace = nextPre,
+                postTrace = nextPost,
+                lastUpdateNs = timestampNs,
+            )
+        }
+    }
     @Synchronized
     fun refreshRamBudget(): Int = workingSet.refreshRamBudget()
 
@@ -194,5 +241,10 @@ class AndroidJnvM250kRuntime(
         const val MAX_EVENTS_PER_RUN = 8_192
         const val DEFAULT_MAX_TIMESTAMPS_PER_RUN = 32
         const val MAX_TIMESTAMPS_PER_RUN = 1_024
+
+        /** Initial pair-based STDP parameters; research defaults, not tuned values. */
+        const val STDP_TRACE_TAU_NS = 20_000_000.0
+        const val STDP_A_PLUS = 0.01
+        const val STDP_A_MINUS = 0.012
     }
 }
