@@ -347,7 +347,7 @@ class AndroidJnvM250kRewardAttribution(
         val episode = activeEpisode ?: error("there is no active reward episode")
         if (episode.counterfactualDecisionJson != null) {
             // The durable decision, not a newly computed report, is authoritative on retry.
-            return finishEpisodeWithCounterfactual(
+            return finishEpisodeWithCounterfactualInternal(
                 reward = reward,
                 report = AndroidJnvM250kCounterfactualEvaluator.Report(
                     candidates = emptyList(),
@@ -356,6 +356,7 @@ class AndroidJnvM250kRewardAttribution(
                     baselineComplete = true,
                 ),
                 policy = policy,
+                verifySnapshot = false,
             )
         }
         val contextJson = episode.counterfactualContextJson
@@ -375,7 +376,7 @@ class AndroidJnvM250kRewardAttribution(
             candidateConnectionIds = candidateIds,
             outcomeNeuronIds = context.outcomeNeuronIds,
         )
-        return finishEpisodeWithCounterfactual(reward, report, policy)
+        return finishEpisodeWithCounterfactualInternal(reward, report, policy, verifySnapshot = false)
     }
 
     @Synchronized
@@ -384,6 +385,14 @@ class AndroidJnvM250kRewardAttribution(
         report: AndroidJnvM250kCounterfactualEvaluator.Report,
         policy: AndroidJnvM250kCounterfactualRewardGate.Policy =
             AndroidJnvM250kCounterfactualRewardGate.Policy(),
+    ): AndroidJnvM250kCounterfactualFinishResult =
+        finishEpisodeWithCounterfactualInternal(reward, report, policy, verifySnapshot = true)
+
+    private fun finishEpisodeWithCounterfactualInternal(
+        reward: Double,
+        report: AndroidJnvM250kCounterfactualEvaluator.Report,
+        policy: AndroidJnvM250kCounterfactualRewardGate.Policy,
+        verifySnapshot: Boolean,
     ): AndroidJnvM250kCounterfactualFinishResult {
         require(reward.isFinite() && reward in -1.0..1.0)
         check(journal != null) { "counterfactual episode learning requires a persistent episode journal" }
@@ -415,19 +424,21 @@ class AndroidJnvM250kRewardAttribution(
             val allScores = responseScoresFor(episode)
             val evaluatedIds = report.candidates.mapTo(LinkedHashSet()) { it.connectionId }
             val scores = allScores.filterKeys { it in evaluatedIds }
-            episode.counterfactualContextJson?.let { contextJson ->
-                val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
-                val expectedIds = allScores.entries
-                    .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
-                    .take(AndroidJnvM250kCounterfactualEvaluator.DEFAULT_MAX_CANDIDATES)
-                    .mapTo(LinkedHashSet()) { it.key }
-                require(report == AndroidJnvM250kCounterfactualEvaluator.evaluate(
-                    initialStates = context.initialStates,
-                    connections = context.connections,
-                    externalInputs = context.externalInputs,
-                    candidateConnectionIds = expectedIds,
-                    outcomeNeuronIds = context.outcomeNeuronIds,
-                )) { "counterfactual report does not match the persisted pre-action snapshot" }
+            if (verifySnapshot) {
+                episode.counterfactualContextJson?.let { contextJson ->
+                    val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
+                    val expectedIds = allScores.entries
+                        .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
+                        .take(AndroidJnvM250kCounterfactualEvaluator.DEFAULT_MAX_CANDIDATES)
+                        .mapTo(LinkedHashSet()) { it.key }
+                    require(report == AndroidJnvM250kCounterfactualEvaluator.evaluate(
+                        initialStates = context.initialStates,
+                        connections = context.connections,
+                        externalInputs = context.externalInputs,
+                        candidateConnectionIds = expectedIds,
+                        outcomeNeuronIds = context.outcomeNeuronIds,
+                    )) { "counterfactual report does not match the persisted pre-action snapshot" }
+                }
             }
             decision = AndroidJnvM250kCounterfactualRewardGate.evaluate(
                 reward = reward,
