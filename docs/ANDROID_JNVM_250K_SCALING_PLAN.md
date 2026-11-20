@@ -141,7 +141,7 @@ Completed in the current branch:
 5. Add a bounded disk-backed event queue and atomic timestamp commit contract.
 
 Remaining before the new profile can run ANS:
-6. Add Android SQLite integration tests for batched graph creation, process interruption/restart, checkpoint atomicity, duplicate prevention, degree rejection, event backpressure, timestamp atomicity, working-set cache/database coherence, route enforcement and legacy database isolation.
+6. Partially covered by `AndroidJnvM250kStoreInstrumentedTest`: full-profile initialization/idempotency, batched graph persistence, close/reopen checkpoint recovery, stale-checkpoint rejection, duplicate-ID transaction rollback, timestamp atomicity and partial-checkpoint corruption. Still add focused coverage for degree rejection, event backpressure, working-set cache/database coherence, route enforcement and legacy database isolation.
 7. Integrate the LIF-DT scheduler, CPU/GPU compute backend, feature-state persistence, learning and plasticity against the new store and population descriptor.
 8. Measure database growth, startup time, query latency, event throughput and actual heap use on the target Android device before enabling the profile in the app settings.
 
