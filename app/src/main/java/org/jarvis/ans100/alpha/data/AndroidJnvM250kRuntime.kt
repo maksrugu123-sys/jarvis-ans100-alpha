@@ -11,6 +11,26 @@ data class AndroidJnvM250kSpike(
     val timestampNs: Long,
 )
 
+/**
+ * One sparse synapse transmission emitted by an actual source-neuron spike.
+ * This records transmission, not proof that the target's later behavior was
+ * caused exclusively by this edge.
+ */
+data class AndroidJnvM250kCausalLink(
+    val connectionId: String,
+    val sourceNeuronId: Int,
+    val targetNeuronId: Int,
+    val timestampNs: Long,
+) {
+    init {
+        require(connectionId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        AndroidJnvM250kProfile.requireNeuronId(sourceNeuronId)
+        AndroidJnvM250kProfile.requireNeuronId(targetNeuronId)
+        require(sourceNeuronId != targetNeuronId)
+        require(timestampNs >= 0L)
+    }
+}
+
 /** Bounded result for one or more committed timestamp groups. */
 data class AndroidJnvM250kRunResult(
     val processedEvents: Int,
@@ -163,6 +183,16 @@ class AndroidJnvM250kRuntime(
                         strength = (learnedWeights[connection.connectionId] ?: connection.weight) * signedPolarity,
                         coreTainted = updated.coreTainted,
                     )
+                    if (causalLinks.size < MAX_CAUSAL_LINKS_PER_RUN) {
+                        causalLinks += AndroidJnvM250kCausalLink(
+                            connectionId = connection.connectionId,
+                            sourceNeuronId = spike.neuronId,
+                            targetNeuronId = connection.targetNeuronId,
+                            timestampNs = timestamp,
+                        )
+                    } else {
+                        omittedCausalLinks++
+                    }
                 }
             }
 
