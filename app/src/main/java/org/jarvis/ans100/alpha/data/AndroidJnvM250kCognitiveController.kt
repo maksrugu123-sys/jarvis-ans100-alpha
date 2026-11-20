@@ -32,12 +32,68 @@ class AndroidJnvM250kCognitiveController(
         val batchesRecorded: Int,
     )
 
+    data class DecisionStart(
+        val decision: ANS100Decision,
+        val encoding: AndroidJnvM250kEvidenceEncoder.Encoding?,
+        val context: AndroidJnvM250kDecisionEpisodeContext?,
+    )
+
+    private val evidenceEncoder = AndroidJnvM250kEvidenceEncoder()
+    private val hybridDecisionController = ANS100HybridPopulationController()
+
     private var phase = Phase.IDLE
     private var decisionContext: AndroidJnvM250kDecisionEpisodeContext? = null
     private var inputBatch: List<AndroidNeuronEvent> = emptyList()
     private var inputsScheduled = false
     private var batchesRecorded = 0
     private var finishResult: AndroidJnvM250kCounterfactualFinishResult? = null
+
+    /**
+     * Joins the existing typed-evidence + hybrid candidate competition path
+     * to the 250k JNVM runtime. The 10k hybrid network must already have
+     * completed its bounded pass; its actual telemetry/readout IDs are inputs.
+     *
+     * Clarification/abstention decisions are returned without starting a
+     * reward episode. Only a selected answer candidate enters the JNVM loop.
+     */
+    @Synchronized
+    fun decideAndBeginEpisode(
+        episodeId: String,
+        evidence: TypedEvidenceBundle,
+        understanding: LocalUnderstanding,
+        hybridTelemetry: AndroidHybridRunTelemetry,
+        emittedSpikeNeuronIds: Set<Int>,
+        processedEventCount: Int,
+        pendingEvents: Int,
+        budgetExhausted: Boolean,
+        inputTimeNs: Long,
+        outcomeNeuronIds: Set<Int>,
+        maxGraphDepth: Int = AndroidJnvM250kRuntime.DEFAULT_COUNTERFACTUAL_GRAPH_DEPTH,
+    ): DecisionStart {
+        require(evidence.turnId.isNotBlank())
+        val decision = hybridDecisionController.decide(
+            evidence = evidence,
+            understanding = understanding,
+            telemetry = hybridTelemetry,
+            emittedSpikeNeuronIds = emittedSpikeNeuronIds,
+            processedEventCount = processedEventCount,
+            pendingEvents = pendingEvents,
+            budgetExhausted = budgetExhausted,
+        )
+        decision.validateAgainst(evidence)
+        if (decision.status != ANS100DecisionStatus.SELECTED) {
+            return DecisionStart(decision, encoding = null, context = null)
+        }
+        val encoding = evidenceEncoder.encode(evidence, inputTimeNs)
+        val context = beginEpisode(
+            episodeId = episodeId,
+            decision = decision,
+            externalInputs = encoding.events,
+            outcomeNeuronIds = outcomeNeuronIds,
+            maxGraphDepth = maxGraphDepth,
+        )
+        return DecisionStart(decision, encoding, context)
+    }
 
     @Synchronized
     fun beginEpisode(
