@@ -180,8 +180,10 @@ class AndroidJnvM250kRuntime(
         )
     }
 
+    @Synchronized
     fun refreshRamBudget(): Int = workingSet.refreshRamBudget()
 
+    @Synchronized
     override fun close() {
         workingSet.close()
         // Store ownership remains with the caller.
