@@ -20,11 +20,13 @@ data class AndroidJnvM250kSynapseSnapshot(
     val connection: AndroidNeuronConnection,
     val preTrace: Double,
     val postTrace: Double,
+    val eligibility: Double,
     val lastUpdateNs: Long,
 ) {
     init {
         require(preTrace.isFinite() && preTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
         require(postTrace.isFinite() && postTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
+        require(eligibility.isFinite() && eligibility in -AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY..AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY)
         require(lastUpdateNs >= 0L)
     }
 }
@@ -35,6 +37,7 @@ data class AndroidJnvM250kSynapseUpdate(
     val weight: Double,
     val preTrace: Double,
     val postTrace: Double,
+    val eligibility: Double,
     val lastUpdateNs: Long,
 ) {
     init {
@@ -42,9 +45,18 @@ data class AndroidJnvM250kSynapseUpdate(
         require(weight.isFinite() && weight in 0.0..1.0)
         require(preTrace.isFinite() && preTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
         require(postTrace.isFinite() && postTrace in 0.0..AndroidJnvM250kStore.MAX_STDP_TRACE)
+        require(eligibility.isFinite() && eligibility in -AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY..AndroidJnvM250kStore.MAX_RSTDP_ELIGIBILITY)
         require(lastUpdateNs >= 0L)
     }
 }
+
+/** Result of applying one idempotent reward to a bounded local synapse set. */
+data class AndroidJnvM250kRewardResult(
+    val rewardId: String,
+    val affectedSynapses: Int,
+    val replayed: Boolean,
+    val modelTimeNs: Long,
+)
 
 /**
  * Independent disk-backed structural store for the 250k sparse profile.
@@ -462,13 +474,13 @@ class AndroidJnvM250kStore(
             val args = ordered.map { it.toString() }.toTypedArray()
             db.rawQuery(
                 "SELECT c.connection_id, c.source_id, c.target_id, c.delay_ns, c.weight, " +
-                    "l.pre_trace, l.post_trace, l.last_update_ns " +
+                    "l.pre_trace, l.post_trace, l.eligibility, l.last_update_ns " +
                     "FROM connections c LEFT JOIN synapse_learning l ON l.connection_id=c.connection_id " +
                     "WHERE c.$column IN ($placeholders) ORDER BY c.connection_id",
                 args,
             ).use { cursor ->
                 while (cursor.moveToNext()) {
-                    if (cursor.isNull(5) || cursor.isNull(6) || cursor.isNull(7)) {
+                    if (cursor.isNull(5) || cursor.isNull(6) || cursor.isNull(7) || cursor.isNull(8)) {
                         throw AndroidNeuronNetworkException("250k synapse learning state is missing")
                     }
                     val connection = AndroidNeuronConnection(
@@ -482,7 +494,8 @@ class AndroidJnvM250kStore(
                         connection = connection,
                         preTrace = cursor.getDouble(5),
                         postTrace = cursor.getDouble(6),
-                        lastUpdateNs = cursor.getLong(7),
+                        eligibility = cursor.getDouble(7),
+                        lastUpdateNs = cursor.getLong(8),
                     )
                 }
             }
@@ -661,6 +674,7 @@ class AndroidJnvM250kStore(
                         ContentValues().apply {
                             put("pre_trace", synapse.preTrace)
                             put("post_trace", synapse.postTrace)
+                            put("eligibility", synapse.eligibility)
                             put("last_update_ns", synapse.lastUpdateNs)
                         },
                         "connection_id=?",
@@ -692,6 +706,123 @@ class AndroidJnvM250kStore(
                 ) != 1
             ) throw AndroidNeuronNetworkException("250k model clock metadata is missing")
             db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Applies one reward to synapses touching a small, explicitly credited
+     * neuron set. The reward is accepted only at the current model clock, so it
+     * cannot leap over pending events. A durable receipt makes retries safe.
+     */
+    @Synchronized
+    fun applyReward(
+        rewardId: String,
+        reward: Double,
+        rewardedNeuronIds: Set<Int>,
+        timestampNs: Long,
+        traceTauNs: Double,
+        learningRate: Double,
+    ): AndroidJnvM250kRewardResult {
+        require(rewardId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
+        require(reward.isFinite() && reward in -1.0..1.0)
+        require(rewardedNeuronIds.isNotEmpty() && rewardedNeuronIds.size <= MAX_REWARD_NEURONS)
+        rewardedNeuronIds.forEach { AndroidJnvM250kProfile.requireNeuronId(it) }
+        require(timestampNs >= 0L)
+        require(traceTauNs.isFinite() && traceTauNs > 0.0)
+        require(learningRate.isFinite() && learningRate in 0.0..1.0)
+        requireInitialized()
+
+        val db = helper.writableDatabase
+        db.beginTransaction()
+        try {
+            val priorReceipt = db.rawQuery(
+                "SELECT affected_synapses FROM reward_receipts WHERE reward_id=?",
+                arrayOf(rewardId),
+            ).use { if (it.moveToFirst()) it.getInt(0) else null }
+            val clock = scalar(db, "SELECT value FROM metadata WHERE key='model_time_ns'").toLong()
+            if (priorReceipt != null) {
+                db.setTransactionSuccessful()
+                return AndroidJnvM250kRewardResult(rewardId, priorReceipt, true, clock)
+            }
+            if (timestampNs != clock) {
+                throw AndroidNeuronNetworkException("250k reward must be applied at the current committed model time")
+            }
+
+            val ordered = rewardedNeuronIds.sorted()
+            val placeholders = List(ordered.size) { "?" }.joinToString(",")
+            val args = ordered.map { it.toString() }.toTypedArray()
+            val ids = ArrayList<String>(MAX_REWARDED_SYNAPSES + 1)
+            val rows = ArrayList<DoubleArray>(MAX_REWARDED_SYNAPSES + 1)
+            db.rawQuery(
+                "SELECT c.connection_id, c.weight, l.pre_trace, l.post_trace, l.eligibility, l.last_update_ns " +
+                    "FROM connections c JOIN synapse_learning l ON l.connection_id=c.connection_id " +
+                    "WHERE c.source_id IN ($placeholders) OR c.target_id IN ($placeholders) " +
+                    "ORDER BY c.connection_id LIMIT ?",
+                args + args + arrayOf((MAX_REWARDED_SYNAPSES + 1).toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    ids += cursor.getString(0)
+                    rows += doubleArrayOf(
+                        cursor.getDouble(1),
+                        cursor.getDouble(2),
+                        cursor.getDouble(3),
+                        cursor.getDouble(4),
+                        cursor.getLong(5).toDouble(),
+                    )
+                }
+            }
+            if (ids.size > MAX_REWARDED_SYNAPSES) {
+                throw AndroidNeuronBackpressureException("250k reward credit set exceeds its bounded synapse limit")
+            }
+
+            var affected = 0
+            for (index in ids.indices) {
+                val values = rows[index]
+                val lastUpdate = values[4].toLong()
+                if (lastUpdate > timestampNs) {
+                    throw AndroidNeuronNetworkException("250k reward trace is newer than the model clock")
+                }
+                val decay = kotlin.math.exp(-(timestampNs - lastUpdate).toDouble() / traceTauNs)
+                val preTrace = (values[1] * decay).coerceIn(0.0, MAX_STDP_TRACE)
+                val postTrace = (values[2] * decay).coerceIn(0.0, MAX_STDP_TRACE)
+                val eligibility = (values[3] * decay).coerceIn(-MAX_RSTDP_ELIGIBILITY, MAX_RSTDP_ELIGIBILITY)
+                val nextWeight = (values[0] + reward * learningRate * eligibility).coerceIn(0.0, 1.0)
+                val nextEligibility = if (reward == 0.0) eligibility else 0.0
+                if (reward != 0.0 && eligibility != 0.0) affected += 1
+                if (db.update(
+                        "connections",
+                        ContentValues().apply { put("weight", nextWeight) },
+                        "connection_id=?",
+                        arrayOf(ids[index]),
+                    ) != 1
+                ) throw AndroidNeuronNetworkException("250k rewarded synapse disappeared before commit")
+                if (db.update(
+                        "synapse_learning",
+                        ContentValues().apply {
+                            put("pre_trace", preTrace)
+                            put("post_trace", postTrace)
+                            put("eligibility", nextEligibility)
+                            put("last_update_ns", timestampNs)
+                        },
+                        "connection_id=?",
+                        arrayOf(ids[index]),
+                    ) != 1
+                ) throw AndroidNeuronNetworkException("250k rewarded synapse trace disappeared before commit")
+            }
+            db.insertOrThrow(
+                "reward_receipts",
+                null,
+                ContentValues().apply {
+                    put("reward_id", rewardId)
+                    put("timestamp_ns", timestampNs)
+                    put("reward", reward)
+                    put("affected_synapses", affected)
+                },
+            )
+            db.setTransactionSuccessful()
+            return AndroidJnvM250kRewardResult(rewardId, affected, false, clock)
         } finally {
             db.endTransaction()
         }
@@ -734,7 +865,8 @@ class AndroidJnvM250kStore(
             )
             db.execSQL("CREATE INDEX connections_source_idx ON connections(source_id, connection_id)")
             db.execSQL("CREATE INDEX connections_target_idx ON connections(target_id)")
-            createSynapseLearningTable(db)
+            createSynapseLearningTable(db, includeEligibility = true)
+            createRewardReceiptTable(db)
             db.execSQL(
                 "CREATE TABLE events (event_id TEXT PRIMARY KEY, time_ns INTEGER NOT NULL, target_id INTEGER NOT NULL, " +
                     "strength REAL NOT NULL, core_tainted INTEGER NOT NULL DEFAULT 0, " +
@@ -747,23 +879,37 @@ class AndroidJnvM250kStore(
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
             if (oldVersion < 2) {
-                createSynapseLearningTable(db)
+                createSynapseLearningTable(db, includeEligibility = false)
                 db.execSQL(
                     "INSERT INTO synapse_learning(connection_id, pre_trace, post_trace, last_update_ns) " +
                         "SELECT connection_id, 0.0, 0.0, 0 FROM connections",
                 )
             }
-            if (newVersion > 2) {
+            if (oldVersion < 3) {
+                db.execSQL("ALTER TABLE synapse_learning ADD COLUMN eligibility REAL NOT NULL DEFAULT 0.0")
+                createRewardReceiptTable(db)
+            }
+            if (newVersion > 3) {
                 throw AndroidNeuronNetworkException("unsupported 250k JNVM schema migration: $oldVersion -> $newVersion")
             }
         }
 
-        private fun createSynapseLearningTable(db: SQLiteDatabase) {
+        private fun createSynapseLearningTable(db: SQLiteDatabase, includeEligibility: Boolean) {
+            val eligibilityColumn = if (includeEligibility) "eligibility REAL NOT NULL DEFAULT 0.0, " else ""
             db.execSQL(
                 "CREATE TABLE synapse_learning (" +
                     "connection_id TEXT PRIMARY KEY, pre_trace REAL NOT NULL, post_trace REAL NOT NULL, " +
+                    eligibilityColumn +
                     "last_update_ns INTEGER NOT NULL, " +
                     "FOREIGN KEY(connection_id) REFERENCES connections(connection_id) ON DELETE CASCADE)",
+            )
+        }
+
+        private fun createRewardReceiptTable(db: SQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE reward_receipts (" +
+                    "reward_id TEXT PRIMARY KEY, timestamp_ns INTEGER NOT NULL, reward REAL NOT NULL, " +
+                    "affected_synapses INTEGER NOT NULL)",
             )
         }
 
@@ -773,12 +919,15 @@ class AndroidJnvM250kStore(
         }
 
         companion object {
-            private const val DATABASE_VERSION = 2
+            private const val DATABASE_VERSION = 3
         }
     }
 
     companion object {
         const val MAX_STDP_TRACE = 1_000.0
+        const val MAX_RSTDP_ELIGIBILITY = 100.0
+        const val MAX_REWARD_NEURONS = 32
+        const val MAX_REWARDED_SYNAPSES = MAX_REWARD_NEURONS * (AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON + AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON)
 
         private fun readState(cursor: Cursor) = AndroidNeuronState(
             neuronId = cursor.getInt(0),
