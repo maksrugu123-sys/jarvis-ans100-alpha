@@ -170,7 +170,7 @@ class AndroidJnvM250kStore(
     fun persistConnectionBatch(
         connections: List<AndroidNeuronConnection>,
         expectedCheckpoint: AndroidJnvM250kInitializationCheckpoint?,
-        nextCheckpoint: AndroidJnvM250kInitializationCheckpoint,
+        nextCheckpoint: AndroidJnvM250kInitializationCheckpoint?,
     ) {
         persistConnectionBatchInternal(connections, expectedCheckpoint, nextCheckpoint)
     }
