@@ -128,7 +128,7 @@ class AndroidJnvM250kRuntime(
         while (frontier.isNotEmpty()) {
             val batch = frontier.filterNot { it in visitedSources }.toSortedSet()
             if (batch.isEmpty()) break
-            if (depth == maxGraphDepth) {
+            if (depth == maxGraphDepth || edges.size == AndroidJnvM250kDecisionEpisodeContext.MAX_CONNECTIONS) {
                 // Probe the boundary so a terminal frontier is accepted, but
                 // never omit a reachable edge beyond the configured depth.
                 check(store.outgoingConnectionsFor(batch, maxEdges = 1).isEmpty()) {
