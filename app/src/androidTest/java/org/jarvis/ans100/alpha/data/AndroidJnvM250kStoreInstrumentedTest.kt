@@ -231,12 +231,19 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     .single { it.targetNeuronId == sourceZeroTarget }.weight
                 assertTrue("positive reward must reinforce positive eligibility", positiveRewardWeight > afterStdp.weight)
 
-                val replay = learningRuntime.applyReward(
+                assertTrue(positiveRewardWeight > afterStdp.weight)
+            }
+
+            // Reward receipts must survive closing and reopening SQLite.
+            store.close()
+            store = AndroidJnvM250kStore(context, databaseName)
+            AndroidJnvM250kRuntime(context, store, forcedSpikeBackend).use { resumedRuntime ->
+                val replayAfterReopen = resumedRuntime.applyReward(
                     rewardId = "reward-positive-once",
                     reward = 1.0,
                     rewardedNeuronIds = setOf(sourceZeroTarget),
                 )
-                assertTrue(replay.replayed)
+                assertTrue(replayAfterReopen.replayed)
                 assertEquals(
                     positiveRewardWeight,
                     store.outgoingPage(0, limit = 16).single { it.targetNeuronId == sourceZeroTarget }.weight,
@@ -245,14 +252,14 @@ class AndroidJnvM250kStoreInstrumentedTest {
 
                 // A second postsynaptic spike reuses the still-decaying pre-trace,
                 // creating fresh positive eligibility for a punishment probe.
-                learningRuntime.scheduleInputs(
+                resumedRuntime.scheduleInputs(
                     listOf(AndroidNeuronEvent("stdp-second-post-event", 20_000_000L, sourceZeroTarget, 1.0)),
                 )
-                val secondPost = learningRuntime.run(maxEvents = 1, maxTimestamps = 1)
+                val secondPost = resumedRuntime.run(maxEvents = 1, maxTimestamps = 1)
                 assertEquals(listOf(sourceZeroTarget), secondPost.emittedSpikes.map { it.neuronId })
                 val beforePunishment = store.outgoingPage(0, limit = 16)
                     .single { it.targetNeuronId == sourceZeroTarget }.weight
-                val negative = learningRuntime.applyReward(
+                val negative = resumedRuntime.applyReward(
                     rewardId = "reward-negative-once",
                     reward = -1.0,
                     rewardedNeuronIds = setOf(sourceZeroTarget),
@@ -265,7 +272,7 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 )
                 val afterPunishment = store.outgoingPage(0, limit = 16)
                     .single { it.targetNeuronId == sourceZeroTarget }.weight
-                val delayedRetry = learningRuntime.applyReward(
+                val delayedRetry = resumedRuntime.applyReward(
                     rewardId = "reward-positive-once",
                     reward = 1.0,
                     rewardedNeuronIds = setOf(sourceZeroTarget),
@@ -276,7 +283,6 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     store.outgoingPage(0, limit = 16).single { it.targetNeuronId == sourceZeroTarget }.weight,
                     0.000001,
                 )
-                assertTrue(positiveRewardWeight > afterStdp.weight)
             }
             val learnedConnection = store.outgoingPage(0, limit = 16)
                 .single { it.targetNeuronId == sourceZeroTarget }
