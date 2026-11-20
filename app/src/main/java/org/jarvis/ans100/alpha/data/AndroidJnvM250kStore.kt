@@ -449,8 +449,8 @@ class AndroidJnvM250kStore(
         require(preSpikeNeuronIds.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
         require(postSpikeNeuronIds.size <= AndroidJnvM250kProfile.MAX_EVENTS_PER_TIMESTAMP)
         require(preSpikeNeuronIds.isNotEmpty() || postSpikeNeuronIds.isNotEmpty())
-        preSpikeNeuronIds.forEach(AndroidJnvM250kProfile::requireNeuronId)
-        postSpikeNeuronIds.forEach(AndroidJnvM250kProfile::requireNeuronId)
+        preSpikeNeuronIds.forEach { AndroidJnvM250kProfile.requireNeuronId(it) }
+        postSpikeNeuronIds.forEach { AndroidJnvM250kProfile.requireNeuronId(it) }
         requireInitialized()
 
         val result = LinkedHashMap<String, AndroidJnvM250kSynapseSnapshot>()
@@ -459,7 +459,7 @@ class AndroidJnvM250kStore(
             if (ids.isEmpty()) return
             val ordered = ids.sorted()
             val placeholders = List(ordered.size) { "?" }.joinToString(",")
-            val args = ordered.map(Int::toString).toTypedArray()
+            val args = ordered.map { it.toString() }.toTypedArray()
             db.rawQuery(
                 "SELECT c.connection_id, c.source_id, c.target_id, c.delay_ns, c.weight, " +
                     "l.pre_trace, l.post_trace, l.last_update_ns " +
