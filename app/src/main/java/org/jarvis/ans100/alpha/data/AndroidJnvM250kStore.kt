@@ -905,25 +905,28 @@ class AndroidJnvM250kStore(
             }
 
             val ordered = connectionIds.sorted()
-            val placeholders = List(ordered.size) { "?" }.joinToString(",")
-            val args = ordered.map { it.toString() }.toTypedArray()
-            val rows = ArrayList<AndroidJnvM250kRewardSynapseRow>(MAX_REWARDED_SYNAPSES + 1)
-            db.rawQuery(
-                "SELECT c.connection_id, c.weight, l.pre_trace, l.post_trace, l.eligibility, l.last_update_ns " +
-                    "FROM connections c JOIN synapse_learning l ON l.connection_id=c.connection_id " +
-                    "WHERE c.connection_id IN ($placeholders) " +
-                    "ORDER BY c.connection_id LIMIT ?",
-                args + arrayOf((MAX_REWARDED_SYNAPSES + 1).toString()),
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    rows += AndroidJnvM250kRewardSynapseRow(
-                        connectionId = cursor.getString(0),
-                        weight = cursor.getDouble(1),
-                        preTrace = cursor.getDouble(2),
-                        postTrace = cursor.getDouble(3),
-                        eligibility = cursor.getDouble(4),
-                        lastUpdateNs = cursor.getLong(5),
-                    )
+            val rows = ArrayList<AndroidJnvM250kRewardSynapseRow>(ordered.size)
+            // Android versions can ship SQLite builds with a 999-variable
+            // limit. Keep each IN query below that limit even for 1,536 IDs.
+            for (chunk in ordered.chunked(MAX_REWARD_QUERY_IDS_PER_CHUNK)) {
+                val placeholders = List(chunk.size) { "?" }.joinToString(",")
+                db.rawQuery(
+                    "SELECT c.connection_id, c.weight, l.pre_trace, l.post_trace, l.eligibility, l.last_update_ns " +
+                        "FROM connections c JOIN synapse_learning l ON l.connection_id=c.connection_id " +
+                        "WHERE c.connection_id IN ($placeholders) " +
+                        "ORDER BY c.connection_id",
+                    chunk.toTypedArray(),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        rows += AndroidJnvM250kRewardSynapseRow(
+                            connectionId = cursor.getString(0),
+                            weight = cursor.getDouble(1),
+                            preTrace = cursor.getDouble(2),
+                            postTrace = cursor.getDouble(3),
+                            eligibility = cursor.getDouble(4),
+                            lastUpdateNs = cursor.getLong(5),
+                        )
+                    }
                 }
             }
             if (rows.size > MAX_REWARDED_SYNAPSES) {
@@ -1085,6 +1088,7 @@ class AndroidJnvM250kStore(
         const val MAX_REWARD_NEURONS = 32
         const val MAX_REWARD_RECEIPTS = 100_000
         const val MAX_REWARDED_SYNAPSES = MAX_REWARD_NEURONS * (AndroidJnvM250kProfile.MAX_OUTGOING_CONNECTIONS_PER_NEURON + AndroidJnvM250kProfile.MAX_INCOMING_CONNECTIONS_PER_NEURON)
+        private const val MAX_REWARD_QUERY_IDS_PER_CHUNK = 900
 
         private fun readState(cursor: Cursor) = AndroidNeuronState(
             neuronId = cursor.getInt(0),
