@@ -224,7 +224,7 @@ class AndroidJnvM250kRewardAttribution(
             observedLinks = episode.observedLinks,
             omittedLinks = episode.omittedLinks,
             responseScores = scores,
-            unansweredTransmissions = episode.unansweredTransmissions + episode.pending.size,
+            unansweredTransmissions = saturatedAdd(episode.unansweredTransmissions, episode.pending.size.toLong()),
             contestedTargetResponses = episode.contestedTargetResponses,
             observationCoverage = coverage,
             rewardResult = rewardResult,
