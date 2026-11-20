@@ -167,6 +167,28 @@ class AndroidJnvM250kRewardAttributionTest {
         assertEquals(0.5, weighted.getValue("edge-b"), 0.000001)
     }
 
+
+    @Test
+    fun incompleteTransmissionTraceReducesConfidenceConservatively() {
+        var weighted = emptyMap<String, Double>()
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 10L) },
+            applyWeightedReward = { id, _, credits ->
+                weighted = credits
+                AndroidJnvM250kRewardResult(id, credits.size, false, 10L)
+            },
+        )
+        attribution.beginEpisode("partial-trace", "action")
+        attribution.recordRun(runResult(
+            listOf(link("edge-a", 1, 9), link("edge-b", 2, 9)),
+            omitted = 2,
+        ))
+        val result = attribution.finishEpisode(1.0)
+        assertEquals(0.5, result.observationCoverage, 0.000001)
+        assertEquals(0.25, weighted.getValue("edge-a"), 0.000001)
+        assertEquals(0.25, weighted.getValue("edge-b"), 0.000001)
+    }
+
     private fun link(id: String, source: Int, target: Int) = AndroidJnvM250kCausalLink(id, source, target, 10L, 10L)
     private fun runResult(
         links: List<AndroidJnvM250kCausalLink>,
