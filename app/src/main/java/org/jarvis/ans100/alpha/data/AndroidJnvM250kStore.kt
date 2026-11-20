@@ -796,7 +796,7 @@ class AndroidJnvM250kStore(
             }
 
             var affected = 0
-            for (index in ids.indices) {
+            for (index in rows.indices) {
                 val row = rows[index]
                 if (row.lastUpdateNs > timestampNs) {
                     throw AndroidNeuronNetworkException("250k reward trace is newer than the model clock")
@@ -824,7 +824,7 @@ class AndroidJnvM250kStore(
                             put("last_update_ns", timestampNs)
                         },
                         "connection_id=?",
-                        arrayOf(ids[index]),
+                        arrayOf(row.connectionId),
                     ) != 1
                 ) throw AndroidNeuronNetworkException("250k rewarded synapse trace disappeared before commit")
             }
