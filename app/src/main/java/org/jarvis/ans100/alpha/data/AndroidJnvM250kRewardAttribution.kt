@@ -3,6 +3,7 @@ package org.jarvis.ans100.alpha.data
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.Closeable
 
 /** Result of applying an episode outcome to exact synapses observed transmitting. */
 data class AndroidJnvM250kAttributionResult(
