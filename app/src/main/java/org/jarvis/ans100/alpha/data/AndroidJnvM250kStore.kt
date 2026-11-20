@@ -733,6 +733,7 @@ class AndroidJnvM250kStore(
         timestampNs: Long,
         traceTauNs: Double,
         learningRate: Double,
+        connectionCredits: Map<String, Double> = emptyMap(),
     ): AndroidJnvM250kRewardResult {
         require(rewardId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")))
         require(reward.isFinite() && reward in -1.0..1.0)
@@ -741,6 +742,10 @@ class AndroidJnvM250kStore(
         require(timestampNs >= 0L)
         require(traceTauNs.isFinite() && traceTauNs > 0.0)
         require(learningRate.isFinite() && learningRate in 0.0..1.0)
+        if (connectionCredits.isNotEmpty()) {
+            require(connectionCredits.keys == connectionIds) { "per-connection credit keys must exactly match the rewarded connection IDs" }
+            connectionCredits.values.forEach { require(it.isFinite() && it in 0.0..1.0) }
+        }
         requireInitialized()
 
         val db = helper.writableDatabase
@@ -808,9 +813,11 @@ class AndroidJnvM250kStore(
                 val preTrace = (row.preTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
                 val postTrace = (row.postTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
                 val eligibility = (row.eligibility * decay).coerceIn(-MAX_RSTDP_ELIGIBILITY, MAX_RSTDP_ELIGIBILITY)
-                val nextWeight = (row.weight + reward * learningRate * eligibility).coerceIn(0.0, 1.0)
-                val nextEligibility = if (reward == 0.0) eligibility else 0.0
-                if (reward != 0.0 && eligibility != 0.0) affected += 1
+                val credit = connectionCredits[row.connectionId] ?: 1.0
+                val effectiveReward = reward * credit
+                val nextWeight = (row.weight + effectiveReward * learningRate * eligibility).coerceIn(0.0, 1.0)
+                val nextEligibility = if (effectiveReward == 0.0) eligibility else 0.0
+                if (effectiveReward != 0.0 && eligibility != 0.0) affected += 1
                 if (db.update(
                         "connections",
                         ContentValues().apply { put("weight", nextWeight) },
@@ -878,7 +885,13 @@ class AndroidJnvM250kStore(
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
-            val creditedIds = "connections:" + connectionIds.sorted().joinToString(",")
+            val creditedIds = if (connectionCredits.isEmpty()) {
+                "connections:" + connectionIds.sorted().joinToString(",")
+            } else {
+                "connections-weighted:" + connectionIds.sorted().joinToString(",") { id ->
+                    "$id=${java.lang.Double.doubleToLongBits(connectionCredits.getValue(id))}"
+                }
+            }
             val priorReceipt = db.rawQuery(
                 "SELECT affected_synapses, reward, credited_neurons FROM reward_receipts WHERE reward_id=?",
                 arrayOf(rewardId),
