@@ -125,9 +125,19 @@ class AndroidJnvM250kRuntime(
         val visitedSources = LinkedHashSet<Int>()
         var frontier = externalInputs.mapTo(sortedSetOf()) { it.targetNeuronId }
         var depth = 0
-        while (frontier.isNotEmpty() && depth < maxGraphDepth) {
+        while (frontier.isNotEmpty()) {
             val batch = frontier.filterNot { it in visitedSources }.toSortedSet()
             if (batch.isEmpty()) break
+            if (depth == maxGraphDepth) {
+                // Probe the boundary so a terminal frontier is accepted, but
+                // never omit a reachable edge beyond the configured depth.
+                check(store.outgoingConnectionsFor(batch, maxEdges = 1).isEmpty()) {
+                    "counterfactual graph depth exceeds the configured complete-snapshot bound"
+                }
+                visitedSources += batch
+                frontier = sortedSetOf()
+                break
+            }
             val remaining = AndroidJnvM250kDecisionEpisodeContext.MAX_CONNECTIONS - edges.size
             check(remaining > 0) {
                 "reachable counterfactual graph exceeds the bounded edge snapshot"
