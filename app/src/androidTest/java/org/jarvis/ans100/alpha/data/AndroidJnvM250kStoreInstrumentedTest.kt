@@ -23,6 +23,56 @@ class AndroidJnvM250kStoreInstrumentedTest {
         get() = ApplicationProvider.getApplicationContext()
 
     @Test
+    fun selectedDecisionSnapshotCaptureReadsCompleteBoundedReachableGraph() {
+        val databaseName = "jnvm-250k-snapshot-${UUID.randomUUID()}.db"
+        val store = AndroidJnvM250kStore(context, databaseName)
+        try {
+            store.initialize()
+            store.registerConnections(
+                listOf(
+                    AndroidNeuronConnection("capture-edge-a", 1, 2, 1L, 1.0),
+                    AndroidNeuronConnection("capture-edge-b", 2, 3, 1L, 1.0),
+                ),
+            )
+            val decision = ANS100Decision(
+                turnId = "turn-capture",
+                topologyVersion = ANS100TopologyVersion.HYBRID_SPARSE_POPULATIONS_V1,
+                status = ANS100DecisionStatus.SELECTED,
+                candidates = listOf(ANS100Candidate("answer", "Ответить", emptyList())),
+                selectedCandidateId = "answer",
+                responseGoal = "Подготовить ответ",
+            )
+            AndroidJnvM250kRuntime(context, store).use { runtime ->
+                val inputs = listOf(AndroidNeuronEvent("capture-input", 1L, 1, 1.0))
+                val snapshot = runtime.captureDecisionEpisodeContext(
+                    decision = decision,
+                    externalInputs = inputs,
+                    outcomeNeuronIds = setOf(3),
+                    maxGraphDepth = 2,
+                )
+                assertEquals(decision.turnId, snapshot.decisionTurnId)
+                assertEquals(decision.selectedCandidateId, snapshot.selectedCandidateId)
+                assertEquals(setOf(1, 2, 3), snapshot.initialStates.keys)
+                assertEquals(setOf("capture-edge-a", "capture-edge-b"), snapshot.connections.map { it.connectionId }.toSet())
+                assertEquals(inputs, snapshot.externalInputs)
+                assertEquals(setOf(3), snapshot.outcomeNeuronIds)
+
+                assertTrue(runCatching {
+                    runtime.captureDecisionEpisodeContext(
+                        decision = decision,
+                        externalInputs = listOf(AndroidNeuronEvent("capture-input-depth", 1L, 1, 1.0)),
+                        outcomeNeuronIds = setOf(3),
+                        maxGraphDepth = 1,
+                    )
+                }.isFailure)
+            }
+        } finally {
+            store.close()
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
     fun graphBatchAndCheckpointSurviveReopenAndRejectPartialOrStaleWrites() {
         val databaseName = "jnvm-250k-${UUID.randomUUID()}.db"
         var store = AndroidJnvM250kStore(context, databaseName)
