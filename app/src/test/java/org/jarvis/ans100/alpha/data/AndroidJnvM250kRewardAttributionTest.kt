@@ -98,6 +98,29 @@ class AndroidJnvM250kRewardAttributionTest {
     }
 
     @Test
+    fun candidateMemoryStaysBoundedAndRetainsFrequentlyTransmittingNeuron() {
+        var credited = emptySet<Int>()
+        val attribution = AndroidJnvM250kRewardAttribution(
+            applyReward = { id, _, ids ->
+                credited = ids
+                AndroidJnvM250kRewardResult(id, ids.size, false, 0L)
+            },
+            maxCreditedNeurons = 2,
+            maxTrackedNeurons = 3,
+        )
+        attribution.beginEpisode("bounded-episode", "action")
+        val links = (200..230).mapIndexed { index, target ->
+            link("edge-$index", 100, target)
+        }
+        attribution.recordRun(runResult(links))
+
+        assertEquals(3, attribution.trackedCandidateCount())
+        val result = attribution.finishEpisode(1.0)
+        assertEquals(2, result.creditedNeuronIds.size)
+        assertTrue("frequent source neuron must survive bounded replacement", 100 in credited)
+    }
+
+    @Test
     fun rejectsUnsafeEpisodeIdentifiers() {
         val attribution = AndroidJnvM250kRewardAttribution(
             applyReward = { id, _, ids -> AndroidJnvM250kRewardResult(id, ids.size, false, 0L) },
