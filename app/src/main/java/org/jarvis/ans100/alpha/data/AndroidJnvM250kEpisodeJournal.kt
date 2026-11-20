@@ -35,6 +35,12 @@ class AndroidJnvM250kEpisodeJournal(context: Context) : Closeable {
                 null,
             ).use { it.moveToFirst() && it.getLong(0) > 0L }
             check(!active) { "an episode is already active in the durable journal" }
+            // Retain only a bounded recent history of completed/aborted episodes.
+            db.execSQL(
+                "DELETE FROM episodes WHERE state IN ('FINISHED','ABORTED') " +
+                    "AND episode_id NOT IN (SELECT episode_id FROM episodes " +
+                    "WHERE state IN ('FINISHED','ABORTED') ORDER BY rowid DESC LIMIT 999)",
+            )
             db.insertOrThrow(
                 "episodes",
                 null,
