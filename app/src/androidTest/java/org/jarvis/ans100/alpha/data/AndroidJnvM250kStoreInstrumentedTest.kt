@@ -263,6 +263,19 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     store.outgoingPage(0, limit = 16)
                         .single { it.targetNeuronId == sourceZeroTarget }.weight < beforePunishment,
                 )
+                val afterPunishment = store.outgoingPage(0, limit = 16)
+                    .single { it.targetNeuronId == sourceZeroTarget }.weight
+                val delayedRetry = learningRuntime.applyReward(
+                    rewardId = "reward-positive-once",
+                    reward = 1.0,
+                    rewardedNeuronIds = setOf(sourceZeroTarget),
+                )
+                assertTrue("a delayed retry must be recognized after the clock advances", delayedRetry.replayed)
+                assertEquals(
+                    afterPunishment,
+                    store.outgoingPage(0, limit = 16).single { it.targetNeuronId == sourceZeroTarget }.weight,
+                    0.000001,
+                )
                 assertTrue(positiveRewardWeight > afterStdp.weight)
             }
             val learnedConnection = store.outgoingPage(0, limit = 16)
