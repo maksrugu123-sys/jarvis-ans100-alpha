@@ -86,7 +86,7 @@ data class AndroidJnvM250kDecisionEpisodeContext(
                 })
             }
         val outcomes = JSONArray().also { array ->
-            outcomeNeuronIds.sorted().forEach(array::put)
+            outcomeNeuronIds.sorted().forEach { array.put(it) }
         }
         return JSONObject().apply {
             put("version", SNAPSHOT_VERSION)
