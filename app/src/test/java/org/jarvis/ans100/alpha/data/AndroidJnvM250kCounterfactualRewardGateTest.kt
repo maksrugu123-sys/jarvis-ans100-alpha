@@ -113,4 +113,41 @@ class AndroidJnvM250kCounterfactualRewardGateTest {
             decision.rejected["edge"],
         )
     }
+
+    @Test
+    fun applyCallbackRunsOnlyForAcceptedCreditsAndReceivesFilteredMap() {
+        var calls = 0
+        var applied: Map<String, Double>? = null
+        val result = AndroidJnvM250kCounterfactualRewardGate.applyIfTrusted(
+            rewardId = "episode-safe-1",
+            reward = 1.0,
+            responseScores = mapOf("edge-valid" to 0.8, "edge-wrong-way" to 0.9),
+            report = report(
+                effect("edge-valid", 1, 0.5),
+                effect("edge-wrong-way", -1, 1.0),
+            ),
+        ) { id, reward, credits ->
+            calls++
+            assertEquals("episode-safe-1", id)
+            assertEquals(1.0, reward, 0.0)
+            applied = credits
+            "receipt"
+        }
+        assertEquals(1, calls)
+        assertEquals(mapOf("edge-valid" to 0.4), applied)
+        assertEquals("receipt", result.rewardResult)
+
+        val rejected = AndroidJnvM250kCounterfactualRewardGate.applyIfTrusted(
+            rewardId = "episode-incomplete",
+            reward = 1.0,
+            responseScores = mapOf("edge" to 1.0),
+            report = report(effect("edge", 1, 1.0, counterfactualComplete = false)),
+        ) { _, _, _ ->
+            calls++
+            "must-not-run"
+        }
+        assertEquals(1, calls)
+        assertEquals(null, rejected.rewardResult)
+        assertFalse(rejected.decision.mayApplyReward)
+    }
 }
