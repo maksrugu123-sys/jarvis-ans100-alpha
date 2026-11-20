@@ -182,6 +182,39 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 assertEquals("cpu-reference", targetRun.computeBackend)
             }
 
+            // The source spike at t=100 must leave a persisted pre-trace. A
+            // deterministic test backend forces the later postsynaptic spike so
+            // the LTP direction can be checked without depending on thresholds.
+            val forcedSpikeBackend = object : AndroidNeuronComputeBackend {
+                override val backendName = "instrumentation-force-spike"
+                override fun processBatch(
+                    inputs: List<AndroidNeuronKernel.Input>,
+                ): List<AndroidNeuronKernel.Result> = inputs.map {
+                    AndroidNeuronKernel.process(it.state, it.timestampNs, 2.0)
+                }
+            }
+            AndroidJnvM250kRuntime(context, store, forcedSpikeBackend).use { learningRuntime ->
+                val before = store.outgoingPage(0, limit = 16)
+                    .single { it.targetNeuronId == sourceZeroTarget }
+                val traceBeforePost = store.loadPlasticitySynapses(setOf(0), emptySet())
+                    .single { it.connection.connectionId == before.connectionId }
+                assertTrue(traceBeforePost.preTrace > 0.99)
+                assertEquals(0.0, traceBeforePost.postTrace, 0.000001)
+
+                learningRuntime.scheduleInputs(
+                    listOf(AndroidNeuronEvent("stdp-post-event", 2_000_000L, sourceZeroTarget, 1.0)),
+                )
+                val learningRun = learningRuntime.run(maxEvents = 1, maxTimestamps = 1)
+                assertEquals(listOf(sourceZeroTarget), learningRun.emittedSpikes.map { it.neuronId })
+            }
+            val learnedConnection = store.outgoingPage(0, limit = 16)
+                .single { it.targetNeuronId == sourceZeroTarget }
+            assertTrue("post-after-pre must potentiate the synapse", learnedConnection.weight > 0.5)
+            val persistedTrace = store.loadPlasticitySynapses(setOf(0), emptySet())
+                .single { it.connection.connectionId == learnedConnection.connectionId }
+            assertTrue(persistedTrace.preTrace > 0.0)
+            assertTrue(persistedTrace.postTrace > 0.99)
+
             // Partial checkpoint metadata is treated as corruption, never as a
             // fresh run that could silently duplicate already committed edges.
             store.close()
