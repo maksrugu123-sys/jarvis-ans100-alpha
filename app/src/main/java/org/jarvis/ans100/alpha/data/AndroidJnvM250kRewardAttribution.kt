@@ -349,7 +349,10 @@ class AndroidJnvM250kRewardAttribution(
     private fun decodeEpisode(record: AndroidJnvM250kEpisodeJournal.Record): Episode {
         val json = JSONObject(record.payload)
         if (!json.has("snapshot_version")) return decodeLegacyEpisode(record, json)
-        require(json.getInt("snapshot_version") == SNAPSHOT_VERSION) { "unsupported episode snapshot version" }
+        val snapshotVersion = json.getInt("snapshot_version")
+        require(snapshotVersion in MIN_SUPPORTED_SNAPSHOT_VERSION..SNAPSHOT_VERSION) {
+            "unsupported episode snapshot version"
+        }
         val episode = Episode(
             id = json.getString("episode_id"),
             actionId = json.getString("action_id"),
@@ -357,7 +360,7 @@ class AndroidJnvM250kRewardAttribution(
             omittedLinks = json.getLong("omitted_links"),
             unansweredTransmissions = json.getLong("unanswered_transmissions"),
             unobservedTransmissions = json.getLong("unobserved_transmissions"),
-            runtimeOmittedTransmissions = json.getLong("runtime_omitted_transmissions"),
+            runtimeOmittedTransmissions = if (snapshotVersion >= 3) json.getLong("runtime_omitted_transmissions") else 0L,
             contestedTargetResponses = json.getLong("contested_responses"),
             nextOrder = json.getLong("next_order"),
             pendingReward = if (json.isNull("pending_reward")) null else json.getDouble("pending_reward"),
@@ -474,7 +477,8 @@ class AndroidJnvM250kRewardAttribution(
         const val MAX_CREDITED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val DEFAULT_MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
-        private const val SNAPSHOT_VERSION = 2
+        private const val MIN_SUPPORTED_SNAPSHOT_VERSION = 2
+        private const val SNAPSHOT_VERSION = 3
         const val TARGET_RESPONSE_WINDOW_NS = 100_000_000L
         const val MAX_RESPONSE_CREDIT = 1_000_000.0
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
