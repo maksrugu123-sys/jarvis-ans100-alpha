@@ -3351,3 +3351,30 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 - Added sidecar state to network checkpoint export/restore. `JPVRNetworkJNVMStore` now passes feature sidecars into each changed-neuron runtime record inside the same group transaction as the scheduler checkpoint; restore reconstructs them from the same pinned snapshot.
 - Added focused tests for signal modulation, sidecar updates and execution -> group checkpoint -> restore. Tests are authored but **NOT RUN**. No benchmark, APK build, CI, held-out experiment or device verification was performed.
 - Explicit scope: sidecars are opt-in per neuron by supplying feature state or synaptic memory at network construction. Neurons without sidecars preserve the baseline signal path. This is a Python reference integration only; Kotlin/Android runtime, dialog integration, bounded 128-shard working-set integration, full inhibitory populations and 500,000-neuron capacity remain unfinished.
+
+
+## 2026-11-20 — Bind counterfactual R-STDP to selected ANS decisions
+
+**Objective:** replace manually assembled counterfactual reports with an explicit bounded decision-to-runtime learning cycle, while keeping reward labels external and recovery deterministic.
+
+**Added:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidJnvM250kDecisionEpisodeContext.kt` — immutable bounded pre-action snapshot contract binding turn ID and selected candidate to initial neuron states, captured edges, exact external inputs and outcome/readout neurons.
+- `app/src/main/java/org/jarvis/ans100/alpha/data/AndroidJnvM250kDecisionLearningCycle.kt` — opt-in lifecycle bridge: capture/persist/schedule, run-and-record, externally rewarded finish, and recovered-episode resume.
+
+**Changed:**
+- `AndroidJnvM250kStore.kt` adds exact bounded neuron-state and outgoing-edge reads for snapshot capture.
+- `AndroidJnvM250kRuntime.kt` captures a complete reachable pre-action graph from input targets. It requires an empty event queue and fails closed above 16 graph levels, 512 edges or 512 states.
+- `AndroidJnvM250kRewardAttribution.kt` adds selected-decision episode creation, persists the pre-action context in snapshot schema V6 and runtime completion counters in V7, ranks actual target-response candidates for at most eight counterfactual replays, validates reports against the persisted snapshot, and refuses learning while runtime work remains pending or budget-exhausted.
+- `AndroidJnvM250kEpisodeJournalInstrumentedTest.kt` adds process-recreation recovery from a decision-bound snapshot, rejection of abstained decisions, and incomplete-runtime reward refusal.
+- `AndroidJnvM250kDecisionEpisodeContextTest.kt` covers decision identity/status, incomplete graph endpoints, stale inputs, duplicate IDs and input bounds.
+- `ANDROID_JNVM_250K_SCALING_PLAN.md`, `JARVIS_ARCHITECTURE.md` §3.55 and `README.md` record the new opt-in bridge and its integration boundary.
+
+**Behavior:** only SELECTED decisions may start this episode path. The exact pre-action graph and inputs are journaled before enqueue. Each bounded runtime result is immediately written to the attribution journal. Finish requires at least one processed runtime batch, zero pending events and no exhausted final batch; the CPU replay then suppresses up to eight response-supported candidate edges and the gate submits only exact-edge credits. The scalar reward must come from independently observed user/environment feedback. No automatic reward is inferred from ANS activation.
+
+**Tests:** added JVM context-invariant tests and Android instrumentation tests for durable decision-snapshot recovery, policy-change-resistant retry, abstention rejection and incomplete-runtime refusal. All are **AUTHORED, NOT RUN**.
+
+**Verification:** GitHub files were fetched back and inspected for expected methods, snapshot versions, bounded guards and absence of conflict markers. No Gradle/Kotlin build, unit-test command, Android instrumentation, APK/AAB, CI/GitHub Actions, benchmark or device run was performed.
+
+**Limitations:** the bridge is not instantiated by MainActivity; the normal Android chat route remains on the separate 10k hybrid topology. A caller must map the selected candidate to 250k input and outcome neuron IDs. Runtime timestamp commit and attribution journal write are separate database transactions, so a process death between them can lose a batch's telemetry. Counterfactual replay is CPU LIF-DT only and omits online STDP and environment feedback; it is model sensitivity evidence, not real-world causal proof. No Android performance or useful-learning evidence exists.
+
+**Next step:** add an explicit caller from the ANS decision orchestration route only after a validated mapping exists between candidate slots, 250k input projections and outcome/readout neurons; then run focused tests/build/device validation only with separate user authorization.
