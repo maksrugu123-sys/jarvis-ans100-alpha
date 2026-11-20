@@ -157,6 +157,12 @@ class AndroidJnvM250kStoreInstrumentedTest {
                         AndroidNeuronEvent("runtime-input-inhibitory", 100L, 4, 1.2),
                     ),
                 )
+                val deferredRun = runtime.run(maxEvents = 1, maxTimestamps = 1)
+                assertTrue(deferredRun.budgetExhausted)
+                assertEquals(0, deferredRun.processedEvents)
+                assertEquals(0L, deferredRun.currentTimeNs)
+                assertEquals(2, deferredRun.pendingEvents)
+
                 val sourceRun = runtime.run(maxEvents = 2, maxTimestamps = 1)
                 assertEquals(2, sourceRun.processedEvents)
                 assertEquals(setOf(0, 4), sourceRun.emittedSpikes.map { it.neuronId }.toSet())
