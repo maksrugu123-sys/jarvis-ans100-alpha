@@ -49,15 +49,15 @@ class AndroidJnvM250kEvidenceEncoderTest {
             encoded.recordToNeuronId.entries.single { it.value == event.targetNeuronId }.key
         }
 
-        assertTrue(AndroidJnvM250kTopology.POPULATION_RANGES.single {
+        assertTrue(byId.getValue("user-message").targetNeuronId in AndroidJnvM250kTopology.POPULATION_RANGES.single {
             it.population == AndroidJnvM250kTopology.Population.PERCEPTION
-        } contains byId.getValue("user-message").targetNeuronId)
-        assertTrue(AndroidJnvM250kTopology.POPULATION_RANGES.single {
+        })
+        assertTrue(byId.getValue("intent-hint").targetNeuronId in AndroidJnvM250kTopology.POPULATION_RANGES.single {
             it.population == AndroidJnvM250kTopology.Population.PATTERN_DETECTION
-        } contains byId.getValue("intent-hint").targetNeuronId)
-        assertTrue(AndroidJnvM250kTopology.POPULATION_RANGES.single {
+        })
+        assertTrue(byId.getValue("clarification-flag").targetNeuronId in AndroidJnvM250kTopology.POPULATION_RANGES.single {
             it.population == AndroidJnvM250kTopology.Population.PREDICTION
-        } contains byId.getValue("clarification-flag").targetNeuronId)
+        })
     }
 
     @Test
