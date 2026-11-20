@@ -739,13 +739,12 @@ class AndroidJnvM250kStore(
         try {
             val creditedIds = rewardedNeuronIds.sorted().joinToString(",")
             val priorReceipt = db.rawQuery(
-                "SELECT affected_synapses, timestamp_ns, reward, credited_neurons FROM reward_receipts WHERE reward_id=?",
+                "SELECT affected_synapses, reward, credited_neurons FROM reward_receipts WHERE reward_id=?",
                 arrayOf(rewardId),
             ).use { cursor ->
                 if (cursor.moveToFirst()) {
-                    if (cursor.getLong(1) != timestampNs ||
-                        cursor.getDouble(2) != reward ||
-                        cursor.getString(3) != creditedIds
+                    if (cursor.getDouble(1) != reward ||
+                        cursor.getString(2) != creditedIds
                     ) {
                         throw AndroidNeuronNetworkException("250k reward ID was replayed with different feedback")
                     }
