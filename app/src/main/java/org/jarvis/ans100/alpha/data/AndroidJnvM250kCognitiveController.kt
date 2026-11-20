@@ -40,6 +40,13 @@ class AndroidJnvM250kCognitiveController(
 
     private val evidenceEncoder = AndroidJnvM250kEvidenceEncoder()
     private val hybridDecisionController = ANS100HybridPopulationController()
+    private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine()
+    private var hypothesisLedger: ANS100NeuralHypothesisLedger? = null
+
+    data class HypothesisObservation(
+        val hypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis>,
+        val persisted: Boolean,
+    )
 
     private var phase = Phase.IDLE
     private var decisionContext: AndroidJnvM250kDecisionEpisodeContext? = null
@@ -175,6 +182,43 @@ class AndroidJnvM250kCognitiveController(
         finishResult = result
         phase = if (result.decision.mayApplyReward) Phase.FINISHED else Phase.REJECTED
         return result
+    }
+
+    /**
+     * Records association candidates decoded from actual neural co-activation
+     * after this decision's runtime pass has completed. Reproduction is tracked
+     * across independent completed turns; it is not treated as factual truth.
+     */
+    @Synchronized
+    fun observeNeuralHypotheses(
+        activeConceptIds: Set<String>,
+        decodedCandidates: List<ANS100NeuralAssociationDecoder.Candidate>,
+        ledger: ANS100NeuralHypothesisLedger? = hypothesisLedger,
+        pairScanComplete: Boolean = true,
+    ): HypothesisObservation {
+        check(phase == Phase.AWAITING_OUTCOME) {
+            "hypotheses can be committed only after the decision runtime queue is drained"
+        }
+        val context = decisionContext ?: error("there is no decision context for this hypothesis turn")
+        val hypotheses = neuralHypothesisEngine.observeTurn(
+            turnId = context.decisionTurnId,
+            activeConceptIds = activeConceptIds,
+            candidates = decodedCandidates,
+            completed = true,
+            pairScanComplete = pairScanComplete,
+        )
+        val persisted = ledger?.save(neuralHypothesisEngine.exportSnapshot()) ?: false
+        hypothesisLedger = ledger
+        return HypothesisObservation(hypotheses, persisted)
+    }
+
+    /** Restore the bounded cross-turn hypothesis checkpoint before new turns. */
+    @Synchronized
+    fun restoreHypothesisCheckpoint(ledger: ANS100NeuralHypothesisLedger): Boolean {
+        val snapshot = ledger.load() ?: return false
+        neuralHypothesisEngine.restoreSnapshot(snapshot)
+        hypothesisLedger = ledger
+        return true
     }
 
     @Synchronized
