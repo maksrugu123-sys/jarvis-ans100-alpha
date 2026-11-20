@@ -253,7 +253,7 @@ attribution.recordRun(runResult)
 val learningResult = attribution.finishEpisode(outcomeReward)
 ```
 
-The app's higher-level action/decision controller does not yet own this lifecycle automatically; callers must currently open, feed and finish the episode explicitly.
+The explicit `AndroidJnvM250kDecisionLearningCycle` now accepts an `ANS100Decision`, captures the bounded pre-action JNVM context, schedules inputs, records each completed runtime batch and finishes from external feedback. The app's MainActivity/chat route does not yet instantiate this bridge automatically.
 
 ## Bounded counterfactual edge replay
 
@@ -266,9 +266,51 @@ The app's higher-level action/decision controller does not yet own this lifecycl
 - Hard limits are eight candidate edges, 512 default replay events, 64 default timestamp groups, one 512-edge snapshot page, with configurable ceilings of 2,048 events and 256 timestamp groups. Generated fan-out is included in the per-replay work budget; a replay that hits a bound is marked incomplete.
 - Candidate IDs must exist in the supplied edge snapshot, and all edge endpoints, external-input targets and outcome neurons must have supplied initial states. Inputs must be later than each target's snapshot time.
 
-This is a controlled counterfactual *model replay*, not a faithful replay of the complete production runtime. It currently does not reproduce online STDP/eligibility updates, external environment feedback, unprovided hidden state, asynchronous app actions or GPU/hybrid backend behavior. It assumes the supplied snapshot and input stream are complete and deterministic. If either branch is incomplete, its score must not be treated as a validated effect. The evaluator is not yet wired into `AndroidJnvM250kRewardAttribution` or the app decision lifecycle, and its score must not automatically change R-STDP credit.
+This is a controlled counterfactual *model replay*, not a faithful replay of the complete production runtime. It currently does not reproduce online STDP/eligibility updates, external environment feedback, unprovided hidden state, asynchronous app actions or GPU/hybrid backend behavior. It assumes the supplied snapshot and input stream are complete and deterministic. If either branch is incomplete, its score must not be treated as a validated effect. The evaluator is now invoked by the opt-in `AndroidJnvM250kDecisionLearningCycle` after a selected decision's runtime episode has completed. It still is not automatically wired into MainActivity or the ordinary chat pipeline, and its score must not automatically change R-STDP credit outside the gated journal path.
 
 Unit tests are authored for an edge that changes the selected outcome, an unrelated edge, input snapshot immutability, hard candidate bounds and incomplete replay reporting. Tests are **not run**; no APK build or Android device experiment was run.
+
+
+## Decision-bound 250k learning cycle
+
+`AndroidJnvM250kDecisionLearningCycle` now provides an explicit bridge from the typed ANS decision contract to the separate 250k runtime:
+
+- `AndroidJnvM250kRuntime.captureDecisionEpisodeContext` accepts only `SELECTED` decisions, requires an empty persisted event queue, and captures a detached pre-action state/edge snapshot by traversing outgoing connections from the external-input targets. The graph traversal is bounded to 16 levels, 512 edges and 512 neuron states; it fails closed if any reachable frontier remains outside those bounds.
+- `AndroidJnvM250kDecisionEpisodeContext` binds the snapshot to the exact decision turn and selected candidate. It stores the pre-action neuron states, captured edges, external input batch and selected outcome/readout neuron IDs. The complete context is written to the episode journal before the input batch is scheduled.
+- `AndroidJnvM250kDecisionLearningCycle.begin` persists the context and schedules the captured inputs. `run` executes one bounded 250k runtime batch and immediately records its spikes/transmissions into the episode journal. `finish` runs the CPU counterfactual replay and applies only the exact-edge credits accepted by the gate, using an externally supplied reward in [-1, 1].
+- Candidate edges are selected from the episode's actual target-response evidence, ranked deterministically and limited to the evaluator's eight-candidate ceiling. The same persisted pre-action snapshot and inputs are used for baseline and one-edge-suppressed replays.
+- Episode snapshot schema is version 7. It persists the decision context, exact gate decision and runtime-completion status. Reward is refused if no runtime batch completed, the last batch left pending events, or the runtime budget was exhausted.
+- `resumeRecoveredEpisode` reuses the durable episode snapshot. If a reward was already marked pending, the exact persisted accepted-credit map and stable reward ID are replayed instead of recalculating the gate.
+
+Minimal opt-in wiring:
+
+```kotlin
+val attribution = AndroidJnvM250kRewardAttribution.persistent(
+    context = context,
+    applyReward = { id, reward, ids ->
+        runtime.applyRewardToConnections(id, reward, ids)
+    },
+    applyWeightedReward = { id, reward, credits ->
+        runtime.applyRewardToConnections(id, reward, credits.keys, credits)
+    },
+)
+val cycle = AndroidJnvM250kDecisionLearningCycle(runtime, attribution)
+cycle.begin(
+    decision = selectedDecision,
+    episodeId = stableEpisodeId,
+    externalInputs = decisionInputEvents,
+    outcomeNeuronIds = selectedCandidateReadoutNeuronIds,
+)
+val runResult = cycle.run()
+// Only after independent feedback reports the actual outcome:
+val learning = cycle.finish(observedReward)
+```
+
+**Integration boundary:** this is a source-level orchestration API, not an automatic MainActivity/chat integration. The ordinary Android dialogue route currently uses its separate 10k hybrid topology; the 250k JNVM runtime remains an independent profile. A caller must explicitly pass the selected decision, the correct 250k input projection and outcome-readout neuron IDs, and a reward from real external/user feedback. An ANS-generated confidence or its own prediction must not be substituted for the observed reward.
+
+**Recovery limitation:** runtime timestamp commits and episode-journal telemetry writes are separate SQLite transactions. `run()` immediately calls `recordRun()`, but a process death in the small interval after the runtime commit and before the journal write can lose that batch's attribution telemetry. This bridge does not claim cross-database atomicity. The CPU replay also omits online STDP, environment feedback and unprovided state; it is sensitivity evidence inside the captured model, not proof of real-world causality.
+
+The decision-context invariant tests and Android journal-recovery tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, Android instrumentation or device run was performed.
 
 ## Durable counterfactual decision in the episode journal
 
@@ -281,7 +323,7 @@ Unit tests are authored for an edge that changes the selected outcome, an unrela
 - The journal schema migration preserves existing OPEN, REWARD_PENDING, FINISHED and ABORTED records.
 - The gated method requires the weighted callback and refuses the legacy unweighted fallback. Ordinary `finishEpisode()` refuses to consume an episode with a persisted counterfactual decision, preventing accidental double learning through both paths.
 
-The episode journal and JNVM reward database remain separate databases, not one cross-database transaction. Retry safety therefore still depends on the JNVM store's durable idempotent reward receipt. The new method is opt-in and is not automatically connected to the app's decision controller. Instrumentation tests for exact-decision recovery and terminal rejection are authored but **not run**.
+The episode journal and JNVM reward database remain separate databases, not one cross-database transaction. Retry safety therefore still depends on the JNVM store's durable idempotent reward receipt. The new method is opt-in and is exposed through `AndroidJnvM250kDecisionLearningCycle`; it is not automatically connected to MainActivity or the ordinary chat pipeline. Instrumentation tests for exact-decision recovery and terminal rejection are authored but **not run**.
 
 ## Counterfactual-gated reward policy
 
