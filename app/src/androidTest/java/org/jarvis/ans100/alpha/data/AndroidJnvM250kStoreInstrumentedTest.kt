@@ -153,8 +153,8 @@ class AndroidJnvM250kStoreInstrumentedTest {
             AndroidJnvM250kRuntime(context, store).use { runtime ->
                 runtime.scheduleInputs(
                     listOf(
-                        AndroidNeuronEvent("runtime-input-excitatory", 100L, 0, 1.2),
-                        AndroidNeuronEvent("runtime-input-inhibitory", 100L, 4, 1.2),
+                        AndroidNeuronEvent("runtime-input-excitatory", 100L, 0, 1.0),
+                        AndroidNeuronEvent("runtime-input-inhibitory", 100L, 4, 1.0),
                     ),
                 )
                 val deferredRun = runtime.run(maxEvents = 1, maxTimestamps = 1)
