@@ -198,6 +198,7 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     AndroidNeuronKernel.process(it.state, it.timestampNs, 2.0)
                 }
             }
+            var positiveRewardWeight = 0.0
             AndroidJnvM250kRuntime(context, store, forcedSpikeBackend).use { learningRuntime ->
                 val before = store.outgoingPage(0, limit = 16)
                     .single { it.targetNeuronId == sourceZeroTarget }
@@ -211,14 +212,66 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 )
                 val learningRun = learningRuntime.run(maxEvents = 1, maxTimestamps = 1)
                 assertEquals(listOf(sourceZeroTarget), learningRun.emittedSpikes.map { it.neuronId })
+
+                val afterStdp = store.outgoingPage(0, limit = 16)
+                    .single { it.targetNeuronId == sourceZeroTarget }
+                assertTrue("post-after-pre must potentiate the synapse", afterStdp.weight > 0.5)
+                val eligibility = store.loadPlasticitySynapses(setOf(0), emptySet())
+                    .single { it.connection.connectionId == afterStdp.connectionId }
+                assertTrue("STDP must accumulate a reward eligibility trace", eligibility.eligibility > 0.0)
+
+                val positive = learningRuntime.applyReward(
+                    rewardId = "reward-positive-once",
+                    reward = 1.0,
+                    rewardedNeuronIds = setOf(sourceZeroTarget),
+                )
+                assertTrue(positive.affectedSynapses > 0)
+                assertTrue(!positive.replayed)
+                positiveRewardWeight = store.outgoingPage(0, limit = 16)
+                    .single { it.targetNeuronId == sourceZeroTarget }.weight
+                assertTrue("positive reward must reinforce positive eligibility", positiveRewardWeight > afterStdp.weight)
+
+                val replay = learningRuntime.applyReward(
+                    rewardId = "reward-positive-once",
+                    reward = 1.0,
+                    rewardedNeuronIds = setOf(sourceZeroTarget),
+                )
+                assertTrue(replay.replayed)
+                assertEquals(
+                    positiveRewardWeight,
+                    store.outgoingPage(0, limit = 16).single { it.targetNeuronId == sourceZeroTarget }.weight,
+                    0.000001,
+                )
+
+                // A second postsynaptic spike reuses the still-decaying pre-trace,
+                // creating fresh positive eligibility for a punishment probe.
+                learningRuntime.scheduleInputs(
+                    listOf(AndroidNeuronEvent("stdp-second-post-event", 20_000_000L, sourceZeroTarget, 1.0)),
+                )
+                val secondPost = learningRuntime.run(maxEvents = 1, maxTimestamps = 1)
+                assertEquals(listOf(sourceZeroTarget), secondPost.emittedSpikes.map { it.neuronId })
+                val beforePunishment = store.outgoingPage(0, limit = 16)
+                    .single { it.targetNeuronId == sourceZeroTarget }.weight
+                val negative = learningRuntime.applyReward(
+                    rewardId = "reward-negative-once",
+                    reward = -1.0,
+                    rewardedNeuronIds = setOf(sourceZeroTarget),
+                )
+                assertTrue(negative.affectedSynapses > 0)
+                assertTrue(
+                    "negative reward must weaken positive eligibility",
+                    store.outgoingPage(0, limit = 16)
+                        .single { it.targetNeuronId == sourceZeroTarget }.weight < beforePunishment,
+                )
+                assertTrue(positiveRewardWeight > afterStdp.weight)
             }
             val learnedConnection = store.outgoingPage(0, limit = 16)
                 .single { it.targetNeuronId == sourceZeroTarget }
-            assertTrue("post-after-pre must potentiate the synapse", learnedConnection.weight > 0.5)
             val persistedTrace = store.loadPlasticitySynapses(setOf(0), emptySet())
                 .single { it.connection.connectionId == learnedConnection.connectionId }
             assertTrue(persistedTrace.preTrace > 0.0)
             assertTrue(persistedTrace.postTrace > 0.99)
+            assertEquals(0.0, persistedTrace.eligibility, 0.000001)
 
             // Partial checkpoint metadata is treated as corruption, never as a
             // fresh run that could silently duplicate already committed edges.
