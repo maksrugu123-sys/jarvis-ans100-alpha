@@ -153,3 +153,10 @@ Until the above sequence is complete:
 - do not extrapolate full-network speed from the isolated LIF-DT kernel benchmark;
 - keep Android builds, device benchmarks and heavy tests opt-in;
 - distinguish authored tests from tests actually executed.
+
+## Android SQLite integration test authored
+
+`AndroidJnvM250kStoreInstrumentedTest` adds opt-in Android instrumentation coverage against the real SQLite implementation. It initializes the complete 250,000-row profile once, checks initialization idempotency, commits a bounded sparse-edge batch with its checkpoint, closes and reopens the database, and verifies the saved cursor and edges. It also verifies that a stale worker cannot advance the cursor, that a duplicate-ID failure rolls back an earlier insert in the same batch, and that partially deleted checkpoint metadata fails closed.
+
+This is intentionally an instrumentation test because the production store depends on Android SQLite. It performs full 250k initialization and should not be added to lightweight JVM smoke-test runs. The test is authored but **not executed**; database restart, rollback and corruption handling therefore remain unverified on a real Android runtime until the instrumentation test is deliberately run.
+
