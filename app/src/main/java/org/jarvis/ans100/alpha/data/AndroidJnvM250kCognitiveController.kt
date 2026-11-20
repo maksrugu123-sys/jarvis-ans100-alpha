@@ -117,6 +117,22 @@ class AndroidJnvM250kCognitiveController(
             "only a selected ANS decision can start an executable episode"
         }
         require(externalInputs.isNotEmpty()) { "a real external input batch is required" }
+        val inputPopulations = setOf(
+            AndroidJnvM250kTopology.Population.PERCEPTION,
+            AndroidJnvM250kTopology.Population.MEMORY,
+            AndroidJnvM250kTopology.Population.PATTERN_DETECTION,
+            AndroidJnvM250kTopology.Population.PREDICTION,
+            AndroidJnvM250kTopology.Population.CONTEXT,
+        )
+        require(externalInputs.all {
+            AndroidJnvM250kTopology.populationFor(it.targetNeuronId) in inputPopulations
+        }) { "cognitive episode inputs must target an evidence/perception population" }
+        val actionRange = AndroidJnvM250kTopology.POPULATION_RANGES.single {
+            it.population == AndroidJnvM250kTopology.Population.ACTION_SELECTION
+        }
+        require(outcomeNeuronIds.isNotEmpty() && outcomeNeuronIds.all { it in actionRange }) {
+            "counterfactual outcome readouts must belong to ACTION_SELECTION"
+        }
 
         // Capture before scheduling any input: this is the baseline for replay.
         val context = runtime.captureDecisionEpisodeContext(
