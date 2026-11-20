@@ -396,7 +396,9 @@ class AndroidJnvM250kRewardAttribution(
             check(episode.pendingReward == null) {
                 "episode already has a different reward path pending; retry it with its original API"
             }
-            val scores = responseScoresFor(episode)
+            val allScores = responseScoresFor(episode)
+            val evaluatedIds = report.candidates.mapTo(LinkedHashSet()) { it.connectionId }
+            val scores = allScores.filterKeys { it in evaluatedIds }
             episode.counterfactualContextJson?.let { contextJson ->
                 val context = AndroidJnvM250kDecisionEpisodeContext.fromJson(JSONObject(contextJson))
                 val expectedIds = scores.entries
