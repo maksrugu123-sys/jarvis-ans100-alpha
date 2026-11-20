@@ -597,6 +597,9 @@ class AndroidJnvM250kRewardAttribution(
     fun hasDecisionEpisodeContext(): Boolean = activeEpisode?.counterfactualContextJson != null
 
     @Synchronized
+    fun hasPendingReward(): Boolean = activeEpisode?.pendingReward != null
+
+    @Synchronized
     fun trackedConnectionCount(): Int = activeEpisode?.candidates?.size ?: 0
 
     @Synchronized
