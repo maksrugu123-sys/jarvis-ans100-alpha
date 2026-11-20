@@ -315,7 +315,11 @@ class AndroidJnvM250kRewardAttribution(
             require(episode.pendingReward == reward) {
                 "recovered counterfactual episode has a different persisted reward; retry with the original value"
             }
-            decision = decodeCounterfactualDecision(JSONObject(existing))
+            val persisted = JSONObject(existing)
+            require(persisted.getString("reward_id") == rewardId && persisted.getDouble("reward") == reward) {
+                "persisted counterfactual receipt identity or reward does not match this retry"
+            }
+            decision = decodeCounterfactualDecision(persisted)
             require(decision.mayApplyReward) { "persisted counterfactual decision is not reward-pending" }
         } else {
             check(episode.pendingReward == null) {
@@ -657,7 +661,10 @@ class AndroidJnvM250kRewardAttribution(
         if (record.state == "REWARD_PENDING") {
             require(record.reward != null && episode.pendingReward == record.reward)
             if (episode.counterfactualDecisionJson != null) {
-                require(decodeCounterfactualDecision(JSONObject(episode.counterfactualDecisionJson!!)).mayApplyReward)
+                val decisionJson = JSONObject(episode.counterfactualDecisionJson!!)
+                require(decisionJson.getString("reward_id") == "counterfactual-episode-${episode.id}")
+                require(decisionJson.getDouble("reward") == record.reward)
+                require(decodeCounterfactualDecision(decisionJson).mayApplyReward)
             }
         } else {
             require(episode.pendingReward == null)
