@@ -40,8 +40,7 @@ class AndroidJnvM250kRewardAttribution(
 ) {
     private data class Candidate(
         val neuronId: Int,
-        var transmissions: Long,
-        val estimationError: Long,
+        var estimatedTransmissions: Long,
         val firstSeenOrder: Long,
     )
 
@@ -105,7 +104,7 @@ class AndroidJnvM250kRewardAttribution(
         }
 
         val credited = episode.candidates.values
-            .sortedWith(compareByDescending<Candidate> { it.transmissions }.thenBy { it.firstSeenOrder })
+            .sortedWith(compareByDescending<Candidate> { it.estimatedTransmissions }.thenBy { it.firstSeenOrder })
             .take(maxCreditedNeurons)
             .mapTo(LinkedHashSet()) { it.neuronId }
 
@@ -138,24 +137,23 @@ class AndroidJnvM250kRewardAttribution(
         AndroidJnvM250kProfile.requireNeuronId(neuronId)
         val existing = episode.candidates[neuronId]
         if (existing != null) {
-            existing.transmissions = saturatedAdd(existing.transmissions, 1L)
+            existing.estimatedTransmissions = saturatedAdd(existing.estimatedTransmissions, 1L)
             return
         }
         if (episode.candidates.size < maxTrackedNeurons) {
-            episode.candidates[neuronId] = Candidate(neuronId, 1L, 0L, episode.nextOrder++)
+            episode.candidates[neuronId] = Candidate(neuronId, 1L, episode.nextOrder++)
             return
         }
 
         // Space-Saving replacement: retain frequent endpoints without allowing
         // the episode map to grow with the full 250k neuron ID space.
         val leastFrequent = episode.candidates.values.minWithOrNull(
-            compareBy<Candidate> { it.transmissions }.thenBy { it.firstSeenOrder },
+            compareBy<Candidate> { it.estimatedTransmissions }.thenBy { it.firstSeenOrder },
         ) ?: return
         episode.candidates.remove(leastFrequent.neuronId)
         episode.candidates[neuronId] = Candidate(
             neuronId = neuronId,
-            transmissions = saturatedAdd(leastFrequent.transmissions, 1L),
-            estimationError = leastFrequent.transmissions,
+            estimatedTransmissions = saturatedAdd(leastFrequent.estimatedTransmissions, 1L),
             firstSeenOrder = episode.nextOrder++,
         )
     }
