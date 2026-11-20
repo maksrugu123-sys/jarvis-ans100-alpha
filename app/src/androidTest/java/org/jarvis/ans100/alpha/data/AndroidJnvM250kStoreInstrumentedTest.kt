@@ -26,9 +26,8 @@ class AndroidJnvM250kStoreInstrumentedTest {
     @Test
     fun graphBatchAndCheckpointSurviveReopenAndRejectPartialOrStaleWrites() {
         val databaseName = "jnvm-250k-${UUID.randomUUID()}.db"
-        var store: AndroidJnvM250kStore? = null
+        var store = AndroidJnvM250kStore(context, databaseName)
         try {
-            store = AndroidJnvM250kStore(context, databaseName)
             val initialized = store.initialize()
             assertTrue(initialized.initialized)
             assertEquals(AndroidJnvM250kProfile.NEURON_CAPACITY, initialized.neuronCount)
@@ -91,7 +90,6 @@ class AndroidJnvM250kStoreInstrumentedTest {
             // Partial checkpoint metadata is treated as corruption, never as a
             // fresh run that could silently duplicate already committed edges.
             store.close()
-            store = null
             val raw = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
             try {
                 assertEquals(
@@ -113,7 +111,7 @@ class AndroidJnvM250kStoreInstrumentedTest {
             assertNotNull(corruptCheckpointFailure)
             assertNull(runCatching { store.loadConnectionInitializationCheckpoint() }.getOrNull())
         } finally {
-            runCatching { store?.close() }
+            runCatching { store.close() }
             context.deleteDatabase(databaseName)
         }
     }
