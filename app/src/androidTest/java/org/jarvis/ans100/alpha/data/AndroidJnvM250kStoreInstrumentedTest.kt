@@ -278,6 +278,11 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     .single { it.targetNeuronId == sourceZeroTarget }
                 val unrelatedOutgoing = store.outgoingPage(sourceZeroTarget, limit = 16).first()
                 val unrelatedWeightBefore = unrelatedOutgoing.weight
+                val exactEligibilityBefore = store.loadPlasticitySynapses(
+                    setOf(exactTargetConnection.sourceNeuronId),
+                    emptySet(),
+                ).single { it.connection.connectionId == exactTargetConnection.connectionId }.eligibility
+                val expectedWeightedDelta = 0.5 * AndroidJnvM250kRuntime.RSTDP_LEARNING_RATE * exactEligibilityBefore
                 val exactReward = resumedRuntime.applyRewardToConnections(
                     rewardId = "reward-exact-edge-once",
                     reward = 1.0,
@@ -287,6 +292,12 @@ class AndroidJnvM250kStoreInstrumentedTest {
                 assertEquals("weighted exact reward must affect only its selected edge", 1, exactReward.affectedSynapses)
                 val exactWeightAfterReward = store.outgoingPage(0, limit = 16)
                     .single { it.connectionId == exactTargetConnection.connectionId }.weight
+                assertEquals(
+                    "0.5 response confidence must apply half the ordinary eligibility delta",
+                    (beforePunishment + expectedWeightedDelta).coerceIn(0.0, 1.0),
+                    exactWeightAfterReward,
+                    0.000001,
+                )
                 val exactReplay = resumedRuntime.applyRewardToConnections(
                     rewardId = "reward-exact-edge-once",
                     reward = 1.0,
