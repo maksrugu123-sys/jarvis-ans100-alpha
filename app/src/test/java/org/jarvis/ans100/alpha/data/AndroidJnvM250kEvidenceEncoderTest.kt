@@ -1,0 +1,90 @@
+package org.jarvis.ans100.alpha.data
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class AndroidJnvM250kEvidenceEncoderTest {
+    private fun bundle(): TypedEvidenceBundle = TypedEvidenceBundle(
+        turnId = "evidence-encoder-test",
+        records = listOf(
+            TypedEvidenceRecord(
+                recordId = "user-message",
+                turnId = "evidence-encoder-test",
+                feature = EvidenceFeature.USER_MESSAGE_TEXT,
+                source = EvidenceSourceKind.USER_MESSAGE,
+                status = EvidenceStatus.USER_PROVIDED,
+                value = EvidenceValue.Text("Объясни принцип работы"),
+                activation = 1.0,
+                provenanceRef = "turn:user-message",
+            ),
+            TypedEvidenceRecord(
+                recordId = "intent-hint",
+                turnId = "evidence-encoder-test",
+                feature = EvidenceFeature.CORE_INTENT_HINT,
+                source = EvidenceSourceKind.CORE_UNDERSTANDING,
+                status = EvidenceStatus.HEURISTIC,
+                value = EvidenceValue.Category("explain"),
+                activation = 0.7,
+                provenanceRef = "turn:core.intent",
+            ),
+            TypedEvidenceRecord(
+                recordId = "clarification-flag",
+                turnId = "evidence-encoder-test",
+                feature = EvidenceFeature.CORE_REQUIRES_CLARIFICATION_HINT,
+                source = EvidenceSourceKind.CORE_REASONING_PLAN,
+                status = EvidenceStatus.HEURISTIC,
+                value = EvidenceValue.BooleanValue(false),
+                activation = 0.5,
+                provenanceRef = "turn:core.reasoningPlan.requiresClarification",
+            ),
+        ),
+    )
+
+    @Test
+    fun mapsTypedSourcesToTheirDedicated250kPopulations() {
+        val encoded = AndroidJnvM250kEvidenceEncoder().encode(bundle(), inputTimeNs = 10L)
+        val byId = encoded.events.associateBy { event ->
+            encoded.recordToNeuronId.entries.single { it.value == event.targetNeuronId }.key
+        }
+
+        assertTrue(AndroidJnvM250kTopology.POPULATION_RANGES.single {
+            it.population == AndroidJnvM250kTopology.Population.PERCEPTION
+        } contains byId.getValue("user-message").targetNeuronId)
+        assertTrue(AndroidJnvM250kTopology.POPULATION_RANGES.single {
+            it.population == AndroidJnvM250kTopology.Population.PATTERN_DETECTION
+        } contains byId.getValue("intent-hint").targetNeuronId)
+        assertTrue(AndroidJnvM250kTopology.POPULATION_RANGES.single {
+            it.population == AndroidJnvM250kTopology.Population.PREDICTION
+        } contains byId.getValue("clarification-flag").targetNeuronId)
+    }
+
+    @Test
+    fun preservesHeuristicTaintAndFalseBooleanPolarity() {
+        val encoded = AndroidJnvM250kEvidenceEncoder().encode(bundle(), inputTimeNs = 10L)
+        val byId = encoded.events.associateBy { event ->
+            encoded.recordToNeuronId.entries.single { it.value == event.targetNeuronId }.key
+        }
+
+        assertFalse(byId.getValue("user-message").coreTainted)
+        assertTrue(byId.getValue("intent-hint").coreTainted)
+        assertTrue(byId.getValue("clarification-flag").coreTainted)
+        assertTrue(byId.getValue("intent-hint").strength > 0.0)
+        assertTrue(byId.getValue("clarification-flag").strength < 0.0)
+        assertEquals(2, encoded.heuristicRecordCount)
+        assertEquals(1, encoded.userProvidedRecordCount)
+    }
+
+    @Test
+    fun encodingIsDeterministicAndDoesNotCollideWithinOneTurn() {
+        val encoder = AndroidJnvM250kEvidenceEncoder()
+        val first = encoder.encode(bundle(), inputTimeNs = 10L)
+        val second = encoder.encode(bundle(), inputTimeNs = 10L)
+
+        assertEquals(first.recordToNeuronId, second.recordToNeuronId)
+        assertEquals(first.events, second.events)
+        assertEquals(first.events.size, first.events.map { it.targetNeuronId }.distinct().size)
+        assertEquals(first.events.size, first.events.map { it.eventId }.distinct().size)
+    }
+}
