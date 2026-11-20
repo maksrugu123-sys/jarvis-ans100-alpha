@@ -294,6 +294,18 @@ class AndroidJnvM250kStoreInstrumentedTest {
                     connectionCredits = mapOf(exactTargetConnection.connectionId to 0.5),
                 )
                 assertTrue("weighted exact-edge reward receipt must make retries idempotent", exactReplay.replayed)
+                val conflictingCreditFailure = runCatching {
+                    resumedRuntime.applyRewardToConnections(
+                        rewardId = "reward-exact-edge-once",
+                        reward = 1.0,
+                        connectionIds = setOf(exactTargetConnection.connectionId),
+                        connectionCredits = mapOf(exactTargetConnection.connectionId to 0.75),
+                    )
+                }.exceptionOrNull()
+                assertTrue(
+                    "a reward receipt cannot be replayed with a different per-edge confidence",
+                    conflictingCreditFailure is AndroidNeuronNetworkException,
+                )
                 assertEquals(
                     "replaying exact-edge reward must not change its weight",
                     exactWeightAfterReward,
