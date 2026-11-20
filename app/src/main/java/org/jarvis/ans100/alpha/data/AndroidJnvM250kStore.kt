@@ -152,6 +152,10 @@ class AndroidJnvM250kStore(
     fun registerConnection(connection: AndroidNeuronConnection) {
         AndroidJnvM250kProfile.requireNeuronId(connection.sourceNeuronId)
         AndroidJnvM250kProfile.requireNeuronId(connection.targetNeuronId)
+        AndroidJnvM250kTopology.requireAllowedConnection(
+            connection.sourceNeuronId,
+            connection.targetNeuronId,
+        )
         requireInitialized()
         val db = helper.writableDatabase
         db.beginTransaction()
