@@ -173,6 +173,9 @@ class AndroidJnvM250kStore(
         expectedCheckpoint: AndroidJnvM250kInitializationCheckpoint?,
         nextCheckpoint: AndroidJnvM250kInitializationCheckpoint?,
     ) {
+        require((expectedCheckpoint == null) == (nextCheckpoint == null)) {
+            "expected and next checkpoints must either both be present or both be absent"
+        }
         persistConnectionBatchInternal(connections, expectedCheckpoint, nextCheckpoint)
     }
 
