@@ -143,7 +143,7 @@ object AndroidJnvM250kCounterfactualEvaluator {
         val queue = java.util.PriorityQueue<AndroidNeuronEvent>(
             compareBy<AndroidNeuronEvent> { it.timeNs }.thenBy { it.eventId },
         )
-        externalInputs.forEach(queue::add)
+        externalInputs.forEach { queue.add(it) }
         var processed = 0
         var timestamps = 0
         var outcomeSpikes = 0
@@ -156,7 +156,7 @@ object AndroidJnvM250kCounterfactualEvaluator {
             val group = ArrayList<AndroidNeuronEvent>()
             while (queue.isNotEmpty() && queue.peek().timeNs == time) group += queue.remove()
             if (processed + group.size > limits.maxEventsPerReplay) {
-                group.forEach(queue::add)
+                group.forEach { queue.add(it) }
                 break
             }
             val byTarget = group.groupBy { it.targetNeuronId }.toSortedMap()
