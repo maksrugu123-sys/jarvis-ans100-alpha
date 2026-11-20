@@ -5,6 +5,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.Closeable
 
+/** Result of a durable counterfactual-gated episode decision. */
+data class AndroidJnvM250kCounterfactualFinishResult(
+    val episodeId: String,
+    val rewardId: String,
+    val decision: AndroidJnvM250kCounterfactualRewardGate.Decision,
+    val rewardResult: AndroidJnvM250kRewardResult?,
+    val replayedPersistedDecision: Boolean,
+)
+
 /** Outcome attribution supported by observed target-neuron responses. */
 data class AndroidJnvM250kAttributionResult(
     val episodeId: String,
@@ -71,6 +80,7 @@ class AndroidJnvM250kRewardAttribution(
         var nextOrder: Long = 0L,
         var pendingReward: Double? = null,
         var legacyUnweightedReward: Boolean = false,
+        var counterfactualDecisionJson: String? = null,
     )
 
     private var activeEpisode: Episode? = journal?.loadRecoverable()?.let(::decodeEpisode)
@@ -215,6 +225,9 @@ class AndroidJnvM250kRewardAttribution(
         require(reward.isFinite() && reward in -1.0..1.0)
         val currentEpisode = activeEpisode ?: error("there is no active reward episode")
         val episode = copyEpisode(currentEpisode)
+        check(episode.counterfactualDecisionJson == null) {
+            "this episode has a persisted counterfactual decision; retry finishEpisodeWithCounterfactual"
+        }
         val pending = episode.pendingReward
         if (pending != null && pending != reward) {
             throw IllegalArgumentException("recovered episode has a different persisted reward; retry with the original value")
@@ -271,6 +284,186 @@ class AndroidJnvM250kRewardAttribution(
         )
         activeEpisode = null
         return result
+    }
+
+    /**
+     * Durable opt-in path for counterfactual-gated R-STDP.
+     *
+     * The exact gate decision and accepted per-edge multipliers are stored
+     * before reward application. A recovered pending episode always replays
+     * that stored map; a newly supplied report/policy cannot alter it.
+     */
+    @Synchronized
+    fun finishEpisodeWithCounterfactual(
+        reward: Double,
+        report: AndroidJnvM250kCounterfactualEvaluator.Report,
+        policy: AndroidJnvM250kCounterfactualRewardGate.Policy =
+            AndroidJnvM250kCounterfactualRewardGate.Policy(),
+    ): AndroidJnvM250kCounterfactualFinishResult {
+        require(reward.isFinite() && reward in -1.0..1.0)
+        val weightedCallback = applyWeightedReward
+            ?: error("counterfactual-gated reward requires applyWeightedReward; unweighted fallback is unsafe")
+        val current = activeEpisode ?: error("there is no active reward episode")
+        val episode = copyEpisode(current)
+        val rewardId = "counterfactual-episode-${episode.id}"
+        require(rewardId.length <= 160) { "episode ID is too long for a stable counterfactual reward ID" }
+
+        val existing = episode.counterfactualDecisionJson
+        val replayed = existing != null
+        val decision: AndroidJnvM250kCounterfactualRewardGate.Decision
+        if (existing != null) {
+            require(episode.pendingReward == reward) {
+                "recovered counterfactual episode has a different persisted reward; retry with the original value"
+            }
+            decision = decodeCounterfactualDecision(JSONObject(existing))
+            require(decision.mayApplyReward) { "persisted counterfactual decision is not reward-pending" }
+        } else {
+            check(episode.pendingReward == null) {
+                "episode already has a different reward path pending; retry it with its original API"
+            }
+            val scores = responseScoresFor(episode)
+            decision = AndroidJnvM250kCounterfactualRewardGate.evaluate(
+                reward = reward,
+                responseScores = scores,
+                report = report,
+                policy = policy,
+            )
+            episode.counterfactualDecisionJson =
+                encodeCounterfactualDecision(rewardId, reward, decision, report, policy).toString()
+            if (decision.mayApplyReward) {
+                episode.pendingReward = reward
+                // Persist exact accepted IDs and multipliers before calling R-STDP.
+                journal?.prepareReward(episode.id, encodeEpisode(episode), reward)
+                activeEpisode = episode
+            } else {
+                // Terminal rejection is durable and never invokes a reward callback.
+                journal?.reject(episode.id, encodeEpisode(episode), reward)
+                activeEpisode = null
+                return AndroidJnvM250kCounterfactualFinishResult(
+                    episodeId = episode.id,
+                    rewardId = rewardId,
+                    decision = decision,
+                    rewardResult = null,
+                    replayedPersistedDecision = false,
+                )
+            }
+        }
+
+        val credits = decision.acceptedCredits.toSortedMap()
+        check(credits.isNotEmpty())
+        val result = weightedCallback(rewardId, reward, credits)
+        journal?.complete(episode.id)
+        activeEpisode = null
+        return AndroidJnvM250kCounterfactualFinishResult(
+            episodeId = episode.id,
+            rewardId = rewardId,
+            decision = decision,
+            rewardResult = result,
+            replayedPersistedDecision = replayed,
+        )
+    }
+
+    private fun responseScoresFor(episode: Episode): Map<String, Double> {
+        val responders = episode.candidates.values.filter { it.responseCount > 0L }
+        require(responders.isNotEmpty()) {
+            "no target-neuron response was observed; transmissions alone cannot receive counterfactual reward"
+        }
+        val selected = responders.sortedWith(
+            compareByDescending<Candidate> { it.responseCredit }
+                .thenByDescending { it.responseCount }
+                .thenByDescending { it.estimatedTransmissions }
+                .thenBy { it.firstSeenOrder },
+        ).take(maxCreditedConnections)
+        val known = saturatedAdd(episode.observedLinks, episode.runtimeOmittedTransmissions)
+        val assessed = (episode.observedLinks - episode.unobservedTransmissions).coerceAtLeast(0L)
+        val coverage = if (known == 0L) 0.0 else
+            (assessed.toDouble() / known.toDouble()).coerceIn(0.0, 1.0)
+        require(coverage > 0.0) { "no assessed transmission evidence remains" }
+        return selected.associate { candidate ->
+            candidate.connectionId to (
+                (candidate.responseCredit / candidate.responseCount.toDouble()).coerceIn(0.0, 1.0) *
+                    coverage
+            ).coerceIn(0.0, 1.0)
+        }
+    }
+
+    private fun encodeCounterfactualDecision(
+        rewardId: String,
+        reward: Double,
+        decision: AndroidJnvM250kCounterfactualRewardGate.Decision,
+        report: AndroidJnvM250kCounterfactualEvaluator.Report,
+        policy: AndroidJnvM250kCounterfactualRewardGate.Policy,
+    ): JSONObject {
+        val credits = JSONObject()
+        decision.acceptedCredits.toSortedMap().forEach { (id, value) -> credits.put(id, value) }
+        val rejected = JSONObject()
+        decision.rejected.toSortedMap().forEach { (id, reason) -> rejected.put(id, reason.name) }
+        val effects = JSONArray()
+        report.candidates.sortedBy { it.connectionId }.forEach { effect ->
+            effects.put(JSONObject().apply {
+                put("id", effect.connectionId)
+                put("baseline_spikes", effect.baselineOutcomeSpikes)
+                put("counterfactual_spikes", effect.counterfactualOutcomeSpikes)
+                put("delta", effect.outcomeSpikeDelta)
+                put("sensitivity", effect.sensitivityScore)
+                put("baseline_complete", effect.baselineComplete)
+                put("counterfactual_complete", effect.counterfactualComplete)
+            })
+        }
+        return JSONObject().apply {
+            put("version", 1)
+            put("reward_id", rewardId)
+            put("reward", reward)
+            put("baseline_accepted", decision.baselineAccepted)
+            put("reward_accepted", decision.rewardAccepted)
+            put("accepted_credits", credits)
+            put("rejected", rejected)
+            put("policy_min_sensitivity", policy.minimumSensitivity)
+            put("policy_min_combined_confidence", policy.minimumCombinedConfidence)
+            put("policy_min_abs_delta", policy.minimumAbsoluteOutcomeDelta)
+            put("report_baseline_complete", report.baselineComplete)
+            put("report_baseline_events", report.baselineProcessedEvents)
+            put("report_baseline_timestamps", report.baselineProcessedTimestamps)
+            put("report_candidates", effects)
+        }.also {
+            require(it.toString().length <= AndroidJnvM250kEpisodeJournal.MAX_PAYLOAD_CHARS / 2) {
+                "counterfactual decision exceeds its durable journal bound"
+            }
+        }
+    }
+
+    private fun decodeCounterfactualDecision(
+        json: JSONObject,
+    ): AndroidJnvM250kCounterfactualRewardGate.Decision {
+        require(json.getInt("version") == 1)
+        val creditsJson = json.getJSONObject("accepted_credits")
+        val credits = LinkedHashMap<String, Double>()
+        val creditKeys = creditsJson.keys()
+        while (creditKeys.hasNext()) {
+            val id = creditKeys.next()
+            val value = creditsJson.getDouble(id)
+            require(id.matches(CONNECTION_ID) && value.isFinite() && value in 0.0..1.0)
+            credits[id] = value
+        }
+        val rejectedJson = json.getJSONObject("rejected")
+        val rejected = LinkedHashMap<String, AndroidJnvM250kCounterfactualRewardGate.Rejection>()
+        val rejectedKeys = rejectedJson.keys()
+        while (rejectedKeys.hasNext()) {
+            val id = rejectedKeys.next()
+            require(id.matches(CONNECTION_ID))
+            rejected[id] = AndroidJnvM250kCounterfactualRewardGate.Rejection.valueOf(
+                rejectedJson.getString(id),
+            )
+        }
+        val decision = AndroidJnvM250kCounterfactualRewardGate.Decision(
+            acceptedCredits = credits.toSortedMap(),
+            rejected = rejected.toSortedMap(),
+            baselineAccepted = json.getBoolean("baseline_accepted"),
+            rewardAccepted = json.getBoolean("reward_accepted"),
+        )
+        require(decision.mayApplyReward && credits.isNotEmpty())
+        require(credits.keys.intersect(rejected.keys).isEmpty())
+        return decision
     }
 
     @Synchronized
@@ -381,6 +574,8 @@ class AndroidJnvM250kRewardAttribution(
             put("next_order", episode.nextOrder)
             if (episode.pendingReward == null) put("pending_reward", JSONObject.NULL)
             else put("pending_reward", episode.pendingReward!!)
+            if (episode.counterfactualDecisionJson == null) put("counterfactual_decision", JSONObject.NULL)
+            else put("counterfactual_decision", JSONObject(episode.counterfactualDecisionJson!!))
         }.toString().also {
             require(it.length <= AndroidJnvM250kEpisodeJournal.MAX_PAYLOAD_CHARS) {
                 "episode snapshot exceeds the durable journal bound"
@@ -408,6 +603,9 @@ class AndroidJnvM250kRewardAttribution(
             nextOrder = json.getLong("next_order"),
             pendingReward = if (json.isNull("pending_reward")) null else json.getDouble("pending_reward"),
             legacyUnweightedReward = json.optBoolean("legacy_unweighted_reward", false),
+            counterfactualDecisionJson = if (
+                snapshotVersion >= 5 && !json.isNull("counterfactual_decision")
+            ) json.getJSONObject("counterfactual_decision").toString() else null,
         )
         require(episode.id == record.episodeId && episode.id.matches(SAFE_ID))
         require(episode.actionId.matches(SAFE_ID))
@@ -458,6 +656,9 @@ class AndroidJnvM250kRewardAttribution(
         }
         if (record.state == "REWARD_PENDING") {
             require(record.reward != null && episode.pendingReward == record.reward)
+            if (episode.counterfactualDecisionJson != null) {
+                require(decodeCounterfactualDecision(JSONObject(episode.counterfactualDecisionJson!!)).mayApplyReward)
+            }
         } else {
             require(episode.pendingReward == null)
         }
@@ -522,7 +723,7 @@ class AndroidJnvM250kRewardAttribution(
         const val DEFAULT_MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         const val MAX_TRACKED_CONNECTIONS = AndroidJnvM250kStore.MAX_REWARDED_SYNAPSES
         private const val MIN_SUPPORTED_SNAPSHOT_VERSION = 2
-        private const val SNAPSHOT_VERSION = 4
+        private const val SNAPSHOT_VERSION = 5
         const val TARGET_RESPONSE_WINDOW_NS = 100_000_000L
         const val MAX_RESPONSE_CREDIT = 1_000_000.0
         private val SAFE_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
