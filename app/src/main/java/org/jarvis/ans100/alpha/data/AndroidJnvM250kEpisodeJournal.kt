@@ -39,7 +39,7 @@ class AndroidJnvM250kEpisodeJournal(context: Context) : Closeable {
             db.execSQL(
                 "DELETE FROM episodes WHERE state IN ('FINISHED','ABORTED','REJECTED') " +
                     "AND episode_id NOT IN (SELECT episode_id FROM episodes " +
-                    "WHERE state IN ('FINISHED','ABORTED') ORDER BY rowid DESC LIMIT 999)",
+                    "WHERE state IN ('FINISHED','ABORTED','REJECTED') ORDER BY rowid DESC LIMIT 999)",
             )
             db.insertOrThrow(
                 "episodes",
