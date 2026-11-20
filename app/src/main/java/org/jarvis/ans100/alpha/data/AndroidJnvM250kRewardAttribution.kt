@@ -115,6 +115,8 @@ class AndroidJnvM250kRewardAttribution(
         context: AndroidJnvM250kDecisionEpisodeContext,
     ) {
         require(episodeId.matches(SAFE_ID)) { "episodeId must be a safe stable identifier" }
+        check(journal != null) { "decision-bound learning requires a persistent episode journal" }
+        check(applyWeightedReward != null) { "decision-bound learning requires the weighted exact-edge reward callback" }
         context.validateAgainst(decision)
         check(activeEpisode == null) { "finish or abort the active reward episode first" }
         val actionId = "decision-" + context.selectedCandidateId
@@ -340,6 +342,8 @@ class AndroidJnvM250kRewardAttribution(
             AndroidJnvM250kCounterfactualRewardGate.Policy(),
     ): AndroidJnvM250kCounterfactualFinishResult {
         require(reward.isFinite() && reward in -1.0..1.0)
+        check(journal != null) { "counterfactual episode learning requires a persistent episode journal" }
+        check(applyWeightedReward != null) { "counterfactual episode learning requires the weighted exact-edge reward callback" }
         val episode = activeEpisode ?: error("there is no active reward episode")
         if (episode.counterfactualDecisionJson != null) {
             // The durable decision, not a newly computed report, is authoritative on retry.
@@ -382,6 +386,7 @@ class AndroidJnvM250kRewardAttribution(
             AndroidJnvM250kCounterfactualRewardGate.Policy(),
     ): AndroidJnvM250kCounterfactualFinishResult {
         require(reward.isFinite() && reward in -1.0..1.0)
+        check(journal != null) { "counterfactual episode learning requires a persistent episode journal" }
         val weightedCallback = applyWeightedReward
             ?: error("counterfactual-gated reward requires applyWeightedReward; unweighted fallback is unsafe")
         val current = activeEpisode ?: error("there is no active reward episode")
