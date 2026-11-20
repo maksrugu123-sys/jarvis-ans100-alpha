@@ -32,6 +32,12 @@ object AndroidJnvM250kCounterfactualRewardGate {
         }
     }
 
+    data class ApplyResult<T>(
+        val decision: Decision,
+        /** Null means the gate rejected the episode and no reward callback was invoked. */
+        val rewardResult: T?,
+    )
+
     data class Decision(
         /** Exact connection IDs and bounded confidence multipliers safe to submit. */
         val acceptedCredits: Map<String, Double>,
@@ -118,8 +124,30 @@ object AndroidJnvM250kCounterfactualRewardGate {
         )
     }
 
+    /**
+     * Applies a durable exact-edge reward only when the decision passes every gate.
+     * The caller must supply a stable reward ID; the JNVM store's receipt handles retries.
+     */
+    fun <T> applyIfTrusted(
+        rewardId: String,
+        reward: Double,
+        responseScores: Map<String, Double>,
+        report: AndroidJnvM250kCounterfactualEvaluator.Report,
+        policy: Policy = Policy(),
+        applyWeightedReward: (rewardId: String, reward: Double, credits: Map<String, Double>) -> T,
+    ): ApplyResult<T> {
+        require(rewardId.matches(REWARD_ID)) { "rewardId must be a safe stable identifier" }
+        val decision = evaluate(reward, responseScores, report, policy)
+        if (!decision.mayApplyReward) return ApplyResult(decision, null)
+        return ApplyResult(
+            decision = decision,
+            rewardResult = applyWeightedReward(rewardId, reward, decision.acceptedCredits),
+        )
+    }
+
     const val DEFAULT_MINIMUM_SENSITIVITY = 0.25
     const val DEFAULT_MINIMUM_COMBINED_CONFIDENCE = 0.10
 
     private val CONNECTION_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+    private val REWARD_ID = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
 }
