@@ -27,7 +27,9 @@ data class AndroidJnvM250kAttributionResult(
  *
  * This coordinator is deliberately in-memory in this first version. It never
  * fabricates a causal path from population labels or mere neuron co-activity.
- * Only endpoints of recorded synapse transmissions can receive credit.
+ * Only endpoints of recorded transmissions become candidate credited IDs.
+ * The downstream store currently rewards all eligible synapses adjacent to
+ * those IDs, not only the exact transmitted connection IDs.
  */
 class AndroidJnvM250kRewardAttribution(
     private val applyReward: (rewardId: String, reward: Double, neuronIds: Set<Int>) -> AndroidJnvM250kRewardResult,
