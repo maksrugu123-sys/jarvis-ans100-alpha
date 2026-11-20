@@ -148,6 +148,8 @@ object AndroidJnvM250kCounterfactualEvaluator {
         var timestamps = 0
         var outcomeSpikes = 0
         var generatedSequence = 0L
+        var generatedEvents = 0
+        var generationTruncated = false
 
         while (queue.isNotEmpty() && timestamps < limits.maxTimestampsPerReplay) {
             val time = queue.peek().timeNs
@@ -168,6 +170,7 @@ object AndroidJnvM250kCounterfactualEvaluator {
                 states[targetId] = result.state.copy(coreTainted = previous.coreTainted || events.any { it.coreTainted })
                 if (result.spiked) spiked += targetId
             }
+            val generatedForTimestamp = ArrayList<AndroidNeuronEvent>()
             for (sourceId in spiked) {
                 if (sourceId in outcomeNeuronIds) outcomeSpikes++
                 val source = states.getValue(sourceId)
@@ -180,7 +183,7 @@ object AndroidJnvM250kCounterfactualEvaluator {
                         "counterfactual event timestamp overflow"
                     }
                     generatedSequence++
-                    queue += AndroidNeuronEvent(
+                    generatedForTimestamp += AndroidNeuronEvent(
                         eventId = "cf-$generatedSequence-${edge.connectionId}",
                         timeNs = time + edge.delayNs,
                         targetNeuronId = edge.targetNeuronId,
@@ -189,6 +192,14 @@ object AndroidJnvM250kCounterfactualEvaluator {
                     )
                 }
             }
+            // Bound total replay work, not just consumed input events. Never
+            // enqueue a partial timestamp's generated fan-out.
+            if (processed + generatedEvents + generatedForTimestamp.size > limits.maxEventsPerReplay) {
+                generationTruncated = true
+                break
+            }
+            queue.addAll(generatedForTimestamp)
+            generatedEvents += generatedForTimestamp.size
             processed += group.size
             timestamps++
         }
@@ -196,7 +207,7 @@ object AndroidJnvM250kCounterfactualEvaluator {
             outcomeSpikes = outcomeSpikes,
             processedEvents = processed,
             processedTimestamps = timestamps,
-            complete = queue.isEmpty(),
+            complete = queue.isEmpty() && !generationTruncated,
         )
     }
 
