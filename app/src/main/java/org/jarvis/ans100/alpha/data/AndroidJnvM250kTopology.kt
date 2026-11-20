@@ -7,8 +7,10 @@ package org.jarvis.ans100.alpha.data
  * Excitatory/inhibitory polarity is an orthogonal property within each
  * population; it must not be confused with a separate population.
  *
- * This is an allocation contract only. It does not yet create connections,
- * run learning, or imply that the 250k scheduler is integrated.
+ * This defines population allocation and legal signal routes. The sparse
+ * initializer builds a deterministic structural scaffold and the independent
+ * 250k runtime executes LIF-DT signal propagation. Learning and plasticity are
+ * still separate, unimplemented integration stages for this profile.
  */
 object AndroidJnvM250kTopology {
     enum class Population {
