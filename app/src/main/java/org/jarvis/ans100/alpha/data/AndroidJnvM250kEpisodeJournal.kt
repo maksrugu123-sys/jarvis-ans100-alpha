@@ -37,7 +37,7 @@ class AndroidJnvM250kEpisodeJournal(context: Context) : Closeable {
             check(!active) { "an episode is already active in the durable journal" }
             // Retain only a bounded recent history of completed/aborted episodes.
             db.execSQL(
-                "DELETE FROM episodes WHERE state IN ('FINISHED','ABORTED') " +
+                "DELETE FROM episodes WHERE state IN ('FINISHED','ABORTED','REJECTED') " +
                     "AND episode_id NOT IN (SELECT episode_id FROM episodes " +
                     "WHERE state IN ('FINISHED','ABORTED') ORDER BY rowid DESC LIMIT 999)",
             )
@@ -67,6 +67,23 @@ class AndroidJnvM250kEpisodeJournal(context: Context) : Closeable {
     fun prepareReward(episodeId: String, payload: String, reward: Double) {
         require(reward.isFinite() && reward in -1.0..1.0)
         save(episodeId, payload, "REWARD_PENDING", reward)
+    }
+
+    /** Persist a terminal rejected decision without creating a reward receipt. */
+    @Synchronized
+    fun reject(episodeId: String, payload: String, reward: Double) {
+        require(reward.isFinite() && reward in -1.0..1.0)
+        requireSafeEpisodeId(episodeId)
+        require(payload.length <= MAX_PAYLOAD_CHARS)
+        val values = ContentValues().apply {
+            put("payload", payload)
+            put("state", "REJECTED")
+            put("reward", reward)
+        }
+        val changed = helper.writableDatabase.update(
+            "episodes", values, "episode_id=? AND state='OPEN'", arrayOf(episodeId),
+        )
+        check(changed == 1) { "episode journal rejected-decision transition was rejected" }
     }
 
     @Synchronized
@@ -130,19 +147,34 @@ class AndroidJnvM250kEpisodeJournal(context: Context) : Closeable {
             db.execSQL(
                 "CREATE TABLE episodes (" +
                     "episode_id TEXT PRIMARY KEY, payload TEXT NOT NULL, " +
-                    "state TEXT NOT NULL CHECK(state IN ('OPEN','REWARD_PENDING','FINISHED','ABORTED')), " +
+                    "state TEXT NOT NULL CHECK(state IN ('OPEN','REWARD_PENDING','FINISHED','ABORTED','REJECTED')), " +
                     "reward REAL)",
             )
             db.execSQL("CREATE INDEX episodes_state_idx ON episodes(state)")
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            if (oldVersion < 2 && newVersion >= 2) {
+                db.execSQL(
+                    "CREATE TABLE episodes_v2 (" +
+                        "episode_id TEXT PRIMARY KEY, payload TEXT NOT NULL, " +
+                        "state TEXT NOT NULL CHECK(state IN ('OPEN','REWARD_PENDING','FINISHED','ABORTED','REJECTED')), " +
+                        "reward REAL)",
+                )
+                db.execSQL(
+                    "INSERT INTO episodes_v2 (episode_id,payload,state,reward) " +
+                        "SELECT episode_id,payload,state,reward FROM episodes",
+                )
+                db.execSQL("DROP TABLE episodes")
+                db.execSQL("ALTER TABLE episodes_v2 RENAME TO episodes")
+                db.execSQL("CREATE INDEX episodes_state_idx ON episodes(state)")
+            }
             if (newVersion > DATABASE_VERSION) error("unsupported episode journal schema upgrade")
         }
 
         companion object {
             private const val DATABASE_NAME = "jarvis_ans100_episode_journal_v1.db"
-            private const val DATABASE_VERSION = 1
+            private const val DATABASE_VERSION = 2
         }
     }
 
