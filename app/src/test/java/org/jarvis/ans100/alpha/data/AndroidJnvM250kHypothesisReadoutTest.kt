@@ -44,14 +44,14 @@ class AndroidJnvM250kHypothesisReadoutTest {
         val sourceIds = encoding.conceptRecordIds.map { encoding.recordToNeuronId.getValue(it) }.sorted()
         val target = 70_123
         val spikes = sourceIds.mapIndexed { index, neuronId ->
-            AndroidJnvM250kSpike(neuronId, 1L, 10L + index)
+            AndroidJnvM250kSpike(neuronId, 1L, 10L)
         } + AndroidJnvM250kSpike(target, 1L, 20L)
         val links = sourceIds.mapIndexed { index, neuronId ->
             AndroidJnvM250kCausalLink(
                 connectionId = "edge-$index",
                 sourceNeuronId = neuronId,
                 targetNeuronId = target,
-                timestampNs = 10L + index,
+                timestampNs = 10L,
                 arrivalTimestampNs = 20L,
             )
         }
@@ -177,5 +177,32 @@ class AndroidJnvM250kHypothesisReadoutTest {
         assertEquals(1, encoded.predictionEventCount)
         assertEquals(base.conceptRecordIds, encoded.conceptRecordIds)
         assertEquals(base.recordToNeuronId, encoded.recordToNeuronId)
+    }
+
+    @Test
+    fun laterRecurrentSourceSpikeCannotMasqueradeAsDirectLexicalInput() {
+        val encoding = encoding()
+        val sourceIds = encoding.conceptRecordIds.map { encoding.recordToNeuronId.getValue(it) }.sorted()
+        val target = 70_123
+        val spikes = sourceIds.map { AndroidJnvM250kSpike(it, 1L, 100L) } +
+            AndroidJnvM250kSpike(target, 1L, 110L)
+        val links = sourceIds.mapIndexed { index, neuronId ->
+            AndroidJnvM250kCausalLink(
+                connectionId = "late-edge-$index",
+                sourceNeuronId = neuronId,
+                targetNeuronId = target,
+                timestampNs = 100L,
+                arrivalTimestampNs = 110L,
+            )
+        }
+        val result = AndroidJnvM250kHypothesisReadout().decode(
+            encoding = encoding,
+            emittedSpikes = spikes,
+            causalLinks = links,
+            omittedCausalLinks = 0,
+            ambiguousTargetSpikeNeuronIds = emptySet(),
+        )
+        assertTrue(result.activeConceptIds.isEmpty())
+        assertTrue(result.candidates.isEmpty())
     }
 }
