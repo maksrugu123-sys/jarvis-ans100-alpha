@@ -6,7 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidJnvM250kEvidenceEncoderTest {
-    private fun bundle(turnId: String = "evidence-encoder-test"): TypedEvidenceBundle = TypedEvidenceBundle(
+    private fun bundle(
+        turnId: String = "evidence-encoder-test",
+        message: String = "Объясни принцип работы",
+    ): TypedEvidenceBundle = TypedEvidenceBundle(
         turnId = turnId,
         records = listOf(
             TypedEvidenceRecord(
@@ -15,7 +18,7 @@ class AndroidJnvM250kEvidenceEncoderTest {
                 feature = EvidenceFeature.USER_MESSAGE_TEXT,
                 source = EvidenceSourceKind.USER_MESSAGE,
                 status = EvidenceStatus.USER_PROVIDED,
-                value = EvidenceValue.Text("Объясни принцип работы"),
+                value = EvidenceValue.Text(message),
                 activation = 1.0,
                 provenanceRef = "turn:user-message",
             ),
@@ -127,5 +130,18 @@ class AndroidJnvM250kEvidenceEncoderTest {
                 range -> range.population == AndroidJnvM250kTopology.Population.PERCEPTION
             }
         })
+    }
+
+    @Test
+    fun lexicalNeuronAddressesDoNotDependOnWordOrder() {
+        val encoder = AndroidJnvM250kEvidenceEncoder()
+        val first = encoder.encode(bundle("word-order-a", "объясни принцип работы"), inputTimeNs = 10L)
+        val second = encoder.encode(bundle("word-order-b", "работы объясни принцип"), inputTimeNs = 10L)
+
+        assertEquals(first.conceptRecordIds, second.conceptRecordIds)
+        assertEquals(
+            first.conceptRecordIds.associateWith { first.recordToNeuronId.getValue(it) },
+            second.conceptRecordIds.associateWith { second.recordToNeuronId.getValue(it) },
+        )
     }
 }
