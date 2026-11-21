@@ -56,6 +56,9 @@ import org.jarvis.ans100.alpha.data.ANS100NeuralAssociationDecoder
 import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisEngine
 import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisLedger
 import org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine
+import org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine
+import org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionLedger
+import org.jarvis.ans100.alpha.data.ANS100ConceptMemory
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceAdapter
 import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutContract
 import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutDecoder
@@ -328,6 +331,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val neuralHypothesisLedger = ANS100NeuralHypothesisLedger(appContext)
     private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine().apply {
         runCatching { neuralHypothesisLedger.load()?.let { restoreSnapshot(it) } }
+    }
+    private val structuredHypothesisRevisionLedger = ANS100HypothesisRevisionLedger(appContext)
+    private val structuredHypothesisRevisionEngine = ANS100HypothesisRevisionEngine().apply {
+        runCatching { structuredHypothesisRevisionLedger.load()?.let { restoreSnapshot(it) } }
     }
     private val benchmarkTraceStore = ANS100BenchmarkTraceStore(appContext.filesDir)
     private val conversationCoordinator = LocalConversationCoordinator(
@@ -1783,6 +1790,33 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         pairScanComplete = neuralAssociationResult.pairScanComplete &&
                             neuralAssociationResult.candidateSetComplete,
                     )
+                    // Revise symbolic causal-chain candidates only after a complete
+                    // neural pass. Premise edges stay provenance; only exact direct
+                    // relation observations can support or refute the proposed edge.
+                    val structuredHypothesisRevisions = structuredHypothesisRevisionEngine.observeTurn(
+                        turnId = turnId,
+                        candidates = conceptInput.causalChainHypotheses.map { candidate ->
+                            ANS100ConceptMemory.Hypothesis(
+                                id = candidate.hypothesisId,
+                                fromConceptId = candidate.fromConceptId,
+                                type = candidate.relationType,
+                                toConceptId = candidate.toConceptId,
+                                premiseRelationIds = candidate.premiseRelationIds,
+                                evidenceRefs = candidate.premiseEvidenceRefs,
+                                estimatedStrength = candidate.estimatedStrength,
+                            )
+                        },
+                        directEvidence = conceptInput.relationObservations,
+                        completed = !result.budgetExhausted && result.pendingEvents == 0,
+                    )
+                    // A failed checkpoint must not fail the user-facing turn.
+                    val structuredHypothesisStatePersisted = runCatching {
+                        structuredHypothesisRevisionLedger.save(
+                            structuredHypothesisRevisionEngine.exportSnapshot(),
+                        )
+                    }.getOrDefault(false)
+                    val structuredHypothesisReviewQueue =
+                        structuredHypothesisRevisionEngine.reviewQueue()
                     // A failed checkpoint must never fail the user-facing turn.
                     val neuralHypothesisStatePersisted = runCatching {
                         neuralHypothesisLedger.save(neuralHypothesisEngine.exportSnapshot())
@@ -1891,6 +1925,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         append("; causal_chain_supported_by_stored_records=").append(conceptInput.causalChainHypotheses.count { it.status == org.jarvis.ans100.alpha.data.ANS100CausalHypothesisEngine.Status.SUPPORTED_BY_STORED_RECORDS })
                         append("; causal_chain_refuted_by_stored_records=").append(conceptInput.causalChainHypotheses.count { it.status == org.jarvis.ans100.alpha.data.ANS100CausalHypothesisEngine.Status.REFUTED_BY_STORED_RECORDS })
                         append("; causal_chain_conflicting_records=").append(conceptInput.causalChainHypotheses.count { it.status == org.jarvis.ans100.alpha.data.ANS100CausalHypothesisEngine.Status.CONFLICTING_STORED_RECORDS })
+                        append("; structured_hypothesis_revisions=").append(structuredHypothesisRevisions.size)
+                        append("; structured_hypothesis_supported=").append(structuredHypothesisRevisions.count { it.status == ANS100HypothesisRevisionEngine.Status.SUPPORTED_BY_DIRECT_EVIDENCE })
+                        append("; structured_hypothesis_refuted=").append(structuredHypothesisRevisions.count { it.status == ANS100HypothesisRevisionEngine.Status.REFUTED_BY_DIRECT_EVIDENCE })
+                        append("; structured_hypothesis_conflicted=").append(structuredHypothesisRevisions.count { it.status == ANS100HypothesisRevisionEngine.Status.CONFLICTED_DIRECT_EVIDENCE })
+                        append("; structured_hypothesis_review_requests=").append(structuredHypothesisReviewQueue.size)
+                        append("; structured_hypothesis_state_persisted=").append(structuredHypothesisStatePersisted)
                         append("; explicit_relation_evidence=").append(conceptInput.relationEvidenceCount)
                         append("; supported_relation_hypotheses=").append(conceptInput.hypothesisVerifications.count { it.status == org.jarvis.ans100.alpha.data.ANS100ConceptMemory.VerificationStatus.SUPPORTED })
                         append("; refuted_relation_hypotheses=").append(conceptInput.hypothesisVerifications.count { it.status == org.jarvis.ans100.alpha.data.ANS100ConceptMemory.VerificationStatus.REFUTED })
