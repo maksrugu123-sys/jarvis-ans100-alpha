@@ -67,8 +67,8 @@ class AndroidJnvM250kEvidenceEncoder {
                 it.source == EvidenceSourceKind.USER_MESSAGE &&
                 it.value is EvidenceValue.Text
         }?.let { (it.value as EvidenceValue.Text).value }.orEmpty()
-        val tokens = tokenize(message).take(MAX_LEXICAL_CONCEPTS)
-        val perceptionRange = range(AndroidJnvM250kTopology.Population.PERCEPTION)
+        val tokens = tokenize(message).sorted().take(MAX_LEXICAL_CONCEPTS)
+        val perceptionRange = lexicalPerceptionRange()
         tokens.forEachIndexed { index, token ->
             val recordId = lexicalRecordId(token)
             if (recordId in mapping) return@forEachIndexed
@@ -178,13 +178,32 @@ class AndroidJnvM250kEvidenceEncoder {
     private fun inputRangeFor(record: TypedEvidenceRecord): AndroidJnvM250kTopology.Range =
         when (record.source) {
             EvidenceSourceKind.USER_MESSAGE,
-            EvidenceSourceKind.MESSAGE_STRUCTURE -> range(AndroidJnvM250kTopology.Population.PERCEPTION)
+            EvidenceSourceKind.MESSAGE_STRUCTURE -> evidencePerceptionRange()
             EvidenceSourceKind.CORE_UNDERSTANDING -> range(AndroidJnvM250kTopology.Population.PATTERN_DETECTION)
             EvidenceSourceKind.CORE_REASONING_PLAN -> range(AndroidJnvM250kTopology.Population.PREDICTION)
             EvidenceSourceKind.CONVERSATION_CONTEXT -> range(AndroidJnvM250kTopology.Population.CONTEXT)
             EvidenceSourceKind.APPROVED_MEMORY -> range(AndroidJnvM250kTopology.Population.MEMORY)
             EvidenceSourceKind.VERIFIED_TOOL_RESULT -> range(AndroidJnvM250kTopology.Population.CONTEXT)
         }
+
+    /** Reserve disjoint halves so lexical addresses never depend on metadata slots. */
+    private fun evidencePerceptionRange(): AndroidJnvM250kTopology.Range {
+        val base = range(AndroidJnvM250kTopology.Population.PERCEPTION)
+        return AndroidJnvM250kTopology.Range(
+            population = base.population,
+            firstNeuronId = base.firstNeuronId,
+            lastNeuronIdInclusive = base.firstNeuronId + base.size / 2 - 1,
+        )
+    }
+
+    private fun lexicalPerceptionRange(): AndroidJnvM250kTopology.Range {
+        val base = range(AndroidJnvM250kTopology.Population.PERCEPTION)
+        return AndroidJnvM250kTopology.Range(
+            population = base.population,
+            firstNeuronId = base.firstNeuronId + base.size / 2,
+            lastNeuronIdInclusive = base.lastNeuronIdInclusive,
+        )
+    }
 
     private fun range(population: AndroidJnvM250kTopology.Population) =
         AndroidJnvM250kTopology.POPULATION_RANGES.single { it.population == population }
