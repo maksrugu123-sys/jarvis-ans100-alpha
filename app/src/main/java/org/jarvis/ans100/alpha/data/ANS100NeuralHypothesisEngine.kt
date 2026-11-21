@@ -33,6 +33,7 @@ class ANS100NeuralHypothesisEngine(
         val supportingTurnIds: List<String>,
         val nonReproducingTurnIds: List<String>,
         val sharedTargetCount: Int,
+        val heuristicEvidence: Boolean = false,
     )
 
     data class PersistedHypothesis(
@@ -44,6 +45,7 @@ class ANS100NeuralHypothesisEngine(
         val supportingTurnIds: List<String>,
         val nonReproducingTurnIds: List<String>,
         val sharedTargetCount: Int,
+        val heuristicEvidence: Boolean = false,
     )
 
     data class Snapshot(
@@ -60,6 +62,7 @@ class ANS100NeuralHypothesisEngine(
         val supportingTurns: LinkedHashSet<String> = LinkedHashSet(),
         val nonReproducingTurns: LinkedHashSet<String> = LinkedHashSet(),
         var sharedTargetCount: Int = 0,
+        var heuristicEvidence: Boolean = false,
     )
 
     private val states = LinkedHashMap<String, State>()
@@ -177,6 +180,7 @@ class ANS100NeuralHypothesisEngine(
             state.supportingTurns.add(turnId)
             trimOldest(state.supportingTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
             state.sharedTargetCount = maxOf(state.sharedTargetCount, candidate.convergentNeuronIds.size)
+            state.heuristicEvidence = state.heuristicEvidence || candidate.heuristicEvidence
         }
 
         if (pairScanComplete) {
@@ -212,6 +216,7 @@ class ANS100NeuralHypothesisEngine(
                 supportingTurnIds = state.supportingTurns.toList(),
                 nonReproducingTurnIds = state.nonReproducingTurns.toList(),
                 sharedTargetCount = state.sharedTargetCount,
+                heuristicEvidence = state.heuristicEvidence,
             )
         },
         observedTurnIds = observedTurns.toList(),
@@ -252,6 +257,7 @@ class ANS100NeuralHypothesisEngine(
                     supportingTurns = LinkedHashSet(item.supportingTurnIds),
                     nonReproducingTurns = LinkedHashSet(item.nonReproducingTurnIds),
                     sharedTargetCount = item.sharedTargetCount,
+                    heuristicEvidence = item.heuristicEvidence,
                 ),
             ) == null)
         }
@@ -281,6 +287,7 @@ class ANS100NeuralHypothesisEngine(
             supportingTurnIds = state.supportingTurns.toList(),
             nonReproducingTurnIds = state.nonReproducingTurns.toList(),
             sharedTargetCount = state.sharedTargetCount,
+            heuristicEvidence = state.heuristicEvidence,
         )
     }
 
