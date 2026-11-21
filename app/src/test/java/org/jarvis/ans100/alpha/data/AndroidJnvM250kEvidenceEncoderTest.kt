@@ -144,4 +144,30 @@ class AndroidJnvM250kEvidenceEncoderTest {
             second.conceptRecordIds.associateWith { second.recordToNeuronId.getValue(it) },
         )
     }
+
+    @Test
+    fun learnedConceptPrototypeIsRecalledIntoReservedMemoryRangeAsTaintedSignal() {
+        val encoder = AndroidJnvM250kEvidenceEncoder()
+        val base = encoder.encode(bundle(), inputTimeNs = 10L)
+        val prototype = ANS100NeuralHypothesisEngine.ConceptPrototype(
+            prototypeId = "jnvm250k-prototype:" + "c".repeat(32),
+            memberConceptIds = listOf("lex-token:" + "a".repeat(24), "lex-token:" + "b".repeat(24)),
+            memberLabels = listOf("альфа", "бета"),
+            supportingTurnCount = 2,
+            verificationTurnCount = 2,
+            confidence = 1.0,
+            heuristicEvidence = false,
+        )
+        val encoded = encoder.appendConceptPrototypes(base, listOf(prototype), recallTimeNs = 10L)
+        val event = encoded.events.last()
+        val memoryRange = AndroidJnvM250kTopology.POPULATION_RANGES.single {
+            it.population == AndroidJnvM250kTopology.Population.MEMORY
+        }
+        assertTrue(event.targetNeuronId in memoryRange)
+        assertTrue(event.targetNeuronId >= memoryRange.firstNeuronId + memoryRange.size / 2)
+        assertTrue(event.coreTainted)
+        assertEquals(1, encoded.conceptPrototypeEventCount)
+        assertEquals(base.conceptRecordIds, encoded.conceptRecordIds)
+        assertEquals(base.recordToNeuronId, encoded.recordToNeuronId)
+    }
 }
