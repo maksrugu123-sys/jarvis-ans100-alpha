@@ -424,3 +424,20 @@ Unit tests were added for stable addresses across turns, actual two-edge converg
 - Every prediction pulse is marked heuristic-tainted because it is model-generated, regardless of whether its supporting lexical observations were user-provided. Forecasts are returned in `DecisionStart.predictions` for inspection.
 
 These are predictions of likely co-occurring lexical features, not next-word generation, factual claims, or independent language reasoning. They should be treated as model expectations and compared with subsequent observed input. Unit tests were added for stable lexical addresses, lexical-only readout, conservative prediction thresholds, and PREDICTION-population routing. Tests remain **NOT RUN**; no Gradle build, APK, CI or device benchmark was performed.
+
+## Repeated co-occurrence prototypes and prediction outcome audit (V1)
+
+The 250k hypothesis engine now has a bounded concept-prototype stage. It is deliberately named a *co-occurrence prototype*, not a semantic concept:
+
+- A prototype is formed from 2–4 lexical token slots only when every pair in the group has at least two independent supporting turns and pair confidence >= 0.75. This is complete-link grouping: an A–B and B–C chain cannot merge A, B and C unless A–C also passes.
+- Prototype IDs are deterministic digests of the sorted member token IDs. The prototype is reconstructed from the persisted pair-hypothesis checkpoint; no raw message or new unbounded dictionary is stored.
+- When one member is present in a later turn, the controller may reactivate the prototype into the second half of the MEMORY population. User-approved memory evidence is reserved to the first half. Prototype pulses are marked `coreTainted`, are reported separately in `DecisionStart.conceptPrototypes`, and never enter the set of observed lexical tokens.
+- This is still statistical clustering of exact normalized word forms. It does not establish a semantic category, synonym, causal relation, or generalization beyond the observed tokens.
+
+Prediction feedback is now separated from neural co-activation:
+- `DecisionStart.predictions` are forecasts generated before the new input is observed. At the end of the turn, the controller compares each forecast with the current encoding's actual lexical token set, not with the neurons that happened to spike.
+- The encoder reports when the 24-token lexical cap truncated the message. Truncated turns are not used to score prediction hits/misses, because an omitted token must not be counted as absent.
+- Prediction hits and misses are persisted per independent turn in the existing hypothesis checkpoint. After at least two forecast evaluations, `predict250k` uses the lower of the association support ratio and observed prediction accuracy. Repeated misses therefore suppress a previously strong forecast.
+- These prediction misses are not factual contradictions and do not change the underlying association's independent co-activation support history.
+
+Tests were added for complete-link grouping, rejection of transitive-only clusters, MEMORY prototype routing/taint, prediction-miss suppression after checkpoint restore, and lexical truncation metadata. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device benchmark was run.
