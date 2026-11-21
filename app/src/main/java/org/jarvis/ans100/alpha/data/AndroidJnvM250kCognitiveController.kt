@@ -4,11 +4,13 @@ package org.jarvis.ans100.alpha.data
  * Coordinates one real decision-bound JNVM episode.
  *
  * The existing typed-evidence encoder and 10k hybrid population controller
- * provide provenance-bound inputs and candidate selection. This class bridges
- * that completed decision into the separate 250k JNVM runtime, captures the
- * pre-action graph, records actual transmissions/responses, and delegates
- * bounded replay plus durable exact-edge reward to the attribution journal.
- * It does not independently interpret raw language or execute external tools/actions.
+ * provide provenance-bound inputs and candidate selection. The 250k encoder
+ * adds stable lexical slots and can prime its PREDICTION population from
+ * repeated co-occurrence hypotheses. This class bridges the selected decision
+ * into the separate JNVM runtime, captures the pre-action graph, records actual
+ * transmissions/responses, and delegates bounded replay plus durable exact-edge
+ * reward to the attribution journal. It does not independently understand raw
+ * language or execute external tools/actions.
  *
  * A completed neural readout is not proof of a successful real-world action.
  * The caller must convert an independently observed outcome into a bounded
