@@ -34,6 +34,8 @@ class ANS100NeuralHypothesisEngine(
         val nonReproducingTurnIds: List<String>,
         val sharedTargetCount: Int,
         val heuristicEvidence: Boolean = false,
+        val predictionHitCount: Int = 0,
+        val predictionMissCount: Int = 0,
     )
 
     data class PersistedHypothesis(
@@ -545,6 +547,8 @@ class ANS100NeuralHypothesisEngine(
             nonReproducingTurnIds = state.nonReproducingTurns.toList(),
             sharedTargetCount = state.sharedTargetCount,
             heuristicEvidence = state.heuristicEvidence,
+            predictionHitCount = state.predictionHitTurns.size,
+            predictionMissCount = state.predictionMissTurns.size,
         )
     }
 
