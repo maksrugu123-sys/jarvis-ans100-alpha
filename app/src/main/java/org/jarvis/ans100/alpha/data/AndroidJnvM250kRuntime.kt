@@ -9,6 +9,7 @@ data class AndroidJnvM250kSpike(
     val neuronId: Int,
     val spikeSequence: Long,
     val timestampNs: Long,
+    val coreTainted: Boolean = false,
 )
 
 /**
@@ -252,7 +253,7 @@ class AndroidJnvM250kRuntime(
                 val updated = result.state.copy(coreTainted = taintByTarget.getValue(neuronId))
                 changed += updated
                 if (result.spiked) {
-                    val spike = AndroidJnvM250kSpike(neuronId, updated.spikeSequence, timestamp)
+                    val spike = AndroidJnvM250kSpike(neuronId, updated.spikeSequence, timestamp, updated.coreTainted)
                     spikes += spike
                     timestampSpikes += spike
                     if (byTarget.getValue(neuronId).any { !it.eventId.matches(GENERATED_SYNAPSE_EVENT_ID) }) {
