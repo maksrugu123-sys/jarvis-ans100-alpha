@@ -235,4 +235,54 @@ class ANS100HypothesisRevisionEngineTest {
         ).single()
         assertEquals(ANS100HypothesisRevisionEngine.MAX_EVIDENCE_PER_HYPOTHESIS, retry.directEvidenceCount)
     }
+
+    @Test
+    fun unverifiedHypothesisRequestsBothSupportingAndCounterEvidence() {
+        val engine = ANS100HypothesisRevisionEngine()
+        engine.observeTurn("turn-1", listOf(candidate()), emptyList(), true)
+        val request = engine.reviewQueue().single()
+        assertEquals(ANS100HypothesisRevisionEngine.ReviewAction.SEEK_BOTH_SIDES, request.action)
+        assertTrue(request.excludedEvidenceRefs.containsAll(candidate().evidenceRefs))
+        assertEquals(ANS100HypothesisRevisionEngine.MAX_EVIDENCE_PER_HYPOTHESIS,
+            request.additionalEvidenceCapacity)
+    }
+
+    @Test
+    fun supportedHypothesisRequestsCounterEvidence() {
+        val engine = ANS100HypothesisRevisionEngine()
+        engine.observeTurn(
+            "turn-1", listOf(candidate()), listOf(evidence("tool:support", true)), true,
+        )
+        assertEquals(
+            ANS100HypothesisRevisionEngine.ReviewAction.SEEK_COUNTER_EVIDENCE,
+            engine.reviewQueue().single().action,
+        )
+    }
+
+    @Test
+    fun refutedHypothesisRequestsSupportingEvidence() {
+        val engine = ANS100HypothesisRevisionEngine()
+        engine.observeTurn(
+            "turn-1", listOf(candidate()), listOf(evidence("tool:counter", false)), true,
+        )
+        assertEquals(
+            ANS100HypothesisRevisionEngine.ReviewAction.SEEK_SUPPORTING_EVIDENCE,
+            engine.reviewQueue().single().action,
+        )
+    }
+
+    @Test
+    fun conflictedHypothesisIsQueuedForManualAdjudication() {
+        val engine = ANS100HypothesisRevisionEngine()
+        engine.observeTurn(
+            "turn-1",
+            listOf(candidate()),
+            listOf(evidence("tool:support", true), evidence("tool:counter", false)),
+            true,
+        )
+        assertEquals(
+            ANS100HypothesisRevisionEngine.ReviewAction.MANUAL_CONFLICT_REVIEW,
+            engine.reviewQueue().single().action,
+        )
+    }
 }
