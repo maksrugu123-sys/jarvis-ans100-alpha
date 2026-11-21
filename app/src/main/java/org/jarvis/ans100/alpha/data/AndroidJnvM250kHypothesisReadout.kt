@@ -90,7 +90,7 @@ class AndroidJnvM250kHypothesisReadout(
         val recordsByNeuron = encoding.recordToNeuronId.entries
             .filter { it.key in encoding.conceptRecordIds }
             .associate { (recordId, neuronId) -> neuronId to recordId }
-        require(recordsByNeuron.size == encoding.recordToNeuronId.size)
+        require(recordsByNeuron.size == encoding.conceptRecordIds.size)
         val sourceSpikeIds = emittedSpikes.map { it.neuronId }.toSet()
         val activeRecords = recordsByNeuron.filter { (neuronId, _) ->
             neuronId in sourceSpikeIds
