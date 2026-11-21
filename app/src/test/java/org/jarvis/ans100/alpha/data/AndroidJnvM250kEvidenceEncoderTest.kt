@@ -6,12 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidJnvM250kEvidenceEncoderTest {
-    private fun bundle(): TypedEvidenceBundle = TypedEvidenceBundle(
-        turnId = "evidence-encoder-test",
+    private fun bundle(turnId: String = "evidence-encoder-test"): TypedEvidenceBundle = TypedEvidenceBundle(
+        turnId = turnId,
         records = listOf(
             TypedEvidenceRecord(
                 recordId = "user-message",
-                turnId = "evidence-encoder-test",
+                turnId = turnId,
                 feature = EvidenceFeature.USER_MESSAGE_TEXT,
                 source = EvidenceSourceKind.USER_MESSAGE,
                 status = EvidenceStatus.USER_PROVIDED,
@@ -21,7 +21,7 @@ class AndroidJnvM250kEvidenceEncoderTest {
             ),
             TypedEvidenceRecord(
                 recordId = "intent-hint",
-                turnId = "evidence-encoder-test",
+                turnId = turnId,
                 feature = EvidenceFeature.CORE_INTENT_HINT,
                 source = EvidenceSourceKind.CORE_UNDERSTANDING,
                 status = EvidenceStatus.HEURISTIC,
@@ -31,7 +31,7 @@ class AndroidJnvM250kEvidenceEncoderTest {
             ),
             TypedEvidenceRecord(
                 recordId = "clarification-flag",
-                turnId = "evidence-encoder-test",
+                turnId = turnId,
                 feature = EvidenceFeature.CORE_REQUIRES_CLARIFICATION_HINT,
                 source = EvidenceSourceKind.CORE_REASONING_PLAN,
                 status = EvidenceStatus.HEURISTIC,
@@ -86,5 +86,17 @@ class AndroidJnvM250kEvidenceEncoderTest {
         assertEquals(first.events, second.events)
         assertEquals(first.events.size, first.events.map { it.targetNeuronId }.distinct().size)
         assertEquals(first.events.size, first.events.map { it.eventId }.distinct().size)
+    }
+
+    @Test
+    fun stableEvidenceSlotsReuseNeuronAddressesAcrossTurns() {
+        val encoder = AndroidJnvM250kEvidenceEncoder()
+        val first = encoder.encode(bundle("turn-one"), inputTimeNs = 10L)
+        val second = encoder.encode(bundle("turn-two"), inputTimeNs = 10L)
+
+        assertEquals(first.recordToNeuronId, second.recordToNeuronId)
+        assertFalse(first.events.map { it.eventId } == second.events.map { it.eventId })
+        assertEquals(first.recordLabels, second.recordLabels)
+        assertEquals(first.recordProvenance, second.recordProvenance)
     }
 }
