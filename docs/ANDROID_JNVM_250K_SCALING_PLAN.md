@@ -435,9 +435,9 @@ The 250k hypothesis engine now has a bounded concept-prototype stage. It is deli
 - This is still statistical clustering of exact normalized word forms. It does not establish a semantic category, synonym, causal relation, or generalization beyond the observed tokens.
 
 Prediction feedback is now separated from neural co-activation:
-- `DecisionStart.predictions` are forecasts generated before the new input is observed. At the end of the turn, the controller compares each forecast with the current encoding's actual lexical token set, not with the neurons that happened to spike.
+- `DecisionStart.predictions` are forecasts saved after the *previous* completed turn and delivered at the start of the next accepted episode. At the end of that next episode, the controller compares each forecast with the current message's actual lexical token set, not with the neurons that happened to spike. The same message is never used both to generate and score its own forecast.
 - The encoder reports when the 24-token lexical cap truncated the message. Truncated turns are not used to score prediction hits/misses, because an omitted token must not be counted as absent.
-- Prediction hits and misses are persisted per independent turn in the existing hypothesis checkpoint. After at least two forecast evaluations, `predict250k` uses the lower of the association support ratio and observed prediction accuracy. Repeated misses therefore suppress a previously strong forecast.
+- Pending next-turn forecasts, prediction hits and misses are persisted in the existing hypothesis checkpoint, so a process restart does not silently replace a forecast before it is evaluated. After at least two forecast evaluations, `predict250k` uses the lower of the association support ratio and observed prediction accuracy. Repeated misses therefore suppress a previously strong forecast.
 - These prediction misses are not factual contradictions and do not change the underlying association's independent co-activation support history.
 
 Tests were added for complete-link grouping, rejection of transitive-only clusters, MEMORY prototype routing/taint, prediction-miss suppression after checkpoint restore, and lexical truncation metadata. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device benchmark was run.
