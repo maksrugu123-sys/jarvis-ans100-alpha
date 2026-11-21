@@ -474,3 +474,10 @@ Important trust boundary:
 - The adapter is not called automatically by the dialogue pipeline. A future UI/approval action must explicitly invoke it, inspect leads, and use a separate page-verification step before any result can be considered for direct evidence.
 
 Tests are authored for bounds, URL filtering, provenance labeling, and no-network skip paths. They have NOT been run. No Gradle build, APK, CI, or device test was run.
+
+
+## Explicitly approved source-page inspection
+
+`ANS100HypothesisPageVerifier` adds a separate page-reading step for a previously returned search lead. It requires an explicit approval flag, accepts only HTTPS URLs on ordinary public-looking hostnames and standard port 443, refuses redirects (including cross-host redirects), accepts HTML/XHTML only, uses bounded connection/read timeouts, and caps the response at 512 KB. Extracted page text is capped at 12,000 characters; script/style/noscript/SVG/iframe content is excluded. A SHA-256 digest and retrieval timestamp are retained for traceability.
+
+The output status is always `FETCHED_PAGE_UNVERIFIED`. The relevance field only reports whether lexical terms from both hypothesis endpoints appear in the fetched page. It does not infer support/refutation, judge publisher trust, prove causality, or enter the hypothesis revision ledger. Search-result leads and page text remain untrusted until a later fact-extraction and source-validation stage. Tests are authored / NOT RUN.
