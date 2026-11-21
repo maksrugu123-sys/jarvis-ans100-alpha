@@ -508,3 +508,18 @@ A different hostname is only `DISTINCT_HOST_UNVERIFIED`; `independenceConfirmed`
 This is deliberately not natural-language understanding or fact checking. The cue detector can miss paraphrases, mishandle complex grammar, modality, quotations, sarcasm, and negation scope. Its output is not accepted by the revision engine as `VERIFIED_TOOL`, is not promoted to direct evidence, and cannot train neurons. A human/reliable verifier must inspect the full claim and source before creating direct evidence.
 
 Tests are authored for ordered support, explicit negation, the "not only" exception, co-mention ambiguity, reversed order, Russian cue recognition, and provenance retention. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device test was run.
+
+
+## Unified hypothesis evidence-review packet (V1)
+
+`ANS100HypothesisEvidenceReviewPacketBuilder` combines one review request with an explicitly inspected page, extracted passages, source-audit assessments and lexical polarity candidates into a bounded manual-review artifact.
+
+- The builder validates hypothesis identity across all stages and checks page/sentence digests, HTTPS URL/host, search-lead reference, fetch timestamp, relation type and passage references.
+- Every passage remains `CANDIDATE_ONLY`; packet status is always `MANUAL_REVIEW_REQUIRED`. Possible support, possible contradiction and ambiguity remain unverified lexical candidates.
+- Duplicate content, duplicate URL, same-host overlap and distinct-host-unverified assessments are preserved. Source independence always remains false.
+- Extraction/source-audit truncation is surfaced. Passage and source lists are bounded; an empty extraction remains an explicit manual-review packet.
+- The review action, current revision status, permitted source classes, excluded references and remaining evidence capacity are included for human context.
+- The builder never creates `RelationEvidence`, promotes `VERIFIED_TOOL`, updates the revision engine or ledger, changes concept memory, or trains neurons.
+- Fixed a field-name mismatch: the page report exposes `contentSha256`; the passage extractor now reads that field and exports it downstream as `pageContentSha256`.
+
+Tests cover composition, identity/digest mismatch rejection, independence preservation, ambiguous polarity, truncation and non-promotion invariants. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation or device test was run.
