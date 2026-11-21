@@ -37,6 +37,7 @@ class ANS100WorkspaceConceptInputBridge {
         val hypothesisReports: List<HypothesisReport>,
         val relationEvidenceCount: Int,
         val causalChainHypotheses: List<ANS100CausalHypothesisEngine.Candidate> = emptyList(),
+        val relationObservations: List<ANS100ConceptMemory.RelationEvidence> = emptyList(),
     ) {
         val unresolvedHypothesisCount: Int
             get() = hypothesisVerifications.count {
@@ -225,6 +226,7 @@ class ANS100WorkspaceConceptInputBridge {
             hypothesisReports = allHypothesisReports,
             relationEvidenceCount = relationObservations.size,
             causalChainHypotheses = causalChainHypotheses,
+            relationObservations = relationObservations,
         )
     }
 
