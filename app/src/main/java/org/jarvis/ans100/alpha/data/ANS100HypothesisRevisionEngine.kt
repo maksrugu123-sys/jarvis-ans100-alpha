@@ -108,7 +108,11 @@ class ANS100HypothesisRevisionEngine(
         val prepared = candidates.map { candidate ->
             val key = relationKey(candidate.fromConceptId, candidate.type, candidate.toConceptId)
             val existing = states[key]
-            val mergedPremises = (existing?.premiseEvidenceRefs.orEmpty() + candidate.evidenceRefs).toSet()
+            val mergedPremises = (existing?.premiseEvidenceRefs.orEmpty() + candidate.evidenceRefs).distinct()
+            val mergedRelationIds = (existing?.premiseRelationIds.orEmpty() + candidate.premiseRelationIds).distinct()
+            require(mergedPremises.size <= MAX_PREMISES && mergedRelationIds.size <= MAX_PREMISES) {
+                "alternative premise provenance budget exceeded for this hypothesis"
+            }
             require(mergedPremises.intersect(existing?.evidence?.keys.orEmpty()).isEmpty()) {
                 "premise evidence cannot be reused as direct confirmation"
             }
@@ -136,6 +140,10 @@ class ANS100HypothesisRevisionEngine(
                     "an evidence reference cannot be rebound to different polarity or source"
                 }
             }
+            val newEvidenceCount = incoming.count { it.evidenceRef !in existing?.evidence?.keys.orEmpty() }
+            require((existing?.evidence?.size ?: 0) + newEvidenceCount <= MAX_EVIDENCE_PER_HYPOTHESIS) {
+                "direct evidence history is full; refusing to evict deduplication keys"
+            }
             Triple(candidate, existing, incoming)
         }
 
@@ -151,14 +159,11 @@ class ANS100HypothesisRevisionEngine(
                 lastUpdatedTurnId = turnId,
             ).also { states[key] = it }
             state.premiseRelationIds.addAll(candidate.premiseRelationIds)
-            trimOldest(state.premiseRelationIds, MAX_PREMISES)
             state.premiseEvidenceRefs.addAll(candidate.evidenceRefs)
-            trimOldest(state.premiseEvidenceRefs, MAX_PREMISES)
             state.lastUpdatedTurnId = turnId
             incoming.forEach { item ->
                 state.evidence.putIfAbsent(item.evidenceRef, item)
             }
-            trimOldest(state.evidence, MAX_EVIDENCE_PER_HYPOTHESIS)
         }
 
         while (states.size > maxHypotheses) {
