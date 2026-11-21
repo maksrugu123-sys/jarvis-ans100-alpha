@@ -485,23 +485,12 @@ The output status is always `FETCHED_PAGE_UNVERIFIED`. The relevance field only 
 
 ## Bounded hypothesis passage extraction (V1)
 
-`ANS100HypothesisPassageExtractor` adds a deterministic, bounded extraction stage after an explicitly approved page has been fetched:
+`ANS100HypothesisPassageExtractor` adds a deterministic, bounded extraction stage after an explicitly approved page has been fetched. It splits the bounded page text into sentences, deduplicates normalized repeats, and retains at most six (hard maximum twelve) sentences containing lexical tokens from both hypothesis endpoints. Each candidate preserves hypothesis/search-lead references, HTTPS URL/host, page SHA-256, fetch timestamp, sentence SHA-256, and deterministic passage reference. Excerpts default to 600 characters (hard maximum 1,000).
 
-- It splits the already bounded page text into sentences, normalizes and deduplicates repeated sentences, then retains at most six (hard maximum twelve) sentences containing at least one exact lexical token from each hypothesis endpoint.
-- Each passage carries the hypothesis ID, search-lead provenance reference, HTTPS source URL/host, page SHA-256, fetch timestamp, sentence SHA-256, and a deterministic passage reference. Excerpts are capped at 600 characters by default (hard maximum 1,000).
-- The output status is always `UNCLASSIFIED_PASSAGE`. It does not decide whether a passage supports or contradicts a relation, because lexical co-mention and simple sentence polarity are not reliable enough to establish that distinction. It also does not authenticate publishers, establish source independence, create `VERIFIED_TOOL` evidence, revise hypotheses, or train synapses.
-- A matching passage is a candidate for later claim-level review only. The next stage must assess the actual proposition, its polarity, source provenance, and whether apparently separate pages are copies or syndications before any evidence can enter the revision engine.
-
-Tests are authored for exact endpoint co-mention, provenance retention, deterministic deduplication, candidate/excerpt bounds, invalid provenance rejection, and one-endpoint false positives. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device run was performed.
-
+Every result remains `UNCLASSIFIED_PASSAGE`. Co-mention does not establish support or refutation. The extractor does not authenticate publishers, establish independence, create `VERIFIED_TOOL` evidence, revise hypotheses, or train synapses. Tests are authored but **NOT RUN**.
 
 ## Hypothesis source duplication and host-overlap audit (V1)
 
-`ANS100HypothesisSourceAudit` performs a bounded page-level provenance audit over extracted passage candidates:
+`ANS100HypothesisSourceAudit` collapses passages from the same fetched page, canonicalizes HTTPS URLs, detects exact page-content SHA-256 duplicates across URLs, and labels repeated URLs and same-host pages. The default cap is 24 unique pages (hard maximum 48), with at most 288 input passage candidates.
 
-- It collapses multiple passages from the same fetched page, canonicalizes HTTPS URLs without discarding query parameters, and detects exact page-content SHA-256 duplicates even when they appear at different URLs.
-- It labels repeated content, repeated URLs, and additional pages from the same hostname separately. The default cap is 24 unique pages (hard maximum 48); input is capped at 288 passage candidates.
-- A different hostname receives only `DISTINCT_HOST_UNVERIFIED`. The report always keeps `independenceConfirmed=false`: host difference does not prove publisher independence because syndication, common ownership, copied reporting, and upstream sources are not resolved by this stage.
-- No source is promoted to trusted evidence. The audit does not inspect publisher ownership, author identity, citations, or original reporting; it does not revise hypotheses or train connections.
-
-Tests are authored for cross-URL content duplication, same-host overlap, the unverified status of different hosts, same-page collapse, bounded page count, and host/URL mismatch. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device run was performed.
+A different hostname is only `DISTINCT_HOST_UNVERIFIED`; `independenceConfirmed` remains false. Host difference does not prove publisher independence because syndication, common ownership, copied reporting, and shared upstream sources are not resolved. This stage does not promote sources to trusted evidence, revise hypotheses, or train connections. Tests are authored but **NOT RUN**.

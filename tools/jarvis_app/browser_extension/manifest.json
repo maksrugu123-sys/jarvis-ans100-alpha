@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "JARVIS Browser Bridge",
+  "version": "1.2.0",
+  "description": "Explicit, user-triggered browser actions for the local JARVIS ANS-100 assistant.",
+  "action": {
+    "default_title": "JARVIS Browser Bridge",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8765/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1:8765/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JARVIS Browser Bridge</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="mark">J</div>
+    <div>
+      <h1>JARVIS</h1>
+      <p>УПРАВЛЕНИЕ БРАУЗЕРОМ</p>
+    </div>
+  </header>
+
+  <section class="status-card">
+    <span class="dot"></span>
+    <span id="status">Подключите локальное ядро JARVIS</span>
+  </section>
+
+  <section class="panel">
+    <h2>Подключение</h2>
+    <p class="hint">Расширение автоматически подключается к локальному JARVIS на этом компьютере. Ручной токен не нужен.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Открыть сайт или найти</h2>
+    <label for="target">Адрес сайта или поисковый запрос</label>
+    <input id="target" type="text" maxlength="500" placeholder="youtube.com или Minecraft 1.21">
+    <div class="actions">
+      <button id="open" type="button">Открыть сайт</button>
+      <button id="search" class="secondary" type="button">Найти в интернете</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Текущая страница</h2>
+    <p id="page" class="page">Данные страницы не читаются автоматически.</p>
+    <label for="question">Что спросить у JARVIS?</label>
+    <textarea id="question" rows="3" maxlength="900">Кратко перескажи эту страницу и выдели главное.</textarea>
+    <button id="ask" type="button" disabled>Передать страницу и спросить</button>
+    <p class="hint">Текст страницы отправляется только после нажатия этой кнопки. Не отправляйте личные данные; локальные и внутренние адреса отклоняются.</p>
+  </section>
+
+  <div id="result" role="status" aria-live="polite"></div>
+  <footer>Только явные действия · без фонового чтения · без отправки форм</footer>
+</body>
+</html>

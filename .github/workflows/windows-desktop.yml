@@ -1,0 +1,199 @@
+name: Windows desktop package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jarvis-windows-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Gate release publication on both supported Windows runtime generations.
+  windows-compatibility:
+    name: Windows compatibility (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-2025]
+    timeout-minutes: 25
+    steps:
+      - name: Check out selected branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packager
+        run: python -m pip install --upgrade pip "pyinstaller>=6.10,<7" "pywebview>=6.0,<7"
+
+      - name: Check Windows packaging contract
+        run: python -m unittest tools.jarvis_app.test_windows_packaging -v
+
+      - name: Build portable Windows application
+        run: python -m PyInstaller --noconfirm --clean packaging/windows/JARVIS.spec
+
+      - name: Smoke-test packaged server
+        shell: pwsh
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "jarvis-windows-compat-smoke"
+          New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
+          $data = Join-Path $smokeRoot "local-console.jpvr"
+          $workspace = Join-Path $smokeRoot "workspace.jpvr"
+          $auth = Join-Path $smokeRoot "auth-token"
+          $stdout = Join-Path $smokeRoot "stdout.log"
+          $stderr = Join-Path $smokeRoot "stderr.log"
+          $exe = (Resolve-Path "dist/JARVIS/JARVIS.exe").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList @(
+            "--port", "18766",
+            "--platform", "desktop",
+            "--server-only",
+            "--data", $data,
+            "--workspace-file", $workspace,
+            "--auth-file", $auth
+          ) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 45; $i++) {
+              if ($proc.HasExited) {
+                $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "JARVIS exited before health check (code $($proc.ExitCode)). STDOUT: $out STDERR: $err"
+              }
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:18766/api/health" -TimeoutSec 2
+                if ($health.status -eq "ok" -and $health.platform -eq "desktop" -and $health.auth_required -eq $false -and $health.auth_scheme -eq "none") {
+                  $ready = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) {
+              $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+              $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+              throw "JARVIS did not become healthy within 45 seconds. STDOUT: $out STDERR: $err"
+            }
+            Write-Host "Packaged JARVIS smoke test passed on ${{ matrix.runner }}."
+          } finally {
+            if (-not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force
+              $proc.WaitForExit()
+            }
+          }
+
+  build-windows:
+    needs: windows-compatibility
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out selected branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packager
+        run: python -m pip install --upgrade pip "pyinstaller>=6.10,<7" "pywebview>=6.0,<7"
+
+      - name: Check Windows packaging contract
+        run: python -m unittest tools.jarvis_app.test_windows_packaging -v
+
+      - name: Build portable Windows application
+        run: python -m PyInstaller --noconfirm --clean packaging/windows/JARVIS.spec
+
+      - name: Smoke-test packaged server on Windows
+        shell: pwsh
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "jarvis-windows-smoke"
+          New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
+          $data = Join-Path $smokeRoot "local-console.jpvr"
+          $workspace = Join-Path $smokeRoot "workspace.jpvr"
+          $auth = Join-Path $smokeRoot "auth-token"
+          $stdout = Join-Path $smokeRoot "stdout.log"
+          $stderr = Join-Path $smokeRoot "stderr.log"
+          $exe = (Resolve-Path "dist/JARVIS/JARVIS.exe").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList @(
+            "--port", "18765",
+            "--platform", "desktop",
+            "--server-only",
+            "--data", $data,
+            "--workspace-file", $workspace,
+            "--auth-file", $auth
+          ) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 45; $i++) {
+              if ($proc.HasExited) {
+                $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "JARVIS exited before health check (code $($proc.ExitCode)). STDOUT: $out STDERR: $err"
+              }
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:18765/api/health" -TimeoutSec 2
+                if ($health.status -eq "ok" -and $health.platform -eq "desktop" -and $health.auth_required -eq $false -and $health.auth_scheme -eq "none") {
+                  $ready = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) {
+              $out = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+              $err = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+              throw "JARVIS did not become healthy within 45 seconds. STDOUT: $out STDERR: $err"
+            }
+            Write-Host "Packaged JARVIS server health check passed on Windows."
+          } finally {
+            if (-not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force
+              $proc.WaitForExit()
+            }
+          }
+
+      - name: Assemble portable archive
+        shell: pwsh
+        run: |
+          Copy-Item "start_jarvis_windows_exe.bat" "dist/Запустить JARVIS.bat"
+          Compress-Archive -Path "dist/JARVIS", "dist/Запустить JARVIS.bat" -DestinationPath "dist/jarvis-windows-portable.zip" -CompressionLevel Optimal
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-windows-portable
+          path: dist/jarvis-windows-portable.zip
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Publish or update public Windows preview release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-experimental-latest
+          name: JARVIS Windows — latest experimental build
+          target_commitish: ${{ github.ref_name }}
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+          body: |
+            Автоматически обновляемая экспериментальная Windows-сборка JARVIS.
+
+            Собрана из ветки: `${{ github.ref_name }}`
+            Коммит: `${{ github.sha }}`
+
+            Это переносимая папка приложения в ZIP, не установщик. Основной интерфейс открывается в собственном окне JARVIS через WebView2, без запуска Chrome/Edge как браузера.
+            Требуется Microsoft Edge WebView2 Runtime (входит в Windows 11; на Windows 10 может потребоваться установка).
+            Проверки упаковки и API выполняются на Windows Server 2022 и 2025 runners. Физическая проверка самого окна приложения на Windows 10/11 остаётся отдельным этапом.
+          files: dist/jarvis-windows-portable.zip

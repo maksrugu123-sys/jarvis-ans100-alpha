@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "JARVIS Local Console",
+  "short_name": "JARVIS",
+  "description": "Локальная консоль задач JARVIS ANS-100 Alpha",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1119",
+  "theme_color": "#101722",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

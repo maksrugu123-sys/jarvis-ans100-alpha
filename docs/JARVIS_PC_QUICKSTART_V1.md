@@ -1,0 +1,190 @@
+# JARVIS PC Quick Start V1
+
+**Status:** source-level desktop development entry point  
+**Date:** 2026-11-13
+
+This guide describes the existing Python local console for Linux/macOS and the current Windows 10/11 compatibility work. An optional visible Chromium research controller is now present at source level; it requires a separately installed Playwright package and Chromium browser. A cross-platform JPVR I/O adapter is present in the source, but Windows execution has not yet been verified. This is not a claim of a finished Windows release, conversational assistant, or native desktop executable.
+
+## What currently works at source level
+
+- Python local-console process.
+- Local browser/PWA interface with the shared-format memory manager (create/search/list/delete).
+- Local JPVR task/session registry.
+- Separate JPVR shared workspace for conversations, explicit memories, task summaries and non-secret settings.
+- Authenticated workspace API V1 with revision-based conflict detection.
+- Encrypted `.jws` workspace export/import in the PWA, with merge preview, explicit confirmation and no silent overwrites.
+- Separate encrypted `.jwb` workspace backup and full replacement restore, with integrity validation, current-revision backup acknowledgement, preview, explicit confirmation and server-side CAS.
+- Bounded symbolic reasoning preview using structured facts and actions.
+- Optional visible Chromium research panel: search, open and read page text; pause automation for manual user takeover; ask the local model about the current page with the source URL saved alongside the answer.
+- Bearer-token protected state and mutation routes.
+
+An optional LiteRT-LM source adapter for Qwen3-0.6B INT4 no-think inference exists, and the local conversation route is wired through JARVIS Core. The adapter requires an explicitly supplied model file; successful inference and natural-language response quality have not been runtime-verified. Not yet delivered: verified production conversation quality, production task execution, offline voice, native Windows/macOS/Linux package, multi-source evidence validation, secure network isolation for untrusted pages, or automatic synchronization with Android.
+
+## Requirements
+
+- A supported Python 3 installation.
+- A local copy of this repository.
+- A modern browser.
+
+The repository's Python modules use modern Python syntax. The minimum supported Python version has not yet been formally declared or verified across Windows, macOS, and Linux. If startup fails, record the exact Python version and error instead of changing dependencies blindly.
+
+## Windows 10 and Windows 11 compatibility
+
+The JPVR storage code now routes file operations through `tools/jpvr_reference/platform_io.py`:
+
+- POSIX uses `flock` and native positional I/O.
+- Windows uses a one-byte `msvcrt` file-region lock. It deliberately serializes readers and writers instead of pretending Windows has the same shared-lock behavior.
+- Windows opens JPVR descriptors in binary mode and uses seek-based positional reads/writes while the container lock is held.
+- The Python standard library has no portable Windows equivalent for POSIX parent-directory `fsync`; Windows currently flushes file contents, but the code does not claim an explicit directory-entry durability barrier.
+
+The seek-based I/O fallback has dedicated source tests, including a Windows-only cross-process region-lock regression. The token store also has a Windows-only regression for rotating legacy read-only digest files. These tests are authored but have not been run on Windows. The Windows token-digest adapter now avoids applying POSIX chmod assumptions and relies on inherited Windows profile ACLs; the standard library code does not audit or harden those ACLs. **Neither Windows 10 nor Windows 11 has been executed or verified yet.** Until the full JPVR storage suite and a real Windows 10/11 smoke test pass, treat Windows runtime support as experimental and do not keep the only copy of important data in a Windows JPVR container.
+
+## Start on Windows 10 or Windows 11
+
+For a one-click first launch, double-click `start_jarvis_windows.bat` in the repository root. The launcher starts the local Python console if port 8765 is not already responding, waits for its health endpoint, and opens the JARVIS PWA in an app-mode window. It checks common system-wide and per-user install locations for Microsoft Edge first, then Google Chrome, and falls back to the default browser if neither is found. It sets Python UTF-8 and unbuffered-output environment flags for clearer Windows terminal logs. Keep the separate **JARVIS Core** terminal open. The one-time access token is printed there; enter it in the JARVIS sign-in panel. The launcher does not install Python, Playwright, Chromium or the language model.
+
+You can also start manually. Open PowerShell in the repository directory:
+
+    py -3 --version
+    py -3 -m tools.jarvis_app --port 8765 --platform desktop
+
+If the Python launcher is unavailable, use `python -m tools.jarvis_app --port 8765 --platform desktop` after confirming that `python` points to a supported Python 3 installation. Then open `http://127.0.0.1:8765/` in a browser on the same PC and enter the one-time token printed in PowerShell. Keep the terminal open while using JARVIS.
+
+The JPVR implementation is intended to use the same adapter on Windows 10 and 11, but neither OS has been run in this development environment. Before storing important information, verify that `%USERPROFILE%\\.jarvis-ans100-alpha` inherits a private ACL for the current Windows account. The application does not yet inspect or configure Windows ACL entries.
+
+
+### Desktop interface navigation and preferences
+
+After authentication, the desktop console shows a persistent left navigation rail for Overview, Chat, ANS-100, Browser, Tasks, Memory, Data Transfer, Planning, Settings and the event log. On narrow/mobile screens the navigation becomes a horizontal scrollable strip. The selected section follows the visible panel; selecting a navigation item scrolls to that section.
+
+The Settings panel currently contains only local display preferences: compact spacing and reduced motion. These values are saved in the current browser profile under `jarvis.ui.preferences.v1`; they do not modify model files, network weights, memories, credentials or server configuration. The navigation status area reports the platform, configured conversation backend availability, and the separate dialogue R-STDP prototype's output/input dimensions. It does not claim that the complete 10,000-neuron ANS-100 reasoning design is implemented.
+
+The service worker cache version is v14 for this UI revision. If a previously installed PWA keeps showing the older layout, close its windows and reload after the local console has been updated.
+
+## Start on Linux or macOS
+
+Open a terminal in the repository directory:
+
+    python3 --version
+    python3 -m tools.jarvis_app --port 8765 --platform desktop
+
+## Chat commands for the visible browser
+
+After signing in, the chat accepts a deliberately small explicit command set:
+- `Открой браузер` — open the visible Chromium research window.
+- `Найди в интернете <запрос>` or `Открой браузер и найди <запрос>` — search in the visible browser and show source links in the JARVIS panel.
+- `Открой сайт <домен>` or `Открой <URL>` — navigate to a public page in the dedicated Chromium research window.
+- `Прочитай страницу` — extract bounded text from the currently open Chromium research page.
+- `Открой в обычном браузере <домен>` — open a new tab/window in the same browser that is currently hosting the JARVIS PWA (for example, Edge if the launcher opened JARVIS in Edge).
+- `Найди в браузере <запрос>` — open a Bing search in that same browser. These two commands do not choose or switch the browser brand; to use Chrome instead of Edge, open the JARVIS PWA in Chrome first.
+
+
+The normal-browser commands use the user-initiated `window.open` flow in the PWA; they do not communicate with the extension's background process. The current extension still performs its open/search/page-handoff actions from its own toolbar popup. A chat-to-extension command relay is not implemented. The normal-browser URL helper accepts HTTP/HTTPS domain URLs, rejects literal IP addresses, credentials and common local hostnames, but it is not a DNS/network security boundary.
+
+These are UI-level deterministic command routes to the existing read-only browser API. They do not make ANS-100 a general command interpreter and do not authorize shell commands, arbitrary application control, downloads, logins, forms, messages or purchases. The browser's URL/DNS/request guards still apply. Search/open/read require the optional Playwright + Chromium installation described below.
+
+
+### Desktop ANS-100 V4 topology status
+
+The ANS-100 panel reports the source-defined desktop V4 topology contract: seven populations, 10,000 declared neuron IDs, and 25,500 expected directed connections. This status endpoint reads metadata only; it does not construct the network or allocate 10,000 runtime neurons. The topology is currently a source-level foundation and is **not connected to the live desktop conversation path**. The existing 10-neuron structural conversation signal preprocessor remains separate, as does the small four-output dialogue R-STDP experiment shown below it. Do not interpret the declared connection count as a measured runtime graph until the topology builder tests and integration/parity work have been run.
+
+
+Browser-only chat commands remain available even when the local language-model runtime is missing. The send button changes to **Команда браузера**; recognized browser commands are handled locally in the PWA before any model request. Non-browser chat messages still require the configured LiteRT-LM runtime and return a clear unavailable message instead of being sent to a missing model.
+
+## Chrome / Edge browser extension
+
+The JARVIS panel includes a download link for a Manifest V3 companion extension. To install it on Windows 10:
+
+1. Click **Скачать расширение для Chrome / Edge** in the Браузер JARVIS panel.
+2. Extract the ZIP to a permanent folder.
+3. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.
+4. Enable **Developer mode**, click **Load unpacked / Загрузить распакованное**, and select the extracted `jarvis-browser-extension` folder.
+5. Pin **JARVIS Browser Bridge** to the browser toolbar.
+6. Open the JARVIS Core terminal, copy the one-time access token and paste it into the extension popup. Press **Подключить**.
+
+The extension opens a public web address in a new tab or starts a Bing search. It can also read up to 12,000 characters of the active tab and send the text to the local JARVIS model, but only after the user opens the extension and presses **Передать страницу и спросить**. It requests temporary access to the active tab and does not run a background page collector. The token is stored in the extension's local browser-profile storage; **Забыть токен** removes it.
+
+Only `http://127.0.0.1:8765` is used for the local API. The server allows CORS only from a valid Chrome/Edge extension origin and only for the two extension bridge endpoints. The API still requires the JARVIS Bearer token. The server rejects localhost, private and reserved source-page URLs before accepting their text. The extension does not read cookies, passwords, browser history or all tabs and cannot submit forms, click page controls, download/upload files, log into accounts or run shell commands.
+
+This is an unpacked developer-mode extension, not a signed CRX and not a store-published extension. It has not yet been installed or tested on a real Chrome or Edge profile.
+
+## Optional visible research browser
+
+The PC PWA includes a source-level visible browser panel. The browser opens a separate foreground Chromium window with a dedicated JARVIS profile; it is not a headless scraper and does not reuse your everyday browser profile.
+
+From the repository root, install the optional package and browser binary:
+
+    python3 -m pip install -r requirements-browser.txt
+    python3 -m playwright install chromium
+
+On Windows, use `py -3 -m pip install -r requirements-browser.txt` and `py -3 -m playwright install chromium`. A graphical desktop session must be available. JARVIS does not automatically install a browser or run in headless mode.
+
+After starting the local console and signing in to the PWA, use the **Браузер JARVIS** panel:
+1. Enter a search query. Chromium opens visibly and the PWA lists the extracted source links.
+2. Open a result, then use **Прочитать открытую страницу** to display the extracted text.
+3. Enter a question and choose **Спросить JARVIS**. This requires an installed and available local language model. The model receives up to 1,800 characters of page text as explicitly untrusted context, and the saved answer includes the page URL.
+4. Choose **Забрать управление** to pause JARVIS while you interact with the visible window; choose **Вернуть управление JARVIS** when finished.
+5. Choose **Закрыть браузер** to close the dedicated browser context.
+
+The browser uses the separate profile under `~/.jarvis-ans100-alpha/research-browser-profile` (or the corresponding data directory on Windows). It is designed for clean read-only research. Do not sign into personal accounts or use it for sensitive authenticated browsing. It allows only GET/HEAD network requests, blocks WebSocket connections, downloads and service workers, and applies hostname/IP/port checks; these are best-effort filters, not a complete network sandbox against DNS rebinding or browser-engine vulnerabilities. Page scripts still run. JARVIS does not submit forms, send messages, make purchases, upload files or perform external actions.
+
+If Playwright or Chromium is missing, the browser feature reports an error and the rest of the local console remains available. Search markup may change; unsupported pages, anti-bot checks or timeouts can cause search/reading to fail. The visible browser is source-implemented but its headed runtime, manual takeover and model-assisted page answers have not been executed or verified on Windows/Linux/macOS.
+
+## First launch
+
+1. The server prints a one-time 43-character access token.
+2. Save it in a password manager or another private location. Do not paste it into public chats or commit it to Git.
+3. Open http://127.0.0.1:8765/ in the same PC browser.
+4. Enter the token on the PWA sign-in screen.
+5. Keep the terminal process running while using the local console.
+6. Stop the server with Ctrl+C.
+
+The default data and token-digest paths are under the current user's home directory:
+
+- ~/.jarvis-ans100-alpha/local-console.jpvr (task/session lifecycle)
+- ~/.jarvis-ans100-alpha/workspace.jpvr (shared workspace/memory)
+- ~/.jarvis-ans100-alpha/local-console.jpvr.access-token
+
+The server creates and protects its private auth directory/files. Use encrypted `.jws` to merge workspace data between devices. Use a separate `.jwb` to make a point-in-time password-encrypted backup and restore the complete shared workspace after checking the preview and acknowledging a separately saved backup of the current revision. JWB contains only conversations, explicit memories, task summaries and non-secret settings; it does not contain `local-console.jpvr`, Android drafts, auth tokens, Keystore keys or neural checkpoints. The separate task/session file `local-console.jpvr` still requires its own stopped-server file backup. Do not manually edit JPVR bytes.
+
+If the token is lost, stop the server and restart it with:
+
+    python -m tools.jarvis_app --port 8765 --rotate-token
+
+Use python3 instead of python on systems where that is the configured interpreter. Token rotation revokes the previous token and prints a replacement once.
+
+## Local-only security boundary
+
+The service binds to 127.0.0.1. Keep it that way. Do not expose it through 0.0.0.0, a LAN address, port forwarding, or a public tunnel. The current Bearer token protects local API access but is not a trusted human identity or permission to execute external actions.
+
+The PWA and Android Compose client use the same API contract when they connect to a compatible local service. Workspace routes are GET/POST `/api/workspace` plus POST `/api/workspace/restore`, use Bearer authentication and compare-and-swap revisions, and are bounded to 16 MiB. On Termux, launch with `python3 -m tools.jarvis_app --port 8765 --platform android`; on a PC use `--platform desktop`. The Android client currently targets 127.0.0.1 on the phone itself; it does not connect to a PC-hosted service. Manual encrypted `.jws` merge transfer and `.jwb` backup/restore are implemented at source level in both UIs. Browser, Android, Windows and cross-platform verification remain pending. See [Shared Workspace & Memory V1](JARVIS_SHARED_WORKSPACE_MEMORY_V1.md) and [Workspace Backup & Restore V1](JARVIS_WORKSPACE_BACKUP_RESTORE_V1.md). Cross-device pairing and automatic synchronization are not implemented.
+
+## Troubleshooting
+
+- **Module not found:** make sure the terminal's current directory is the repository root.
+- **Port already in use:** stop the other local console or choose another port, then open the matching local URL.
+- **Token rejected:** verify that the token belongs to this data/auth profile; rotate it only if necessary.
+- **Storage error:** stop the server and preserve a copy of the JPVR file before attempting recovery. Do not delete or overwrite the only copy.
+- **Browser page unavailable:** confirm the server is still running and open the exact 127.0.0.1 URL printed by the process.
+
+## Verification status
+
+This is a documented launch procedure based on the current CLI source. It has not been executed or verified on Linux or macOS. Windows 10/11 support is experimental and has not been runtime-verified. No package, installer, desktop executable, build, test, or performance measurement is claimed.
+
+
+## Windows 10 first desktop window milestone
+
+The repository now includes `start_jarvis_windows.bat`, which opens the existing responsive dark JARVIS PWA in an Edge app-mode window. This is an app-like desktop window, not yet a native compiled Windows executable or installer. The browser command shortcuts are available in the chat and route only to the existing read-only visible-browser API. Windows 10 startup, Edge app-mode launch, Python storage behavior, Playwright/Chromium, and all command flows remain **NOT VERIFIED ON WINDOWS**. No build or tests were run for this change.
+
+
+## First packaged Windows desktop build
+
+A PyInstaller **onedir** packaging definition is now provided at `packaging/windows/JARVIS.spec`. It packages the local Python console into `JARVIS/JARVIS.exe` and includes the PWA static assets and Browser Bridge extension files. The console remains enabled because the current authentication flow prints a one-time access token to the Core terminal.
+
+For the packaged build, extract the complete build archive and place `start_jarvis_windows_exe.bat` beside the `JARVIS` folder, then double-click the BAT file. It starts the bundled desktop Core and opens the PWA in Edge or Chrome app mode. This is a portable folder build, **not an installer**. Do not move only the EXE out of its folder.
+
+The first Windows build is produced by the dedicated workflow `.github/workflows/windows-desktop.yml` on pushes to `experiment/jarvis-integrated-prototype-v1` that touch the Windows packaging or desktop runtime paths. The artifact is named `jarvis-windows-portable`. The build is performed on a Windows runner; it does not execute the Android Gradle build or the Python test suite.
+
+The base package does not bundle the optional LiteRT-LM runtime/model or Playwright/Chromium. Those remain separate optional installations. Browser extension installation remains manual through Chrome/Edge developer mode. The packaged build and Windows/Chrome/Edge runtime must be considered **unverified until the workflow succeeds and a user performs a real Windows smoke test**.
+
+Regression coverage: `tools/jarvis_app/test_windows_packaging.py` checks the packaging entry point, included UI/extension assets and launcher contract. Status: **NOT RUN**.

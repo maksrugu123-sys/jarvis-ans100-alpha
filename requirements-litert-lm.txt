@@ -1,0 +1,3 @@
+# Optional offline model runtime for the desktop/PWA console.
+# The matching Android artifact is pinned to the same LiteRT-LM release.
+litert-lm-api==0.17.1

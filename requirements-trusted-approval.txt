@@ -1,0 +1,2 @@
+# Optional dependency for Ed25519 signed-approval verification and its tests.
+cryptography>=42.0.0

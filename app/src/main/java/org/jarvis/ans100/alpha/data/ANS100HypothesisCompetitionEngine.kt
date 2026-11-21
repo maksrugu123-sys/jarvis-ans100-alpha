@@ -1,0 +1,130 @@
+package org.jarvis.ans100.alpha.data
+
+import java.util.Locale
+
+/**
+ * Cross-checks neural co-activation pairs against typed explanations generated
+ * independently by the approved workspace relation graph.
+ *
+ * It does not merge the two signals into a truth decision. Workspace support and
+ * counter-evidence remain EXPLICIT_USER assertions, not external verification.
+ */
+class ANS100HypothesisCompetitionEngine {
+    companion object {
+        const val MAX_EXPLANATIONS_PER_CANDIDATE = 12
+    }
+
+    enum class Status {
+        NEURAL_ONLY,
+        MEMORY_PATH_UNRESOLVED,
+        USER_ASSERTIONS_SUPPORT,
+        USER_COUNTER_EVIDENCE,
+        MIXED_USER_ASSERTIONS,
+        VERIFIED_TOOL_SUPPORT,
+        VERIFIED_TOOL_COUNTER_EVIDENCE,
+        MIXED_SOURCE_SUPPORT,
+        MIXED_SOURCE_COUNTER_EVIDENCE,
+        MIXED_EVIDENCE,
+        UNCLASSIFIED_SUPPORT,
+        UNCLASSIFIED_COUNTER_EVIDENCE,
+    }
+
+    enum class Direction {
+        SAME_DIRECTION,
+        REVERSED_DIRECTION,
+    }
+
+    data class Explanation(
+        val hypothesisId: String,
+        val relationType: ANS100ConceptMemory.RelationType,
+        val direction: Direction,
+        val verificationStatus: ANS100ConceptMemory.VerificationStatus,
+        val premiseEvidenceCount: Int,
+        val supportingEvidenceCount: Int,
+        val contradictingEvidenceCount: Int,
+        val supportingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
+        val contradictingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
+    )
+
+    data class Comparison(
+        val neuralCandidateId: String,
+        val status: Status,
+        val explanations: List<Explanation>,
+    )
+
+    fun compare(
+        neuralCandidates: List<ANS100NeuralAssociationDecoder.Candidate>,
+        memoryHypotheses: List<ANS100WorkspaceConceptInputBridge.HypothesisReport>,
+    ): List<Comparison> {
+        require(neuralCandidates.size <= ANS100NeuralAssociationDecoder.MAX_CANDIDATES)
+        require(memoryHypotheses.size <= ANS100ConceptMemory.MAX_HYPOTHESES)
+        return neuralCandidates.map { candidate ->
+            val first = normalize(candidate.firstLabel)
+            val second = normalize(candidate.secondLabel)
+            val explanations = memoryHypotheses.mapNotNull { report ->
+                val from = normalize(report.fromLabel)
+                val to = normalize(report.toLabel)
+                val direction = when {
+                    from == first && to == second -> Direction.SAME_DIRECTION
+                    from == second && to == first -> Direction.REVERSED_DIRECTION
+                    else -> return@mapNotNull null
+                }
+                Explanation(
+                    hypothesisId = report.hypothesisId,
+                    relationType = report.relationType,
+                    direction = direction,
+                    verificationStatus = report.verificationStatus,
+                    premiseEvidenceCount = report.premiseEvidenceRefs.size,
+                    supportingEvidenceCount = report.supportingEvidenceRefs.size,
+                    contradictingEvidenceCount = report.contradictingEvidenceRefs.size,
+                    supportingEvidenceSources = report.supportingEvidenceSources,
+                    contradictingEvidenceSources = report.contradictingEvidenceSources,
+                )
+            }.sortedWith(compareBy<Explanation> { it.relationType.name }.thenBy { it.hypothesisId })
+                .take(MAX_EXPLANATIONS_PER_CANDIDATE)
+
+            val hasSupport = explanations.any {
+                it.verificationStatus == ANS100ConceptMemory.VerificationStatus.SUPPORTED ||
+                    it.verificationStatus == ANS100ConceptMemory.VerificationStatus.CONFLICTING
+            }
+            val hasCounterEvidence = explanations.any {
+                it.verificationStatus == ANS100ConceptMemory.VerificationStatus.REFUTED ||
+                    it.verificationStatus == ANS100ConceptMemory.VerificationStatus.CONFLICTING
+            }
+            val supportSources = explanations.flatMap { it.supportingEvidenceSources }.toSet()
+            val counterSources = explanations.flatMap { it.contradictingEvidenceSources }.toSet()
+            val explicitUser = ANS100ConceptMemory.LearningSource.EXPLICIT_USER
+            val verifiedTool = ANS100ConceptMemory.LearningSource.VERIFIED_TOOL
+            val supportHasUnclassifiedSource = explanations.any {
+                it.supportingEvidenceCount > 0 && it.supportingEvidenceSources.isEmpty()
+            }
+            val counterHasUnclassifiedSource = explanations.any {
+                it.contradictingEvidenceCount > 0 && it.contradictingEvidenceSources.isEmpty()
+            }
+            val status = when {
+                explanations.isEmpty() -> Status.NEURAL_ONLY
+                hasSupport && hasCounterEvidence ->
+                    if (!supportHasUnclassifiedSource && !counterHasUnclassifiedSource &&
+                        (supportSources + counterSources).isNotEmpty() &&
+                        (supportSources + counterSources).all { it == explicitUser }
+                    ) Status.MIXED_USER_ASSERTIONS else Status.MIXED_EVIDENCE
+                hasSupport -> when {
+                    supportHasUnclassifiedSource || supportSources.isEmpty() -> Status.UNCLASSIFIED_SUPPORT
+                    supportSources == setOf(explicitUser) -> Status.USER_ASSERTIONS_SUPPORT
+                    supportSources == setOf(verifiedTool) -> Status.VERIFIED_TOOL_SUPPORT
+                    else -> Status.MIXED_SOURCE_SUPPORT
+                }
+                hasCounterEvidence -> when {
+                    counterHasUnclassifiedSource || counterSources.isEmpty() -> Status.UNCLASSIFIED_COUNTER_EVIDENCE
+                    counterSources == setOf(explicitUser) -> Status.USER_COUNTER_EVIDENCE
+                    counterSources == setOf(verifiedTool) -> Status.VERIFIED_TOOL_COUNTER_EVIDENCE
+                    else -> Status.MIXED_SOURCE_COUNTER_EVIDENCE
+                }
+                else -> Status.MEMORY_PATH_UNRESOLVED
+            }
+            Comparison(candidate.candidateId, status, explanations)
+        }
+    }
+
+    private fun normalize(value: String): String = value.trim().lowercase(Locale.ROOT)
+}
