@@ -89,7 +89,9 @@ class ANS100NeuralHypothesisLedger(
                 .put("supporting_turn_ids", JSONArray(item.supportingTurnIds))
                 .put("non_reproducing_turn_ids", JSONArray(item.nonReproducingTurnIds))
                 .put("shared_target_count", item.sharedTargetCount)
-                .put("heuristic_evidence", item.heuristicEvidence))
+                .put("heuristic_evidence", item.heuristicEvidence)
+                .put("prediction_hit_turn_ids", JSONArray(item.predictionHitTurnIds))
+                .put("prediction_miss_turn_ids", JSONArray(item.predictionMissTurnIds)))
         }
         return JSONObject()
             .put("schema", SNAPSHOT_SCHEMA)
@@ -116,6 +118,8 @@ class ANS100NeuralHypothesisLedger(
                 nonReproducingTurnIds = readStrings(row.getJSONArray("non_reproducing_turn_ids")),
                 sharedTargetCount = row.getInt("shared_target_count"),
                 heuristicEvidence = row.optBoolean("heuristic_evidence", false),
+                predictionHitTurnIds = row.optJSONArray("prediction_hit_turn_ids")?.let(::readStrings) ?: emptyList(),
+                predictionMissTurnIds = row.optJSONArray("prediction_miss_turn_ids")?.let(::readStrings) ?: emptyList(),
             )
         }
         return ANS100NeuralHypothesisEngine.Snapshot(
