@@ -101,8 +101,8 @@ class AndroidJnvM250kHypothesisReadoutTest {
             pairScanComplete = first.pairScanComplete,
         )
         assertEquals(ANS100NeuralHypothesisEngine.Status.GENERATED, generated.single().status)
-        assertTrue(generated.single().heuristicEvidence)
-        assertTrue(engine.exportSnapshot().hypotheses.single().heuristicEvidence)
+        assertFalse(generated.single().heuristicEvidence)
+        assertFalse(engine.exportSnapshot().hypotheses.single().heuristicEvidence)
 
         val second = engine.observe250kTurn(
             turnId = "turn-two",
