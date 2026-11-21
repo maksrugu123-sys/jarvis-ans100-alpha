@@ -523,3 +523,12 @@ Tests are authored for ordered support, explicit negation, the "not only" except
 - Fixed a field-name mismatch: the page report exposes `contentSha256`; the passage extractor now reads that field and exports it downstream as `pageContentSha256`.
 
 Tests cover composition, identity/digest mismatch rejection, independence preservation, ambiguous polarity, truncation and non-promotion invariants. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation or device test was run.
+
+
+## Explicit human review decisions for hypothesis packets (V1)
+
+`ANS100HypothesisManualReviewDecision` records a bounded human decision against the exact evidence-review packet. The record includes a SHA-256 fingerprint of the packet, exact hypothesis identity, selected passage references, a bounded rationale, decision ID, and review timestamp. If any packet content changes after review, conversion is rejected.
+
+Outcomes distinguish confirmed support, confirmed contradiction, insufficient evidence, untrusted source, and unresolved conflict. Only the two explicit confirmation outcomes can be converted into one `RelationEvidence` observation with source `EXPLICIT_USER`; a decision never counts multiple passages as multiple independent sources. Non-confirmation outcomes return no evidence. The generated evidence reference is derived from the decision ID, packet fingerprint, and outcome.
+
+This is a user attestation, not objective proof, publisher authentication, or confirmation of source independence. The component does not mutate the revision engine, ledger, concept memory, or neural weights. The caller must explicitly submit the returned observation to the revision pipeline. No automatic page retrieval or automatic runtime invocation is added. Tests are authored / **NOT RUN**; compilation and Android integration remain unverified.
