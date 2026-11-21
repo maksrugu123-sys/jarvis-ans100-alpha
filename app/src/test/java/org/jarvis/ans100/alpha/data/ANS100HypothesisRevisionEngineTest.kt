@@ -205,4 +205,34 @@ class ANS100HypothesisRevisionEngineTest {
         }
         assertTrue(rejected)
     }
+
+    @Test
+    fun fullEvidenceBudgetRejectsNewRecordsWithoutEvictingDeduplicationHistory() {
+        val engine = ANS100HypothesisRevisionEngine()
+        val initialEvidence = (0 until ANS100HypothesisRevisionEngine.MAX_EVIDENCE_PER_HYPOTHESIS).map {
+            evidence("tool:record-$it", supports = true)
+        }
+        engine.observeTurn("turn-full", listOf(candidate()), initialEvidence, true)
+        val before = engine.exportSnapshot()
+        var rejected = false
+        try {
+            engine.observeTurn(
+                "turn-overflow",
+                listOf(candidate()),
+                listOf(evidence("tool:overflow", supports = false)),
+                true,
+            )
+        } catch (_: IllegalArgumentException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+        assertEquals(before, engine.exportSnapshot())
+        val retry = engine.observeTurn(
+            "turn-overflow",
+            listOf(candidate()),
+            listOf(evidence("tool:record-0", supports = true)),
+            true,
+        ).single()
+        assertEquals(ANS100HypothesisRevisionEngine.MAX_EVIDENCE_PER_HYPOTHESIS, retry.directEvidenceCount)
+    }
 }
