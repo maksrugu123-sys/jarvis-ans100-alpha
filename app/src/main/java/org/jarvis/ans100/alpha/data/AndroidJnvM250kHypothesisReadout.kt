@@ -153,7 +153,8 @@ class AndroidJnvM250kHypothesisReadout(
                 .thenBy { it.candidateId },
         )
 
-        val complete = omittedCausalLinks == 0 && spikeCaptureComplete && candidates.size <= maxCandidates
+        val complete = omittedCausalLinks == 0 && spikeCaptureComplete &&
+            ambiguousTargetSpikeNeuronIds.isEmpty() && candidates.size <= maxCandidates
         return Result(
             activeConceptIds = activeConceptIds,
             candidates = candidates.take(maxCandidates),
