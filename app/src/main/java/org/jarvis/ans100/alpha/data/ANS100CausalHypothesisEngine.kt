@@ -72,7 +72,12 @@ class ANS100CausalHypothesisEngine {
                         val premiseIds = listOf(first.id, second.id)
                         val stableKey = premiseIds.joinToString("|")
                         val id = "causal-chain:${digest(stableKey)}"
-                        if (id in output) return@secondLoop
+                        // One revision candidate per exact relation. If several
+                        // premise paths imply the same A -> C relation, keep the
+                        // first deterministic path rather than double-counting
+                        // the same claim as several independent hypotheses.
+                        val relationKey = "${first.fromConceptId}|$type|${second.toConceptId}"
+                        if (relationKey in output) return@secondLoop
                         val hypothesis = ANS100ConceptMemory.Hypothesis(
                             id = id,
                             fromConceptId = first.fromConceptId,
@@ -93,7 +98,7 @@ class ANS100CausalHypothesisEngine {
                             ANS100ConceptMemory.VerificationStatus.UNRESOLVED ->
                                 Status.UNRESOLVED
                         }
-                        output[id] = Candidate(
+                        output[relationKey] = Candidate(
                             hypothesisId = id,
                             fromConceptId = hypothesis.fromConceptId,
                             relationType = type,
