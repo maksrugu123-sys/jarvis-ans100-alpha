@@ -4,7 +4,6 @@ import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
-import java.net.URLDecoder
 import java.security.MessageDigest
 import java.util.Locale
 
@@ -169,7 +168,7 @@ class ANS100HypothesisPageVerifier(
     }
 
     private fun attribute(tag: String, name: String): String? {
-        val regex = Regex("(?is)\\b" + Regex.escape(name) + """\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))""")
+        val regex = Regex("(?is)\\b" + Regex.escape(name) + """\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
         val match = regex.find(tag) ?: return null
         return match.groupValues.drop(1).firstOrNull { it.isNotEmpty() }
     }
@@ -187,7 +186,7 @@ class ANS100HypothesisPageVerifier(
     private fun clean(value: String, limit: Int): String =
         decodeEntities(value)
             .replace(Regex("\\s+"), " ")
-            .filter { it == '\\t' || it == '\\n' || it.code >= 0x20 }
+            .filter { it.code >= 0x20 }
             .trim()
             .take(limit)
 
