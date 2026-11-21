@@ -121,4 +121,18 @@ class ANS100HypothesisManualReviewDecisionTest {
             emptyList(), "Проверено.", 10_007L,
         )
     }
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsModifiedDecisionOutcome() {
+        val packet = packet()
+        val decision = decisions.record(
+            packet, "decision-009",
+            ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_SUPPORT,
+            listOf(packet.passages.first().passageRef), "Проверено.", 10_008L,
+        )
+        decisions.toRelationEvidence(
+            packet,
+            decision.copy(outcome = ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_CONTRADICTION),
+        )
+    }
+
 }
