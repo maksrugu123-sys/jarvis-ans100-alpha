@@ -131,7 +131,9 @@ class AndroidJnvM250kHypothesisReadoutTest {
             )
         }
         val source = first.candidates.single().firstConceptId
-        val predictions = engine.predict250k(setOf(source))
+        val restored = ANS100NeuralHypothesisEngine()
+        restored.restoreSnapshot(engine.exportSnapshot())
+        val predictions = restored.predict250k(setOf(source))
         assertEquals(1, predictions.size)
         assertEquals(first.candidates.single().secondConceptId, predictions.single().predictedConceptId)
         assertTrue(predictions.single().confidence >= ANS100NeuralHypothesisEngine.MIN_PREDICTION_CONFIDENCE)
@@ -206,5 +208,29 @@ class AndroidJnvM250kHypothesisReadoutTest {
         )
         assertTrue(result.activeConceptIds.isEmpty())
         assertTrue(result.candidates.isEmpty())
+    }
+
+    @Test
+    fun nonReproducingTurnLowersAssociationBelowPredictionThreshold() {
+        val first = readout()
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "positive-$index",
+                activeConceptIds = first.activeConceptIds,
+                candidates = first.candidates,
+                completed = true,
+                pairScanComplete = true,
+            )
+        }
+        engine.observe250kTurn(
+            turnId = "negative-one",
+            activeConceptIds = first.activeConceptIds,
+            candidates = emptyList(),
+            completed = true,
+            pairScanComplete = true,
+        )
+        val source = first.candidates.single().firstConceptId
+        assertTrue(engine.predict250k(setOf(source)).isEmpty())
     }
 }
