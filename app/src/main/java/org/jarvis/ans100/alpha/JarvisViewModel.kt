@@ -58,6 +58,10 @@ import org.jarvis.ans100.alpha.data.ANS100NeuralHypothesisLedger
 import org.jarvis.ans100.alpha.data.ANS100HypothesisCompetitionEngine
 import org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine
 import org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionLedger
+import org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision
+import org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewLedger
+import org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewCoordinator
+import org.jarvis.ans100.alpha.data.ANS100HypothesisEvidenceReviewPacketBuilder
 import org.jarvis.ans100.alpha.data.ANS100ConceptMemory
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceAdapter
 import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutContract
@@ -336,6 +340,21 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val structuredHypothesisRevisionEngine = ANS100HypothesisRevisionEngine().apply {
         runCatching { structuredHypothesisRevisionLedger.load()?.let { restoreSnapshot(it) } }
     }
+    private val manualHypothesisReviewDecision = ANS100HypothesisManualReviewDecision()
+    private val manualHypothesisReviewLedger = ANS100HypothesisManualReviewLedger(
+        appContext,
+        decisionValidator = manualHypothesisReviewDecision,
+    )
+    private val manualHypothesisReviewCoordinator = ANS100HypothesisManualReviewCoordinator(
+        decisionFactory = manualHypothesisReviewDecision,
+        decisionLedger = manualHypothesisReviewLedger,
+        revisionEngine = structuredHypothesisRevisionEngine,
+        revisionLedger = structuredHypothesisRevisionLedger,
+    )
+    // Replay the write-ahead journal only after the revision checkpoint has been restored.
+    private val manualHypothesisReviewRecovery = runCatching {
+        manualHypothesisReviewCoordinator.replayPending()
+    }.getOrNull()
     private val benchmarkTraceStore = ANS100BenchmarkTraceStore(appContext.filesDir)
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
@@ -1477,6 +1496,21 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
      * Applies one explicit rating to the latest eligible ANS-100 answer trace.
      * A rating is consumed once; model text and implicit behavior never reward it.
      */
+    /**
+     * Submits a decision made through an explicit human-review UI.
+     * The packet must be the exact packet that was displayed to the reviewer.
+     */
+    fun submitManualHypothesisReview(
+        packet: ANS100HypothesisEvidenceReviewPacketBuilder.Packet,
+        decision: ANS100HypothesisManualReviewDecision.Decision,
+    ): Boolean = runCatching {
+        manualHypothesisReviewCoordinator.recordAndApply(packet, decision)
+    }.getOrDefault(false)
+
+    /** Retries durable manual decisions that have not yet reached the revision checkpoint. */
+    fun retryPendingManualHypothesisReviews(): ANS100HypothesisManualReviewCoordinator.ReplayReport =
+        manualHypothesisReviewCoordinator.replayPending()
+
     fun rateLatestHybridAnswer(positive: Boolean) {
         val trace = latestHybridFeedback ?: return
         latestHybridFeedback = null

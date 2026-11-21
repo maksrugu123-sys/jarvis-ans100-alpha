@@ -193,6 +193,52 @@ class ANS100HypothesisRevisionEngine(
         return snapshot()
     }
 
+    /**
+     * Applies one already-reviewed direct observation to an existing exact relation.
+     * Replaying the same evidence reference and content is idempotent; rebinding it
+     * or exceeding the evidence budget is rejected without partial mutation.
+     */
+    @Synchronized
+    fun recordDirectEvidence(
+        hypothesisId: String,
+        evidence: ANS100ConceptMemory.RelationEvidence,
+        reviewTurnId: String,
+    ): Revision? {
+        require(isValidTurnId(reviewTurnId))
+        require(evidence.fromConceptId.isNotBlank() &&
+            evidence.fromConceptId.length <= MAX_CONCEPT_ID_CHARS)
+        require(evidence.toConceptId.isNotBlank() &&
+            evidence.toConceptId.length <= MAX_CONCEPT_ID_CHARS &&
+            evidence.fromConceptId != evidence.toConceptId)
+        require(isValidReference(evidence.evidenceRef))
+        require(evidence.source.isTrustedRevisionSource()) {
+            "manual review accepts only trusted direct-evidence sources"
+        }
+        val state = states.values.firstOrNull { it.hypothesisId == hypothesisId } ?: return null
+        require(state.fromConceptId == evidence.fromConceptId &&
+            state.relationType == evidence.type &&
+            state.toConceptId == evidence.toConceptId) {
+            "evidence does not match the exact hypothesis relation"
+        }
+        require(evidence.evidenceRef !in state.premiseEvidenceRefs) {
+            "premise evidence cannot be reused as direct confirmation"
+        }
+        val record = EvidenceRecord(evidence.evidenceRef, evidence.source, evidence.supports)
+        val previous = state.evidence[evidence.evidenceRef]
+        if (previous != null) {
+            require(previous == record) {
+                "an evidence reference cannot be rebound to different polarity or source"
+            }
+            return toRevision(state)
+        }
+        require(state.evidence.size < MAX_EVIDENCE_PER_HYPOTHESIS) {
+            "direct evidence history is full; refusing to evict deduplication keys"
+        }
+        state.evidence[evidence.evidenceRef] = record
+        state.lastUpdatedTurnId = reviewTurnId
+        return toRevision(state)
+    }
+
     @Synchronized
     fun snapshot(): List<Revision> = states.values.map(::toRevision)
 

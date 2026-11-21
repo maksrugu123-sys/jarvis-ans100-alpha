@@ -327,4 +327,67 @@ class ANS100HypothesisRevisionEngineTest {
             queue.first().action,
         )
     }
+    @Test
+    fun manualDirectEvidenceIsAppliedToExactExistingHypothesis() {
+        val engine = ANS100HypothesisRevisionEngine()
+        engine.observeTurn("turn-manual-base", listOf(candidate()), emptyList(), completed = true)
+        val result = engine.recordDirectEvidence(
+            revisionId(),
+            evidence("manual-review:approved-one", supports = true,
+                source = ANS100ConceptMemory.LearningSource.EXPLICIT_USER),
+            "manual-review-turn-one",
+        )
+        assertEquals(1, result!!.directEvidenceCount)
+        assertEquals(ANS100HypothesisRevisionEngine.Status.SUPPORTED_BY_DIRECT_EVIDENCE, result.status)
+    }
+
+    @Test
+    fun manualDirectEvidenceReplayIsIdempotentButCannotBeRebound() {
+        val engine = ANS100HypothesisRevisionEngine()
+        engine.observeTurn("turn-manual-base-2", listOf(candidate()), emptyList(), completed = true)
+        val positive = evidence("manual-review:stable", true,
+            ANS100ConceptMemory.LearningSource.EXPLICIT_USER)
+        val first = engine.recordDirectEvidence(revisionId(), positive, "manual-review-turn-two")
+        val replay = engine.recordDirectEvidence(revisionId(), positive, "manual-review-turn-two")
+        assertEquals(1, first!!.directEvidenceCount)
+        assertEquals(1, replay!!.directEvidenceCount)
+        try {
+            engine.recordDirectEvidence(
+                revisionId(),
+                positive.copy(supports = false),
+                "manual-review-turn-two",
+            )
+            throw AssertionError("expected evidence reference rebinding to be rejected")
+        } catch (_: IllegalArgumentException) {
+            assertEquals(1, engine.snapshot().single().directEvidenceCount)
+        }
+    }
+
+    @Test
+    fun manualDirectEvidenceCannotReusePremiseReferenceOrTargetAnotherRelation() {
+        val engine = ANS100HypothesisRevisionEngine()
+        engine.observeTurn("turn-manual-base-3", listOf(candidate()), emptyList(), completed = true)
+        try {
+            engine.recordDirectEvidence(
+                revisionId(),
+                evidence("memory:a-b", true, ANS100ConceptMemory.LearningSource.EXPLICIT_USER),
+                "manual-review-turn-three",
+            )
+            throw AssertionError("expected premise evidence to be rejected")
+        } catch (_: IllegalArgumentException) {
+            assertEquals(0, engine.snapshot().single().directEvidenceCount)
+        }
+        try {
+            engine.recordDirectEvidence(
+                revisionId(),
+                evidence("manual-review:wrong-relation", true,
+                    ANS100ConceptMemory.LearningSource.EXPLICIT_USER).copy(toConceptId = "concept.other"),
+                "manual-review-turn-three",
+            )
+            throw AssertionError("expected relation mismatch to be rejected")
+        } catch (_: IllegalArgumentException) {
+            assertEquals(0, engine.snapshot().single().directEvidenceCount)
+        }
+    }
+
 }

@@ -77,6 +77,22 @@ class ANS100HypothesisManualReviewDecision {
         return unsigned.copy(decisionDigest = decisionDigest(unsigned))
     }
 
+    /** Validates the decision's canonical integrity digest before durable storage/replay. */
+    fun isDecisionIntact(decision: Decision): Boolean = runCatching {
+        require(decision.decisionId.matches(DECISION_ID_PATTERN))
+        require(decision.packetFingerprint.matches(SHA256))
+        require(decision.hypothesisId.isNotBlank() && decision.fromConceptId.isNotBlank() &&
+            decision.toConceptId.isNotBlank() && decision.fromConceptId != decision.toConceptId)
+        require(decision.reviewedAtEpochMs > 0L)
+        require(decision.rationale.isNotBlank() && decision.rationale.length <= MAX_RATIONALE_CHARS)
+        require(decision.selectedPassageRefs.size <= MAX_SELECTED_PASSAGES)
+        require(decision.selectedPassageRefs.distinct().size == decision.selectedPassageRefs.size)
+        require(decision.selectedPassageRefs.all { it.isNotBlank() &&
+            it.length <= ANS100ConceptMemory.MAX_EVIDENCE_REF_CHARS })
+        require(decision.decisionDigest.matches(SHA256) &&
+            decision.decisionDigest == decisionDigest(decision))
+    }.isSuccess
+
     /**
      * Produces one explicit-user observation only when the exact reviewed packet
      * is supplied again. Non-confirmation outcomes never become evidence.
