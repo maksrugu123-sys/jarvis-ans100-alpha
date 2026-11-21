@@ -48,6 +48,26 @@ class ANS100HypothesisRevisionEngine(
         val lastUpdatedTurnId: String,
     )
 
+    enum class ReviewAction {
+        SEEK_BOTH_SIDES,
+        SEEK_COUNTER_EVIDENCE,
+        SEEK_SUPPORTING_EVIDENCE,
+        MANUAL_CONFLICT_REVIEW,
+    }
+
+    /** Structured request for the next evidence-acquisition step; not a truth decision. */
+    data class ReviewRequest(
+        val hypothesisId: String,
+        val fromConceptId: String,
+        val relationType: ANS100ConceptMemory.RelationType,
+        val toConceptId: String,
+        val currentStatus: Status,
+        val action: ReviewAction,
+        val additionalEvidenceCapacity: Int,
+        val excludedEvidenceRefs: List<String>,
+        val permittedSources: Set<ANS100ConceptMemory.LearningSource>,
+    )
+
     data class PersistedHypothesis(
         val hypothesisId: String,
         val fromConceptId: String,
@@ -174,6 +194,52 @@ class ANS100HypothesisRevisionEngine(
 
     @Synchronized
     fun snapshot(): List<Revision> = states.values.map(::toRevision)
+
+    /**
+     * Produces a bounded challenge queue. Supported claims are challenged with
+     * counter-evidence requests; refuted claims seek support; conflicts are held
+     * for adjudication rather than being auto-resolved.
+     */
+    @Synchronized
+    fun reviewQueue(limit: Int = DEFAULT_REVIEW_QUEUE_LIMIT): List<ReviewRequest> {
+        require(limit in 0..MAX_REVIEW_QUEUE_LIMIT)
+        if (limit == 0) return emptyList()
+        return states.values.map { state ->
+            val revision = toRevision(state)
+            val action = when (revision.status) {
+                Status.CANDIDATE_UNVERIFIED -> ReviewAction.SEEK_BOTH_SIDES
+                Status.SUPPORTED_BY_DIRECT_EVIDENCE -> ReviewAction.SEEK_COUNTER_EVIDENCE
+                Status.REFUTED_BY_DIRECT_EVIDENCE -> ReviewAction.SEEK_SUPPORTING_EVIDENCE
+                Status.CONFLICTED_DIRECT_EVIDENCE -> ReviewAction.MANUAL_CONFLICT_REVIEW
+            }
+            ReviewRequest(
+                hypothesisId = revision.hypothesisId,
+                fromConceptId = revision.fromConceptId,
+                relationType = revision.relationType,
+                toConceptId = revision.toConceptId,
+                currentStatus = revision.status,
+                action = action,
+                additionalEvidenceCapacity = (MAX_EVIDENCE_PER_HYPOTHESIS - revision.directEvidenceCount)
+                    .coerceAtLeast(0),
+                excludedEvidenceRefs = (revision.premiseEvidenceRefs +
+                    revision.supportingEvidenceRefs + revision.contradictingEvidenceRefs).distinct(),
+                permittedSources = setOf(
+                    ANS100ConceptMemory.LearningSource.EXPLICIT_USER,
+                    ANS100ConceptMemory.LearningSource.VERIFIED_TOOL,
+                ),
+            )
+        }.sortedWith(
+            compareBy<ReviewRequest> { reviewPriority(it.action) }
+                .thenBy { it.hypothesisId },
+        ).take(limit)
+    }
+
+    private fun reviewPriority(action: ReviewAction): Int = when (action) {
+        ReviewAction.MANUAL_CONFLICT_REVIEW -> 0
+        ReviewAction.SEEK_BOTH_SIDES -> 1
+        ReviewAction.SEEK_COUNTER_EVIDENCE -> 2
+        ReviewAction.SEEK_SUPPORTING_EVIDENCE -> 3
+    }
 
     @Synchronized
     fun exportSnapshot(): Snapshot = Snapshot(
@@ -326,5 +392,7 @@ class ANS100HypothesisRevisionEngine(
         const val MAX_REMEMBERED_TURNS = 512
         const val MAX_CONCEPT_ID_CHARS = 96
         const val MAX_PREMISES = 8
+        const val DEFAULT_REVIEW_QUEUE_LIMIT = 32
+        const val MAX_REVIEW_QUEUE_LIMIT = 64
     }
 }
