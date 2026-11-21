@@ -410,7 +410,7 @@ Unit tests were added for stable addresses across turns, actual two-edge converg
 
 - Unicode NFKC normalization and locale-independent lowercase are applied before tokenization. Tokens are Unicode letters/numbers, 2–32 characters; a small Russian/English stop-word list is removed.
 - Up to 24 distinct tokens are retained per turn. Each token gets a stable digest-based concept-slot ID and a stable PERCEPTION neuron address across turns. Typed evidence and lexical tokens use disjoint halves of PERCEPTION; their address allocation is deterministic. Event IDs remain turn-specific.
-- The readout now considers only these lexical concept slots when forming pair hypotheses. Structural and heuristic typed-evidence records are not mixed into lexical pair candidates.
+- The readout now considers only these lexical concept slots when forming pair hypotheses, and requires each source spike to occur at the exact current-turn input timestamp. Later recurrent spikes cannot masquerade as direct word observations. Structural and heuristic typed-evidence records are not mixed into lexical pair candidates.
 - Labels are the normalized token itself; provenance stores a bounded turn reference and token digest. Raw full message text is not copied into the hypothesis ledger.
 - This is exact lexical matching only: no stemming, lemmatization, synonym mapping, cross-language equivalence, phrase meaning or entity resolution. For example, inflected forms are separate feature slots.
 
