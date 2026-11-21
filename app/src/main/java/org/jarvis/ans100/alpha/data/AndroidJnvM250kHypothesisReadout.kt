@@ -91,7 +91,11 @@ class AndroidJnvM250kHypothesisReadout(
             .filter { it.key in encoding.conceptRecordIds }
             .associate { (recordId, neuronId) -> neuronId to recordId }
         require(recordsByNeuron.size == encoding.conceptRecordIds.size)
-        val sourceSpikeIds = emittedSpikes.map { it.neuronId }.toSet()
+        val inputSpikeTimes = emittedSpikes.asSequence()
+            .filter { it.timestampNs == encoding.inputTimeNs }
+            .groupBy { it.neuronId }
+            .mapValues { (_, spikes) -> spikes.map { it.timestampNs }.toSet() }
+        val sourceSpikeIds = inputSpikeTimes.keys
         val activeRecords = recordsByNeuron.filter { (neuronId, _) ->
             neuronId in sourceSpikeIds
         }
@@ -105,7 +109,8 @@ class AndroidJnvM250kHypothesisReadout(
         causalLinks.forEach { link ->
             val recordId = recordsByNeuron[link.sourceNeuronId] ?: return@forEach
             if (link.sourceNeuronId !in sourceSpikeIds) return@forEach
-            if (link.timestampNs !in spikeTimes[link.sourceNeuronId].orEmpty()) return@forEach
+            if (link.timestampNs != encoding.inputTimeNs) return@forEach
+            if (link.timestampNs !in inputSpikeTimes[link.sourceNeuronId].orEmpty()) return@forEach
             if (link.targetNeuronId in ambiguousTargetSpikeNeuronIds) return@forEach
             if (link.arrivalTimestampNs !in spikeTimes[link.targetNeuronId].orEmpty()) return@forEach
             sourceByArrival.getOrPut(Arrival(link.targetNeuronId, link.arrivalTimestampNs)) {
