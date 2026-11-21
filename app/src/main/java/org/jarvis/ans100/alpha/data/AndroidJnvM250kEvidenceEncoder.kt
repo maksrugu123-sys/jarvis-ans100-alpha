@@ -22,6 +22,7 @@ class AndroidJnvM250kEvidenceEncoder {
         val conceptRecordIds: Set<String> = emptySet(),
         val predictionEventCount: Int = 0,
         val conceptPrototypeEventCount: Int = 0,
+        val lexicalConceptsTruncated: Boolean = false,
         val inputTimeNs: Long = 0L,
     )
 
@@ -70,7 +71,8 @@ class AndroidJnvM250kEvidenceEncoder {
                 it.source == EvidenceSourceKind.USER_MESSAGE &&
                 it.value is EvidenceValue.Text
         }?.let { (it.value as EvidenceValue.Text).value }.orEmpty()
-        val tokens = tokenize(message).sorted().take(MAX_LEXICAL_CONCEPTS)
+        val tokenization = tokenize(message)
+        val tokens = tokenization.tokens.sorted()
         val perceptionRange = lexicalPerceptionRange()
         tokens.forEachIndexed { index, token ->
             val recordId = lexicalRecordId(token)
@@ -107,6 +109,7 @@ class AndroidJnvM250kEvidenceEncoder {
             heuristicRecordCount = evidence.heuristicRecordCount,
             userProvidedRecordCount = evidence.records.count { it.status == EvidenceStatus.USER_PROVIDED },
             conceptRecordIds = lexicalConceptIds,
+            lexicalConceptsTruncated = tokenization.truncated,
             inputTimeNs = inputTimeNs,
         )
     }
@@ -208,15 +211,23 @@ class AndroidJnvM250kEvidenceEncoder {
      * This is a lexical feature layer, not a synonym/meaning/intent model.
      * Stop words are discarded; tokens are never executed as instructions.
      */
-    private fun tokenize(value: String): List<String> {
+    private data class Tokenization(
+        val tokens: List<String>,
+        val truncated: Boolean,
+    )
+
+    private fun tokenize(value: String): Tokenization {
         val normalized = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKC)
             .lowercase(java.util.Locale.ROOT)
         val seen = LinkedHashSet<String>()
         TOKEN_REGEX.findAll(normalized).forEach { match ->
             val token = match.value
-            if (token !in STOP_WORDS && seen.size < MAX_LEXICAL_CONCEPTS) seen += token
+            if (token !in STOP_WORDS) seen += token
         }
-        return seen.toList()
+        return Tokenization(
+            tokens = seen.take(MAX_LEXICAL_CONCEPTS),
+            truncated = seen.size > MAX_LEXICAL_CONCEPTS,
+        )
     }
 
     private fun lexicalRecordId(token: String): String =
