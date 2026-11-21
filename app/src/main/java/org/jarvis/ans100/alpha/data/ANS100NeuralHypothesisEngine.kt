@@ -129,6 +129,73 @@ class ANS100NeuralHypothesisEngine(
         return states.values.map(::snapshot)
     }
 
+    /**
+     * 250k-specific ingestion path. It shares the durable cross-turn lifecycle
+     * with the legacy decoder but accepts only candidates emitted by the
+     * independent JNVM spike/transmission readout.
+     */
+    @Synchronized
+    fun observe250kTurn(
+        turnId: String,
+        activeConceptIds: Set<String>,
+        candidates: List<AndroidJnvM250kHypothesisReadout.Candidate>,
+        completed: Boolean,
+        pairScanComplete: Boolean,
+    ): List<Hypothesis> {
+        require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")))
+        require(activeConceptIds.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
+        require(activeConceptIds.all { it.isNotBlank() && it.length <= 96 })
+        require(candidates.size <= AndroidJnvM250kHypothesisReadout.MAX_CANDIDATES_HARD_LIMIT)
+        require(candidates.all {
+            it.firstConceptId in activeConceptIds && it.secondConceptId in activeConceptIds
+        })
+        require(candidates.map { pairKey(it.firstConceptId, it.secondConceptId) }.distinct().size == candidates.size) {
+            "250k readout must provide at most one candidate per evidence-slot pair"
+        }
+        if (!completed || !observedTurns.add(turnId)) return emptyList()
+        while (observedTurns.size > MAX_REMEMBERED_TURNS) {
+            observedTurns.remove(observedTurns.first())
+        }
+
+        val byPair = candidates.associateBy { pairKey(it.firstConceptId, it.secondConceptId) }
+        val sortedActiveIds = activeConceptIds.sorted()
+        val activePairs = LinkedHashSet<String>()
+        for (left in sortedActiveIds.indices) {
+            for (right in left + 1 until sortedActiveIds.size) {
+                activePairs.add(pairKey(sortedActiveIds[left], sortedActiveIds[right]))
+            }
+        }
+
+        byPair.forEach { (key, candidate) ->
+            val state = states[key] ?: State(
+                hypothesisId = "ans100-hypothesis:${digest(key)}",
+                firstConceptId = candidate.firstConceptId,
+                firstLabel = candidate.firstLabel,
+                secondConceptId = candidate.secondConceptId,
+                secondLabel = candidate.secondLabel,
+            ).also { states[key] = it }
+            state.supportingTurns.add(turnId)
+            trimOldest(state.supportingTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
+            state.sharedTargetCount = maxOf(state.sharedTargetCount, candidate.convergentNeuronIds.size)
+        }
+
+        if (pairScanComplete) {
+            states.forEach { (key, state) ->
+                if (key !in byPair && key in activePairs &&
+                    turnId !in state.supportingTurns && turnId !in state.nonReproducingTurns
+                ) {
+                    state.nonReproducingTurns.add(turnId)
+                    trimOldest(state.nonReproducingTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
+                }
+            }
+        }
+
+        while (states.size > maxHypotheses) {
+            states.remove(states.entries.first().key)
+        }
+        return states.values.map(::snapshot)
+    }
+
     @Synchronized
     fun snapshot(): List<Hypothesis> = states.values.map(::snapshot)
 
