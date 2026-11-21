@@ -17,7 +17,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
                     feature = EvidenceFeature.USER_MESSAGE_TEXT,
                     source = EvidenceSourceKind.USER_MESSAGE,
                     status = EvidenceStatus.USER_PROVIDED,
-                    value = EvidenceValue.Text("data-a"),
+                    value = EvidenceValue.Text("alpha beta"),
                     activation = 1.0,
                     provenanceRef = "turn:$turnId:field-a",
                 ),
@@ -41,7 +41,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
         omitted: Int = 0,
     ): AndroidJnvM250kHypothesisReadout.Result {
         val encoding = encoding()
-        val sourceIds = encoding.recordToNeuronId.values.sorted()
+        val sourceIds = encoding.conceptRecordIds.map { encoding.recordToNeuronId.getValue(it) }.sorted()
         val target = 70_123
         val spikes = sourceIds.mapIndexed { index, neuronId ->
             AndroidJnvM250kSpike(neuronId, 1L, 10L + index)
@@ -72,7 +72,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
         assertEquals(listOf(70_123), result.candidates.single().convergentNeuronIds)
         assertTrue(result.pairScanComplete)
         assertEquals(2, result.candidates.single().activatedConnectionIds.size)
-        assertTrue(result.candidates.single().heuristicEvidence)
+        assertFalse(result.candidates.single().heuristicEvidence)
     }
 
     @Test
@@ -115,5 +115,66 @@ class AndroidJnvM250kHypothesisReadoutTest {
             ANS100NeuralHypothesisEngine.Status.MIXED_REPRODUCTION_SIGNAL,
             second.single().status,
         )
+    }
+
+    @Test
+    fun repeatedLexicalAssociationProducesConservativeFeaturePrediction() {
+        val first = readout()
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "support-turn-$index",
+                activeConceptIds = first.activeConceptIds,
+                candidates = first.candidates,
+                completed = true,
+                pairScanComplete = true,
+            )
+        }
+        val source = first.candidates.single().firstConceptId
+        val predictions = engine.predict250k(setOf(source))
+        assertEquals(1, predictions.size)
+        assertEquals(first.candidates.single().secondConceptId, predictions.single().predictedConceptId)
+        assertTrue(predictions.single().confidence >= ANS100NeuralHypothesisEngine.MIN_PREDICTION_CONFIDENCE)
+    }
+
+    @Test
+    fun predictionPulseTargetsPredictionPopulationAndDoesNotBecomeObservedConcept() {
+        val encoder = AndroidJnvM250kEvidenceEncoder()
+        val base = encoder.encode(
+            TypedEvidenceBundle(
+                turnId = "prediction-turn",
+                records = listOf(
+                    TypedEvidenceRecord(
+                        recordId = "message",
+                        turnId = "prediction-turn",
+                        feature = EvidenceFeature.USER_MESSAGE_TEXT,
+                        source = EvidenceSourceKind.USER_MESSAGE,
+                        status = EvidenceStatus.USER_PROVIDED,
+                        value = EvidenceValue.Text("alpha"),
+                        activation = 1.0,
+                        provenanceRef = "turn:prediction-turn:user",
+                    ),
+                ),
+            ),
+            inputTimeNs = 50L,
+        )
+        val prediction = ANS100NeuralHypothesisEngine.Prediction(
+            sourceConceptId = "lex-token:aaaaaaaaaaaaaaaaaaaaaaaa",
+            predictedConceptId = "lex-token:bbbbbbbbbbbbbbbbbbbbbbbb",
+            predictedLabel = "beta",
+            supportingTurnCount = 2,
+            verificationTurnCount = 2,
+            confidence = 1.0,
+            heuristicEvidence = false,
+        )
+        val encoded = encoder.appendPredictions(base, listOf(prediction), predictionTimeNs = 50L)
+        val predictedEvent = encoded.events.last()
+        val predictionRange = AndroidJnvM250kTopology.POPULATION_RANGES.single {
+            it.population == AndroidJnvM250kTopology.Population.PREDICTION
+        }
+        assertTrue(predictedEvent.targetNeuronId in predictionRange)
+        assertEquals(1, encoded.predictionEventCount)
+        assertEquals(base.conceptRecordIds, encoded.conceptRecordIds)
+        assertEquals(base.recordToNeuronId, encoded.recordToNeuronId)
     }
 }
