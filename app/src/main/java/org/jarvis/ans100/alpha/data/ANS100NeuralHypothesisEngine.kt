@@ -46,6 +46,8 @@ class ANS100NeuralHypothesisEngine(
         val nonReproducingTurnIds: List<String>,
         val sharedTargetCount: Int,
         val heuristicEvidence: Boolean = false,
+        val predictionHitTurnIds: List<String> = emptyList(),
+        val predictionMissTurnIds: List<String> = emptyList(),
     )
 
     data class Snapshot(
@@ -63,6 +65,8 @@ class ANS100NeuralHypothesisEngine(
         val nonReproducingTurns: LinkedHashSet<String> = LinkedHashSet(),
         var sharedTargetCount: Int = 0,
         var heuristicEvidence: Boolean = false,
+        val predictionHitTurns: LinkedHashSet<String> = LinkedHashSet(),
+        val predictionMissTurns: LinkedHashSet<String> = LinkedHashSet(),
     )
 
     private val states = LinkedHashMap<String, State>()
@@ -144,6 +148,7 @@ class ANS100NeuralHypothesisEngine(
         candidates: List<AndroidJnvM250kHypothesisReadout.Candidate>,
         completed: Boolean,
         pairScanComplete: Boolean,
+        predictionsForTurn: List<Prediction> = emptyList(),
     ): List<Hypothesis> {
         require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")))
         require(activeConceptIds.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
@@ -155,6 +160,13 @@ class ANS100NeuralHypothesisEngine(
         require(candidates.map { pairKey(it.firstConceptId, it.secondConceptId) }.distinct().size == candidates.size) {
             "250k readout must provide at most one candidate per evidence-slot pair"
         }
+        require(predictionsForTurn.size <= MAX_PREDICTIONS)
+        require(predictionsForTurn.map { it.predictedConceptId }.distinct().size == predictionsForTurn.size)
+        require(predictionsForTurn.all {
+            it.sourceConceptId in activeConceptIds &&
+                it.predictedConceptId.isNotBlank() && it.predictedConceptId.length <= 96 &&
+                it.sourceConceptId != it.predictedConceptId
+        })
         if (!completed || !observedTurns.add(turnId)) return emptyList()
         while (observedTurns.size > MAX_REMEMBERED_TURNS) {
             observedTurns.remove(observedTurns.first())
@@ -191,6 +203,21 @@ class ANS100NeuralHypothesisEngine(
                     state.nonReproducingTurns.add(turnId)
                     trimOldest(state.nonReproducingTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
                 }
+            }
+        }
+
+        // Evaluate only forecasts that were emitted before this turn's input.
+        // A missing predicted token is a prediction miss, not a factual contradiction.
+        predictionsForTurn.forEach { prediction ->
+            val key = pairKey(prediction.sourceConceptId, prediction.predictedConceptId)
+            val state = states[key] ?: return@forEach
+            if (turnId in state.predictionHitTurns || turnId in state.predictionMissTurns) return@forEach
+            if (prediction.predictedConceptId in activeConceptIds) {
+                state.predictionHitTurns.add(turnId)
+                trimOldest(state.predictionHitTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
+            } else {
+                state.predictionMissTurns.add(turnId)
+                trimOldest(state.predictionMissTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
             }
         }
 
@@ -239,7 +266,14 @@ class ANS100NeuralHypothesisEngine(
             if (support < minimumIndependentSupports) return@forEach
             val total = support + state.nonReproducingTurns.size
             if (total == 0) return@forEach
-            val confidence = support.toDouble() / total
+            val associationConfidence = support.toDouble() / total
+            val predictionEvaluations = state.predictionHitTurns.size + state.predictionMissTurns.size
+            val predictionAccuracy = if (predictionEvaluations >= MIN_PREDICTION_EVALUATIONS) {
+                state.predictionHitTurns.size.toDouble() / predictionEvaluations
+            } else {
+                associationConfidence
+            }
+            val confidence = minOf(associationConfidence, predictionAccuracy)
             if (confidence < minimumConfidence) return@forEach
             candidates += if (firstActive) {
                 Prediction(
@@ -405,6 +439,8 @@ class ANS100NeuralHypothesisEngine(
                 nonReproducingTurnIds = state.nonReproducingTurns.toList(),
                 sharedTargetCount = state.sharedTargetCount,
                 heuristicEvidence = state.heuristicEvidence,
+                predictionHitTurnIds = state.predictionHitTurns.toList(),
+                predictionMissTurnIds = state.predictionMissTurns.toList(),
             )
         },
         observedTurnIds = observedTurns.toList(),
@@ -432,6 +468,13 @@ class ANS100NeuralHypothesisEngine(
                 item.supportingTurnIds.size + item.nonReproducingTurnIds.size)
             require((item.supportingTurnIds + item.nonReproducingTurnIds).all(::isValidTurnId))
             require(item.sharedTargetCount in 0..MAX_SHARED_TARGETS)
+            require(item.predictionHitTurnIds.size <= MAX_OBSERVATIONS_PER_HYPOTHESIS)
+            require(item.predictionMissTurnIds.size <= MAX_OBSERVATIONS_PER_HYPOTHESIS)
+            require(item.predictionHitTurnIds.distinct().size == item.predictionHitTurnIds.size)
+            require(item.predictionMissTurnIds.distinct().size == item.predictionMissTurnIds.size)
+            require((item.predictionHitTurnIds + item.predictionMissTurnIds).distinct().size ==
+                item.predictionHitTurnIds.size + item.predictionMissTurnIds.size)
+            require((item.predictionHitTurnIds + item.predictionMissTurnIds).all(::isValidTurnId))
             val key = pairKey(item.firstConceptId, item.secondConceptId)
             require(item.hypothesisId == "ans100-hypothesis:${digest(key)}")
             require(restored.put(
@@ -446,6 +489,8 @@ class ANS100NeuralHypothesisEngine(
                     nonReproducingTurns = LinkedHashSet(item.nonReproducingTurnIds),
                     sharedTargetCount = item.sharedTargetCount,
                     heuristicEvidence = item.heuristicEvidence,
+                    predictionHitTurns = LinkedHashSet(item.predictionHitTurnIds),
+                    predictionMissTurns = LinkedHashSet(item.predictionMissTurnIds),
                 ),
             ) == null)
         }
@@ -505,6 +550,7 @@ class ANS100NeuralHypothesisEngine(
         const val MAX_CONCEPT_PROTOTYPES = 8
         const val MAX_PROTOTYPE_MEMBERS = 4
         const val MIN_PREDICTION_SUPPORTS = 2
+        const val MIN_PREDICTION_EVALUATIONS = 2
         const val MIN_PREDICTION_CONFIDENCE = 0.75
         private const val MAX_REMEMBERED_TURNS = 512
     }
