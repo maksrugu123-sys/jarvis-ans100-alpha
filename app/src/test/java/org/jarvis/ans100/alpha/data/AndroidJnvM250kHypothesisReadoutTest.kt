@@ -69,7 +69,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
         val result = readout()
         assertEquals(2, result.activeConceptIds.size)
         assertEquals(1, result.candidates.size)
-        assertEquals(1, result.candidates.single().convergentNeuronIds.singleOrNull()?.let { 1 } ?: 0)
+        assertEquals(listOf(70_123), result.candidates.single().convergentNeuronIds)
         assertTrue(result.pairScanComplete)
         assertEquals(2, result.candidates.single().activatedConnectionIds.size)
     }
@@ -89,7 +89,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
     }
 
     @Test
-    fun 250kHypothesesTrackIndependentReproductionAndNonReproduction() {
+    fun jnvmHypothesesTrackIndependentReproductionAndNonReproduction() {
         val first = readout()
         val engine = ANS100NeuralHypothesisEngine()
         val generated = engine.observe250kTurn(
