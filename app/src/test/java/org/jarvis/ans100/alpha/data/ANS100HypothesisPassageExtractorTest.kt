@@ -22,13 +22,13 @@ class ANS100HypothesisPassageExtractorTest {
     @Test
     fun extractsOnlySentencesMentioningBothEndpointsAndKeepsProvenance() {
         val report = ANS100HypothesisPassageExtractor().extract(
-            page("Heat is energy transfer. Heating a metal causes expansion. Expansion can occur in solids."),
+            page("Heat is energy transfer. Heat applied to metal causes expansion. Expansion can occur in solids."),
             "Heat",
             "Expansion",
         )
         assertEquals(1, report.candidates.size)
         val candidate = report.candidates.single()
-        assertTrue(candidate.excerpt.contains("Heating a metal causes expansion"))
+        assertTrue(candidate.excerpt.contains("Heat applied to metal causes expansion"))
         assertEquals("example.org", candidate.sourceHost)
         assertEquals("search-lead:abc123", candidate.searchLeadRef)
         assertEquals("a".repeat(64), candidate.pageContentSha256)
