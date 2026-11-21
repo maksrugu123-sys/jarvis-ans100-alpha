@@ -13,6 +13,8 @@ class AndroidJnvM250kEvidenceEncoder {
         val turnId: String,
         val events: List<AndroidNeuronEvent>,
         val recordToNeuronId: Map<String, Int>,
+        val recordLabels: Map<String, String> = emptyMap(),
+        val recordProvenance: Map<String, String> = emptyMap(),
         val heuristicRecordCount: Int,
         val userProvidedRecordCount: Int,
     )
@@ -54,6 +56,8 @@ class AndroidJnvM250kEvidenceEncoder {
             turnId = evidence.turnId,
             events = events,
             recordToNeuronId = mapping,
+            recordLabels = evidence.records.associate { it.recordId to it.feature.stableId },
+            recordProvenance = evidence.records.associate { it.recordId to it.provenanceRef },
             heuristicRecordCount = evidence.heuristicRecordCount,
             userProvidedRecordCount = evidence.records.count { it.status == EvidenceStatus.USER_PROVIDED },
         )
