@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.security.MessageDigest
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
@@ -14,27 +17,38 @@ class ANS100NeuralHypothesisLedgerInstrumentedTest {
     private val context: Context
         get() = ApplicationProvider.getApplicationContext()
 
-    @Test
-    fun pendingNextTurnForecastSurvivesLedgerRecreation() {
-        val databaseName = "ans100_neural_hypotheses_test_${UUID.randomUUID()}.db"
-        context.deleteDatabase(databaseName)
-        val firstId = "lex-token:" + "a".repeat(24)
-        val secondId = "lex-token:" + "b".repeat(24)
-        val candidate = AndroidJnvM250kHypothesisReadout.Candidate(
-            candidateId = "jnvm250k-association:" + "a".repeat(32),
-            firstConceptId = firstId,
+    private fun digest(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .take(16)
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+    private fun candidate(): AndroidJnvM250kHypothesisReadout.Candidate {
+        val first = "lex-token:" + "a".repeat(24)
+        val second = "lex-token:" + "b".repeat(24)
+        return AndroidJnvM250kHypothesisReadout.Candidate(
+            candidateId = "jnvm250k-association:" + digest("$first|$second"),
+            firstConceptId = first,
             firstLabel = "alpha",
-            secondConceptId = secondId,
+            secondConceptId = second,
             secondLabel = "beta",
             convergentNeuronIds = listOf(70_123),
-            activatedConnectionIds = listOf("ledger-edge-a", "ledger-edge-b"),
+            activatedConnectionIds = listOf("edge-alpha", "edge-beta"),
             evidenceRefs = emptyList(),
         )
+    }
+
+    @Test
+    fun pendingForecastAndOutcomeHistorySurviveSqliteCheckpoint() {
+        val database = "ans100-hypothesis-test-${UUID.randomUUID()}.db"
+        context.deleteDatabase(database)
         val engine = ANS100NeuralHypothesisEngine()
+        val candidate = candidate()
+        val active = setOf(candidate.firstConceptId, candidate.secondConceptId)
         repeat(2) { index ->
             engine.observe250kTurn(
-                turnId = "ledger-training-$index",
-                activeConceptIds = setOf(firstId, secondId),
+                turnId = "ledger-support-$index",
+                activeConceptIds = active,
                 candidates = listOf(candidate),
                 completed = true,
                 pairScanComplete = true,
@@ -42,31 +56,63 @@ class ANS100NeuralHypothesisLedgerInstrumentedTest {
         }
         engine.observe250kTurn(
             turnId = "ledger-prompt",
-            activeConceptIds = setOf(firstId),
+            activeConceptIds = setOf(candidate.firstConceptId),
             candidates = emptyList(),
             completed = true,
             pairScanComplete = true,
         )
         assertEquals(1, engine.pendingPredictions().size)
 
-        val writer = ANS100NeuralHypothesisLedger(context, databaseName)
+        val ledger = ANS100NeuralHypothesisLedger(context, database)
         try {
-            assertTrue(writer.save(engine.exportSnapshot()))
-        } finally {
-            writer.close()
-        }
+            assertTrue(ledger.save(engine.exportSnapshot()))
+            val restoredSnapshot = ledger.load()
+            assertNotNull(restoredSnapshot)
+            val restored = ANS100NeuralHypothesisEngine()
+            restored.restoreSnapshot(checkNotNull(restoredSnapshot))
+            assertEquals(engine.exportSnapshot(), restored.exportSnapshot())
 
-        val reader = ANS100NeuralHypothesisLedger(context, databaseName)
-        try {
-            val restoredSnapshot = reader.load() ?: error("hypothesis checkpoint was not saved")
-            assertEquals(1, restoredSnapshot.pendingPredictions.size)
-            assertEquals(secondId, restoredSnapshot.pendingPredictions.single().predictedConceptId)
-            val restoredEngine = ANS100NeuralHypothesisEngine()
-            restoredEngine.restoreSnapshot(restoredSnapshot)
-            assertEquals(1, restoredEngine.pendingPredictions().size)
+            restored.observe250kTurn(
+                turnId = "ledger-prediction-miss",
+                activeConceptIds = setOf(candidate.firstConceptId),
+                candidates = emptyList(),
+                completed = true,
+                pairScanComplete = true,
+            )
+            assertEquals(1, restored.snapshot().single().predictionMissCount)
+            assertTrue(ledger.save(restored.exportSnapshot()))
         } finally {
-            reader.close()
-            context.deleteDatabase(databaseName)
+            ledger.close()
+            context.deleteDatabase(database)
+        }
+    }
+
+    @Test
+    fun rejectsCheckpointWithPendingForecastWithoutMatchingHypothesis() {
+        val database = "ans100-hypothesis-invalid-${UUID.randomUUID()}.db"
+        context.deleteDatabase(database)
+        val invalid = ANS100NeuralHypothesisEngine.Snapshot(
+            hypotheses = emptyList(),
+            observedTurnIds = emptyList(),
+            pendingPredictions = listOf(
+                ANS100NeuralHypothesisEngine.Prediction(
+                    sourceConceptId = "lex-token:" + "c".repeat(24),
+                    predictedConceptId = "lex-token:" + "d".repeat(24),
+                    predictedLabel = "delta",
+                    supportingTurnCount = 2,
+                    verificationTurnCount = 2,
+                    confidence = 1.0,
+                    heuristicEvidence = false,
+                ),
+            ),
+        )
+        val ledger = ANS100NeuralHypothesisLedger(context, database)
+        try {
+            assertFalse(ledger.save(invalid))
+            assertTrue(ledger.load() == null)
+        } finally {
+            ledger.close()
+            context.deleteDatabase(database)
         }
     }
 }
