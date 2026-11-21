@@ -303,7 +303,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
     }
 
     @Test
-    fun repeatedPredictionMissesSuppressTheSameForecast() {
+    fun repeatedNextTurnPredictionMissesSuppressTheForecastAfterCheckpointRestore() {
         val first = readout()
         val engine = ANS100NeuralHypothesisEngine()
         repeat(2) { index ->
@@ -316,21 +316,35 @@ class AndroidJnvM250kHypothesisReadoutTest {
             )
         }
         val source = first.candidates.single().firstConceptId
-        val initialPredictions = engine.predict250k(setOf(source))
-        assertEquals(1, initialPredictions.size)
+        engine.observe250kTurn(
+            turnId = "forecast-prompt",
+            activeConceptIds = setOf(source),
+            candidates = emptyList(),
+            completed = true,
+            pairScanComplete = true,
+        )
+        assertEquals(1, engine.pendingPredictions().size)
 
-        repeat(2) { index ->
-            engine.observe250kTurn(
-                turnId = "forecast-miss-$index",
-                activeConceptIds = setOf(source),
-                candidates = emptyList(),
-                completed = true,
-                pairScanComplete = true,
-                predictionsForTurn = initialPredictions,
-            )
-        }
+        val restoredBeforeNextTurn = ANS100NeuralHypothesisEngine()
+        restoredBeforeNextTurn.restoreSnapshot(engine.exportSnapshot())
+        assertEquals(1, restoredBeforeNextTurn.pendingPredictions().size)
+        restoredBeforeNextTurn.observe250kTurn(
+            turnId = "forecast-miss-one",
+            activeConceptIds = setOf(source),
+            candidates = emptyList(),
+            completed = true,
+            pairScanComplete = true,
+        )
+        restoredBeforeNextTurn.observe250kTurn(
+            turnId = "forecast-miss-two",
+            activeConceptIds = setOf(source),
+            candidates = emptyList(),
+            completed = true,
+            pairScanComplete = true,
+        )
+
         val restored = ANS100NeuralHypothesisEngine()
-        restored.restoreSnapshot(engine.exportSnapshot())
+        restored.restoreSnapshot(restoredBeforeNextTurn.exportSnapshot())
         assertTrue(restored.predict250k(setOf(source)).isEmpty())
         assertEquals(
             2,
