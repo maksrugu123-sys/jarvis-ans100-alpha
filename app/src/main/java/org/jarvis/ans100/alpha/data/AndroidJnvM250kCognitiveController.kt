@@ -53,6 +53,7 @@ class AndroidJnvM250kCognitiveController(
     private var omittedCausalLinks = 0
     private var spikeCaptureComplete = true
     private var hypothesisLedger: ANS100NeuralHypothesisLedger? = null
+    private var currentPredictions: List<ANS100NeuralHypothesisEngine.Prediction> = emptyList()
 
     data class HypothesisObservation(
         val hypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis>,
@@ -127,6 +128,7 @@ class AndroidJnvM250kCognitiveController(
             maxGraphDepth = maxGraphDepth,
         )
         currentEvidenceEncoding = encoding
+        currentPredictions = predictions
         return DecisionStart(decision, encoding, context, predictions, conceptPrototypes)
     }
 
@@ -177,6 +179,7 @@ class AndroidJnvM250kCognitiveController(
         batchesRecorded = 0
         finishResult = null
         currentEvidenceEncoding = null
+        currentPredictions = emptyList()
         capturedSpikes.clear()
         capturedCausalLinks.clear()
         ambiguousTargetSpikes.clear()
@@ -313,6 +316,7 @@ class AndroidJnvM250kCognitiveController(
             candidates = readout.candidates,
             completed = true,
             pairScanComplete = readout.pairScanComplete,
+            predictionsForTurn = currentPredictions,
         )
         val persisted = ledger?.save(neuralHypothesisEngine.exportSnapshot()) ?: false
         hypothesisLedger = ledger
