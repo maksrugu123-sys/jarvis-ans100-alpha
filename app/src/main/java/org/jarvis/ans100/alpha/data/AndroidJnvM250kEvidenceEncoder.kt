@@ -21,6 +21,7 @@ class AndroidJnvM250kEvidenceEncoder {
         val userProvidedRecordCount: Int,
         val conceptRecordIds: Set<String> = emptySet(),
         val predictionEventCount: Int = 0,
+        val inputTimeNs: Long = 0L,
     )
 
     fun encode(evidence: TypedEvidenceBundle, inputTimeNs: Long): Encoding {
@@ -105,6 +106,7 @@ class AndroidJnvM250kEvidenceEncoder {
             heuristicRecordCount = evidence.heuristicRecordCount,
             userProvidedRecordCount = evidence.records.count { it.status == EvidenceStatus.USER_PROVIDED },
             conceptRecordIds = lexicalConceptIds,
+            inputTimeNs = inputTimeNs,
         )
     }
 
