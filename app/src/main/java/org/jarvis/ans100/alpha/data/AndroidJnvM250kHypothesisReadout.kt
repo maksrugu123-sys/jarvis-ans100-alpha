@@ -26,6 +26,7 @@ class AndroidJnvM250kHypothesisReadout(
         val convergentNeuronIds: List<Int>,
         val activatedConnectionIds: List<String>,
         val evidenceRefs: List<String>,
+        val heuristicEvidence: Boolean = false,
     ) {
         init {
             require(candidateId.matches(Regex("^jnvm250k-association:[a-f0-9]{32}$")))
@@ -96,6 +97,8 @@ class AndroidJnvM250kHypothesisReadout(
 
         val spikeTimes = emittedSpikes.groupBy { it.neuronId }
             .mapValues { (_, spikes) -> spikes.map { it.timestampNs }.toSet() }
+        val targetSpikeTaint = emittedSpikes.groupBy { Arrival(it.neuronId, it.timestampNs) }
+            .mapValues { (_, spikes) -> spikes.any { it.coreTainted } }
         val sourceByArrival = LinkedHashMap<Arrival, MutableList<Pair<String, AndroidJnvM250kCausalLink>>>()
         causalLinks.forEach { link ->
             val recordId = recordsByNeuron[link.sourceNeuronId] ?: return@forEach
@@ -110,8 +113,9 @@ class AndroidJnvM250kHypothesisReadout(
 
         val pairTargets = LinkedHashMap<Pair<String, String>, MutableMap<Int, MutableSet<String>>>()
         val pairRefs = HashMap<Pair<String, String>, MutableSet<String>>()
+        val pairHeuristic = HashMap<Pair<String, String>, Boolean>()
         var consideredPairs = 0
-        sourceByArrival.values.forEach { arrivals ->
+        sourceByArrival.forEach { (arrivalKey, arrivals) ->
             val distinctSources = arrivals.distinctBy { it.first }
             for (leftIndex in distinctSources.indices) {
                 for (rightIndex in leftIndex + 1 until distinctSources.size) {
@@ -125,6 +129,10 @@ class AndroidJnvM250kHypothesisReadout(
                         .getOrPut(target) { LinkedHashSet() }
                     connections += left.second.connectionId
                     connections += right.second.connectionId
+                    val heuristic = encoding.recordStatuses[left.first] == EvidenceStatus.HEURISTIC ||
+                        encoding.recordStatuses[right.first] == EvidenceStatus.HEURISTIC ||
+                        targetSpikeTaint[arrivalKey] == true
+                    pairHeuristic[key] = pairHeuristic[key] == true || heuristic
                     val refs = pairRefs.getOrPut(key) { LinkedHashSet() }
                     listOf(left.first, right.first).forEach { recordId ->
                         val provenance = encoding.recordProvenance[recordId]
@@ -148,6 +156,7 @@ class AndroidJnvM250kHypothesisReadout(
                 convergentNeuronIds = targets,
                 activatedConnectionIds = connections.take(MAX_CONNECTIONS_PER_PAIR),
                 evidenceRefs = refs,
+                heuristicEvidence = pairHeuristic[pair] == true,
             )
         }.sortedWith(
             compareByDescending<Candidate> { it.convergentNeuronIds.size }
