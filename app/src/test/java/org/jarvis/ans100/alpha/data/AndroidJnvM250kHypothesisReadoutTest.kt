@@ -72,6 +72,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
         assertEquals(listOf(70_123), result.candidates.single().convergentNeuronIds)
         assertTrue(result.pairScanComplete)
         assertEquals(2, result.candidates.single().activatedConnectionIds.size)
+        assertTrue(result.candidates.single().heuristicEvidence)
     }
 
     @Test
@@ -100,6 +101,8 @@ class AndroidJnvM250kHypothesisReadoutTest {
             pairScanComplete = first.pairScanComplete,
         )
         assertEquals(ANS100NeuralHypothesisEngine.Status.GENERATED, generated.single().status)
+        assertTrue(generated.single().heuristicEvidence)
+        assertTrue(engine.exportSnapshot().hypotheses.single().heuristicEvidence)
 
         val second = engine.observe250kTurn(
             turnId = "turn-two",
