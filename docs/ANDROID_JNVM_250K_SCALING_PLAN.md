@@ -460,3 +460,17 @@ A separate revision path now connects the existing approved-workspace causal-cha
 - This path revises auditable structured causal candidates; it does not yet learn arbitrary relations from free text, prove real-world causality, automatically modify concept memory, or change synaptic weights.
 
 Unit tests cover direct support, direct refutation, conflict preservation, premise-evidence exclusion, source filtering, duplicate evidence, atomic rejection, and checkpoint restoration. Android instrumentation tests cover SQLite round-trip and invalid provenance rejection. Tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, instrumentation, or device benchmark was run.
+
+
+## Approval-gated hypothesis search leads
+
+`ANS100HypothesisSearchEvidenceProvider` is a bounded adapter that can be invoked explicitly for one review-queue request after the caller has obtained user approval. It builds a neutral query from the resolved endpoint labels and relation type, then returns at most five HTTPS search-result leads with bounded title/snippet fields and stable provenance references.
+
+Important trust boundary:
+- Results are classified only as `UNVERIFIED_SEARCH_LEAD`. A search title or snippet is not direct evidence and cannot be passed to the revision engine as `VERIFIED_TOOL`.
+- The adapter does not open result pages, authenticate publishers, extract facts, or update the hypothesis ledger.
+- Conflict-review and evidence-capacity-exhausted requests are skipped without network access.
+- Search direction remains metadata; the query is neutral to avoid asking the search engine to manufacture support or contradiction.
+- The adapter is not called automatically by the dialogue pipeline. A future UI/approval action must explicitly invoke it, inspect leads, and use a separate page-verification step before any result can be considered for direct evidence.
+
+Tests are authored for bounds, URL filtering, provenance labeling, and no-network skip paths. They have NOT been run. No Gradle build, APK, CI, or device test was run.
