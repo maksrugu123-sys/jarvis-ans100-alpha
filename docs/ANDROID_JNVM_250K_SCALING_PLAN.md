@@ -409,7 +409,7 @@ Unit tests were added for stable addresses across turns, actual two-edge converg
 `AndroidJnvM250kEvidenceEncoder` now adds a separate bounded lexical layer from the actual `USER_MESSAGE_TEXT` value:
 
 - Unicode NFKC normalization and locale-independent lowercase are applied before tokenization. Tokens are Unicode letters/numbers, 2–32 characters; a small Russian/English stop-word list is removed.
-- Up to 24 distinct tokens are retained per turn. Each token gets a stable digest-based concept-slot ID and a stable PERCEPTION neuron address across turns. Event IDs remain turn-specific.
+- Up to 24 distinct tokens are retained per turn. Each token gets a stable digest-based concept-slot ID and a stable PERCEPTION neuron address across turns. Typed evidence and lexical tokens use disjoint halves of PERCEPTION; their address allocation is deterministic. Event IDs remain turn-specific.
 - The readout now considers only these lexical concept slots when forming pair hypotheses. Structural and heuristic typed-evidence records are not mixed into lexical pair candidates.
 - Labels are the normalized token itself; provenance stores a bounded turn reference and token digest. Raw full message text is not copied into the hypothesis ledger.
 - This is exact lexical matching only: no stemming, lemmatization, synonym mapping, cross-language equivalence, phrase meaning or entity resolution. For example, inflected forms are separate feature slots.
@@ -418,7 +418,7 @@ Unit tests were added for stable addresses across turns, actual two-edge converg
 
 - It emits a prediction only when one lexical feature is active, its partner is absent, the pair has at least two independent supporting turns, and the support ratio is at least 0.75.
 - Mixed/non-reproduced associations are naturally down-weighted by the ratio and normally fail the threshold.
-- The predicted feature is encoded as a bounded pulse into the PREDICTION population. It is not added to the active lexical concept set, so a prediction cannot be mistaken for an observed token.
+- The predicted feature is encoded as a bounded pulse into a reserved subrange of the PREDICTION population, separate from typed reasoning-plan input slots. It is not added to the active lexical concept set, so a prediction cannot be mistaken for an observed token.
 - Prediction pulses preserve the heuristic-evidence taint from their supporting hypothesis and are returned in `DecisionStart.predictions` for inspection.
 
 These are predictions of likely co-occurring lexical features, not next-word generation, factual claims, or independent language reasoning. They should be treated as model expectations and compared with subsequent observed input. Unit tests were added for stable lexical addresses, lexical-only readout, conservative prediction thresholds, and PREDICTION-population routing. Tests remain **NOT RUN**; no Gradle build, APK, CI or device benchmark was performed.
