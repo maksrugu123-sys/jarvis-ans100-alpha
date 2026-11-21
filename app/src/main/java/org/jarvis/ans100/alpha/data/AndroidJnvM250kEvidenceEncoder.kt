@@ -27,7 +27,7 @@ class AndroidJnvM250kEvidenceEncoder {
         evidence.records.forEachIndexed { index, record ->
             require(record.turnId == evidence.turnId)
             val range = inputRangeFor(record)
-            var offset = stableHash("${evidence.turnId}|${record.feature.stableId}|${record.recordId}") % range.size
+            var offset = stableHash("${record.feature.stableId}|${record.recordId}") % range.size
             var target = range.firstNeuronId + offset
             var probes = 0
             while (!usedTargets.add(target)) {
