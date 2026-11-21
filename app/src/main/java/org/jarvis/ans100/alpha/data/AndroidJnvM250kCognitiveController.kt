@@ -317,6 +317,8 @@ class AndroidJnvM250kCognitiveController(
             completed = true,
             pairScanComplete = readout.pairScanComplete,
             predictionsForTurn = currentPredictions,
+            predictionOutcomeConceptIds = encoding.conceptRecordIds,
+            predictionOutcomeComplete = !encoding.lexicalConceptsTruncated,
         )
         val persisted = ledger?.save(neuralHypothesisEngine.exportSnapshot()) ?: false
         hypothesisLedger = ledger
