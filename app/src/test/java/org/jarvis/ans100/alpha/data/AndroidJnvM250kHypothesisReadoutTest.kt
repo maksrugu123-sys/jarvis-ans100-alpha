@@ -350,6 +350,8 @@ class AndroidJnvM250kHypothesisReadoutTest {
             2,
             restored.exportSnapshot().hypotheses.single().predictionMissTurnIds.size,
         )
+        assertEquals(2, restored.snapshot().single().predictionMissCount)
+        assertEquals(0, restored.snapshot().single().predictionHitCount)
     }
 
     @Test
@@ -385,6 +387,8 @@ class AndroidJnvM250kHypothesisReadoutTest {
         val persisted = engine.exportSnapshot().hypotheses.single()
         assertEquals(1, persisted.predictionHitTurnIds.size)
         assertTrue(persisted.predictionMissTurnIds.isEmpty())
+        assertEquals(1, engine.snapshot().single().predictionHitCount)
+        assertEquals(0, engine.snapshot().single().predictionMissCount)
     }
 
     @Test
