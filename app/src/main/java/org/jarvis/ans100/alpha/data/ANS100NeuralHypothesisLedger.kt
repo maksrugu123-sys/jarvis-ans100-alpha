@@ -93,10 +93,22 @@ class ANS100NeuralHypothesisLedger(
                 .put("prediction_hit_turn_ids", JSONArray(item.predictionHitTurnIds))
                 .put("prediction_miss_turn_ids", JSONArray(item.predictionMissTurnIds)))
         }
+        val pendingPredictions = JSONArray()
+        snapshot.pendingPredictions.forEach { prediction ->
+            pendingPredictions.put(JSONObject()
+                .put("source_concept_id", prediction.sourceConceptId)
+                .put("predicted_concept_id", prediction.predictedConceptId)
+                .put("predicted_label", prediction.predictedLabel)
+                .put("supporting_turn_count", prediction.supportingTurnCount)
+                .put("verification_turn_count", prediction.verificationTurnCount)
+                .put("confidence", prediction.confidence)
+                .put("heuristic_evidence", prediction.heuristicEvidence))
+        }
         return JSONObject()
             .put("schema", SNAPSHOT_SCHEMA)
             .put("hypotheses", hypotheses)
             .put("observed_turn_ids", JSONArray(snapshot.observedTurnIds))
+            .put("pending_predictions", pendingPredictions)
             .toString()
     }
 
@@ -122,9 +134,24 @@ class ANS100NeuralHypothesisLedger(
                 predictionMissTurnIds = row.optJSONArray("prediction_miss_turn_ids")?.let(::readStrings) ?: emptyList(),
             )
         }
+        val pendingRows = root.optJSONArray("pending_predictions") ?: JSONArray()
+        require(pendingRows.length() <= ANS100NeuralHypothesisEngine.MAX_PREDICTIONS)
+        val pendingPredictions = (0 until pendingRows.length()).map { index ->
+            val row = pendingRows.getJSONObject(index)
+            ANS100NeuralHypothesisEngine.Prediction(
+                sourceConceptId = row.getString("source_concept_id"),
+                predictedConceptId = row.getString("predicted_concept_id"),
+                predictedLabel = row.getString("predicted_label"),
+                supportingTurnCount = row.getInt("supporting_turn_count"),
+                verificationTurnCount = row.getInt("verification_turn_count"),
+                confidence = row.getDouble("confidence"),
+                heuristicEvidence = row.optBoolean("heuristic_evidence", false),
+            )
+        }
         return ANS100NeuralHypothesisEngine.Snapshot(
             hypotheses = hypotheses,
             observedTurnIds = readStrings(root.getJSONArray("observed_turn_ids")),
+            pendingPredictions = pendingPredictions,
         )
     }
 
