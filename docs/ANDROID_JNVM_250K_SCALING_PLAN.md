@@ -376,7 +376,7 @@ No APK build, instrumentation test, device run, or benchmark was performed for t
 
 `AndroidJnvM250kCognitiveController.decideAndBeginEpisode` now connects the existing `ANS100HybridPopulationController` to the 250k runtime. The caller supplies the completed 10k hybrid pass's actual telemetry and emitted spike IDs, along with the typed evidence and Core understanding. The existing hybrid controller validates the candidate lanes and emits SELECTED, NEEDS_CLARIFICATION, or ABSTAINED. Only SELECTED decisions are encoded and opened as reward episodes; clarification and abstention are returned without starting learning.
 
-After the decision bridge, the 250k runtime executes the encoded evidence events and the existing attribution/replay/gate/SQLite chain remains responsible for exact-edge learning. The 10k hybrid candidate competition is still the current action-selection authority; the 250k populations do not yet independently select external tools/actions. The native 250k readout now generates repeatable typed-evidence-slot association candidates from actual spikes and sparse transmissions, but it is not a semantic content decoder. Memory retrieval, content-level pattern hypotheses and prediction within the 250k network still need validated encoders/readouts and app-level adapters. This is not yet a fully autonomous end-to-end agent.
+After the decision bridge, the 250k runtime executes the encoded evidence events and the existing attribution/replay/gate/SQLite chain remains responsible for exact-edge learning. The 10k hybrid candidate competition is still the current action-selection authority; the 250k populations do not yet independently select external tools/actions. The native 250k readout now generates repeatable lexical-feature associations and conservative feature predictions from actual spikes and sparse transmissions, but it is not a semantic content decoder. Memory retrieval, content-level reasoning and app-level integration remain incomplete. This is not yet a fully autonomous end-to-end agent.
 
 Unit tests were added for deterministic mapping, population routing, heuristic taint and boolean polarity. They were authored but NOT RUN. No APK build, instrumentation test, device run or benchmark was performed.
 
@@ -400,6 +400,25 @@ The controller also validates that encoded inputs enter only PERCEPTION/MEMORY/P
 - `ANS100NeuralHypothesisEngine.observe250kTurn` reuses the bounded cross-turn lifecycle and SQLite checkpoint format. It records repeated support and complete later non-reproduction as a mixed/repeatability signal, never as proof of semantic truth or causality.
 - `AndroidJnvM250kCognitiveController.observe250kNeuralHypotheses` accumulates actual spikes and causal links across bounded runtime batches and runs this native readout only after the queue is drained. It can persist the updated checkpoint through the supplied `ANS100NeuralHypothesisLedger`.
 
-**Interpretation limit:** these are associations between stable typed-evidence *slots* (for example, a message-text slot and an intent-hint slot), not concepts extracted from the contents of those fields. Different words can occupy the same ordinal feature slot. The network still needs a real content/semantic encoder and a validated concept-binding mechanism before it can claim semantic understanding. A matching target spike is evidence of temporal co-activation, not proof that either edge alone caused the target spike.
+**Interpretation limit:** typed evidence slots remain structural inputs, while lexical concepts below are exact normalized tokens extracted from user text. Neither layer performs synonym resolution, morphology, translation or semantic understanding. A matching target spike is evidence of temporal co-activation, not proof that either edge alone caused the target spike.
 
 Unit tests were added for stable addresses across turns, actual two-edge convergence, target-spike timestamp matching, ambiguous-target rejection, truncated telemetry, and cross-turn reproduction/non-reproduction. Tests are authored but **NOT RUN**. No Gradle build, APK, CI, Android instrumentation or device benchmark was run.
+
+## Lexical concept slots and association-based prediction (V1)
+
+`AndroidJnvM250kEvidenceEncoder` now adds a separate bounded lexical layer from the actual `USER_MESSAGE_TEXT` value:
+
+- Unicode NFKC normalization and locale-independent lowercase are applied before tokenization. Tokens are Unicode letters/numbers, 2–32 characters; a small Russian/English stop-word list is removed.
+- Up to 24 distinct tokens are retained per turn. Each token gets a stable digest-based concept-slot ID and a stable PERCEPTION neuron address across turns. Event IDs remain turn-specific.
+- The readout now considers only these lexical concept slots when forming pair hypotheses. Structural and heuristic typed-evidence records are not mixed into lexical pair candidates.
+- Labels are the normalized token itself; provenance stores a bounded turn reference and token digest. Raw full message text is not copied into the hypothesis ledger.
+- This is exact lexical matching only: no stemming, lemmatization, synonym mapping, cross-language equivalence, phrase meaning or entity resolution. For example, inflected forms are separate feature slots.
+
+`ANS100NeuralHypothesisEngine.predict250k` adds a conservative co-occurrence predictor:
+
+- It emits a prediction only when one lexical feature is active, its partner is absent, the pair has at least two independent supporting turns, and the support ratio is at least 0.75.
+- Mixed/non-reproduced associations are naturally down-weighted by the ratio and normally fail the threshold.
+- The predicted feature is encoded as a bounded pulse into the PREDICTION population. It is not added to the active lexical concept set, so a prediction cannot be mistaken for an observed token.
+- Prediction pulses preserve the heuristic-evidence taint from their supporting hypothesis and are returned in `DecisionStart.predictions` for inspection.
+
+These are predictions of likely co-occurring lexical features, not next-word generation, factual claims, or independent language reasoning. They should be treated as model expectations and compared with subsequent observed input. Unit tests were added for stable lexical addresses, lexical-only readout, conservative prediction thresholds, and PREDICTION-population routing. Tests remain **NOT RUN**; no Gradle build, APK, CI or device benchmark was performed.
