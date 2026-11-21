@@ -5,8 +5,10 @@ package org.jarvis.ans100.alpha.data
  *
  * The existing typed-evidence encoder and 10k hybrid population controller
  * provide provenance-bound inputs and candidate selection. The 250k encoder
- * adds stable lexical slots and can prime its PREDICTION population from
- * repeated co-occurrence hypotheses. This class bridges the selected decision
+ * adds stable lexical slots, recalls complete-link co-occurrence prototypes
+ * into MEMORY, and delivers saved one-turn-ahead forecasts into PREDICTION.
+ * Forecasts are scored only against the following accepted episode's observed
+ * lexical input. This class bridges the selected decision
  * into the separate JNVM runtime, captures the pre-action graph, records actual
  * transmissions/responses, and delegates bounded replay plus durable exact-edge
  * reward to the attribution journal. It does not independently understand raw
