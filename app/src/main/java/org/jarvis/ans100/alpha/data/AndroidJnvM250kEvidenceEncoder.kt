@@ -225,7 +225,7 @@ class AndroidJnvM250kEvidenceEncoder {
             if (token !in STOP_WORDS) seen += token
         }
         return Tokenization(
-            tokens = seen.take(MAX_LEXICAL_CONCEPTS),
+            tokens = seen.sorted().take(MAX_LEXICAL_CONCEPTS),
             truncated = seen.size > MAX_LEXICAL_CONCEPTS,
         )
     }
