@@ -418,6 +418,7 @@ Unit tests were added for stable addresses across turns, actual two-edge converg
 `ANS100NeuralHypothesisEngine.predict250k` adds a conservative co-occurrence predictor:
 
 - It emits a prediction only when one lexical feature is active, its partner is absent, the pair has at least two independent supporting turns, and the support ratio is at least 0.75.
+- The reported confidence is the bounded ratio `supporting turns / (supporting + non-reproducing turns)`. It is a simple empirical score, not a calibrated probability or quality guarantee.
 - Mixed/non-reproduced associations are naturally down-weighted by the ratio and normally fail the threshold.
 - The predicted feature is encoded as a bounded pulse into a reserved subrange of the PREDICTION population, separate from typed reasoning-plan input slots. It is not added to the active lexical concept set, so a prediction cannot be mistaken for an observed token.
 - Every prediction pulse is marked heuristic-tainted because it is model-generated, regardless of whether its supporting lexical observations were user-provided. Forecasts are returned in `DecisionStart.predictions` for inspection.
