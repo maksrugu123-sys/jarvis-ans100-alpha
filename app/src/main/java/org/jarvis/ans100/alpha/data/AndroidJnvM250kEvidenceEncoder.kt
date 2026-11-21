@@ -19,6 +19,7 @@ class AndroidJnvM250kEvidenceEncoder {
         val heuristicRecordCount: Int,
         val userProvidedRecordCount: Int,
         val conceptRecordIds: Set<String> = emptySet(),
+        val predictionEventCount: Int = 0,
     )
 
     fun encode(evidence: TypedEvidenceBundle, inputTimeNs: Long): Encoding {
@@ -106,6 +107,48 @@ class AndroidJnvM250kEvidenceEncoder {
         )
     }
 
+
+    /**
+     * Converts only sufficiently repeated prior associations into bounded
+     * PREDICTION-population pulses. These pulses are not added to the active
+     * lexical concept set, so they cannot masquerade as observed input.
+     */
+    fun appendPredictions(
+        encoding: Encoding,
+        predictions: List<ANS100NeuralHypothesisEngine.Prediction>,
+        predictionTimeNs: Long,
+    ): Encoding {
+        require(predictionTimeNs >= 0L)
+        require(predictions.size <= ANS100NeuralHypothesisEngine.MAX_PREDICTIONS)
+        require(predictions.map { it.predictedConceptId }.distinct().size == predictions.size)
+        if (predictions.isEmpty()) return encoding
+        val range = range(AndroidJnvM250kTopology.Population.PREDICTION)
+        val usedTargets = encoding.events.mapTo(HashSet()) { it.targetNeuronId }
+        val events = ArrayList<AndroidNeuronEvent>(encoding.events.size + predictions.size)
+        events.addAll(encoding.events)
+        val turnToken = stableHash(encoding.turnId).toString(16)
+        predictions.forEachIndexed { index, prediction ->
+            require(prediction.predictedConceptId.isNotBlank() && prediction.predictedConceptId.length <= 96)
+            require(prediction.confidence.isFinite() && prediction.confidence in 0.0..1.0)
+            var offset = stableHash("prediction|\u0024{prediction.predictedConceptId}") % range.size
+            var target = range.firstNeuronId + offset
+            var probes = 0
+            while (!usedTargets.add(target)) {
+                offset = (offset + 1) % range.size
+                target = range.firstNeuronId + offset
+                probes++
+                check(probes < range.size) { "prediction population is exhausted" }
+            }
+            events += AndroidNeuronEvent(
+                eventId = "pred-\u0024turnToken-\u0024index-\u0024{stableHash(prediction.predictedConceptId).toString(16)}",
+                timeNs = predictionTimeNs,
+                targetNeuronId = target,
+                strength = prediction.confidence.coerceIn(0.0, 1.0),
+                coreTainted = prediction.heuristicEvidence,
+            )
+        }
+        return encoding.copy(events = events, predictionEventCount = predictions.size)
+    }
 
     /**
      * Extracts bounded lexical symbols from the actual user message.
