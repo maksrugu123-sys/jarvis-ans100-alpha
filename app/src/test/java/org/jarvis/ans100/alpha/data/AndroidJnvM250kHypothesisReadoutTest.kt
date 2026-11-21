@@ -233,4 +233,72 @@ class AndroidJnvM250kHypothesisReadoutTest {
         val source = first.candidates.single().firstConceptId
         assertTrue(engine.predict250k(setOf(source)).isEmpty())
     }
+
+    private fun syntheticCandidate(
+        first: String,
+        firstLabel: String,
+        second: String,
+        secondLabel: String,
+        suffix: Char,
+    ) = AndroidJnvM250kHypothesisReadout.Candidate(
+        candidateId = "jnvm250k-association:" + suffix.toString().repeat(32),
+        firstConceptId = first,
+        firstLabel = firstLabel,
+        secondConceptId = second,
+        secondLabel = secondLabel,
+        convergentNeuronIds = listOf(70_100),
+        activatedConnectionIds = listOf("prototype-$suffix-a", "prototype-$suffix-b"),
+        evidenceRefs = emptyList(),
+    )
+
+    @Test
+    fun formsOnlyCompleteLinkClustersFromRepeatedPairEvidence() {
+        val a = "lex-token:" + "a".repeat(24)
+        val b = "lex-token:" + "b".repeat(24)
+        val c = "lex-token:" + "c".repeat(24)
+        val candidates = listOf(
+            syntheticCandidate(a, "alpha", b, "beta", 'a'),
+            syntheticCandidate(a, "alpha", c, "gamma", 'b'),
+            syntheticCandidate(b, "beta", c, "gamma", 'c'),
+        )
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "cluster-support-$index",
+                activeConceptIds = setOf(a, b, c),
+                candidates = candidates,
+                completed = true,
+                pairScanComplete = true,
+            )
+        }
+
+        val prototypes = engine.recall250kConceptPrototypes(setOf(a))
+        assertEquals(1, prototypes.size)
+        assertEquals(listOf(a, b, c), prototypes.single().memberConceptIds)
+        assertEquals(listOf("alpha", "beta", "gamma"), prototypes.single().memberLabels)
+        assertEquals(2, prototypes.single().supportingTurnCount)
+        assertEquals(1.0, prototypes.single().confidence, 0.0)
+    }
+
+    @Test
+    fun refusesTransitiveClusterWhenOnePairHasNoRepeatedEvidence() {
+        val a = "lex-token:" + "d".repeat(24)
+        val b = "lex-token:" + "e".repeat(24)
+        val c = "lex-token:" + "f".repeat(24)
+        val candidates = listOf(
+            syntheticCandidate(a, "delta", b, "epsilon", 'd'),
+            syntheticCandidate(b, "epsilon", c, "zeta", 'e'),
+        )
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "chain-support-$index",
+                activeConceptIds = setOf(a, b, c),
+                candidates = candidates,
+                completed = true,
+                pairScanComplete = true,
+            )
+        }
+        assertTrue(engine.recall250kConceptPrototypes(setOf(a)).isEmpty())
+    }
 }
