@@ -41,9 +41,22 @@ class AndroidJnvM250kCognitiveController(
     private val evidenceEncoder = AndroidJnvM250kEvidenceEncoder()
     private val hybridDecisionController = ANS100HybridPopulationController()
     private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine()
+    private val jnvmHypothesisReadout = AndroidJnvM250kHypothesisReadout()
+    private var currentEvidenceEncoding: AndroidJnvM250kEvidenceEncoder.Encoding? = null
+    private val capturedSpikes = ArrayList<AndroidJnvM250kSpike>()
+    private val capturedCausalLinks = ArrayList<AndroidJnvM250kCausalLink>()
+    private val ambiguousTargetSpikes = LinkedHashSet<Int>()
+    private var omittedCausalLinks = 0
+    private var spikeCaptureComplete = true
     private var hypothesisLedger: ANS100NeuralHypothesisLedger? = null
 
     data class HypothesisObservation(
+        val hypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis>,
+        val persisted: Boolean,
+    )
+
+    data class InternalHypothesisObservation(
+        val readout: AndroidJnvM250kHypothesisReadout.Result,
         val hypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis>,
         val persisted: Boolean,
     )
@@ -99,6 +112,7 @@ class AndroidJnvM250kCognitiveController(
             outcomeNeuronIds = outcomeNeuronIds,
             maxGraphDepth = maxGraphDepth,
         )
+        currentEvidenceEncoding = encoding
         return DecisionStart(decision, encoding, context)
     }
 
@@ -148,6 +162,12 @@ class AndroidJnvM250kCognitiveController(
         inputsScheduled = false
         batchesRecorded = 0
         finishResult = null
+        currentEvidenceEncoding = null
+        capturedSpikes.clear()
+        capturedCausalLinks.clear()
+        ambiguousTargetSpikes.clear()
+        omittedCausalLinks = 0
+        spikeCaptureComplete = true
         phase = Phase.EXECUTING
         return context
     }
@@ -168,6 +188,24 @@ class AndroidJnvM250kCognitiveController(
         }
         val result = runtime.run(maxEvents, maxTimestamps)
         attribution.recordRun(result)
+        if (capturedSpikes.size + result.emittedSpikes.size <=
+            AndroidJnvM250kHypothesisReadout.MAX_SPIKES_PER_TURN
+        ) {
+            capturedSpikes.addAll(result.emittedSpikes)
+        } else {
+            spikeCaptureComplete = false
+            val remaining = AndroidJnvM250kHypothesisReadout.MAX_SPIKES_PER_TURN - capturedSpikes.size
+            if (remaining > 0) capturedSpikes.addAll(result.emittedSpikes.take(remaining))
+        }
+        result.causalLinks.forEach { link ->
+            if (capturedCausalLinks.size < AndroidJnvM250kHypothesisReadout.MAX_CAUSAL_LINKS_PER_TURN) {
+                capturedCausalLinks += link
+            } else {
+                omittedCausalLinks++
+            }
+        }
+        omittedCausalLinks += result.omittedCausalLinks
+        ambiguousTargetSpikes += result.ambiguousTargetSpikeNeuronIds
         if (result.processedEvents > 0) batchesRecorded++
         check(result.processedEvents > 0 || result.pendingEvents > 0) {
             "runtime made no progress; refusing to mark an empty episode as completed"
@@ -226,6 +264,41 @@ class AndroidJnvM250kCognitiveController(
         val persisted = ledger?.save(neuralHypothesisEngine.exportSnapshot()) ?: false
         hypothesisLedger = ledger
         return HypothesisObservation(hypotheses, persisted)
+    }
+
+    /**
+     * Builds hypotheses using only this 250k episode's actual input spikes,
+     * transmitted synapses and matching target spikes. No legacy 10k decoder
+     * or caller-supplied candidate list is involved.
+     */
+    @Synchronized
+    fun observe250kNeuralHypotheses(
+        ledger: ANS100NeuralHypothesisLedger? = hypothesisLedger,
+    ): InternalHypothesisObservation {
+        check(phase == Phase.AWAITING_OUTCOME) {
+            "250k hypotheses can be committed only after the runtime queue is drained"
+        }
+        val encoding = currentEvidenceEncoding
+            ?: error("this episode was not started from a typed evidence bundle")
+        val context = decisionContext ?: error("there is no decision context for this hypothesis turn")
+        val readout = jnvmHypothesisReadout.decode(
+            encoding = encoding,
+            emittedSpikes = capturedSpikes,
+            causalLinks = capturedCausalLinks,
+            omittedCausalLinks = omittedCausalLinks,
+            ambiguousTargetSpikeNeuronIds = ambiguousTargetSpikes,
+            spikeCaptureComplete = spikeCaptureComplete,
+        )
+        val hypotheses = neuralHypothesisEngine.observe250kTurn(
+            turnId = context.decisionTurnId,
+            activeConceptIds = readout.activeConceptIds,
+            candidates = readout.candidates,
+            completed = true,
+            pairScanComplete = readout.pairScanComplete,
+        )
+        val persisted = ledger?.save(neuralHypothesisEngine.exportSnapshot()) ?: false
+        hypothesisLedger = ledger
+        return InternalHypothesisObservation(readout, hypotheses, persisted)
     }
 
     /** Restore the bounded cross-turn hypothesis checkpoint before new turns. */
