@@ -36,7 +36,7 @@ class AndroidJnvM250kHypothesisReadout(
             require(secondLabel.isNotBlank() && secondLabel.length <= 96)
             require(convergentNeuronIds.isNotEmpty() && convergentNeuronIds.size <= MAX_TARGETS_PER_PAIR)
             require(convergentNeuronIds.distinct().size == convergentNeuronIds.size)
-            require(convergentNeuronIds.all { it in 0 until AndroidJnvM250kProfile.NEURON_COUNT })
+            require(convergentNeuronIds.all { it in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY })
             require(activatedConnectionIds.size >= 2 && activatedConnectionIds.size <= MAX_CONNECTIONS_PER_PAIR)
             require(activatedConnectionIds.distinct().size == activatedConnectionIds.size)
             require(activatedConnectionIds.all { it.isNotBlank() && it.length <= 128 })
@@ -80,16 +80,13 @@ class AndroidJnvM250kHypothesisReadout(
         require(emittedSpikes.size <= MAX_SPIKES_PER_TURN)
         require(causalLinks.size <= MAX_CAUSAL_LINKS_PER_TURN)
         require(ambiguousTargetSpikeNeuronIds.all {
-            it in 0 until AndroidJnvM250kProfile.NEURON_COUNT
+            it in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY
         })
 
         val recordsByNeuron = encoding.recordToNeuronId.entries.associate { (recordId, neuronId) ->
             neuronId to recordId
         }
         require(recordsByNeuron.size == encoding.recordToNeuronId.size)
-        val recordById = encoding.events.associateBy { event ->
-            encoding.recordToNeuronId.entries.single { it.value == event.targetNeuronId }.key
-        }
         val sourceSpikeIds = emittedSpikes.map { it.neuronId }.toSet()
         val activeRecords = recordsByNeuron.filter { (neuronId, _) ->
             neuronId in sourceSpikeIds
@@ -127,14 +124,10 @@ class AndroidJnvM250kHypothesisReadout(
                     connections += left.second.connectionId
                     connections += right.second.connectionId
                     val refs = pairRefs.getOrPut(key) { LinkedHashSet() }
-                    encoding.recordToNeuronId.entries
-                        .filter { it.key == left.first || it.key == right.first }
-                        .forEach { entry ->
-                            val sourceEvent = encoding.events.firstOrNull {
-                                it.targetNeuronId == entry.value
-                            }
-                            if (sourceEvent != null) refs += "record:${entry.key}"
-                        }
+                    listOf(left.first, right.first).forEach { recordId ->
+                        val provenance = encoding.recordProvenance[recordId]
+                        if (provenance != null) refs += provenance
+                    }
                 }
             }
         }
@@ -147,9 +140,9 @@ class AndroidJnvM250kHypothesisReadout(
             Candidate(
                 candidateId = "jnvm250k-association:${digest(pair.first + "|" + pair.second)}",
                 firstConceptId = pair.first,
-                firstLabel = pair.first.substringBeforeLast(':'),
+                firstLabel = encoding.recordLabels[pair.first] ?: pair.first.substringBeforeLast(':'),
                 secondConceptId = pair.second,
-                secondLabel = pair.second.substringBeforeLast(':'),
+                secondLabel = encoding.recordLabels[pair.second] ?: pair.second.substringBeforeLast(':'),
                 convergentNeuronIds = targets,
                 activatedConnectionIds = connections.take(MAX_CONNECTIONS_PER_PAIR),
                 evidenceRefs = refs,
