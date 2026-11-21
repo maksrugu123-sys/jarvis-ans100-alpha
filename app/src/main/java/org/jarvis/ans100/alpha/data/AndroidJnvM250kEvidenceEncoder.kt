@@ -149,7 +149,8 @@ class AndroidJnvM250kEvidenceEncoder {
                 // Presence pulse reaches the LIF-DT base threshold; calibrated confidence
                 // remains metadata on DecisionStart.predictions, not spike amplitude.
                 strength = LEXICAL_ACTIVATION,
-                coreTainted = prediction.heuristicEvidence,
+                // Every forecast is model-generated and therefore remains heuristic-tainted.
+                coreTainted = true,
             )
         }
         return encoding.copy(events = events, predictionEventCount = predictions.size)
