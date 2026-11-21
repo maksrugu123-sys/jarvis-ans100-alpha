@@ -59,7 +59,7 @@ class ANS100HypothesisSearchEvidenceProviderTest {
         )
         val exhausted = provider.search(
             request(ANS100HypothesisRevisionEngine.ReviewAction.EVIDENCE_CAPACITY_EXHAUSTED, 0),
-            "A", "B",
+            "A", "B", userApproved = true,
         )
         assertEquals(0, calls)
         assertEquals("manual_conflict_review", conflict.skippedReason)
