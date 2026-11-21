@@ -494,3 +494,17 @@ Every result remains `UNCLASSIFIED_PASSAGE`. Co-mention does not establish suppo
 `ANS100HypothesisSourceAudit` collapses passages from the same fetched page, canonicalizes HTTPS URLs, detects exact page-content SHA-256 duplicates across URLs, and labels repeated URLs and same-host pages. The default cap is 24 unique pages (hard maximum 48), with at most 288 input passage candidates.
 
 A different hostname is only `DISTINCT_HOST_UNVERIFIED`; `independenceConfirmed` remains false. Host difference does not prove publisher independence because syndication, common ownership, copied reporting, and shared upstream sources are not resolved. This stage does not promote sources to trusted evidence, revise hypotheses, or train connections. Tests are authored but **NOT RUN**.
+
+
+## Conservative claim-polarity candidate analysis (V1)
+
+`ANS100HypothesisClaimPolarityAnalyzer` adds a lexical cue stage for extracted passages. It requires both endpoint labels and a relation-specific cue in the expected order. The initial cue dictionary covers the current relation types (`IS_A`, `PART_OF`, `CAUSES`, `ENABLES`, `PREVENTS`, `HAS_PROPERTY`, `USED_FOR`) with a small English/Russian phrase set.
+
+- Ordered cue without detected negation => `POSSIBLE_SUPPORT`.
+- Ordered cue with a nearby explicit negation token => `POSSIBLE_CONTRADICTION`.
+- Missing cue, reversed endpoint order, or unclear scope => `AMBIGUOUS`.
+- Every output remains `POLARITY_CANDIDATE_UNVERIFIED` and preserves the passage/page/source provenance.
+
+This is deliberately not natural-language understanding or fact checking. The cue detector can miss paraphrases, mishandle complex grammar, modality, quotations, sarcasm, and negation scope. Its output is not accepted by the revision engine as `VERIFIED_TOOL`, is not promoted to direct evidence, and cannot train neurons. A human/reliable verifier must inspect the full claim and source before creating direct evidence.
+
+Tests are authored for ordered support, explicit negation, the "not only" exception, co-mention ambiguity, reversed order, Russian cue recognition, and provenance retention. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device test was run.
