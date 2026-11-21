@@ -170,4 +170,15 @@ class AndroidJnvM250kEvidenceEncoderTest {
         assertEquals(base.conceptRecordIds, encoded.conceptRecordIds)
         assertEquals(base.recordToNeuronId, encoded.recordToNeuronId)
     }
+
+    @Test
+    fun marksLexicalInputTruncatedWhenMoreThanTwentyFourTokensArePresent() {
+        val message = (1..30).joinToString(" ") { "слово$it" }
+        val encoded = AndroidJnvM250kEvidenceEncoder().encode(
+            bundle("truncated-lexical", message),
+            inputTimeNs = 10L,
+        )
+        assertEquals(AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS, encoded.conceptRecordIds.size)
+        assertTrue(encoded.lexicalConceptsTruncated)
+    }
 }
