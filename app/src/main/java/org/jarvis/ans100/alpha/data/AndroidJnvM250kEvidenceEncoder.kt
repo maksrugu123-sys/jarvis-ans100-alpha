@@ -21,6 +21,7 @@ class AndroidJnvM250kEvidenceEncoder {
         val userProvidedRecordCount: Int,
         val conceptRecordIds: Set<String> = emptySet(),
         val predictionEventCount: Int = 0,
+        val conceptPrototypeEventCount: Int = 0,
         val inputTimeNs: Long = 0L,
     )
 
@@ -112,6 +113,52 @@ class AndroidJnvM250kEvidenceEncoder {
 
 
     /**
+     * Re-activates a learned co-occurrence prototype in a reserved MEMORY
+     * subrange. These are model-generated recall signals, not observed input
+     * and never enter the lexical concept set used by the hypothesis readout.
+     */
+    fun appendConceptPrototypes(
+        encoding: Encoding,
+        prototypes: List<ANS100NeuralHypothesisEngine.ConceptPrototype>,
+        recallTimeNs: Long,
+    ): Encoding {
+        require(recallTimeNs >= 0L)
+        require(prototypes.size <= ANS100NeuralHypothesisEngine.MAX_CONCEPT_PROTOTYPES)
+        require(prototypes.map { it.prototypeId }.distinct().size == prototypes.size)
+        if (prototypes.isEmpty()) return encoding
+        val range = conceptPrototypeRange()
+        val usedTargets = encoding.events.mapTo(HashSet()) { it.targetNeuronId }
+        val events = ArrayList<AndroidNeuronEvent>(encoding.events.size + prototypes.size)
+        events.addAll(encoding.events)
+        val turnToken = stableHash(encoding.turnId).toString(16)
+        prototypes.sortedBy { it.prototypeId }.forEachIndexed { index, prototype ->
+            require(prototype.prototypeId.matches(Regex("^jnvm250k-prototype:[a-f0-9]{32}$")))
+            require(prototype.memberConceptIds.size in 2..ANS100NeuralHypothesisEngine.MAX_PROTOTYPE_MEMBERS)
+            require(prototype.confidence.isFinite() && prototype.confidence in 0.0..1.0)
+            var offset = stableHash("concept-prototype|" + prototype.prototypeId) % range.size
+            var target = range.firstNeuronId + offset
+            var probes = 0
+            while (!usedTargets.add(target)) {
+                offset = (offset + 1) % range.size
+                target = range.firstNeuronId + offset
+                probes++
+                check(probes < range.size) { "concept prototype memory population is exhausted" }
+            }
+            events += AndroidNeuronEvent(
+                eventId = "memproto-" + turnToken + "-" + index + "-" +
+                    stableHash(prototype.prototypeId).toString(16),
+                timeNs = recallTimeNs,
+                targetNeuronId = target,
+                // Presence pulse only; prototype confidence remains explicit metadata.
+                strength = LEXICAL_ACTIVATION,
+                // Recalled prototypes are learned model state, never trusted observations.
+                coreTainted = true,
+            )
+        }
+        return encoding.copy(events = events, conceptPrototypeEventCount = prototypes.size)
+    }
+
+    /**
      * Converts only sufficiently repeated prior associations into bounded
      * PREDICTION-population pulses. These pulses are not added to the active
      * lexical concept set, so they cannot masquerade as observed input.
@@ -188,7 +235,7 @@ class AndroidJnvM250kEvidenceEncoder {
             EvidenceSourceKind.CORE_UNDERSTANDING -> range(AndroidJnvM250kTopology.Population.PATTERN_DETECTION)
             EvidenceSourceKind.CORE_REASONING_PLAN -> evidencePredictionRange()
             EvidenceSourceKind.CONVERSATION_CONTEXT -> range(AndroidJnvM250kTopology.Population.CONTEXT)
-            EvidenceSourceKind.APPROVED_MEMORY -> range(AndroidJnvM250kTopology.Population.MEMORY)
+            EvidenceSourceKind.APPROVED_MEMORY -> evidenceMemoryRange()
             EvidenceSourceKind.VERIFIED_TOOL_RESULT -> range(AndroidJnvM250kTopology.Population.CONTEXT)
         }
 
@@ -199,6 +246,26 @@ class AndroidJnvM250kEvidenceEncoder {
             population = base.population,
             firstNeuronId = base.firstNeuronId,
             lastNeuronIdInclusive = base.firstNeuronId + base.size / 2 - 1,
+        )
+    }
+
+    /** User-approved memory evidence occupies the first half of MEMORY. */
+    private fun evidenceMemoryRange(): AndroidJnvM250kTopology.Range {
+        val base = range(AndroidJnvM250kTopology.Population.MEMORY)
+        return AndroidJnvM250kTopology.Range(
+            population = base.population,
+            firstNeuronId = base.firstNeuronId,
+            lastNeuronIdInclusive = base.firstNeuronId + base.size / 2 - 1,
+        )
+    }
+
+    /** Learned prototypes occupy the second half of MEMORY. */
+    private fun conceptPrototypeRange(): AndroidJnvM250kTopology.Range {
+        val base = range(AndroidJnvM250kTopology.Population.MEMORY)
+        return AndroidJnvM250kTopology.Range(
+            population = base.population,
+            firstNeuronId = base.firstNeuronId + base.size / 2,
+            lastNeuronIdInclusive = base.lastNeuronIdInclusive,
         )
     }
 
