@@ -441,3 +441,19 @@ Prediction feedback is now separated from neural co-activation:
 - These prediction misses are not factual contradictions and do not change the underlying association's independent co-activation support history.
 
 The SQLite hypothesis ledger now validates checkpoint invariants both before writing and after decoding: bounded histories, unique turn IDs, valid hypothesis digests, and pending forecasts that reference an existing hypothesis. Invalid in-memory snapshots are rejected instead of persisted; malformed or inconsistent stored snapshots load as unavailable rather than reaching the runtime. The controller also permits checkpoint restoration only before the first cognitive episode and refuses to overwrite a non-empty in-memory history. Instrumentation tests cover forecast/history round-trip and rejection of a forecast with no matching hypothesis. Unit tests also cover complete-link grouping, transitive-only cluster rejection, MEMORY prototype routing/taint, one-turn-ahead forecast hits/misses, repeated-miss suppression, pending-forecast restoration, and lexical truncation safeguards. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device benchmark was run.
+
+## Structured hypothesis revision and counter-evidence (V1)
+
+A separate revision path now connects the existing approved-workspace causal-chain generator to durable direct-evidence review:
+
+- ANS100WorkspaceConceptInputBridge.Result exposes the exact parsed RelationEvidence records alongside generated causal-chain candidates. No raw message text is copied into the revision ledger.
+- AndroidJnvM250kCognitiveController.observeStructuredHypotheses(...) accepts only a bridge result for the same completed decision turn, maps its causal candidates into relation hypotheses, and sends the exact direct observations to ANS100HypothesisRevisionEngine.
+- A chain such as A → B → C remains a candidate for A → C. Its premise relation IDs and premise evidence references are provenance only. They are never counted as direct confirmation for A → C. Reusing a premise evidence reference as direct evidence is rejected.
+- Only EXPLICIT_USER and VERIFIED_TOOL observations can revise a hypothesis. MODEL_GENERATED, INFERRED, and other untrusted source classes do not add support or counter-evidence.
+- A unique direct record is counted once. Reusing its reference with the same polarity/source is idempotent; rebinding that reference to a different polarity or source is rejected. If both support and counter-evidence exist, the result is CONFLICTED_DIRECT_EVIDENCE; neither side overwrites the other.
+- Missing evidence does not count as refutation. Incomplete turns are ignored. The evidence-balance ratio is a simple count ratio, not a calibrated probability or truth score.
+- Each hypothesis is bounded to 8 premise IDs/references and 16 direct evidence references. Once the direct-evidence budget is full, new evidence is rejected rather than evicting old deduplication keys. The engine retains at most 128 hypotheses and 512 recent turn IDs.
+- ANS100HypothesisRevisionLedger persists the validated snapshot in a separate SQLite database. The controller exposes startup-only checkpoint restoration and reports whether the latest snapshot was saved.
+- This path revises auditable structured causal candidates; it does not yet learn arbitrary relations from free text, prove real-world causality, automatically modify concept memory, or change synaptic weights. The app/ViewModel still needs to call the structured-observation method with the current bridge result.
+
+Unit tests cover direct support, direct refutation, conflict preservation, premise-evidence exclusion, source filtering, duplicate evidence, atomic rejection, and checkpoint restoration. Android instrumentation tests cover SQLite round-trip and invalid provenance rejection. Tests are AUTHORED / NOT RUN. No Gradle build, APK, CI, instrumentation, or device benchmark was run.
