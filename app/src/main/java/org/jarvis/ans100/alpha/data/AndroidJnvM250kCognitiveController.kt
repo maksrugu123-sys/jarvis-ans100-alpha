@@ -47,6 +47,7 @@ class AndroidJnvM250kCognitiveController(
     private val evidenceEncoder = AndroidJnvM250kEvidenceEncoder()
     private val hybridDecisionController = ANS100HybridPopulationController()
     private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine()
+    private val structuredHypothesisRevisionEngine = ANS100HypothesisRevisionEngine()
     private val jnvmHypothesisReadout = AndroidJnvM250kHypothesisReadout()
     private var currentEvidenceEncoding: AndroidJnvM250kEvidenceEncoder.Encoding? = null
     private val capturedSpikes = ArrayList<AndroidJnvM250kSpike>()
@@ -55,6 +56,7 @@ class AndroidJnvM250kCognitiveController(
     private var omittedCausalLinks = 0
     private var spikeCaptureComplete = true
     private var hypothesisLedger: ANS100NeuralHypothesisLedger? = null
+    private var structuredHypothesisRevisionLedger: ANS100HypothesisRevisionLedger? = null
 
     data class HypothesisObservation(
         val hypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis>,
@@ -64,6 +66,13 @@ class AndroidJnvM250kCognitiveController(
     data class InternalHypothesisObservation(
         val readout: AndroidJnvM250kHypothesisReadout.Result,
         val hypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis>,
+        val persisted: Boolean,
+    )
+
+    data class StructuredHypothesisObservation(
+        val revisions: List<ANS100HypothesisRevisionEngine.Revision>,
+        val candidateCount: Int,
+        val directEvidenceCount: Int,
         val persisted: Boolean,
     )
 
@@ -321,6 +330,69 @@ class AndroidJnvM250kCognitiveController(
         val persisted = ledger?.save(neuralHypothesisEngine.exportSnapshot()) ?: false
         hypothesisLedger = ledger
         return InternalHypothesisObservation(readout, hypotheses, persisted)
+    }
+
+    /**
+     * Revises causal-chain candidates from the approved workspace bridge using
+     * only exact direct relation observations. The bridge's premise edges remain
+     * provenance and cannot be reused as direct confirmation.
+     */
+    @Synchronized
+    fun observeStructuredHypotheses(
+        bridgeResult: ANS100WorkspaceConceptInputBridge.Result,
+        ledger: ANS100HypothesisRevisionLedger? = structuredHypothesisRevisionLedger,
+    ): StructuredHypothesisObservation {
+        check(phase == Phase.AWAITING_OUTCOME) {
+            "structured hypotheses can be revised only after the current neural episode completes"
+        }
+        val context = decisionContext ?: error("there is no decision context for structured hypothesis revision")
+        require(bridgeResult.batch.turnId == context.decisionTurnId) {
+            "workspace evidence must belong to the same completed cognitive turn"
+        }
+        val candidates = bridgeResult.causalChainHypotheses.map { candidate ->
+            ANS100ConceptMemory.Hypothesis(
+                id = candidate.hypothesisId,
+                fromConceptId = candidate.fromConceptId,
+                type = candidate.relationType,
+                toConceptId = candidate.toConceptId,
+                premiseRelationIds = candidate.premiseRelationIds,
+                evidenceRefs = candidate.premiseEvidenceRefs,
+                estimatedStrength = candidate.estimatedStrength,
+            )
+        }
+        val revisions = structuredHypothesisRevisionEngine.observeTurn(
+            turnId = context.decisionTurnId,
+            candidates = candidates,
+            directEvidence = bridgeResult.relationObservations,
+            completed = true,
+        )
+        val persisted = ledger?.save(structuredHypothesisRevisionEngine.exportSnapshot()) ?: false
+        structuredHypothesisRevisionLedger = ledger
+        return StructuredHypothesisObservation(
+            revisions = revisions,
+            candidateCount = candidates.size,
+            directEvidenceCount = bridgeResult.relationObservations.count {
+                it.source == ANS100ConceptMemory.LearningSource.EXPLICIT_USER ||
+                    it.source == ANS100ConceptMemory.LearningSource.VERIFIED_TOOL
+            },
+            persisted = persisted,
+        )
+    }
+
+    /** Restore structured causal-hypothesis revisions before the first episode. */
+    @Synchronized
+    fun restoreStructuredHypothesisCheckpoint(ledger: ANS100HypothesisRevisionLedger): Boolean {
+        check(phase == Phase.IDLE && decisionContext == null && currentEvidenceEncoding == null) {
+            "structured hypothesis history must be restored before the first cognitive episode"
+        }
+        val current = structuredHypothesisRevisionEngine.exportSnapshot()
+        check(current.hypotheses.isEmpty() && current.observedTurnIds.isEmpty()) {
+            "cannot replace an already active structured hypothesis history"
+        }
+        val snapshot = ledger.load() ?: return false
+        structuredHypothesisRevisionEngine.restoreSnapshot(snapshot)
+        structuredHypothesisRevisionLedger = ledger
+        return true
     }
 
     /** Restore the bounded cross-turn hypothesis checkpoint before new turns. */
