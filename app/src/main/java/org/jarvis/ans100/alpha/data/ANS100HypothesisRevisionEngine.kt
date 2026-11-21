@@ -151,7 +151,9 @@ class ANS100HypothesisRevisionEngine(
                 lastUpdatedTurnId = turnId,
             ).also { states[key] = it }
             state.premiseRelationIds.addAll(candidate.premiseRelationIds)
+            trimOldest(state.premiseRelationIds, MAX_PREMISES)
             state.premiseEvidenceRefs.addAll(candidate.evidenceRefs)
+            trimOldest(state.premiseEvidenceRefs, MAX_PREMISES)
             state.lastUpdatedTurnId = turnId
             incoming.forEach { item ->
                 state.evidence.putIfAbsent(item.evidenceRef, item)
@@ -209,7 +211,7 @@ class ANS100HypothesisRevisionEngine(
                 isValidReference(it.evidenceRef) && it.source.isTrustedRevisionSource() &&
                     it.evidenceRef !in item.premiseEvidenceRefs
             })
-            require(item.lastUpdatedTurnId in snapshot.observedTurnIds)
+            require(isValidTurnId(item.lastUpdatedTurnId))
             val expectedId = hypothesisId(item.fromConceptId, item.relationType, item.toConceptId)
             require(item.hypothesisId == expectedId)
             val key = relationKey(item.fromConceptId, item.relationType, item.toConceptId)
