@@ -110,4 +110,30 @@ class ANS100CausalHypothesisEngineTest {
         assertTrue(ANS100CausalHypothesisEngine().generate(memory, setOf("d")).isEmpty())
         assertTrue(ANS100CausalHypothesisEngine().generate(memory, setOf("a"), limit = 0).isEmpty())
     }
+
+    @Test fun multiplePremisePathsProduceOneCandidatePerExactRelation() {
+        val memory = ANS100ConceptMemory()
+        listOf("a", "b", "c", "d").forEach { id ->
+            assertTrue(memory.learnConcept(
+                ANS100ConceptMemory.Concept(id, "Событие $id"),
+                ANS100ConceptMemory.LearningSource.EXPLICIT_USER,
+            ))
+        }
+        fun relation(id: String, from: String, to: String) =
+            ANS100ConceptMemory.Relation(
+                id, from, ANS100ConceptMemory.RelationType.CAUSES, to,
+                0.8, ANS100ConceptMemory.LearningSource.EXPLICIT_USER, "memory:$id",
+            )
+        listOf(
+            relation("a-b", "a", "b"),
+            relation("b-d", "b", "d"),
+            relation("a-c", "a", "c"),
+            relation("c-d", "c", "d"),
+        ).forEach { assertTrue(memory.learnRelation(it)) }
+
+        val candidates = ANS100CausalHypothesisEngine().generate(memory, setOf("a"))
+        assertEquals(1, candidates.size)
+        assertEquals("a", candidates.single().fromConceptId)
+        assertEquals("d", candidates.single().toConceptId)
+    }
 }
