@@ -481,3 +481,15 @@ Tests are authored for bounds, URL filtering, provenance labeling, and no-networ
 `ANS100HypothesisPageVerifier` adds a separate page-reading step for a previously returned search lead. It requires an explicit approval flag, accepts only HTTPS URLs on ordinary public-looking hostnames and standard port 443, performs a DNS preflight that rejects loopback/private/link-local/multicast results, refuses redirects (including cross-host redirects), accepts HTML/XHTML only, uses bounded connection/read timeouts, and caps the response at 512 KB. Extracted page text is capped at 12,000 characters; script/style/noscript/SVG/iframe content is excluded. A SHA-256 digest and retrieval timestamp are retained for traceability.
 
 The output status is always `FETCHED_PAGE_UNVERIFIED`. The relevance field only reports whether lexical terms from both hypothesis endpoints appear in the fetched page. It does not infer support/refutation, judge publisher trust, prove causality, or enter the hypothesis revision ledger. Search-result leads and page text remain untrusted until a later fact-extraction and source-validation stage. DNS preflight is not IP pinning: DNS rebinding between the preflight and HTTP connection is not fully prevented, so this is defense-in-depth rather than a hardened SSRF boundary. Tests are authored / NOT RUN.
+
+
+## Bounded hypothesis passage extraction (V1)
+
+`ANS100HypothesisPassageExtractor` adds a deterministic, bounded extraction stage after an explicitly approved page has been fetched:
+
+- It splits the already bounded page text into sentences, normalizes and deduplicates repeated sentences, then retains at most six (hard maximum twelve) sentences containing at least one exact lexical token from each hypothesis endpoint.
+- Each passage carries the hypothesis ID, search-lead provenance reference, HTTPS source URL/host, page SHA-256, fetch timestamp, sentence SHA-256, and a deterministic passage reference. Excerpts are capped at 600 characters by default (hard maximum 1,000).
+- The output status is always `UNCLASSIFIED_PASSAGE`. It does not decide whether a passage supports or contradicts a relation, because lexical co-mention and simple sentence polarity are not reliable enough to establish that distinction. It also does not authenticate publishers, establish source independence, create `VERIFIED_TOOL` evidence, revise hypotheses, or train synapses.
+- A matching passage is a candidate for later claim-level review only. The next stage must assess the actual proposition, its polarity, source provenance, and whether apparently separate pages are copies or syndications before any evidence can enter the revision engine.
+
+Tests are authored for exact endpoint co-mention, provenance retention, deterministic deduplication, candidate/excerpt bounds, invalid provenance rejection, and one-endpoint false positives. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation, or device run was performed.
