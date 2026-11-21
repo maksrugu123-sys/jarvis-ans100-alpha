@@ -326,6 +326,13 @@ class AndroidJnvM250kCognitiveController(
     /** Restore the bounded cross-turn hypothesis checkpoint before new turns. */
     @Synchronized
     fun restoreHypothesisCheckpoint(ledger: ANS100NeuralHypothesisLedger): Boolean {
+        check(phase == Phase.IDLE && decisionContext == null && currentEvidenceEncoding == null) {
+            "the hypothesis checkpoint must be restored before the first cognitive episode"
+        }
+        val current = neuralHypothesisEngine.exportSnapshot()
+        check(current.hypotheses.isEmpty() && current.observedTurnIds.isEmpty() &&
+            current.pendingPredictions.isEmpty()
+        ) { "cannot replace an already active in-memory hypothesis history" }
         val snapshot = ledger.load() ?: return false
         neuralHypothesisEngine.restoreSnapshot(snapshot)
         hypothesisLedger = ledger
