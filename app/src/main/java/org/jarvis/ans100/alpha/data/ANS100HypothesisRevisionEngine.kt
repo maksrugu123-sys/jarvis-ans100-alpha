@@ -53,6 +53,7 @@ class ANS100HypothesisRevisionEngine(
         SEEK_COUNTER_EVIDENCE,
         SEEK_SUPPORTING_EVIDENCE,
         MANUAL_CONFLICT_REVIEW,
+        EVIDENCE_CAPACITY_EXHAUSTED,
     }
 
     /** Structured request for the next evidence-acquisition step; not a truth decision. */
@@ -206,7 +207,11 @@ class ANS100HypothesisRevisionEngine(
         if (limit == 0) return emptyList()
         return states.values.map { state ->
             val revision = toRevision(state)
-            val action = when (revision.status) {
+            val remainingCapacity = (MAX_EVIDENCE_PER_HYPOTHESIS - revision.directEvidenceCount)
+                .coerceAtLeast(0)
+            val action = if (remainingCapacity == 0) {
+                ReviewAction.EVIDENCE_CAPACITY_EXHAUSTED
+            } else when (revision.status) {
                 Status.CANDIDATE_UNVERIFIED -> ReviewAction.SEEK_BOTH_SIDES
                 Status.SUPPORTED_BY_DIRECT_EVIDENCE -> ReviewAction.SEEK_COUNTER_EVIDENCE
                 Status.REFUTED_BY_DIRECT_EVIDENCE -> ReviewAction.SEEK_SUPPORTING_EVIDENCE
@@ -219,8 +224,7 @@ class ANS100HypothesisRevisionEngine(
                 toConceptId = revision.toConceptId,
                 currentStatus = revision.status,
                 action = action,
-                additionalEvidenceCapacity = (MAX_EVIDENCE_PER_HYPOTHESIS - revision.directEvidenceCount)
-                    .coerceAtLeast(0),
+                additionalEvidenceCapacity = remainingCapacity,
                 excludedEvidenceRefs = (revision.premiseEvidenceRefs +
                     revision.supportingEvidenceRefs + revision.contradictingEvidenceRefs).distinct(),
                 permittedSources = setOf(
@@ -236,9 +240,10 @@ class ANS100HypothesisRevisionEngine(
 
     private fun reviewPriority(action: ReviewAction): Int = when (action) {
         ReviewAction.MANUAL_CONFLICT_REVIEW -> 0
-        ReviewAction.SEEK_BOTH_SIDES -> 1
-        ReviewAction.SEEK_COUNTER_EVIDENCE -> 2
-        ReviewAction.SEEK_SUPPORTING_EVIDENCE -> 3
+        ReviewAction.EVIDENCE_CAPACITY_EXHAUSTED -> 1
+        ReviewAction.SEEK_BOTH_SIDES -> 2
+        ReviewAction.SEEK_COUNTER_EVIDENCE -> 3
+        ReviewAction.SEEK_SUPPORTING_EVIDENCE -> 4
     }
 
     @Synchronized
