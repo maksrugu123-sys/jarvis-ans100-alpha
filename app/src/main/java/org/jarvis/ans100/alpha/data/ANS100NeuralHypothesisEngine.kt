@@ -249,10 +249,12 @@ class ANS100NeuralHypothesisEngine(
     )
 
     /**
-     * Predicts a likely co-occurring lexical feature from independently
-     * repeated 250k associations. This is a bounded feature prediction, not
-     * next-word generation or proof of semantic relation. Confidence is a
-     * bounded support ratio, not a calibrated probability.
+     * Predicts a likely co-occurring lexical feature for the next accepted
+     * episode from independently repeated 250k associations. Forecasts are
+     * evaluated against that following episode's observed lexical input.
+     * This is not next-word generation or proof of semantic relation.
+     * Confidence is the lower of association support and observed forecast
+     * accuracy (after at least two forecast evaluations), not a calibrated probability.
      */
     @Synchronized
     fun predict250k(
