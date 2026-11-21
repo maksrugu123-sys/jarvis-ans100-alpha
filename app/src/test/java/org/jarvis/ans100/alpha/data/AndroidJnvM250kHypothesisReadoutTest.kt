@@ -351,4 +351,39 @@ class AndroidJnvM250kHypothesisReadoutTest {
             restored.exportSnapshot().hypotheses.single().predictionMissTurnIds.size,
         )
     }
+
+    @Test
+    fun nextTurnForecastIsCountedAsHitOnlyWhenTheNextMessageContainsIt() {
+        val first = readout()
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "hit-training-$index",
+                activeConceptIds = first.activeConceptIds,
+                candidates = first.candidates,
+                completed = true,
+                pairScanComplete = true,
+            )
+        }
+        val source = first.candidates.single().firstConceptId
+        engine.observe250kTurn(
+            turnId = "hit-prompt",
+            activeConceptIds = setOf(source),
+            candidates = emptyList(),
+            completed = true,
+            pairScanComplete = true,
+        )
+        assertEquals(1, engine.pendingPredictions().size)
+
+        engine.observe250kTurn(
+            turnId = "hit-next-turn",
+            activeConceptIds = first.activeConceptIds,
+            candidates = first.candidates,
+            completed = true,
+            pairScanComplete = true,
+        )
+        val persisted = engine.exportSnapshot().hypotheses.single()
+        assertEquals(1, persisted.predictionHitTurnIds.size)
+        assertTrue(persisted.predictionMissTurnIds.isEmpty())
+    }
 }
