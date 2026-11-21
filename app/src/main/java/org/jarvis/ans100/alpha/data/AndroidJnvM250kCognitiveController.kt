@@ -243,6 +243,7 @@ class AndroidJnvM250kCognitiveController(
      * after this decision's runtime pass has completed. Reproduction is tracked
      * across independent completed turns; it is not treated as factual truth.
      */
+    @Deprecated("Use observe250kNeuralHypotheses for episodes started from typed evidence.")
     @Synchronized
     fun observeNeuralHypotheses(
         activeConceptIds: Set<String>,
@@ -252,6 +253,9 @@ class AndroidJnvM250kCognitiveController(
     ): HypothesisObservation {
         check(phase == Phase.AWAITING_OUTCOME) {
             "hypotheses can be committed only after the decision runtime queue is drained"
+        }
+        check(currentEvidenceEncoding == null) {
+            "typed-evidence episodes must use the native 250k spike readout"
         }
         val context = decisionContext ?: error("there is no decision context for this hypothesis turn")
         val hypotheses = neuralHypothesisEngine.observeTurn(
