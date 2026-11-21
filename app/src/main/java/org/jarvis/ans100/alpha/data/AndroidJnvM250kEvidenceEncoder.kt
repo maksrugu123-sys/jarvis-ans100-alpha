@@ -201,7 +201,7 @@ class AndroidJnvM250kEvidenceEncoder {
     companion object {
         const val MAX_LEXICAL_CONCEPTS = 24
         const val LEXICAL_ACTIVATION = 0.75
-        private val TOKEN_REGEX = Regex("[\\\\p{L}\\\\p{N}]{2,32}")
+        private val TOKEN_REGEX = Regex("[\\p{L}\\p{N}]{2,32}")
         private val STOP_WORDS = setOf(
             "и", "в", "во", "на", "не", "что", "это", "как", "а", "но", "или", "к", "ко",
             "с", "со", "по", "из", "за", "для", "от", "до", "у", "о", "об", "же", "ли",
