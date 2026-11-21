@@ -4,8 +4,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.security.MessageDigest
 
 class ANS100HypothesisRevisionEngineTest {
+    private fun revisionId(): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("concept.a|CAUSES|concept.c".toByteArray(Charsets.UTF_8))
+            .take(16)
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        return "revision:$digest"
+    }
+
     private fun candidate() = ANS100ConceptMemory.Hypothesis(
         id = "causal-chain:ab-bc",
         fromConceptId = "concept.a",
@@ -171,7 +180,7 @@ class ANS100HypothesisRevisionEngineTest {
             observedTurnIds = listOf("turn-1"),
             hypotheses = listOf(
                 ANS100HypothesisRevisionEngine.PersistedHypothesis(
-                    hypothesisId = "revision:" + "0".repeat(32),
+                    hypothesisId = revisionId(),
                     fromConceptId = hypothesis.fromConceptId,
                     relationType = hypothesis.type,
                     toConceptId = hypothesis.toConceptId,
