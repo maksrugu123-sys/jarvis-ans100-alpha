@@ -386,4 +386,40 @@ class AndroidJnvM250kHypothesisReadoutTest {
         assertEquals(1, persisted.predictionHitTurnIds.size)
         assertTrue(persisted.predictionMissTurnIds.isEmpty())
     }
+
+    @Test
+    fun incompleteLexicalTurnDoesNotCountPendingForecastAsMiss() {
+        val first = readout()
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "incomplete-training-$index",
+                activeConceptIds = first.activeConceptIds,
+                candidates = first.candidates,
+                completed = true,
+                pairScanComplete = true,
+            )
+        }
+        val source = first.candidates.single().firstConceptId
+        engine.observe250kTurn(
+            turnId = "incomplete-prompt",
+            activeConceptIds = setOf(source),
+            candidates = emptyList(),
+            completed = true,
+            pairScanComplete = true,
+        )
+        assertEquals(1, engine.pendingPredictions().size)
+
+        engine.observe250kTurn(
+            turnId = "incomplete-outcome",
+            activeConceptIds = setOf(source),
+            candidates = emptyList(),
+            completed = true,
+            pairScanComplete = false,
+            predictionOutcomeConceptIds = setOf(source),
+            predictionOutcomeComplete = false,
+        )
+        assertTrue(engine.exportSnapshot().hypotheses.single().predictionMissTurnIds.isEmpty())
+        assertTrue(engine.pendingPredictions().isEmpty())
+    }
 }
