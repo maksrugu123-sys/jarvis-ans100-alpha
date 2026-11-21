@@ -31,6 +31,7 @@ class ANS100CausalHypothesisEngine {
         val contradictingEvidenceRefs: List<String>,
         val supportingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
         val contradictingEvidenceSources: Set<ANS100ConceptMemory.LearningSource> = emptySet(),
+        val estimatedStrength: Double = 0.0,
     )
 
     /**
@@ -104,6 +105,7 @@ class ANS100CausalHypothesisEngine {
                             contradictingEvidenceRefs = verification.contradictingEvidenceRefs,
                             supportingEvidenceSources = verification.supportingSources,
                             contradictingEvidenceSources = verification.contradictingSources,
+                            estimatedStrength = hypothesis.estimatedStrength,
                         )
                         if (output.size >= limit) return output.values.toList()
                     }
