@@ -53,6 +53,7 @@ class ANS100NeuralHypothesisEngine(
     data class Snapshot(
         val hypotheses: List<PersistedHypothesis>,
         val observedTurnIds: List<String>,
+        val pendingPredictions: List<Prediction> = emptyList(),
     )
 
     private data class State(
@@ -71,6 +72,7 @@ class ANS100NeuralHypothesisEngine(
 
     private val states = LinkedHashMap<String, State>()
     private val observedTurns = LinkedHashSet<String>()
+    private var pendingPredictions: List<Prediction> = emptyList()
 
     init {
         require(maxHypotheses in 1..MAX_HYPOTHESES_HARD_LIMIT)
@@ -148,7 +150,6 @@ class ANS100NeuralHypothesisEngine(
         candidates: List<AndroidJnvM250kHypothesisReadout.Candidate>,
         completed: Boolean,
         pairScanComplete: Boolean,
-        predictionsForTurn: List<Prediction> = emptyList(),
         predictionOutcomeConceptIds: Set<String> = activeConceptIds,
         predictionOutcomeComplete: Boolean = true,
     ): List<Hypothesis> {
@@ -162,15 +163,8 @@ class ANS100NeuralHypothesisEngine(
         require(candidates.map { pairKey(it.firstConceptId, it.secondConceptId) }.distinct().size == candidates.size) {
             "250k readout must provide at most one candidate per evidence-slot pair"
         }
-        require(predictionsForTurn.size <= MAX_PREDICTIONS)
-        require(predictionsForTurn.map { it.predictedConceptId }.distinct().size == predictionsForTurn.size)
         require(predictionOutcomeConceptIds.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
         require(predictionOutcomeConceptIds.all { it.isNotBlank() && it.length <= 96 })
-        require(predictionsForTurn.all {
-            it.sourceConceptId in predictionOutcomeConceptIds &&
-                it.predictedConceptId.isNotBlank() && it.predictedConceptId.length <= 96 &&
-                it.sourceConceptId != it.predictedConceptId
-        })
         if (!completed || !observedTurns.add(turnId)) return emptyList()
         while (observedTurns.size > MAX_REMEMBERED_TURNS) {
             observedTurns.remove(observedTurns.first())
@@ -212,7 +206,8 @@ class ANS100NeuralHypothesisEngine(
 
         // Evaluate only forecasts that were emitted before this turn's input.
         // A missing predicted token is a prediction miss, not a factual contradiction.
-        if (predictionOutcomeComplete) predictionsForTurn.forEach { prediction ->
+        if (predictionOutcomeComplete) pendingPredictions.forEach { prediction ->
+            if (prediction.sourceConceptId !in predictionOutcomeConceptIds) return@forEach
             val key = pairKey(prediction.sourceConceptId, prediction.predictedConceptId)
             val state = states[key] ?: return@forEach
             if (turnId in state.predictionHitTurns || turnId in state.predictionMissTurns) return@forEach
@@ -228,8 +223,18 @@ class ANS100NeuralHypothesisEngine(
         while (states.size > maxHypotheses) {
             states.remove(states.entries.first().key)
         }
+        // Forecasts evaluated above belonged to the previous turn. Replace them
+        // with forecasts from this complete observation for the following turn.
+        pendingPredictions = if (predictionOutcomeComplete) {
+            predict250k(predictionOutcomeConceptIds)
+        } else {
+            emptyList()
+        }
         return states.values.map(::snapshot)
     }
+
+    @Synchronized
+    fun pendingPredictions(): List<Prediction> = pendingPredictions.toList()
 
     data class Prediction(
         val sourceConceptId: String,
@@ -448,6 +453,7 @@ class ANS100NeuralHypothesisEngine(
             )
         },
         observedTurnIds = observedTurns.toList(),
+        pendingPredictions = pendingPredictions.toList(),
     )
 
     /** Restore only internally consistent, bounded state; malformed checkpoints are rejected. */
@@ -457,6 +463,9 @@ class ANS100NeuralHypothesisEngine(
         require(snapshot.observedTurnIds.size <= MAX_REMEMBERED_TURNS)
         require(snapshot.observedTurnIds.distinct().size == snapshot.observedTurnIds.size)
         require(snapshot.observedTurnIds.all(::isValidTurnId))
+        require(snapshot.pendingPredictions.size <= MAX_PREDICTIONS)
+        require(snapshot.pendingPredictions.map { it.predictedConceptId }.distinct().size ==
+            snapshot.pendingPredictions.size)
         val restored = LinkedHashMap<String, State>()
         snapshot.hypotheses.forEach { item ->
             require(item.firstConceptId.isNotBlank() && item.firstConceptId.length <= 128)
@@ -498,10 +507,21 @@ class ANS100NeuralHypothesisEngine(
                 ),
             ) == null)
         }
+        snapshot.pendingPredictions.forEach { prediction ->
+            require(prediction.sourceConceptId.isNotBlank() && prediction.sourceConceptId.length <= 96)
+            require(prediction.predictedConceptId.isNotBlank() && prediction.predictedConceptId.length <= 96)
+            require(prediction.sourceConceptId != prediction.predictedConceptId)
+            require(prediction.predictedLabel.isNotBlank() && prediction.predictedLabel.length <= 96)
+            require(prediction.supportingTurnCount in MIN_PREDICTION_SUPPORTS..MAX_OBSERVATIONS_PER_HYPOTHESIS)
+            require(prediction.verificationTurnCount >= prediction.supportingTurnCount)
+            require(prediction.confidence.isFinite() && prediction.confidence in 0.0..1.0)
+            require(pairKey(prediction.sourceConceptId, prediction.predictedConceptId) in restored)
+        }
         states.clear()
         states.putAll(restored)
         observedTurns.clear()
         observedTurns.addAll(snapshot.observedTurnIds)
+        pendingPredictions = snapshot.pendingPredictions.toList()
     }
 
     private fun snapshot(state: State): Hypothesis {
