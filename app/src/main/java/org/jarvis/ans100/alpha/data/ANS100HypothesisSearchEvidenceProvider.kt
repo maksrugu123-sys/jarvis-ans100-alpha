@@ -1,5 +1,6 @@
 package org.jarvis.ans100.alpha.data
 
+import java.net.URI
 import java.security.MessageDigest
 
 /**
@@ -40,8 +41,10 @@ class ANS100HypothesisSearchEvidenceProvider(
         request: ANS100HypothesisRevisionEngine.ReviewRequest,
         fromLabel: String,
         toLabel: String,
+        userApproved: Boolean,
         maxResults: Int = AndroidWebSearchService.MAX_RESULTS,
     ): SearchBatch {
+        require(userApproved) { "hypothesis web search requires explicit user approval" }
         require(maxResults in 1..AndroidWebSearchService.MAX_RESULTS)
         val action = request.action
         if (action == ANS100HypothesisRevisionEngine.ReviewAction.MANUAL_CONFLICT_REVIEW) {
@@ -64,7 +67,12 @@ class ANS100HypothesisSearchEvidenceProvider(
             .take(AndroidWebSearchService.MAX_QUERY_CHARS)
         val results = search(query).take(maxResults)
         val candidates = results.mapIndexedNotNull { index, result ->
-            val url = result.url.takeIf { it.startsWith("https://") } ?: return@mapIndexedNotNull null
+            val url = runCatching { URI(result.url) }.getOrNull()?.takeIf { uri ->
+                uri.scheme.equals("https", ignoreCase = true) &&
+                    !uri.host.isNullOrBlank() &&
+                    uri.userInfo == null &&
+                    (uri.port == -1 || uri.port == 443)
+            }?.toASCIIString() ?: return@mapIndexedNotNull null
             val title = result.title.trim().take(AndroidWebSearchService.MAX_TITLE_CHARS)
             if (title.isEmpty()) return@mapIndexedNotNull null
             val snippet = result.snippet.trim().take(AndroidWebSearchService.MAX_SNIPPET_CHARS)

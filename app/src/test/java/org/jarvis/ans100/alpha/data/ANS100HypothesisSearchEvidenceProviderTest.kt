@@ -33,7 +33,7 @@ class ANS100HypothesisSearchEvidenceProviderTest {
                 AndroidWebSearchResult("Second", "https://example.net/page", "Another snippet"),
             )
         }
-        val batch = provider.search(request(), "Heat", "Expansion")
+        val batch = provider.search(request(), "Heat", "Expansion", userApproved = true)
         assertTrue(seenQuery!!.contains("Heat"))
         assertTrue(seenQuery!!.contains("CAUSES".lowercase()))
         assertEquals(2, batch.candidates.size)
@@ -55,7 +55,7 @@ class ANS100HypothesisSearchEvidenceProviderTest {
         }
         val conflict = provider.search(
             request(ANS100HypothesisRevisionEngine.ReviewAction.MANUAL_CONFLICT_REVIEW),
-            "A", "B",
+            "A", "B", userApproved = true,
         )
         val exhausted = provider.search(
             request(ANS100HypothesisRevisionEngine.ReviewAction.EVIDENCE_CAPACITY_EXHAUSTED, 0),
@@ -75,9 +75,22 @@ class ANS100HypothesisSearchEvidenceProviderTest {
                 AndroidWebSearchResult("Three", "https://three.example/page", "3"),
             )
         }
-        val batch = provider.search(request(), "A", "B", maxResults = 2)
+        val batch = provider.search(request(), "A", "B", userApproved = true, maxResults = 2)
         assertEquals(1, batch.candidates.size)
         assertEquals("One", batch.candidates.single().title)
+    }
+
+    @Test
+    fun searchRequiresExplicitApprovalBeforeNetworkCall() {
+        var calls = 0
+        val provider = ANS100HypothesisSearchEvidenceProvider {
+            calls++
+            emptyList()
+        }
+        assertFalse(runCatching {
+            provider.search(request(), "A", "B", userApproved = false)
+        }.isSuccess)
+        assertEquals(0, calls)
     }
 
     @Test
@@ -87,8 +100,8 @@ class ANS100HypothesisSearchEvidenceProviderTest {
             calls++
             emptyList()
         }
-        assertFalse(runCatching { provider.search(request(), " ", "B") }.isSuccess)
-        assertFalse(runCatching { provider.search(request(), "A", "A") }.isSuccess)
+        assertFalse(runCatching { provider.search(request(), " ", "B", userApproved = true) }.isSuccess)
+        assertFalse(runCatching { provider.search(request(), "A", "A", userApproved = true) }.isSuccess)
         assertEquals(0, calls)
     }
 }
