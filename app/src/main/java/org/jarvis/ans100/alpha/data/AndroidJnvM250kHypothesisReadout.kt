@@ -6,10 +6,10 @@ import java.security.MessageDigest
  * Reads hypothesis candidates directly from the 250k JNVM runtime's actual
  * spikes and transmitted sparse synapses.
  *
- * A candidate requires two distinct, stable evidence slots to transmit to the
- * same target neuron and that target to spike at the corresponding arrival
- * timestamp. Ambiguous target spikes and incomplete transmission capture are
- * excluded from negative/reproduction conclusions.
+ * A candidate requires two distinct lexical concept slots to spike at the
+ * current input timestamp, transmit to the same target neuron, and that target
+ * to spike at the corresponding arrival timestamp. Ambiguous target spikes and
+ * incomplete transmission capture are excluded from negative conclusions.
  *
  * This detects repeatable feature co-activation only. It does not understand
  * the contents of text values, infer semantic relations, or prove causality.
