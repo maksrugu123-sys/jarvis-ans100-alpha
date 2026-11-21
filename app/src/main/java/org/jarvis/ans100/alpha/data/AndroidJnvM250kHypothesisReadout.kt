@@ -74,6 +74,7 @@ class AndroidJnvM250kHypothesisReadout(
         causalLinks: List<AndroidJnvM250kCausalLink>,
         omittedCausalLinks: Int,
         ambiguousTargetSpikeNeuronIds: Set<Int>,
+        spikeCaptureComplete: Boolean = true,
     ): Result {
         require(omittedCausalLinks >= 0)
         require(encoding.events.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
@@ -152,7 +153,7 @@ class AndroidJnvM250kHypothesisReadout(
                 .thenBy { it.candidateId },
         )
 
-        val complete = omittedCausalLinks == 0 && candidates.size <= maxCandidates
+        val complete = omittedCausalLinks == 0 && spikeCaptureComplete && candidates.size <= maxCandidates
         return Result(
             activeConceptIds = activeConceptIds,
             candidates = candidates.take(maxCandidates),
