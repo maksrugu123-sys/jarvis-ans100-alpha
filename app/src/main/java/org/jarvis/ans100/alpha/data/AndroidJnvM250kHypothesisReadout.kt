@@ -80,7 +80,8 @@ class AndroidJnvM250kHypothesisReadout(
         require(omittedCausalLinks >= 0)
         require(encoding.events.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN +
             AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS +
-            ANS100NeuralHypothesisEngine.MAX_PREDICTIONS)
+            ANS100NeuralHypothesisEngine.MAX_PREDICTIONS +
+            ANS100NeuralHypothesisEngine.MAX_CONCEPT_PROTOTYPES)
         require(emittedSpikes.size <= MAX_SPIKES_PER_TURN)
         require(causalLinks.size <= MAX_CAUSAL_LINKS_PER_TURN)
         require(ambiguousTargetSpikeNeuronIds.all {
