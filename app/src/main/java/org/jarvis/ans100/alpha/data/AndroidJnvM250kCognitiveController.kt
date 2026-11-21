@@ -73,6 +73,7 @@ class AndroidJnvM250kCognitiveController(
         val revisions: List<ANS100HypothesisRevisionEngine.Revision>,
         val candidateCount: Int,
         val directEvidenceCount: Int,
+        val reviewRequests: List<ANS100HypothesisRevisionEngine.ReviewRequest>,
         val persisted: Boolean,
     )
 
@@ -380,6 +381,7 @@ class AndroidJnvM250kCognitiveController(
                             it.source == ANS100ConceptMemory.LearningSource.VERIFIED_TOOL)
                 }
             },
+            reviewRequests = structuredHypothesisRevisionEngine.reviewQueue(),
             persisted = persisted,
         )
     }
