@@ -387,3 +387,18 @@ Unit tests were added for deterministic mapping, population routing, heuristic t
 
 Important boundary: this handoff does not itself decode semantic concept pairs from the 250k runtime's spike list. The caller must provide candidates produced by the existing neural association decoder and a complete pair-scan flag. Repeated co-activation is repeatability evidence only, never proof of a true semantic relation or causal fact. A dedicated 250k concept readout/decoder is still a future integration task.
 The controller also validates that encoded inputs enter only PERCEPTION/MEMORY/PATTERN_DETECTION/PREDICTION/CONTEXT populations and that counterfactual outcome readouts are selected from ACTION_SELECTION. This prevents accidentally treating arbitrary network neurons as action outcomes.
+
+## Native 250k evidence-slot hypothesis readout (V1)
+
+`AndroidJnvM250kHypothesisReadout` now derives candidate associations directly from the independent 250k runtime rather than requiring the legacy 10k `ANS100NeuralAssociationDecoder`:
+
+- Evidence-slot neuron addresses are stable across turns: the encoder hashes the stable feature/record slot, not the turn ID. Event IDs remain turn-specific to preserve queue idempotency. This allows repeated evidence slots to reuse the same JNVM neuron and its persisted sparse connections.
+- The encoding retains only bounded feature labels and provenance references alongside the record-to-neuron map. It does not retain or hash raw text as a semantic concept.
+- A readout candidate requires two distinct evidence-slot source neurons to have actually spiked, both source neurons to have transmitted through recorded sparse edges, and both transmissions to reach the same target neuron at the same arrival timestamp where that target actually spiked.
+- Target spikes marked ambiguous because they also received external/non-runtime input are excluded. If any ambiguous target spike exists, if runtime causal links or source spikes were truncated, or if the candidate limit was reached, the pair scan is marked incomplete. Incomplete scans cannot create negative/non-reproduction observations.
+- `ANS100NeuralHypothesisEngine.observe250kTurn` reuses the bounded cross-turn lifecycle and SQLite checkpoint format. It records repeated support and complete later non-reproduction as a mixed/repeatability signal, never as proof of semantic truth or causality.
+- `AndroidJnvM250kCognitiveController.observe250kNeuralHypotheses` accumulates actual spikes and causal links across bounded runtime batches and runs this native readout only after the queue is drained. It can persist the updated checkpoint through the supplied `ANS100NeuralHypothesisLedger`.
+
+**Interpretation limit:** these are associations between stable typed-evidence *slots* (for example, a message-text slot and an intent-hint slot), not concepts extracted from the contents of those fields. Different words can occupy the same ordinal feature slot. The network still needs a real content/semantic encoder and a validated concept-binding mechanism before it can claim semantic understanding. A matching target spike is evidence of temporal co-activation, not proof that either edge alone caused the target spike.
+
+Unit tests were added for stable addresses across turns, actual two-edge convergence, target-spike timestamp matching, ambiguous-target rejection, truncated telemetry, and cross-turn reproduction/non-reproduction. Tests are authored but **NOT RUN**. No Gradle build, APK, CI, Android instrumentation or device benchmark was run.
