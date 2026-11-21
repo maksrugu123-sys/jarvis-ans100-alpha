@@ -149,6 +149,8 @@ class ANS100NeuralHypothesisEngine(
         completed: Boolean,
         pairScanComplete: Boolean,
         predictionsForTurn: List<Prediction> = emptyList(),
+        predictionOutcomeConceptIds: Set<String> = activeConceptIds,
+        predictionOutcomeComplete: Boolean = true,
     ): List<Hypothesis> {
         require(turnId.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")))
         require(activeConceptIds.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
@@ -162,8 +164,10 @@ class ANS100NeuralHypothesisEngine(
         }
         require(predictionsForTurn.size <= MAX_PREDICTIONS)
         require(predictionsForTurn.map { it.predictedConceptId }.distinct().size == predictionsForTurn.size)
+        require(predictionOutcomeConceptIds.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
+        require(predictionOutcomeConceptIds.all { it.isNotBlank() && it.length <= 96 })
         require(predictionsForTurn.all {
-            it.sourceConceptId in activeConceptIds &&
+            it.sourceConceptId in predictionOutcomeConceptIds &&
                 it.predictedConceptId.isNotBlank() && it.predictedConceptId.length <= 96 &&
                 it.sourceConceptId != it.predictedConceptId
         })
@@ -208,11 +212,11 @@ class ANS100NeuralHypothesisEngine(
 
         // Evaluate only forecasts that were emitted before this turn's input.
         // A missing predicted token is a prediction miss, not a factual contradiction.
-        predictionsForTurn.forEach { prediction ->
+        if (predictionOutcomeComplete) predictionsForTurn.forEach { prediction ->
             val key = pairKey(prediction.sourceConceptId, prediction.predictedConceptId)
             val state = states[key] ?: return@forEach
             if (turnId in state.predictionHitTurns || turnId in state.predictionMissTurns) return@forEach
-            if (prediction.predictedConceptId in activeConceptIds) {
+            if (prediction.predictedConceptId in predictionOutcomeConceptIds) {
                 state.predictionHitTurns.add(turnId)
                 trimOldest(state.predictionHitTurns, MAX_OBSERVATIONS_PER_HYPOTHESIS)
             } else {
