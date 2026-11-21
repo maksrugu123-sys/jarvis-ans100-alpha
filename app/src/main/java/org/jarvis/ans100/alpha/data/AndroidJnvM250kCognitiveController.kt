@@ -53,7 +53,6 @@ class AndroidJnvM250kCognitiveController(
     private var omittedCausalLinks = 0
     private var spikeCaptureComplete = true
     private var hypothesisLedger: ANS100NeuralHypothesisLedger? = null
-    private var currentPredictions: List<ANS100NeuralHypothesisEngine.Prediction> = emptyList()
 
     data class HypothesisObservation(
         val hypotheses: List<ANS100NeuralHypothesisEngine.Hypothesis>,
@@ -110,7 +109,7 @@ class AndroidJnvM250kCognitiveController(
             return DecisionStart(decision, encoding = null, context = null)
         }
         val baseEncoding = evidenceEncoder.encode(evidence, inputTimeNs)
-        val predictions = neuralHypothesisEngine.predict250k(baseEncoding.conceptRecordIds)
+        val predictions = neuralHypothesisEngine.pendingPredictions()
         val conceptPrototypes = neuralHypothesisEngine.recall250kConceptPrototypes(
             activeConceptIds = baseEncoding.conceptRecordIds,
         )
@@ -128,7 +127,6 @@ class AndroidJnvM250kCognitiveController(
             maxGraphDepth = maxGraphDepth,
         )
         currentEvidenceEncoding = encoding
-        currentPredictions = predictions
         return DecisionStart(decision, encoding, context, predictions, conceptPrototypes)
     }
 
@@ -179,7 +177,6 @@ class AndroidJnvM250kCognitiveController(
         batchesRecorded = 0
         finishResult = null
         currentEvidenceEncoding = null
-        currentPredictions = emptyList()
         capturedSpikes.clear()
         capturedCausalLinks.clear()
         ambiguousTargetSpikes.clear()
@@ -316,7 +313,6 @@ class AndroidJnvM250kCognitiveController(
             candidates = readout.candidates,
             completed = true,
             pairScanComplete = readout.pairScanComplete,
-            predictionsForTurn = currentPredictions,
             predictionOutcomeConceptIds = encoding.conceptRecordIds,
             predictionOutcomeComplete = !encoding.lexicalConceptsTruncated,
         )
