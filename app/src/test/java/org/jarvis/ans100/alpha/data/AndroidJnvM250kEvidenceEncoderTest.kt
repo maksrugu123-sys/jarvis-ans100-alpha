@@ -118,6 +118,9 @@ class AndroidJnvM250kEvidenceEncoderTest {
             second.conceptRecordIds.map { second.recordToNeuronId.getValue(it) },
         )
         assertTrue(first.conceptRecordIds.all { first.recordLabels.getValue(it) in setOf("объясни", "принцип", "работы") })
+        assertTrue(first.conceptRecordIds.all {
+            first.events.single { event -> event.targetNeuronId == first.recordToNeuronId.getValue(it) }.strength >= 1.0
+        })
         assertTrue(first.conceptRecordIds.size <= AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS)
         assertTrue(first.conceptRecordIds.all {
             first.recordToNeuronId.getValue(it) in AndroidJnvM250kTopology.POPULATION_RANGES.single {
