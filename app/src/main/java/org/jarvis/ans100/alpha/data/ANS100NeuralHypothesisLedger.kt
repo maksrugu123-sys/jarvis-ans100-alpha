@@ -47,11 +47,14 @@ class ANS100NeuralHypothesisLedger(
             cursor.getString(1)
         }
         if (payload.length > MAX_SNAPSHOT_CHARS) return null
-        return runCatching { decode(payload) }.getOrNull()
+        return runCatching {
+            decode(payload).also(::validateSnapshot)
+        }.getOrNull()
     }
 
     @Synchronized
     fun save(snapshot: ANS100NeuralHypothesisEngine.Snapshot): Boolean {
+        if (runCatching { validateSnapshot(snapshot) }.isFailure) return false
         val payload = encode(snapshot)
         if (payload.length > MAX_SNAPSHOT_CHARS) return false
         val db = writableDatabase
@@ -75,6 +78,18 @@ class ANS100NeuralHypothesisLedger(
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * Validate before writing and after decoding. A syntactically valid JSON
+     * payload can still contain inconsistent IDs, oversized histories or
+     * pending forecasts whose source hypothesis no longer exists.
+     */
+    private fun validateSnapshot(snapshot: ANS100NeuralHypothesisEngine.Snapshot) {
+        val validator = ANS100NeuralHypothesisEngine(
+            maxHypotheses = snapshot.hypotheses.size.coerceAtLeast(1),
+        )
+        validator.restoreSnapshot(snapshot)
     }
 
     private fun encode(snapshot: ANS100NeuralHypothesisEngine.Snapshot): String {
