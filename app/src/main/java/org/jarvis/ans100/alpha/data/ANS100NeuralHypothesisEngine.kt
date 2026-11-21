@@ -401,7 +401,7 @@ class ANS100NeuralHypothesisEngine(
                 }
             }
             val support = pairStates.minOf { it.supportingTurns.size }
-            val total = pairStates.maxOf { it.supportingTurns.size + it.nonReproducingTurns.size }
+            val total = pairStates.minOf { it.supportingTurns.size + it.nonReproducingTurns.size }
             val confidence = pairStates.minOf {
                 it.supportingTurns.size.toDouble() /
                     (it.supportingTurns.size + it.nonReproducingTurns.size)
