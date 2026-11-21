@@ -18,14 +18,18 @@ class AndroidJnvM250kEvidenceEncoder {
         val recordStatuses: Map<String, EvidenceStatus> = emptyMap(),
         val heuristicRecordCount: Int,
         val userProvidedRecordCount: Int,
+        val conceptRecordIds: Set<String> = emptySet(),
     )
 
     fun encode(evidence: TypedEvidenceBundle, inputTimeNs: Long): Encoding {
         require(inputTimeNs >= 0L)
         require(evidence.records.isNotEmpty()) { "cannot encode an empty evidence bundle" }
-        val usedTargets = HashSet<Int>(evidence.records.size)
-        val mapping = LinkedHashMap<String, Int>(evidence.records.size)
-        val events = ArrayList<AndroidNeuronEvent>(evidence.records.size)
+        val usedTargets = HashSet<Int>(evidence.records.size + MAX_LEXICAL_CONCEPTS)
+        val mapping = LinkedHashMap<String, Int>(evidence.records.size + MAX_LEXICAL_CONCEPTS)
+        val events = ArrayList<AndroidNeuronEvent>(evidence.records.size + MAX_LEXICAL_CONCEPTS)
+        val labels = LinkedHashMap<String, String>(evidence.records.size + MAX_LEXICAL_CONCEPTS)
+        val provenance = LinkedHashMap<String, String>(evidence.records.size + MAX_LEXICAL_CONCEPTS)
+        val statuses = LinkedHashMap<String, EvidenceStatus>(evidence.records.size + MAX_LEXICAL_CONCEPTS)
 
         evidence.records.forEachIndexed { index, record ->
             require(record.turnId == evidence.turnId)
@@ -40,6 +44,9 @@ class AndroidJnvM250kEvidenceEncoder {
                 check(probes < range.size) { "evidence input population is exhausted" }
             }
             mapping[record.recordId] = target
+            labels[record.recordId] = record.feature.stableId
+            provenance[record.recordId] = record.provenanceRef
+            statuses[record.recordId] = record.status
             val magnitude = record.activation.coerceIn(0.0, 1.0)
             val sign = when ((record.value as? EvidenceValue.BooleanValue)?.value) {
                 false -> -1.0
@@ -53,17 +60,77 @@ class AndroidJnvM250kEvidenceEncoder {
                 coreTainted = record.status == EvidenceStatus.HEURISTIC,
             )
         }
+        val lexicalConceptIds = LinkedHashSet<String>()
+        val message = evidence.records.firstOrNull {
+            it.feature == EvidenceFeature.USER_MESSAGE_TEXT &&
+                it.source == EvidenceSourceKind.USER_MESSAGE &&
+                it.value is EvidenceValue.Text
+        }?.let { (it.value as EvidenceValue.Text).value }.orEmpty()
+        val tokens = tokenize(message).take(MAX_LEXICAL_CONCEPTS)
+        val perceptionRange = range(AndroidJnvM250kTopology.Population.PERCEPTION)
+        tokens.forEachIndexed { index, token ->
+            val recordId = lexicalRecordId(token)
+            if (recordId in mapping) return@forEachIndexed
+            var offset = stableHash("lexical.token|$recordId") % perceptionRange.size
+            var target = perceptionRange.firstNeuronId + offset
+            var probes = 0
+            while (!usedTargets.add(target)) {
+                offset = (offset + 1) % perceptionRange.size
+                target = perceptionRange.firstNeuronId + offset
+                probes++
+                check(probes < perceptionRange.size) { "lexical concept input population is exhausted" }
+            }
+            mapping[recordId] = target
+            labels[recordId] = token
+            provenance[recordId] = "turn:${evidence.turnId}:lexical:${stableHash(token).toString(16)}"
+            statuses[recordId] = EvidenceStatus.USER_PROVIDED
+            lexicalConceptIds += recordId
+            events += AndroidNeuronEvent(
+                eventId = "lex-${stableHash(evidence.turnId).toString(16)}-$index-${stableHash(recordId).toString(16)}",
+                timeNs = inputTimeNs,
+                targetNeuronId = target,
+                strength = LEXICAL_ACTIVATION,
+                coreTainted = false,
+            )
+        }
         return Encoding(
             turnId = evidence.turnId,
             events = events,
             recordToNeuronId = mapping,
-            recordLabels = evidence.records.associate { it.recordId to it.feature.stableId },
-            recordProvenance = evidence.records.associate { it.recordId to it.provenanceRef },
-            recordStatuses = evidence.records.associate { it.recordId to it.status },
+            recordLabels = labels,
+            recordProvenance = provenance,
+            recordStatuses = statuses,
             heuristicRecordCount = evidence.heuristicRecordCount,
             userProvidedRecordCount = evidence.records.count { it.status == EvidenceStatus.USER_PROVIDED },
+            conceptRecordIds = lexicalConceptIds,
         )
     }
+
+
+    /**
+     * Extracts bounded lexical symbols from the actual user message.
+     * This is a lexical feature layer, not a synonym/meaning/intent model.
+     * Stop words are discarded; tokens are never executed as instructions.
+     */
+    private fun tokenize(value: String): List<String> {
+        val normalized = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKC)
+            .lowercase(java.util.Locale.ROOT)
+        val seen = LinkedHashSet<String>()
+        TOKEN_REGEX.findAll(normalized).forEach { match ->
+            val token = match.value
+            if (token !in STOP_WORDS && seen.size < MAX_LEXICAL_CONCEPTS) seen += token
+        }
+        return seen.toList()
+    }
+
+    private fun lexicalRecordId(token: String): String =
+        "lex-token:${stableDigest(token)}"
+
+    private fun stableDigest(value: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .take(12)
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
     private fun inputRangeFor(record: TypedEvidenceRecord): AndroidJnvM250kTopology.Range =
         when (record.source) {
