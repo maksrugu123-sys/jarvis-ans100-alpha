@@ -200,6 +200,79 @@ class ANS100NeuralHypothesisEngine(
         return states.values.map(::snapshot)
     }
 
+    data class Prediction(
+        val sourceConceptId: String,
+        val predictedConceptId: String,
+        val predictedLabel: String,
+        val supportingTurnCount: Int,
+        val verificationTurnCount: Int,
+        val confidence: Double,
+        val heuristicEvidence: Boolean,
+    )
+
+    /**
+     * Predicts a likely co-occurring lexical feature from independently
+     * repeated 250k associations. This is a bounded feature prediction, not
+     * next-word generation or proof of semantic relation.
+     */
+    @Synchronized
+    fun predict250k(
+        activeConceptIds: Set<String>,
+        limit: Int = DEFAULT_MAX_PREDICTIONS,
+        minimumIndependentSupports: Int = MIN_PREDICTION_SUPPORTS,
+        minimumConfidence: Double = MIN_PREDICTION_CONFIDENCE,
+    ): List<Prediction> {
+        require(activeConceptIds.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
+        require(activeConceptIds.all { it.isNotBlank() && it.length <= 96 })
+        require(limit in 0..MAX_PREDICTIONS)
+        require(minimumIndependentSupports in 2..MAX_OBSERVATIONS_PER_HYPOTHESIS)
+        require(minimumConfidence.isFinite() && minimumConfidence in 0.5..1.0)
+        if (limit == 0 || activeConceptIds.isEmpty()) return emptyList()
+
+        val candidates = ArrayList<Prediction>()
+        states.values.forEach { state ->
+            val firstActive = state.firstConceptId in activeConceptIds
+            val secondActive = state.secondConceptId in activeConceptIds
+            if (firstActive == secondActive) return@forEach
+            val support = state.supportingTurns.size
+            if (support < minimumIndependentSupports) return@forEach
+            val total = support + state.nonReproducingTurns.size
+            if (total == 0) return@forEach
+            val confidence = support.toDouble() / total
+            if (confidence < minimumConfidence) return@forEach
+            candidates += if (firstActive) {
+                Prediction(
+                    sourceConceptId = state.firstConceptId,
+                    predictedConceptId = state.secondConceptId,
+                    predictedLabel = state.secondLabel,
+                    supportingTurnCount = support,
+                    verificationTurnCount = total,
+                    confidence = confidence,
+                    heuristicEvidence = state.heuristicEvidence,
+                )
+            } else {
+                Prediction(
+                    sourceConceptId = state.secondConceptId,
+                    predictedConceptId = state.firstConceptId,
+                    predictedLabel = state.firstLabel,
+                    supportingTurnCount = support,
+                    verificationTurnCount = total,
+                    confidence = confidence,
+                    heuristicEvidence = state.heuristicEvidence,
+                )
+            }
+        }
+        return candidates
+            .groupBy { it.predictedConceptId }
+            .values.map { group ->
+                group.maxWith(compareBy<Prediction> { it.confidence }.thenBy { it.supportingTurnCount })
+            }
+            .sortedWith(compareByDescending<Prediction> { it.confidence }
+                .thenByDescending { it.supportingTurnCount }
+                .thenBy { it.predictedConceptId })
+            .take(limit)
+    }
+
     @Synchronized
     fun snapshot(): List<Hypothesis> = states.values.map(::snapshot)
 
@@ -311,6 +384,10 @@ class ANS100NeuralHypothesisEngine(
         const val MAX_HYPOTHESES_HARD_LIMIT = 256
         const val MAX_OBSERVATIONS_PER_HYPOTHESIS = 8
         const val MAX_SHARED_TARGETS = 6
+        const val DEFAULT_MAX_PREDICTIONS = 8
+        const val MAX_PREDICTIONS = 16
+        const val MIN_PREDICTION_SUPPORTS = 2
+        const val MIN_PREDICTION_CONFIDENCE = 0.75
         private const val MAX_REMEMBERED_TURNS = 512
     }
 }
