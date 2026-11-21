@@ -5,8 +5,9 @@ package org.jarvis.ans100.alpha.data
  * records into the 250k perception/cognitive input populations.
  *
  * This is a sparse address encoder, not semantic understanding. It hashes
- * stable record metadata (not raw text) into population ranges, preserves
- * heuristic taint, and treats activation only as an uncalibrated input hint.
+ * stable record metadata and normalized lexical-token digests (never the full
+ * raw message) into disjoint population ranges, preserves heuristic taint,
+ * and treats activation only as an uncalibrated input hint.
  */
 class AndroidJnvM250kEvidenceEncoder {
     data class Encoding(
