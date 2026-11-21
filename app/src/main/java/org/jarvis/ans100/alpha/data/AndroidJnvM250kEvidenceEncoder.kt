@@ -241,7 +241,8 @@ class AndroidJnvM250kEvidenceEncoder {
     }
     companion object {
         const val MAX_LEXICAL_CONCEPTS = 24
-        const val LEXICAL_ACTIVATION = 0.75
+        // Matches the current LIF-DT base threshold; long gaps allow adaptation to decay.
+        const val LEXICAL_ACTIVATION = 1.0
         private val TOKEN_REGEX = Regex("[\\p{L}\\p{N}]{2,32}")
         private val STOP_WORDS = setOf(
             "и", "в", "во", "на", "не", "что", "это", "как", "а", "но", "или", "к", "ко",
