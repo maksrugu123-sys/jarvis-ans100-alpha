@@ -130,7 +130,7 @@ class AndroidJnvM250kEvidenceEncoder {
         predictions.forEachIndexed { index, prediction ->
             require(prediction.predictedConceptId.isNotBlank() && prediction.predictedConceptId.length <= 96)
             require(prediction.confidence.isFinite() && prediction.confidence in 0.0..1.0)
-            var offset = stableHash("prediction|\u0024{prediction.predictedConceptId}") % range.size
+            var offset = stableHash("prediction|" + prediction.predictedConceptId) % range.size
             var target = range.firstNeuronId + offset
             var probes = 0
             while (!usedTargets.add(target)) {
@@ -140,7 +140,7 @@ class AndroidJnvM250kEvidenceEncoder {
                 check(probes < range.size) { "prediction population is exhausted" }
             }
             events += AndroidNeuronEvent(
-                eventId = "pred-\u0024turnToken-\u0024index-\u0024{stableHash(prediction.predictedConceptId).toString(16)}",
+                eventId = "pred-" + turnToken + "-" + index + "-" + stableHash(prediction.predictedConceptId).toString(16),
                 timeNs = predictionTimeNs,
                 targetNeuronId = target,
                 strength = prediction.confidence.coerceIn(0.0, 1.0),
