@@ -97,7 +97,7 @@ class AndroidJnvM250kHypothesisReadout(
 
         val spikeTimes = emittedSpikes.groupBy { it.neuronId }
             .mapValues { (_, spikes) -> spikes.map { it.timestampNs }.toSet() }
-        val targetSpikeTaint = emittedSpikes.groupBy { Arrival(it.neuronId, it.timestampNs) }
+        val spikeTaintByArrival = emittedSpikes.groupBy { Arrival(it.neuronId, it.timestampNs) }
             .mapValues { (_, spikes) -> spikes.any { it.coreTainted } }
         val sourceByArrival = LinkedHashMap<Arrival, MutableList<Pair<String, AndroidJnvM250kCausalLink>>>()
         causalLinks.forEach { link ->
@@ -131,7 +131,9 @@ class AndroidJnvM250kHypothesisReadout(
                     connections += right.second.connectionId
                     val heuristic = encoding.recordStatuses[left.first] == EvidenceStatus.HEURISTIC ||
                         encoding.recordStatuses[right.first] == EvidenceStatus.HEURISTIC ||
-                        targetSpikeTaint[arrivalKey] == true
+                        spikeTaintByArrival[Arrival(left.second.sourceNeuronId, left.second.timestampNs)] == true ||
+                        spikeTaintByArrival[Arrival(right.second.sourceNeuronId, right.second.timestampNs)] == true ||
+                        spikeTaintByArrival[arrivalKey] == true
                     pairHeuristic[key] = pairHeuristic[key] == true || heuristic
                     val refs = pairRefs.getOrPut(key) { LinkedHashSet() }
                     listOf(left.first, right.first).forEach { recordId ->
