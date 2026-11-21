@@ -181,4 +181,40 @@ class AndroidJnvM250kEvidenceEncoderTest {
         assertEquals(AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS, encoded.conceptRecordIds.size)
         assertTrue(encoded.lexicalConceptsTruncated)
     }
+
+    @Test
+    fun approvedMemoryEvidenceAndLearnedPrototypesUseDisjointMemoryHalves() {
+        val turnId = "memory-range-test"
+        val evidence = TypedEvidenceBundle(
+            turnId = turnId,
+            records = listOf(
+                TypedEvidenceRecord(
+                    recordId = "approved-memory",
+                    turnId = turnId,
+                    feature = EvidenceFeature.APPROVED_MEMORY_REFERENCE,
+                    source = EvidenceSourceKind.APPROVED_MEMORY,
+                    status = EvidenceStatus.USER_APPROVED_REFERENCE,
+                    value = EvidenceValue.Reference("memory:approved-1"),
+                    activation = 1.0,
+                    provenanceRef = "memory:approved-1",
+                ),
+                TypedEvidenceRecord(
+                    recordId = "message",
+                    turnId = turnId,
+                    feature = EvidenceFeature.USER_MESSAGE_TEXT,
+                    source = EvidenceSourceKind.USER_MESSAGE,
+                    status = EvidenceStatus.USER_PROVIDED,
+                    value = EvidenceValue.Text("альфа"),
+                    activation = 1.0,
+                    provenanceRef = "turn:$turnId:user",
+                ),
+            ),
+        )
+        val encoded = AndroidJnvM250kEvidenceEncoder().encode(evidence, inputTimeNs = 10L)
+        val memoryRange = AndroidJnvM250kTopology.POPULATION_RANGES.single {
+            it.population == AndroidJnvM250kTopology.Population.MEMORY
+        }
+        val approvedMemoryNeuron = encoded.recordToNeuronId.getValue("approved-memory")
+        assertTrue(approvedMemoryNeuron < memoryRange.firstNeuronId + memoryRange.size / 2)
+    }
 }
