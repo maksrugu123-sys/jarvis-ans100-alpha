@@ -2,6 +2,7 @@ package org.jarvis.ans100.alpha.data
 
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
+import java.net.InetAddress
 import java.net.URI
 import java.net.URL
 import java.security.MessageDigest
@@ -18,6 +19,18 @@ class ANS100HypothesisPageVerifier(
         it.openConnection() as HttpURLConnection
     },
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val resolvesOnlyToPublicAddresses: (String) -> Boolean = { host ->
+        runCatching {
+            val addresses = InetAddress.getAllByName(host)
+            addresses.isNotEmpty() && addresses.all { address ->
+                !address.isAnyLocalAddress &&
+                    !address.isLoopbackAddress &&
+                    !address.isLinkLocalAddress &&
+                    !address.isSiteLocalAddress &&
+                    !address.isMulticastAddress
+            }
+        }.getOrDefault(false)
+    },
 ) {
     enum class Relevance {
         BOTH_ENDPOINTS_MENTIONED,
@@ -150,6 +163,9 @@ class ANS100HypothesisPageVerifier(
             host.matches(Regex("[0-9.]+"))
         ) {
             throw AndroidWebSearchException("Ссылка не прошла проверку безопасности.")
+        }
+        if (!resolvesOnlyToPublicAddresses(host)) {
+            throw AndroidWebSearchException("Домен не прошёл проверку публичного сетевого адреса.")
         }
         return uri
     }
