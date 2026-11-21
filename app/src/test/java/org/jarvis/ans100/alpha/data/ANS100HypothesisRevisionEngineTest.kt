@@ -285,4 +285,46 @@ class ANS100HypothesisRevisionEngineTest {
             engine.reviewQueue().single().action,
         )
     }
+
+    @Test
+    fun fullEvidenceBudgetStopsRequestingMoreEvidence() {
+        val engine = ANS100HypothesisRevisionEngine()
+        val records = (0 until ANS100HypothesisRevisionEngine.MAX_EVIDENCE_PER_HYPOTHESIS).map {
+            evidence("tool:full-$it", supports = true)
+        }
+        engine.observeTurn("turn-full", listOf(candidate()), records, true)
+        val request = engine.reviewQueue().single()
+        assertEquals(
+            ANS100HypothesisRevisionEngine.ReviewAction.EVIDENCE_CAPACITY_EXHAUSTED,
+            request.action,
+        )
+        assertEquals(0, request.additionalEvidenceCapacity)
+    }
+
+    @Test
+    fun reviewQueueIsBoundedAndPrioritizesManualConflicts() {
+        val engine = ANS100HypothesisRevisionEngine()
+        val candidates = (0 until 40).map { index ->
+            candidate().copy(
+                id = "candidate-$index",
+                fromConceptId = "concept.from$index",
+                toConceptId = "concept.to$index",
+                premiseRelationIds = listOf("relation:$index"),
+                evidenceRefs = listOf("memory:$index"),
+            )
+        }
+        engine.observeTurn("turn-many", candidates, emptyList(), true)
+        engine.observeTurn(
+            "turn-conflict",
+            listOf(candidate()),
+            listOf(evidence("tool:yes", true), evidence("tool:no", false)),
+            true,
+        )
+        val queue = engine.reviewQueue(limit = 8)
+        assertEquals(8, queue.size)
+        assertEquals(
+            ANS100HypothesisRevisionEngine.ReviewAction.MANUAL_CONFLICT_REVIEW,
+            queue.first().action,
+        )
+    }
 }
