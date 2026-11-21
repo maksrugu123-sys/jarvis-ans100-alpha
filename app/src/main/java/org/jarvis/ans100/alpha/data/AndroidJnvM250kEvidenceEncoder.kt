@@ -146,7 +146,9 @@ class AndroidJnvM250kEvidenceEncoder {
                 eventId = "pred-" + turnToken + "-" + index + "-" + stableHash(prediction.predictedConceptId).toString(16),
                 timeNs = predictionTimeNs,
                 targetNeuronId = target,
-                strength = prediction.confidence.coerceIn(0.0, 1.0),
+                // Presence pulse reaches the LIF-DT base threshold; calibrated confidence
+                // remains metadata on DecisionStart.predictions, not spike amplitude.
+                strength = LEXICAL_ACTIVATION,
                 coreTainted = prediction.heuristicEvidence,
             )
         }
