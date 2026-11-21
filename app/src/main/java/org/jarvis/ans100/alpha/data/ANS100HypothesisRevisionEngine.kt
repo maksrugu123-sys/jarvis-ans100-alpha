@@ -102,16 +102,49 @@ class ANS100HypothesisRevisionEngine(
         }
         if (!completed || turnId in observedTurns) return snapshot()
 
-        // Validate all candidate shapes before mutating any state.
+        // Preflight every candidate and evidence reference before changing any
+        // state, so a malformed observation cannot partially consume a turn.
         candidates.forEach(::validateCandidate)
+        val prepared = candidates.map { candidate ->
+            val key = relationKey(candidate.fromConceptId, candidate.type, candidate.toConceptId)
+            val existing = states[key]
+            val mergedPremises = (existing?.premiseEvidenceRefs.orEmpty() + candidate.evidenceRefs).toSet()
+            require(mergedPremises.intersect(existing?.evidence?.keys.orEmpty()).isEmpty()) {
+                "premise evidence cannot be reused as direct confirmation"
+            }
+            val incoming = directEvidence.asSequence()
+                .filter {
+                    it.fromConceptId == candidate.fromConceptId &&
+                        it.type == candidate.type &&
+                        it.toConceptId == candidate.toConceptId &&
+                        it.source.isTrustedRevisionSource()
+                }
+                .map {
+                    require(isValidReference(it.evidenceRef))
+                    require(it.evidenceRef !in mergedPremises) {
+                        "premise evidence cannot be reused as direct confirmation"
+                    }
+                    EvidenceRecord(it.evidenceRef, it.source, it.supports)
+                }
+                .toList()
+            require(incoming.map { it.evidenceRef }.distinct().size == incoming.size) {
+                "direct evidence references must be unique within a turn"
+            }
+            incoming.forEach { item ->
+                val previous = existing?.evidence?.get(item.evidenceRef)
+                require(previous == null || previous == item) {
+                    "an evidence reference cannot be rebound to different polarity or source"
+                }
+            }
+            Triple(candidate, existing, incoming)
+        }
+
         observedTurns.add(turnId)
         trimOldest(observedTurns, MAX_REMEMBERED_TURNS)
-
-        candidates.forEach { candidate ->
+        prepared.forEach { (candidate, existing, incoming) ->
             val key = relationKey(candidate.fromConceptId, candidate.type, candidate.toConceptId)
-            val id = hypothesisId(candidate.fromConceptId, candidate.type, candidate.toConceptId)
-            val state = states[key] ?: State(
-                hypothesisId = id,
+            val state = existing ?: State(
+                hypothesisId = hypothesisId(candidate.fromConceptId, candidate.type, candidate.toConceptId),
                 fromConceptId = candidate.fromConceptId,
                 relationType = candidate.type,
                 toConceptId = candidate.toConceptId,
@@ -120,33 +153,10 @@ class ANS100HypothesisRevisionEngine(
             state.premiseRelationIds.addAll(candidate.premiseRelationIds)
             state.premiseEvidenceRefs.addAll(candidate.evidenceRefs)
             state.lastUpdatedTurnId = turnId
-
-            directEvidence.asSequence()
-                .filter {
-                    it.fromConceptId == candidate.fromConceptId &&
-                        it.type == candidate.type &&
-                        it.toConceptId == candidate.toConceptId &&
-                        it.source.isTrustedRevisionSource()
-                }
-                .forEach { observation ->
-                    require(observation.evidenceRef !in state.premiseEvidenceRefs) {
-                        "premise evidence cannot be reused as direct confirmation"
-                    }
-                    val incoming = EvidenceRecord(
-                        evidenceRef = observation.evidenceRef,
-                        source = observation.source,
-                        supports = observation.supports,
-                    )
-                    val previous = state.evidence[observation.evidenceRef]
-                    if (previous == null) {
-                        state.evidence[observation.evidenceRef] = incoming
-                        trimOldest(state.evidence, MAX_EVIDENCE_PER_HYPOTHESIS)
-                    } else {
-                        require(previous == incoming) {
-                            "an evidence reference cannot be rebound to different polarity or source"
-                        }
-                    }
-                }
+            incoming.forEach { item ->
+                state.evidence.putIfAbsent(item.evidenceRef, item)
+            }
+            trimOldest(state.evidence, MAX_EVIDENCE_PER_HYPOTHESIS)
         }
 
         while (states.size > maxHypotheses) {
