@@ -173,6 +173,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
             it.population == AndroidJnvM250kTopology.Population.PREDICTION
         }
         assertTrue(predictedEvent.targetNeuronId in predictionRange)
+        assertTrue(predictedEvent.targetNeuronId >= predictionRange.firstNeuronId + predictionRange.size / 2)
         assertEquals(1, encoded.predictionEventCount)
         assertEquals(base.conceptRecordIds, encoded.conceptRecordIds)
         assertEquals(base.recordToNeuronId, encoded.recordToNeuronId)
