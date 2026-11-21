@@ -272,7 +272,9 @@ class AndroidJnvM250kHypothesisReadoutTest {
             )
         }
 
-        val prototypes = engine.recall250kConceptPrototypes(setOf(a))
+        val restored = ANS100NeuralHypothesisEngine()
+        restored.restoreSnapshot(engine.exportSnapshot())
+        val prototypes = restored.recall250kConceptPrototypes(setOf(a))
         assertEquals(1, prototypes.size)
         assertEquals(listOf(a, b, c), prototypes.single().memberConceptIds)
         assertEquals(listOf("alpha", "beta", "gamma"), prototypes.single().memberLabels)
