@@ -133,7 +133,7 @@ class ANS100HypothesisManualReviewLedger(
     }
 
     private fun encode(decision: ANS100HypothesisManualReviewDecision.Decision, evidence: ANS100ConceptMemory.RelationEvidence?): String {
-        val refs = JSONArray().apply { decision.selectedPassageRefs.forEach(::put) }
+        val refs = JSONArray().apply { decision.selectedPassageRefs.forEach { put(it) } }
         return JSONObject()
             .put("decision_id", decision.decisionId).put("packet_fingerprint", decision.packetFingerprint)
             .put("hypothesis_id", decision.hypothesisId).put("from_concept_id", decision.fromConceptId)
