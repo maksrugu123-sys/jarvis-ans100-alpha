@@ -301,4 +301,40 @@ class AndroidJnvM250kHypothesisReadoutTest {
         }
         assertTrue(engine.recall250kConceptPrototypes(setOf(a)).isEmpty())
     }
+
+    @Test
+    fun repeatedPredictionMissesSuppressTheSameForecast() {
+        val first = readout()
+        val engine = ANS100NeuralHypothesisEngine()
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "forecast-training-$index",
+                activeConceptIds = first.activeConceptIds,
+                candidates = first.candidates,
+                completed = true,
+                pairScanComplete = true,
+            )
+        }
+        val source = first.candidates.single().firstConceptId
+        val initialPredictions = engine.predict250k(setOf(source))
+        assertEquals(1, initialPredictions.size)
+
+        repeat(2) { index ->
+            engine.observe250kTurn(
+                turnId = "forecast-miss-$index",
+                activeConceptIds = setOf(source),
+                candidates = emptyList(),
+                completed = true,
+                pairScanComplete = true,
+                predictionsForTurn = initialPredictions,
+            )
+        }
+        val restored = ANS100NeuralHypothesisEngine()
+        restored.restoreSnapshot(engine.exportSnapshot())
+        assertTrue(restored.predict250k(setOf(source)).isEmpty())
+        assertEquals(
+            2,
+            restored.exportSnapshot().hypotheses.single().predictionMissTurnIds.size,
+        )
+    }
 }
