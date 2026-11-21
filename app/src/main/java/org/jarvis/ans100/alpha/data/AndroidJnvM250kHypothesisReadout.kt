@@ -78,16 +78,16 @@ class AndroidJnvM250kHypothesisReadout(
         spikeCaptureComplete: Boolean = true,
     ): Result {
         require(omittedCausalLinks >= 0)
-        require(encoding.events.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
+        require(encoding.events.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN + AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS)
         require(emittedSpikes.size <= MAX_SPIKES_PER_TURN)
         require(causalLinks.size <= MAX_CAUSAL_LINKS_PER_TURN)
         require(ambiguousTargetSpikeNeuronIds.all {
             it in 0 until AndroidJnvM250kProfile.NEURON_CAPACITY
         })
 
-        val recordsByNeuron = encoding.recordToNeuronId.entries.associate { (recordId, neuronId) ->
-            neuronId to recordId
-        }
+        val recordsByNeuron = encoding.recordToNeuronId.entries
+            .filter { it.key in encoding.conceptRecordIds }
+            .associate { (recordId, neuronId) -> neuronId to recordId }
         require(recordsByNeuron.size == encoding.recordToNeuronId.size)
         val sourceSpikeIds = emittedSpikes.map { it.neuronId }.toSet()
         val activeRecords = recordsByNeuron.filter { (neuronId, _) ->
