@@ -78,7 +78,9 @@ class AndroidJnvM250kHypothesisReadout(
         spikeCaptureComplete: Boolean = true,
     ): Result {
         require(omittedCausalLinks >= 0)
-        require(encoding.events.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN + AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS)
+        require(encoding.events.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN +
+            AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS +
+            ANS100NeuralHypothesisEngine.MAX_PREDICTIONS)
         require(emittedSpikes.size <= MAX_SPIKES_PER_TURN)
         require(causalLinks.size <= MAX_CAUSAL_LINKS_PER_TURN)
         require(ambiguousTargetSpikeNeuronIds.all {
