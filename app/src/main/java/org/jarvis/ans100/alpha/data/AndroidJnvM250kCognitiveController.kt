@@ -371,9 +371,14 @@ class AndroidJnvM250kCognitiveController(
         return StructuredHypothesisObservation(
             revisions = revisions,
             candidateCount = candidates.size,
-            directEvidenceCount = bridgeResult.relationObservations.count {
-                it.source == ANS100ConceptMemory.LearningSource.EXPLICIT_USER ||
-                    it.source == ANS100ConceptMemory.LearningSource.VERIFIED_TOOL
+            directEvidenceCount = candidates.sumOf { candidate ->
+                bridgeResult.relationObservations.count {
+                    it.fromConceptId == candidate.fromConceptId &&
+                        it.type == candidate.type &&
+                        it.toConceptId == candidate.toConceptId &&
+                        (it.source == ANS100ConceptMemory.LearningSource.EXPLICIT_USER ||
+                            it.source == ANS100ConceptMemory.LearningSource.VERIFIED_TOOL)
+                }
             },
             persisted = persisted,
         )
