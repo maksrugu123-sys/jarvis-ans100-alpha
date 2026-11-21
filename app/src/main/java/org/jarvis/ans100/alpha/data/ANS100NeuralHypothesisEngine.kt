@@ -274,6 +274,120 @@ class ANS100NeuralHypothesisEngine(
             .take(limit)
     }
 
+    data class ConceptPrototype(
+        val prototypeId: String,
+        val memberConceptIds: List<String>,
+        val memberLabels: List<String>,
+        val supportingTurnCount: Int,
+        val verificationTurnCount: Int,
+        val confidence: Double,
+        val heuristicEvidence: Boolean,
+    ) {
+        init {
+            require(prototypeId.matches(Regex("^jnvm250k-prototype:[a-f0-9]{32}$")))
+            require(memberConceptIds.size in 2..MAX_PROTOTYPE_MEMBERS)
+            require(memberConceptIds.distinct().size == memberConceptIds.size)
+            require(memberLabels.size == memberConceptIds.size)
+            require(memberLabels.all { it.isNotBlank() && it.length <= 96 })
+            require(supportingTurnCount >= MIN_PREDICTION_SUPPORTS)
+            require(verificationTurnCount >= supportingTurnCount)
+            require(confidence.isFinite() && confidence in MIN_PREDICTION_CONFIDENCE..1.0)
+        }
+    }
+
+    /**
+     * Forms bounded co-occurrence prototypes from complete-link groups of
+     * independently repeated lexical associations. Every pair inside a group
+     * must pass the support and confidence thresholds; transitive chains alone
+     * cannot merge unrelated tokens. This is a statistical feature cluster,
+     * not a semantic category or a factual concept.
+     */
+    @Synchronized
+    fun recall250kConceptPrototypes(
+        activeConceptIds: Set<String>,
+        limit: Int = DEFAULT_MAX_CONCEPT_PROTOTYPES,
+        minimumIndependentSupports: Int = MIN_PREDICTION_SUPPORTS,
+        minimumConfidence: Double = MIN_PREDICTION_CONFIDENCE,
+    ): List<ConceptPrototype> {
+        require(activeConceptIds.size <= TypedEvidenceBundle.MAX_RECORDS_PER_TURN)
+        require(activeConceptIds.all { it.isNotBlank() && it.length <= 96 })
+        require(limit in 0..MAX_CONCEPT_PROTOTYPES)
+        require(minimumIndependentSupports in 2..MAX_OBSERVATIONS_PER_HYPOTHESIS)
+        require(minimumConfidence.isFinite() && minimumConfidence in 0.5..1.0)
+        if (limit == 0 || activeConceptIds.isEmpty()) return emptyList()
+
+        fun eligible(first: String, second: String): State? {
+            val state = states[pairKey(first, second)] ?: return null
+            val support = state.supportingTurns.size
+            val total = support + state.nonReproducingTurns.size
+            if (support < minimumIndependentSupports || total < support || total == 0) return null
+            if (support.toDouble() / total < minimumConfidence) return null
+            return state
+        }
+
+        val prototypes = LinkedHashMap<String, ConceptPrototype>()
+        activeConceptIds.sorted().forEach { seed ->
+            val neighbors = states.values.asSequence()
+                .filter { it.firstConceptId == seed || it.secondConceptId == seed }
+                .map { state ->
+                    val other = if (state.firstConceptId == seed) state.secondConceptId else state.firstConceptId
+                    other to eligible(seed, other)
+                }
+                .filter { it.second != null }
+                .sortedWith(compareByDescending<Pair<String, State?>> {
+                    val state = it.second!!
+                    state.supportingTurns.size.toDouble() /
+                        (state.supportingTurns.size + state.nonReproducingTurns.size)
+                }.thenBy { it.first })
+                .map { it.first }
+                .toList()
+
+            val members = arrayListOf(seed)
+            for (candidate in neighbors) {
+                if (members.size >= MAX_PROTOTYPE_MEMBERS) break
+                if (candidate in members) continue
+                if (members.all { eligible(it, candidate) != null }) members += candidate
+            }
+            if (members.size < 2) return@forEach
+
+            val orderedMembers = members.sorted()
+            val pairStates = ArrayList<State>()
+            for (left in orderedMembers.indices) {
+                for (right in left + 1 until orderedMembers.size) {
+                    pairStates += eligible(orderedMembers[left], orderedMembers[right]) ?: return@forEach
+                }
+            }
+            val support = pairStates.minOf { it.supportingTurns.size }
+            val total = pairStates.maxOf { it.supportingTurns.size + it.nonReproducingTurns.size }
+            val confidence = pairStates.minOf {
+                it.supportingTurns.size.toDouble() /
+                    (it.supportingTurns.size + it.nonReproducingTurns.size)
+            }
+            val labels = orderedMembers.map { id ->
+                val state = pairStates.first { it.firstConceptId == id || it.secondConceptId == id }
+                if (state.firstConceptId == id) state.firstLabel else state.secondLabel
+            }
+            val prototypeId = "jnvm250k-prototype:${digest(orderedMembers.joinToString("|"))}"
+            prototypes.putIfAbsent(
+                prototypeId,
+                ConceptPrototype(
+                    prototypeId = prototypeId,
+                    memberConceptIds = orderedMembers,
+                    memberLabels = labels,
+                    supportingTurnCount = support,
+                    verificationTurnCount = total,
+                    confidence = confidence,
+                    heuristicEvidence = pairStates.any { it.heuristicEvidence },
+                ),
+            )
+        }
+        return prototypes.values
+            .sortedWith(compareByDescending<ConceptPrototype> { it.memberConceptIds.size }
+                .thenByDescending { it.confidence }
+                .thenBy { it.prototypeId })
+            .take(limit)
+    }
+
     @Synchronized
     fun snapshot(): List<Hypothesis> = states.values.map(::snapshot)
 
@@ -387,6 +501,9 @@ class ANS100NeuralHypothesisEngine(
         const val MAX_SHARED_TARGETS = 6
         const val DEFAULT_MAX_PREDICTIONS = 8
         const val MAX_PREDICTIONS = 16
+        const val DEFAULT_MAX_CONCEPT_PROTOTYPES = 4
+        const val MAX_CONCEPT_PROTOTYPES = 8
+        const val MAX_PROTOTYPE_MEMBERS = 4
         const val MIN_PREDICTION_SUPPORTS = 2
         const val MIN_PREDICTION_CONFIDENCE = 0.75
         private const val MAX_REMEMBERED_TURNS = 512
