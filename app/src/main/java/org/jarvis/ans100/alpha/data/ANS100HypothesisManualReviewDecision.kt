@@ -32,6 +32,7 @@ class ANS100HypothesisManualReviewDecision {
         val selectedPassageRefs: List<String>,
         val rationale: String,
         val reviewedAtEpochMs: Long,
+        val decisionDigest: String,
     )
 
     fun record(
@@ -60,7 +61,7 @@ class ANS100HypothesisManualReviewDecision {
             Outcome.INSUFFICIENT_EVIDENCE, Outcome.SOURCE_UNTRUSTED,
             Outcome.CONFLICT_REQUIRES_REVIEW -> Unit
         }
-        return Decision(
+        val unsigned = Decision(
             decisionId = decisionId,
             packetFingerprint = fingerprint(packet),
             hypothesisId = packet.hypothesisId,
@@ -71,7 +72,9 @@ class ANS100HypothesisManualReviewDecision {
             selectedPassageRefs = selectedPassageRefs.sorted(),
             rationale = rationale.trim(),
             reviewedAtEpochMs = reviewedAtEpochMs,
+            decisionDigest = "",
         )
+        return unsigned.copy(decisionDigest = decisionDigest(unsigned))
     }
 
     /**
@@ -85,6 +88,9 @@ class ANS100HypothesisManualReviewDecision {
         validatePacket(packet)
         require(decision.decisionId.matches(DECISION_ID_PATTERN))
         require(decision.packetFingerprint.matches(SHA256))
+        require(decision.decisionDigest.matches(SHA256) && decision.decisionDigest == decisionDigest(decision)) {
+            "manual review decision was modified after recording"
+        }
         require(decision.packetFingerprint == fingerprint(packet)) {
             "reviewed packet changed after the decision was recorded"
         }
@@ -138,6 +144,16 @@ class ANS100HypothesisManualReviewDecision {
         require(!packet.sourceIndependenceConfirmed && packet.sources.none { it.independenceConfirmed })
         require(!packet.directEvidenceCreated && !packet.revisionEngineUpdated && !packet.learningAllowed)
         require(packet.excludedEvidenceRefs.distinct().size == packet.excludedEvidenceRefs.size)
+    }
+
+    private fun decisionDigest(decision: Decision): String {
+        val canonical = listOf(
+            decision.decisionId, decision.packetFingerprint, decision.hypothesisId,
+            decision.fromConceptId, decision.relationType.name, decision.toConceptId,
+            decision.outcome.name, decision.selectedPassageRefs.sorted().joinToString("|"),
+            decision.rationale, decision.reviewedAtEpochMs.toString(),
+        ).joinToString("\u001f") { value -> "${value.length}:$value" }
+        return sha256(canonical)
     }
 
     private fun fingerprint(packet: ANS100HypothesisEvidenceReviewPacketBuilder.Packet): String {
