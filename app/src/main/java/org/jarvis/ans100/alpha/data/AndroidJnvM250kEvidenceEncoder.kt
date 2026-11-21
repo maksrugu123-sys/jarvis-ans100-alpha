@@ -122,12 +122,12 @@ class AndroidJnvM250kEvidenceEncoder {
         require(predictions.size <= ANS100NeuralHypothesisEngine.MAX_PREDICTIONS)
         require(predictions.map { it.predictedConceptId }.distinct().size == predictions.size)
         if (predictions.isEmpty()) return encoding
-        val range = range(AndroidJnvM250kTopology.Population.PREDICTION)
+        val range = predictionSignalRange()
         val usedTargets = encoding.events.mapTo(HashSet()) { it.targetNeuronId }
         val events = ArrayList<AndroidNeuronEvent>(encoding.events.size + predictions.size)
         events.addAll(encoding.events)
         val turnToken = stableHash(encoding.turnId).toString(16)
-        predictions.forEachIndexed { index, prediction ->
+        predictions.sortedBy { it.predictedConceptId }.forEachIndexed { index, prediction ->
             require(prediction.predictedConceptId.isNotBlank() && prediction.predictedConceptId.length <= 96)
             require(prediction.confidence.isFinite() && prediction.confidence in 0.0..1.0)
             var offset = stableHash("prediction|" + prediction.predictedConceptId) % range.size
@@ -180,11 +180,30 @@ class AndroidJnvM250kEvidenceEncoder {
             EvidenceSourceKind.USER_MESSAGE,
             EvidenceSourceKind.MESSAGE_STRUCTURE -> evidencePerceptionRange()
             EvidenceSourceKind.CORE_UNDERSTANDING -> range(AndroidJnvM250kTopology.Population.PATTERN_DETECTION)
-            EvidenceSourceKind.CORE_REASONING_PLAN -> range(AndroidJnvM250kTopology.Population.PREDICTION)
+            EvidenceSourceKind.CORE_REASONING_PLAN -> evidencePredictionRange()
             EvidenceSourceKind.CONVERSATION_CONTEXT -> range(AndroidJnvM250kTopology.Population.CONTEXT)
             EvidenceSourceKind.APPROVED_MEMORY -> range(AndroidJnvM250kTopology.Population.MEMORY)
             EvidenceSourceKind.VERIFIED_TOOL_RESULT -> range(AndroidJnvM250kTopology.Population.CONTEXT)
         }
+
+    /** Reserve disjoint prediction-population halves for evidence and model forecasts. */
+    private fun evidencePredictionRange(): AndroidJnvM250kTopology.Range {
+        val base = range(AndroidJnvM250kTopology.Population.PREDICTION)
+        return AndroidJnvM250kTopology.Range(
+            population = base.population,
+            firstNeuronId = base.firstNeuronId,
+            lastNeuronIdInclusive = base.firstNeuronId + base.size / 2 - 1,
+        )
+    }
+
+    private fun predictionSignalRange(): AndroidJnvM250kTopology.Range {
+        val base = range(AndroidJnvM250kTopology.Population.PREDICTION)
+        return AndroidJnvM250kTopology.Range(
+            population = base.population,
+            firstNeuronId = base.firstNeuronId + base.size / 2,
+            lastNeuronIdInclusive = base.lastNeuronIdInclusive,
+        )
+    }
 
     /** Reserve disjoint halves so lexical addresses never depend on metadata slots. */
     private fun evidencePerceptionRange(): AndroidJnvM250kTopology.Range {
