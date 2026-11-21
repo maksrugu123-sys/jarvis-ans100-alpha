@@ -259,6 +259,7 @@ class ANS100WorkspaceConceptInputBridgeTest {
             base + memory("support", "Собака | IS_A | Животное | SUPPORTS", "relation_evidence"),
         )
         assertEquals(1, supported.relationEvidenceCount)
+        assertEquals(1, supported.relationObservations.size)
         assertEquals(ANS100ConceptMemory.VerificationStatus.SUPPORTED,
             supported.hypothesisVerifications.single().status)
         assertEquals(
@@ -278,6 +279,7 @@ class ANS100WorkspaceConceptInputBridgeTest {
             ),
         )
         assertEquals(2, conflicting.relationEvidenceCount)
+        assertEquals(2, conflicting.relationObservations.size)
         assertEquals(ANS100ConceptMemory.VerificationStatus.CONFLICTING,
             conflicting.hypothesisVerifications.single().status)
         assertEquals(1, conflicting.hypothesisReports.single().supportingEvidenceRefs.size)
