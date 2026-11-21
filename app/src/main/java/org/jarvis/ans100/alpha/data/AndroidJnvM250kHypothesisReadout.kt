@@ -100,6 +100,7 @@ class AndroidJnvM250kHypothesisReadout(
         causalLinks.forEach { link ->
             val recordId = recordsByNeuron[link.sourceNeuronId] ?: return@forEach
             if (link.sourceNeuronId !in sourceSpikeIds) return@forEach
+            if (link.timestampNs !in spikeTimes[link.sourceNeuronId].orEmpty()) return@forEach
             if (link.targetNeuronId in ambiguousTargetSpikeNeuronIds) return@forEach
             if (link.arrivalTimestampNs !in spikeTimes[link.targetNeuronId].orEmpty()) return@forEach
             sourceByArrival.getOrPut(Arrival(link.targetNeuronId, link.arrivalTimestampNs)) {
