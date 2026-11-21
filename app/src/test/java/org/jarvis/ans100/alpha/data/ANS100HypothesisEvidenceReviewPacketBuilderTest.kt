@@ -56,10 +56,10 @@ class ANS100HypothesisEvidenceReviewPacketBuilderTest {
         assertTrue(packet.warnings.contains(ANS100HypothesisEvidenceReviewPacketBuilder.Warning.SOURCE_INDEPENDENCE_UNCONFIRMED))
     }
     @Test fun ambiguousPolarityRemainsAmbiguous() {
-        val f = fixture()
-        val ambiguous = f.extraction.candidates.map { c ->
-            val changed = c.copy(excerpt = "Heat and expansion are discussed together.")
-            analyzer.analyze(changed, "heat", ANS100ConceptMemory.RelationType.CAUSES, "expansion")
+        val p = page().copy(extractedText = "Heat and expansion are discussed together.")
+        val f = fixture(p)
+        val ambiguous = f.extraction.candidates.map {
+            analyzer.analyze(it, "heat", ANS100ConceptMemory.RelationType.CAUSES, "expansion")
         }
         val packet = builder.build(request(), f.page, f.extraction, f.audit, ambiguous)
         assertTrue(packet.passages.all { it.polarity == ANS100HypothesisClaimPolarityAnalyzer.PolarityCandidate.AMBIGUOUS })
