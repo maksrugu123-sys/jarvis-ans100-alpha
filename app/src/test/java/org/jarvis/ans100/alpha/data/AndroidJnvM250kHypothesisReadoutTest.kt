@@ -164,7 +164,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
             predictedLabel = "beta",
             supportingTurnCount = 2,
             verificationTurnCount = 2,
-            confidence = 1.0,
+            confidence = 0.75,
             heuristicEvidence = false,
         )
         val encoded = encoder.appendPredictions(base, listOf(prediction), predictionTimeNs = 50L)
@@ -174,6 +174,7 @@ class AndroidJnvM250kHypothesisReadoutTest {
         }
         assertTrue(predictedEvent.targetNeuronId in predictionRange)
         assertTrue(predictedEvent.targetNeuronId >= predictionRange.firstNeuronId + predictionRange.size / 2)
+        assertEquals(1.0, predictedEvent.strength, 0.0)
         assertEquals(1, encoded.predictionEventCount)
         assertEquals(base.conceptRecordIds, encoded.conceptRecordIds)
         assertEquals(base.recordToNeuronId, encoded.recordToNeuronId)
