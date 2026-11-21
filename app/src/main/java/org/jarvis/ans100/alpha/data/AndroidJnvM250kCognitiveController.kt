@@ -39,6 +39,7 @@ class AndroidJnvM250kCognitiveController(
         val encoding: AndroidJnvM250kEvidenceEncoder.Encoding?,
         val context: AndroidJnvM250kDecisionEpisodeContext?,
         val predictions: List<ANS100NeuralHypothesisEngine.Prediction> = emptyList(),
+        val conceptPrototypes: List<ANS100NeuralHypothesisEngine.ConceptPrototype> = emptyList(),
     )
 
     private val evidenceEncoder = AndroidJnvM250kEvidenceEncoder()
@@ -109,7 +110,15 @@ class AndroidJnvM250kCognitiveController(
         }
         val baseEncoding = evidenceEncoder.encode(evidence, inputTimeNs)
         val predictions = neuralHypothesisEngine.predict250k(baseEncoding.conceptRecordIds)
-        val encoding = evidenceEncoder.appendPredictions(baseEncoding, predictions, inputTimeNs)
+        val conceptPrototypes = neuralHypothesisEngine.recall250kConceptPrototypes(
+            activeConceptIds = baseEncoding.conceptRecordIds,
+        )
+        val withConceptMemory = evidenceEncoder.appendConceptPrototypes(
+            baseEncoding,
+            conceptPrototypes,
+            recallTimeNs = inputTimeNs,
+        )
+        val encoding = evidenceEncoder.appendPredictions(withConceptMemory, predictions, inputTimeNs)
         val context = beginEpisode(
             episodeId = episodeId,
             decision = decision,
@@ -118,7 +127,7 @@ class AndroidJnvM250kCognitiveController(
             maxGraphDepth = maxGraphDepth,
         )
         currentEvidenceEncoding = encoding
-        return DecisionStart(decision, encoding, context, predictions)
+        return DecisionStart(decision, encoding, context, predictions, conceptPrototypes)
     }
 
     @Synchronized
