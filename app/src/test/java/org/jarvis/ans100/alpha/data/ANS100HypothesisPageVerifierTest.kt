@@ -47,6 +47,7 @@ class ANS100HypothesisPageVerifierTest {
         val verifier = ANS100HypothesisPageVerifier(
             connectionFactory = { url -> FakeConnection(url).also { connection = it } },
             nowMillis = { 1234L },
+            resolvesOnlyToPublicAddresses = { true },
         )
         val report = verifier.inspect(lead(), "Heat", "Expansion", userApproved = true)
         assertEquals("Heat causes expansion", report.pageTitle)
@@ -68,6 +69,7 @@ class ANS100HypothesisPageVerifierTest {
         var calls = 0
         val verifier = ANS100HypothesisPageVerifier(
             connectionFactory = { calls++; FakeConnection(it) },
+            resolvesOnlyToPublicAddresses = { true },
         )
         assertFalse(runCatching {
             verifier.inspect(lead(), "Heat", "Expansion", userApproved = false)
@@ -79,6 +81,7 @@ class ANS100HypothesisPageVerifierTest {
     fun refusesRedirectsNonHtmlAndUnsafeHosts() {
         val redirect = ANS100HypothesisPageVerifier(
             connectionFactory = { FakeConnection(it, status = 302) },
+            resolvesOnlyToPublicAddresses = { true },
         )
         assertFalse(runCatching {
             redirect.inspect(lead(), "Heat", "Expansion", true)
@@ -86,6 +89,7 @@ class ANS100HypothesisPageVerifierTest {
 
         val pdf = ANS100HypothesisPageVerifier(
             connectionFactory = { FakeConnection(it, type = "application/pdf") },
+            resolvesOnlyToPublicAddresses = { true },
         )
         assertFalse(runCatching {
             pdf.inspect(lead(), "Heat", "Expansion", true)
@@ -97,11 +101,26 @@ class ANS100HypothesisPageVerifierTest {
         }.isSuccess)
     }
 
+
+    @Test
+    fun refusesDomainsThatResolveToPrivateAddresses() {
+        var calls = 0
+        val verifier = ANS100HypothesisPageVerifier(
+            connectionFactory = { calls++; FakeConnection(it) },
+            resolvesOnlyToPublicAddresses = { false },
+        )
+        assertFalse(runCatching {
+            verifier.inspect(lead(), "Heat", "Expansion", true)
+        }.isSuccess)
+        assertEquals(0, calls)
+    }
+
     @Test
     fun enforcesPageByteLimit() {
         val oversized = ByteArray(ANS100HypothesisPageVerifier.MAX_PAGE_BYTES + 1) { 65 }
         val verifier = ANS100HypothesisPageVerifier(
             connectionFactory = { FakeConnection(it, body = oversized) },
+            resolvesOnlyToPublicAddresses = { true },
         )
         assertFalse(runCatching {
             verifier.inspect(lead(), "Heat", "Expansion", true)
