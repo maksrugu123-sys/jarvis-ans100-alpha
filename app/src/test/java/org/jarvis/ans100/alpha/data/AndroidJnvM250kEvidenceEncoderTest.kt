@@ -97,6 +97,32 @@ class AndroidJnvM250kEvidenceEncoderTest {
         assertEquals(first.recordToNeuronId, second.recordToNeuronId)
         assertFalse(first.events.map { it.eventId } == second.events.map { it.eventId })
         assertEquals(first.recordLabels, second.recordLabels)
-        assertEquals(first.recordProvenance, second.recordProvenance)
+        assertEquals(
+            first.recordProvenance.filterKeys { it !in first.conceptRecordIds },
+            second.recordProvenance.filterKeys { it !in second.conceptRecordIds },
+        )
+        assertTrue(first.conceptRecordIds.isNotEmpty())
+        assertEquals(first.conceptRecordIds, second.conceptRecordIds)
+    }
+
+    @Test
+    fun extractsStableBoundedLexicalConceptSlotsFromActualMessage() {
+        val encoder = AndroidJnvM250kEvidenceEncoder()
+        val first = encoder.encode(bundle("lexical-one"), inputTimeNs = 10L)
+        val second = encoder.encode(bundle("lexical-two"), inputTimeNs = 10L)
+
+        assertTrue(first.conceptRecordIds.isNotEmpty())
+        assertEquals(first.conceptRecordIds, second.conceptRecordIds)
+        assertEquals(
+            first.conceptRecordIds.map { first.recordToNeuronId.getValue(it) },
+            second.conceptRecordIds.map { second.recordToNeuronId.getValue(it) },
+        )
+        assertTrue(first.conceptRecordIds.all { first.recordLabels.getValue(it) in setOf("объясни", "принцип", "работы") })
+        assertTrue(first.conceptRecordIds.size <= AndroidJnvM250kEvidenceEncoder.MAX_LEXICAL_CONCEPTS)
+        assertTrue(first.conceptRecordIds.all {
+            first.recordToNeuronId.getValue(it) in AndroidJnvM250kTopology.POPULATION_RANGES.single {
+                range -> range.population == AndroidJnvM250kTopology.Population.PERCEPTION
+            }
+        })
     }
 }
