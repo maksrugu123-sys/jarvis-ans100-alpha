@@ -276,7 +276,9 @@ class ANS100NeuralResponseGenerator(
     ): String {
         val reference = understanding.contextReference
         if (reference.status != "selected") {
-            return "Я вижу, что ты ссылаешься на предыдущую часть разговора, но не могу однозначно выбрать её. Какую именно тему продолжить?"
+            return understanding.reasoningPlan.clarificationQuestion.ifBlank {
+                "Я вижу несколько возможных тем. Какую именно продолжить?"
+            }
         }
         val excerpt = reference.sourceAssistantMessage.ifBlank { reference.sourceUserMessage }
             .take(MAX_HISTORY_EXCERPT_CHARS)
