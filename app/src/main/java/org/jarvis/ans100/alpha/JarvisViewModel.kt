@@ -210,6 +210,7 @@ data class HypothesisReviewUiState(
     val activeRequest: org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine.ReviewRequest? = null,
     val searchCandidates: List<ANS100HypothesisSearchEvidenceProvider.SearchCandidate> = emptyList(),
     val activePacket: ANS100HypothesisEvidenceReviewPacketBuilder.Packet? = null,
+    val inspectedPages: List<ANS100HypothesisMultiSourceReviewPacketBuilder.InspectedPage> = emptyList(),
     val conceptLabels: Map<String, String> = emptyMap(),
     val isBusy: Boolean = false,
     val message: String? = null,
@@ -352,6 +353,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val hypothesisSourceAudit = ANS100HypothesisSourceAudit()
     private val hypothesisPolarityAnalyzer = ANS100HypothesisClaimPolarityAnalyzer()
     private val hypothesisPacketBuilder = ANS100HypothesisEvidenceReviewPacketBuilder()
+    private val hypothesisMultiSourcePacketBuilder = ANS100HypothesisMultiSourceReviewPacketBuilder(
+        sourceAudit = hypothesisSourceAudit,
+        pagePacketBuilder = hypothesisPacketBuilder,
+    )
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
     private val localSignalRuntime = LocalConversationSignalRuntime(
         SharedPreferencesConversationSignalStorage(application.applicationContext),
@@ -1570,6 +1575,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         mutableState.value = mutableState.value.copy(
             hypothesisReview = before.copy(
                 activeRequest = request, searchCandidates = emptyList(), activePacket = null,
+                inspectedPages = emptyList(),
                 isBusy = true, error = null, message = "Поиск выполняется по вашему запросу…",
                 conceptLabels = labels,
             ),
@@ -1605,6 +1611,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val before = mutableState.value.hypothesisReview
         if (before.isBusy) return
         val request = before.activeRequest?.takeIf { it.hypothesisId == hypothesisId } ?: return
+        if (before.inspectedPages.size >= ANS100HypothesisMultiSourceReviewPacketBuilder.MAX_PAGES_HARD_LIMIT) {
+            mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
+                error = "Достигнут предел: не более 12 открытых страниц в одном пакете.",
+            ))
+            return
+        }
+        if (before.inspectedPages.any { it.page.searchLeadRef == provenanceRef }) {
+            mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
+                message = "Эта ссылка уже открыта и учтена в списке источников.",
+            ))
+            return
+        }
         val lead = before.searchCandidates.firstOrNull {
             it.hypothesisId == hypothesisId && it.provenanceRef == provenanceRef
         } ?: return
@@ -1631,47 +1649,70 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     toLabel = toLabel,
                     userApproved = true,
                 )
-                val extraction = hypothesisPassageExtractor.extract(
-                    page, fromLabel, toLabel,
-                )
-                val audit = if (extraction.candidates.isEmpty()) {
-                    val uri = java.net.URI(page.finalUrl)
-                    ANS100HypothesisSourceAudit.AuditReport(
-                        assessments = listOf(
-                            ANS100HypothesisSourceAudit.SourceAssessment(
-                                ANS100HypothesisSourceAudit.SourceRecord(
-                                    sourceUrl = page.finalUrl,
-                                    sourceHost = uri.host.lowercase(java.util.Locale.ROOT).trimEnd('.'),
-                                    pageContentSha256 = page.contentSha256.lowercase(java.util.Locale.ROOT),
-                                    searchLeadRef = page.searchLeadRef,
-                                    fetchedAtEpochMs = page.fetchedAtEpochMs,
-                                ),
-                                ANS100HypothesisSourceAudit.Assessment.DISTINCT_HOST_UNVERIFIED,
-                                null, null,
-                            ),
-                        ),
-                        uniquePageCount = 1, distinctHostCount = 1, truncated = false,
-                    )
-                } else hypothesisSourceAudit.audit(extraction.candidates)
+                val extraction = hypothesisPassageExtractor.extract(page, fromLabel, toLabel)
                 val analyses = extraction.candidates.map { passage ->
                     hypothesisPolarityAnalyzer.analyze(
                         passage, fromLabel, request.relationType, toLabel,
                     )
                 }
-                hypothesisPacketBuilder.build(request, page, extraction, audit, analyses)
+                ANS100HypothesisMultiSourceReviewPacketBuilder.InspectedPage(
+                    page = page,
+                    extraction = extraction,
+                    analyses = analyses,
+                )
             }
             mainHandler.post {
                 val current = mutableState.value.hypothesisReview
+                val inspected = result.getOrNull()
+                val pages = if (inspected == null) current.inspectedPages else
+                    (current.inspectedPages + inspected).take(
+                        ANS100HypothesisMultiSourceReviewPacketBuilder.MAX_PAGES_HARD_LIMIT,
+                    )
                 mutableState.value = mutableState.value.copy(
                     hypothesisReview = current.copy(
                         isBusy = false,
-                        activePacket = result.getOrNull(),
-                        message = result.getOrNull()?.let {
-                            "Пакет подготовлен. Все фрагменты остаются неподтверждёнными до ручного решения."
+                        inspectedPages = pages,
+                        activePacket = null,
+                        message = inspected?.let {
+                            "Страница добавлена. Открыто источников: ${pages.size}. Можно открыть ещё страницы, затем собрать общий пакет."
                         },
                         error = result.exceptionOrNull()?.message,
                     ),
                 )
+            }
+        }
+    }
+
+    /** Combines all individually approved page fetches into one auditable decision packet. */
+    fun buildCombinedHypothesisReviewPacket(hypothesisId: String) {
+        val before = mutableState.value.hypothesisReview
+        if (before.isBusy) return
+        val request = before.activeRequest?.takeIf { it.hypothesisId == hypothesisId } ?: return
+        if (before.inspectedPages.isEmpty()) {
+            mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
+                error = "Сначала отдельно откройте хотя бы одну страницу.",
+            ))
+            return
+        }
+        val pages = before.inspectedPages.take(
+            ANS100HypothesisMultiSourceReviewPacketBuilder.MAX_PAGES_HARD_LIMIT,
+        )
+        mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
+            isBusy = true, activePacket = null, error = null,
+            message = "Сопоставляю источники, дубликаты и фрагменты…",
+        ))
+        hypothesisReviewExecutor.execute {
+            val result = runCatching { hypothesisMultiSourcePacketBuilder.build(request, pages) }
+            mainHandler.post {
+                val current = mutableState.value.hypothesisReview
+                mutableState.value = mutableState.value.copy(hypothesisReview = current.copy(
+                    isBusy = false,
+                    activePacket = result.getOrNull(),
+                    message = result.getOrNull()?.let {
+                        "Общий пакет собран: страниц — ${it.sources.size}, фрагментов — ${it.passages.size}. Независимость источников не подтверждена."
+                    },
+                    error = result.exceptionOrNull()?.message,
+                ))
             }
         }
     }
