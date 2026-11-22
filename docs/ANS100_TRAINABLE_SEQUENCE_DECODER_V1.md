@@ -66,7 +66,7 @@ The Android app exposes a dedicated **Обучение** tab for the experimenta
 - a separate correction form uses the prompt as recurrent context and supervises only the corrected continuation;
 - an independent held-out form accepts `prompt => expected answer` lines and runs generation without applying any learning update.
 
-The held-out screen reports strict case-insensitive exact-string match only. This deliberately conservative score is not semantic accuracy, factual correctness, or a measure of general intelligence. Keep held-out examples separate from training and corrections. Training and evaluation run on a background executor rather than the Compose UI thread.
+The held-out screen reports case-insensitive exact-string match, token-overlap F1 and a coarse repetition rate. These are diagnostics only: they do not establish semantic accuracy, factual correctness, grammatical quality or general intelligence. Keep held-out examples separate from training and corrections. Training and evaluation run on a background executor rather than the Compose UI thread.
 
 The screen does not bundle a corpus or silently learn from conversation history. Until a reviewed Russian corpus is supplied and evaluated, a trained decoder remains a small experimental model and may produce poor or empty continuations.
 
