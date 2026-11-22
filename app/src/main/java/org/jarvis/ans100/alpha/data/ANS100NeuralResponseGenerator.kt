@@ -292,7 +292,8 @@ class ANS100NeuralResponseGenerator(
             }
         }
         val followUp = normalize(prompt).replace(Regex("[^\\p{L}\\p{N} ]"), " ").replace(Regex("\\s+"), " ").trim()
-        val previousAnswer = reference.sourceAssistantMessage.take(MAX_HISTORY_EXCERPT_CHARS)
+        val previousAnswer = reference.sourceAssistantMessage.ifBlank { reference.sourceUserMessage }
+            .take(MAX_HISTORY_EXCERPT_CHARS)
         return when {
             followUp in setOf("почему", "а почему", "зачем", "а зачем", "why") ->
                 "Ты спрашиваешь, почему я дал предыдущий ответ: «$previousAnswer». Я вернусь к его причине и проверю, какие сведения действительно её подтверждают, вместо того чтобы придумывать объяснение."
