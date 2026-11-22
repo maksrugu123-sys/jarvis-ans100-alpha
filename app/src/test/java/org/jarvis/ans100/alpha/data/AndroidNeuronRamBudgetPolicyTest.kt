@@ -21,7 +21,17 @@ class AndroidNeuronRamBudgetPolicyTest {
             availableRamBytes = 256L * 1024L * 1024L,
             appMemoryClassMb = 64,
         )
-        assertEquals(4, profile.maximumBudgetMb)
+        assertEquals(5, profile.maximumBudgetMb)
+    }
+
+    @Test
+    fun availableRamKeepsOneHundredMibReserveOutsideNeuronBudget() {
+        val profile = AndroidNeuronRamBudgetPolicy.profileFromMeasurements(
+            totalRamBytes = 8L * 1024L * 1024L * 1024L,
+            availableRamBytes = 128L * 1024L * 1024L,
+            appMemoryClassMb = 512,
+        )
+        assertEquals(2, profile.maximumBudgetMb)
     }
 
     @Test
