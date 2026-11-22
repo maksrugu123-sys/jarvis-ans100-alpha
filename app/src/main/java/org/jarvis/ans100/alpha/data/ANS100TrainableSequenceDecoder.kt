@@ -11,9 +11,9 @@ import kotlin.math.tanh
 import kotlin.random.Random
 
 /**
- * Small, trainable Elman RNN language-sequence experiment owned by ANS.
+ * Small, trainable Elman RNN language-sequence experiment owned by ANS. Question/answer training uses a bounded subword tokenizer.
  *
- * The network predicts the next token from a recurrent hidden state. It has no
+ * The network predicts the next token from a recurrent hidden state. Subword pieces allow composition beyond complete words seen in the training corpus. It has no
  * pretrained weights, remote inference, prompt templates, or external LLM.
  * Training is supervised next-token learning over examples supplied by the
  * caller. This is a research prototype, not a general-purpose language model.
