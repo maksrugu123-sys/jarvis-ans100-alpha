@@ -15,7 +15,26 @@ class ANS100HypothesisManualReviewLedger(
     private val decisionValidator: ANS100HypothesisManualReviewDecision = ANS100HypothesisManualReviewDecision(),
 ) : SQLiteOpenHelper(context.applicationContext, databaseName, null, DATABASE_VERSION) {
     enum class State { PENDING, APPLIED, RECORDED_NO_EVIDENCE }
-    data class Entry(val decision: ANS100HypothesisManualReviewDecision.Decision, val evidence: ANS100ConceptMemory.RelationEvidence?, val state: State)
+    data class SourceSnapshot(
+        val canonicalUrl: String, val host: String, val pageContentSha256: String,
+        val searchLeadRef: String, val assessment: String,
+    )
+    data class PassageSnapshot(
+        val passageRef: String, val excerpt: String, val sentenceSha256: String,
+        val polarity: String, val polarityReason: String, val sourceAssessment: String,
+    )
+    data class ReviewSnapshot(
+        val hypothesisId: String, val pageTitle: String, val pageUrl: String,
+        val pageContentSha256: String, val fetchedAtEpochMs: Long,
+        val sources: List<SourceSnapshot>, val passages: List<PassageSnapshot>,
+        val warnings: List<String>,
+    )
+    data class Entry(
+        val decision: ANS100HypothesisManualReviewDecision.Decision,
+        val evidence: ANS100ConceptMemory.RelationEvidence?,
+        val state: State,
+        val snapshot: ReviewSnapshot? = null,
+    )
     data class PendingBatch(val entries: List<Entry>, val rejectedEntries: Int)
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -24,21 +43,41 @@ class ANS100HypothesisManualReviewLedger(
             state TEXT NOT NULL, created_at_ms INTEGER NOT NULL
         )""".trimIndent())
         db.execSQL("CREATE INDEX manual_hypothesis_review_state_idx ON manual_hypothesis_review_decisions(state, created_at_ms)")
+        db.execSQL("""CREATE TABLE manual_hypothesis_review_snapshots (
+            decision_id TEXT PRIMARY KEY NOT NULL, snapshot_payload TEXT NOT NULL
+        )""".trimIndent())
     }
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) { if (oldVersion < 1) onCreate(db) }
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 1) onCreate(db)
+        if (oldVersion < 2) db.execSQL("""CREATE TABLE IF NOT EXISTS manual_hypothesis_review_snapshots (
+            decision_id TEXT PRIMARY KEY NOT NULL, snapshot_payload TEXT NOT NULL
+        )""".trimIndent())
+    }
 
     @Synchronized
-    fun append(decision: ANS100HypothesisManualReviewDecision.Decision, evidence: ANS100ConceptMemory.RelationEvidence?): Boolean {
-        if (runCatching { validate(decision, evidence) }.isFailure) return false
+    fun append(
+        decision: ANS100HypothesisManualReviewDecision.Decision,
+        evidence: ANS100ConceptMemory.RelationEvidence?,
+        packet: ANS100HypothesisEvidenceReviewPacketBuilder.Packet? = null,
+    ): Boolean {
+        if (runCatching {
+            validate(decision, evidence)
+            if (packet != null) decisionValidator.toRelationEvidence(packet, decision)
+        }.isFailure) return false
         val payload = encode(decision, evidence)
-        if (payload.length > MAX_ENTRY_CHARS) return false
+        val snapshotPayload = packet?.let(::encodeSnapshot)
+        if (payload.length > MAX_ENTRY_CHARS || (snapshotPayload?.length ?: 0) > MAX_SNAPSHOT_CHARS) return false
         val db = writableDatabase
         db.beginTransaction()
         try {
             val existing = db.rawQuery("SELECT payload FROM manual_hypothesis_review_decisions WHERE decision_id=?", arrayOf(decision.decisionId))
                 .use { if (it.moveToFirst()) it.getString(0) else null }
             if (existing != null) {
-                if (existing != payload) return false
+                val existingSnapshot = db.rawQuery(
+                    "SELECT snapshot_payload FROM manual_hypothesis_review_snapshots WHERE decision_id=?",
+                    arrayOf(decision.decisionId),
+                ).use { if (it.moveToFirst()) it.getString(0) else null }
+                if (existing != payload || existingSnapshot != snapshotPayload) return false
                 db.setTransactionSuccessful()
                 return true
             }
@@ -51,6 +90,13 @@ class ANS100HypothesisManualReviewLedger(
                 put("state", state.name); put("created_at_ms", decision.reviewedAtEpochMs)
             }
             if (db.insert("manual_hypothesis_review_decisions", null, values) == -1L) return false
+            if (snapshotPayload != null) {
+                val snapshotValues = ContentValues().apply {
+                    put("decision_id", decision.decisionId)
+                    put("snapshot_payload", snapshotPayload)
+                }
+                if (db.insert("manual_hypothesis_review_snapshots", null, snapshotValues) == -1L) return false
+            }
             db.setTransactionSuccessful()
             return true
         } finally { db.endTransaction() }
@@ -69,7 +115,8 @@ class ANS100HypothesisManualReviewLedger(
         require(limit in 0..MAX_ENTRIES)
         if (limit == 0) return PendingBatch(emptyList(), 0)
         return readableDatabase.rawQuery(
-            "SELECT payload, state FROM manual_hypothesis_review_decisions WHERE state=? ORDER BY created_at_ms, decision_id LIMIT ?",
+            "SELECT payload, state, (SELECT snapshot_payload FROM manual_hypothesis_review_snapshots s WHERE s.decision_id=manual_hypothesis_review_decisions.decision_id) " +
+                "FROM manual_hypothesis_review_decisions WHERE state=? ORDER BY created_at_ms, decision_id LIMIT ?",
             arrayOf(State.PENDING.name, limit.toString()),
         ).use { cursor ->
             val valid = mutableListOf<Entry>()
@@ -78,7 +125,7 @@ class ANS100HypothesisManualReviewLedger(
                 val payload = cursor.getString(0)
                 val state = runCatching { State.valueOf(cursor.getString(1)) }.getOrNull()
                 val entry = if (payload.length <= MAX_ENTRY_CHARS && state != null) {
-                    runCatching { decode(payload, state) }.getOrNull()
+                    runCatching { decode(payload, state, cursor.getStringOrNull(2)) }.getOrNull()
                 } else null
                 if (entry == null) rejected++ else valid += entry
             }
@@ -92,8 +139,8 @@ class ANS100HypothesisManualReviewLedger(
         require(limit in 0..MAX_ENTRIES)
         if (limit == 0) return emptyList()
         return readableDatabase.rawQuery(
-            "SELECT payload, state FROM manual_hypothesis_review_decisions " +
-                "ORDER BY created_at_ms DESC, decision_id DESC LIMIT ?",
+            "SELECT payload, state, (SELECT snapshot_payload FROM manual_hypothesis_review_snapshots s WHERE s.decision_id=manual_hypothesis_review_decisions.decision_id) " +
+                "FROM manual_hypothesis_review_decisions ORDER BY created_at_ms DESC, decision_id DESC LIMIT ?",
             arrayOf(limit.toString()),
         ).use { cursor ->
             buildList {
@@ -101,7 +148,7 @@ class ANS100HypothesisManualReviewLedger(
                     val payload = cursor.getString(0)
                     if (payload.length > MAX_ENTRY_CHARS) continue
                     val state = runCatching { State.valueOf(cursor.getString(1)) }.getOrNull() ?: continue
-                    runCatching { decode(payload, state) }.getOrNull()?.let(::add)
+                    runCatching { decode(payload, state, cursor.getStringOrNull(2)) }.getOrNull()?.let(::add)
                 }
             }
         }
@@ -160,7 +207,7 @@ class ANS100HypothesisManualReviewLedger(
             .toString()
     }
 
-    private fun decode(payload: String, state: State): Entry {
+    private fun decode(payload: String, state: State, snapshotPayload: String?): Entry {
         val root = JSONObject(payload)
         val refs = root.getJSONArray("selected_passage_refs")
         require(refs.length() <= ANS100HypothesisManualReviewDecision.MAX_SELECTED_PASSAGES)
@@ -186,8 +233,64 @@ class ANS100HypothesisManualReviewLedger(
         } else {
             require(state == State.PENDING || state == State.APPLIED) { "evidence decisions require a replayable state" }
         }
-        return Entry(decision, evidence, state)
+        val snapshot = snapshotPayload?.takeIf { it.length <= MAX_SNAPSHOT_CHARS }?.let(::decodeSnapshot)
+        if (snapshot != null) require(snapshot.hypothesisId == decision.hypothesisId)
+        return Entry(decision, evidence, state, snapshot)
     }
+
+    private fun encodeSnapshot(packet: ANS100HypothesisEvidenceReviewPacketBuilder.Packet): String {
+        require(packet.passages.size <= ANS100HypothesisEvidenceReviewPacketBuilder.MAX_PASSAGES_HARD_LIMIT)
+        require(packet.sources.size <= ANS100HypothesisEvidenceReviewPacketBuilder.MAX_SOURCE_ASSESSMENTS_HARD_LIMIT)
+        val sources = JSONArray().apply {
+            packet.sources.forEach { source ->
+                put(JSONObject().put("url", source.canonicalUrl).put("host", source.host)
+                    .put("digest", source.pageContentSha256).put("lead", source.searchLeadRef)
+                    .put("assessment", source.assessment.name))
+            }
+        }
+        val passages = JSONArray().apply {
+            packet.passages.forEach { passage ->
+                put(JSONObject().put("ref", passage.passageRef)
+                    .put("excerpt", passage.excerpt.take(ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT))
+                    .put("digest", passage.sentenceSha256).put("polarity", passage.polarity.name)
+                    .put("reason", passage.polarityReason.name).put("source_assessment", passage.sourceAssessment.name))
+            }
+        }
+        val warnings = JSONArray().apply { packet.warnings.map { it.name }.sorted().forEach(::put) }
+        return JSONObject().put("hypothesis_id", packet.hypothesisId)
+            .put("page_title", packet.pageTitle.take(180)).put("page_url", packet.pageUrl.take(2048))
+            .put("page_digest", packet.pageContentSha256).put("fetched_at_ms", packet.fetchedAtEpochMs)
+            .put("sources", sources).put("passages", passages).put("warnings", warnings).toString()
+    }
+
+    private fun decodeSnapshot(payload: String): ReviewSnapshot {
+        val root = JSONObject(payload)
+        val sourceArray = root.getJSONArray("sources")
+        val passageArray = root.getJSONArray("passages")
+        val warningArray = root.getJSONArray("warnings")
+        require(sourceArray.length() <= ANS100HypothesisEvidenceReviewPacketBuilder.MAX_SOURCE_ASSESSMENTS_HARD_LIMIT)
+        require(passageArray.length() <= ANS100HypothesisEvidenceReviewPacketBuilder.MAX_PASSAGES_HARD_LIMIT)
+        require(warningArray.length() <= ANS100HypothesisEvidenceReviewPacketBuilder.Warning.values().size)
+        val sources = (0 until sourceArray.length()).map { i ->
+            val item = sourceArray.getJSONObject(i)
+            SourceSnapshot(item.getString("url"), item.getString("host"), item.getString("digest"),
+                item.getString("lead"), item.getString("assessment"))
+        }
+        val passages = (0 until passageArray.length()).map { i ->
+            val item = passageArray.getJSONObject(i)
+            PassageSnapshot(item.getString("ref"), item.getString("excerpt"), item.getString("digest"),
+                item.getString("polarity"), item.getString("reason"), item.getString("source_assessment"))
+        }
+        val warnings = (0 until warningArray.length()).map { warningArray.getString(it) }
+        require(sources.all { it.canonicalUrl.length <= 2048 && it.host.length <= 253 && it.pageContentSha256.matches(SHA256) })
+        require(passages.all { it.passageRef.isNotBlank() && it.excerpt.length <= ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT && it.sentenceSha256.matches(SHA256) })
+        return ReviewSnapshot(root.getString("hypothesis_id"), root.getString("page_title"),
+            root.getString("page_url"), root.getString("page_digest"), root.getLong("fetched_at_ms"),
+            sources, passages, warnings)
+    }
+
+    private fun android.database.Cursor.getStringOrNull(index: Int): String? =
+        if (isNull(index)) null else getString(index)
 
     private fun expectedEvidenceRef(d: ANS100HypothesisManualReviewDecision.Decision) =
         "manual-review:" + sha256(d.decisionId + "|" + d.packetFingerprint + "|" + d.outcome.name)
@@ -198,8 +301,10 @@ class ANS100HypothesisManualReviewLedger(
         const val DEFAULT_DATABASE_NAME = "ans100_manual_hypothesis_reviews.db"
         const val MAX_ENTRIES = 512
         const val MAX_ENTRY_CHARS = 16 * 1024
+        const val MAX_SNAPSHOT_CHARS = 32 * 1024
         const val DEFAULT_HISTORY_LIMIT = 100
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
+        private val SHA256 = Regex("[0-9a-f]{64}")
         private val DECISION_ID = Regex("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
     }
 }
