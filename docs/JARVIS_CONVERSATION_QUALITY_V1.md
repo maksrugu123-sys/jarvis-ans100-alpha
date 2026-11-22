@@ -95,7 +95,7 @@ Regression scenarios cover clear return to an older named topic, short answers t
 
 ## Semantic dialogue memory prototype
 
-A separate `LocalSemanticDialogueMemory` view is now derived from a bounded window of up to 32 recent transcript messages plus the current user turn. It currently tracks:
+A separate `LocalSemanticDialogueMemory` view is now derived from a bounded window of up to 32 messages total, including the current user turn. It currently tracks:
 
 - explicit user preferences only when a conservative phrase marker is present; each entry retains the source user-message ID and provenance;
 - explicit task requests, with heuristic `open` / `in_progress` states;
