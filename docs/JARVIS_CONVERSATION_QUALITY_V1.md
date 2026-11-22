@@ -92,3 +92,18 @@ This is a narrow dialogue-state improvement, not yet open-ended language underst
 Topic candidates are ranked by lexical overlap, with stronger weight for the user's original turn and an explicit margin over the runner-up. A candidate is selected only when the margin is at least two score points and heuristic confidence reaches 0.66. Otherwise, the reference remains ambiguous. When two candidates exist, the clarification prompt presents short excerpts from both rather than silently selecting one.
 
 Regression scenarios cover clear return to an older named topic, short answers to open questions, explicit topic changes, equally plausible topics, and low-margin matches. These are deterministic unit scenarios, not a measured accuracy benchmark. A broader held-out evaluation and on-device latency/RAM measurements remain pending.
+
+## Semantic dialogue memory prototype
+
+A separate `LocalSemanticDialogueMemory` view is now derived from a bounded window of up to 32 recent transcript messages plus the current user turn. It currently tracks:
+
+- explicit user preferences only when a conservative phrase marker is present; each entry retains the source user-message ID and provenance;
+- explicit task requests, with heuristic `open` / `in_progress` states;
+- task completion only when a later user message contains a completion marker and overlaps the task vocabulary;
+- a small list of unanswered assistant questions.
+
+The memory is passed into the ANS understanding context and the recurrent decoder's bounded context. It is not a separate database, does not survive transcript deletion, and does not yet create a permanent user profile. This is intentional: the transcript remains the source of truth for this prototype.
+
+Limits: at most 8 active tasks, 8 completed tasks, 8 explicit preferences, and 4 unresolved questions; the serialized memory context is capped at 1,800 characters. Every stored preference/task retains provenance. Statements without explicit preference markers are not promoted into preferences. The task lifecycle is lexical and approximate: ambiguous completion wording can be missed, and these labels are not a measured semantic accuracy score.
+
+Regression coverage was added for explicit preference provenance, retaining a task across a topic detour, explicit completion, avoiding inferred preferences, and collection bounds. These tests have been added but were not run. No build, CI, APK generation, or on-device measurement was performed.
