@@ -248,7 +248,7 @@ class ANS100NeuralResponseGenerator : LocalResponseEngine {
         const val MIN_NEURAL_MARGIN = 0.15
         const val MIN_MEMORY_MATCH_RATIO = 0.20
         private val CAPABILITY_QUESTION = Regex(
-            """\\b(что ты умеешь|что умеешь|твои возможности|что можешь делать)\\b""",
+            """\b(что ты умеешь|что умеешь|твои возможности|что можешь делать)\b""",
         )
         private val TOKEN = Regex("[a-zа-яё0-9]{3,}")
         private val STOP_WORDS = setOf(
