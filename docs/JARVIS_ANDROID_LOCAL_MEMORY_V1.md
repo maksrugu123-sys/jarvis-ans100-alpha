@@ -29,10 +29,13 @@ The first read migrates the previous `SharedPreferences` snapshot into the new f
 Chat commands:
 - `/memory location` — show the actual storage directory.
 - `/memory export` — write a timestamped `.jmem` export to the public `Downloads/JARVIS` folder on Android 10+, without requesting broad storage permission. Older Android versions use the app-specific `JARVIS/Memory/exports` folder.
+- `/memory import` — open the Android file picker for a `.jmem` backup. The selected file is bounded to 3 MiB and fully decoded/validated before it is staged; invalid files do not change current memory.
+- `/memory import confirm` — replace the complete current memory snapshot with the staged backup. This is a separate explicit confirmation; it does not merge records.
+- `/memory import cancel` — discard the staged backup without changing current memory.
 - `/memory reset` — ask for confirmation.
 - `/memory reset confirm` — clear all approved memory records, including superseded correction history, while retaining the folder and an empty V2 file.
 
-Russian aliases are also accepted: `/память папка`, `/память выгрузить`, `/память сбросить`, and `/память сбросить подтверждаю`. Export includes the approved-memory snapshot only; it does not include chats, model weights, access tokens, or other app data.
+Russian aliases are also accepted: `/память папка`, `/память выгрузить`, `/память импорт`, `/память импорт подтвердить`, `/память импорт отмена`, `/память сбросить`, and `/память сбросить подтверждаю`. Export includes the approved-memory snapshot only; it does not include chats, model weights, access tokens, or other app data. A restored backup replaces only approved local memory; it does not restore conversations, model weights, settings or access tokens.
 
 ## Explicit correction history
 
