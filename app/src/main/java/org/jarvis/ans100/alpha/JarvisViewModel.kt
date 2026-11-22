@@ -1329,6 +1329,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun ansSequenceModelStatus(): ANS100TrainableLanguageModule.Status =
         sequenceLanguageModule.status()
 
+    fun setAnsSequenceTrainingMessage(message: String) {
+        val current = mutableState.value.sequenceTraining
+        mutableState.value = mutableState.value.copy(
+            sequenceTraining = current.copy(message = message.take(2_000)),
+        )
+    }
+
     fun refreshAnsSequenceTrainingStatus() {
         val status = sequenceLanguageModule.status()
         val label = when {
@@ -1412,7 +1419,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 val exact = predictions.count { it.third }
                 val details = predictions.take(8).mapIndexed { index, item ->
                     "${index + 1}. ${if (item.third) "✓" else "✗"} Ожидалось: ${item.first.take(100)} | Получено: ${item.second.ifBlank { "∅" }.take(100)}"
-                }.joinToString("\\n")
+                }.joinToString("\n")
                 "Точное совпадение: $exact/${predictions.size} (${"%.1f".format(java.util.Locale.ROOT, exact * 100.0 / predictions.size)}%).\n$details\nЭто строгая проверка совпадения строк, а не полноценная оценка смысла. Проверочные ответы не добавлялись в обучение."
             }
             mainHandler.post {
