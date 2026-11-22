@@ -1,0 +1,9 @@
+# Held-out contextual checks. Do not train or fine-tune on these rows.
+[approved memory] preference: мой любимый напиток — чай [ans analysis] intent=question; terms=любимый напиток. Какой мой любимый напиток? => Твой любимый напиток — чай.
+[approved memory] preference: мой любимый напиток — вода [ans analysis] intent=question; terms=любимый напиток. Какой мой любимый напиток? => Твой любимый напиток — вода.
+[dialogue context] user: Я работаю над браузером RAZLOM.NET. ans: Обсудим его разработку. [ans analysis] intent=question; terms=проект. Над каким проектом я работаю? => Ты работаешь над браузером RAZLOM.NET.
+[dialogue context] user: Я работаю над NOVA Terminal. ans: Обсудим его разработку. [ans analysis] intent=question; terms=проект. Над каким проектом я работаю? => Ты работаешь над NOVA Terminal.
+[approved memory] preference: предпочитаю темную тему интерфейса [ans analysis] intent=question; terms=тема интерфейса. Какую тему интерфейса я предпочитаю? => Ты предпочитаешь темную тему.
+[approved memory] preference: предпочитаю светлую тему интерфейса [ans analysis] intent=question; terms=тема интерфейса. Какую тему интерфейса я предпочитаю? => Ты предпочитаешь светлую тему.
+[dialogue context] user: Я планирую сначала проверить память. ans: Хорошо, начнем с памяти. [ans analysis] intent=question; terms=первый шаг. Что я планирую проверить сначала? => Сначала ты планируешь проверить память.
+[dialogue context] user: Я планирую сначала проверить генерацию. ans: Хорошо, начнем с генерации. [ans analysis] intent=question; terms=первый шаг. Что я планирую проверить сначала? => Сначала ты планируешь проверить генерацию.
