@@ -16,6 +16,7 @@ class JarvisSpeechController(context: Context) : TextToSpeech.OnInitListener {
     private val appContext = context.applicationContext
     @Volatile private var ready = false
     @Volatile private var languageAvailable = false
+    @Volatile private var pendingText: String? = null
     private var engine: TextToSpeech? = null
 
     init {
@@ -53,19 +54,28 @@ class JarvisSpeechController(context: Context) : TextToSpeech.OnInitListener {
         tts.setPitch(JARVIS_PITCH)
         tts.setSpeechRate(JARVIS_SPEECH_RATE)
         ready = true
+        pendingText?.also {
+            pendingText = null
+            speak(it)
+        }
     }
 
     fun speak(text: String): Boolean {
         val clean = text.trim().take(MAX_SPEECH_CHARS)
         if (clean.isEmpty()) return false
         val tts = engine ?: return false
-        if (!ready || !languageAvailable) return false
+        if (!ready || !languageAvailable) {
+            pendingText = clean
+            return true
+        }
+        pendingText = null
         tts.stop()
         return tts.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "jarvis-${System.nanoTime()}") ==
             TextToSpeech.SUCCESS
     }
 
     fun stop() {
+        pendingText = null
         engine?.stop()
     }
 
