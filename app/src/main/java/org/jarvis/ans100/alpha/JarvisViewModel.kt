@@ -31,6 +31,7 @@ import org.jarvis.ans100.alpha.data.ANS100TrainableSequenceDecoder
 import org.jarvis.ans100.alpha.data.FileANS100SequenceModelStorage
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
 import org.jarvis.ans100.alpha.data.PhoneFolderLocalWorkspaceMemoryStorage
+import org.jarvis.ans100.alpha.data.PhoneFolderSemanticDialogueMemoryStorage
 import org.jarvis.ans100.alpha.data.LocalMemoryBackupInfo
 import org.jarvis.ans100.alpha.data.LocalWorkspaceMemoryCodec
 import org.jarvis.ans100.alpha.data.LocalDraftException
@@ -382,6 +383,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         SharedPreferencesConversationSignalStorage(application.applicationContext),
     )
     private val phoneMemoryStorage = PhoneFolderLocalWorkspaceMemoryStorage(application.applicationContext)
+    private val phoneSemanticMemoryStorage = PhoneFolderSemanticDialogueMemoryStorage(application.applicationContext)
     private val workspaceMemoryCache = LocalWorkspaceMemoryCache(phoneMemoryStorage)
     @Volatile private var pendingLocalMemoryImport: List<LocalWorkspaceMemory>? = null
     private val workspaceConceptInputBridge = ANS100WorkspaceConceptInputBridge()
@@ -420,6 +422,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         ANS100NeuralResponseGenerator(sequenceLanguageModule),
         workspaceMemoryCache,
         sequenceLanguageModule,
+        phoneSemanticMemoryStorage,
     )
     private val runtimeClient = LocalRuntimeBridgeClient()
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
@@ -1184,6 +1187,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun reloadConversation() {
         try {
+            // First app launch creates JARVIS/Memory/semantic-dialogue.jmem; later launches restore it.
+            conversationCoordinator.semanticMemory()
             val messages = conversationCoordinator.history()
             mutableState.value = mutableState.value.copy(
                 conversation = mutableState.value.conversation.copy(
