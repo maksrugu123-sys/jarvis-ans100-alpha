@@ -43,14 +43,16 @@ class FileANS100SequenceModelStorage(context: Context) : ANS100SequenceModelStor
         require(snapshot.all { it.code in 0x21..0x7e }) {
             "ANS model snapshot must be URL-safe Base64 text"
         }
-        var stream: java.io.FileOutputStream? = null
+        var output: java.io.FileOutputStream? = null
         return try {
-            stream = atomicFile.startWrite()
+            val stream = atomicFile.startWrite()
+            output = stream
             stream.write(snapshot.toByteArray(Charsets.US_ASCII))
             atomicFile.finishWrite(stream)
+            output = null
             true
         } catch (error: IOException) {
-            stream?.let(atomicFile::failWrite)
+            output?.let(atomicFile::failWrite)
             false
         }
     }
