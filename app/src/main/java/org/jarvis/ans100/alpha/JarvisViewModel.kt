@@ -31,6 +31,7 @@ import org.jarvis.ans100.alpha.data.ANS100TrainableSequenceDecoder
 import org.jarvis.ans100.alpha.data.FileANS100SequenceModelStorage
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
 import org.jarvis.ans100.alpha.data.PhoneFolderLocalWorkspaceMemoryStorage
+import org.jarvis.ans100.alpha.data.LocalMemoryBackupInfo
 import org.jarvis.ans100.alpha.data.LocalWorkspaceMemoryCodec
 import org.jarvis.ans100.alpha.data.LocalDraftException
 import org.jarvis.ans100.alpha.data.LocalDraftRepository
@@ -162,6 +163,9 @@ data class LocalMemoryUiState(
     val error: String? = null,
     val lastAddedId: String? = null,
     val importPickerRequestId: Long = 0L,
+    val backups: List<LocalMemoryBackupInfo> = emptyList(),
+    val isLoadingBackups: Boolean = false,
+    val backupListError: String? = null,
 )
 
 data class PeerMemorySyncUiState(
@@ -1551,6 +1555,32 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
+
+    fun refreshLocalMemoryBackups() {
+        val before = mutableState.value
+        if (before.localMemory.isLoadingBackups) return
+        mutableState.value = before.copy(
+            localMemory = before.localMemory.copy(isLoadingBackups = true, backupListError = null),
+        )
+        conversationExecutor.execute {
+            val result = runCatching { phoneMemoryStorage.listExports() }
+            mainHandler.post {
+                val current = mutableState.value
+                mutableState.value = current.copy(
+                    localMemory = current.localMemory.copy(
+                        backups = result.getOrDefault(emptyList()),
+                        isLoadingBackups = false,
+                        backupListError = result.exceptionOrNull()?.message,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun previewLocalMemoryBackup(uri: String) {
+        val parsed = runCatching { Uri.parse(uri) }.getOrNull() ?: return
+        previewLocalMemoryImport(parsed)
     }
 
     fun previewLocalMemoryImport(uri: Uri) {
