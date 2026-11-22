@@ -52,6 +52,22 @@ class ANS100TrainableLanguageModule(
     }
 
     @Synchronized
+    fun trainPairs(
+        examples: List<Pair<String, String>>,
+        epochs: Int = ANS100TrainableSequenceDecoder.DEFAULT_EPOCHS,
+        learningRate: Double = ANS100TrainableSequenceDecoder.DEFAULT_LEARNING_RATE,
+    ): ANS100TrainableSequenceDecoder.TrainingReport {
+        check(storageError == null) { "stored model is unreadable; explicit recovery is required" }
+        val candidate = newDecoder()
+        val report = candidate.trainPairs(examples, epochs, learningRate)
+        persistCandidate(candidate)
+        decoder = candidate
+        storageLoaded = true
+        storageError = null
+        return report
+    }
+
+    @Synchronized
     fun generate(prompt: String): ANS100TrainableSequenceDecoder.Generation? =
         if (decoder.isTrained) decoder.generate(prompt) else null
 
