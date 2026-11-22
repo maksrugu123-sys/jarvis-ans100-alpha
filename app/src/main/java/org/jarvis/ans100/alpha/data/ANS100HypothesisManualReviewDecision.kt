@@ -154,7 +154,8 @@ class ANS100HypothesisManualReviewDecision {
         require(packet.passages.all {
             it.disposition == ANS100HypothesisEvidenceReviewPacketBuilder.PassageDisposition.CANDIDATE_ONLY &&
                 it.passageRef.isNotBlank() && it.sentenceSha256.matches(SHA256) &&
-                it.excerpt.isNotBlank()
+                it.excerpt.isNotBlank() && it.sourceUrl.startsWith("https://") &&
+                it.pageContentSha256.matches(SHA256)
         })
         require(packet.sources.size <= ANS100HypothesisEvidenceReviewPacketBuilder.MAX_SOURCE_ASSESSMENTS_HARD_LIMIT)
         require(!packet.sourceIndependenceConfirmed && packet.sources.none { it.independenceConfirmed })
@@ -203,6 +204,8 @@ class ANS100HypothesisManualReviewDecision {
             field(passage.matchedCue)
             field(passage.detectedNegation)
             field(passage.sourceAssessment.name)
+            field(passage.sourceUrl)
+            field(passage.pageContentSha256)
         }
         packet.sources.sortedWith(compareBy({ it.canonicalUrl }, { it.pageContentSha256 }, { it.searchLeadRef })).forEach { source ->
             field(source.canonicalUrl)
