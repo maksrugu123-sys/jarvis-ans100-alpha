@@ -32,6 +32,7 @@ Chat commands:
 - `/memory import` — open the Android file picker for a `.jmem` backup. The selected file is bounded to 3 MiB and fully decoded/validated before it is staged; invalid files do not change current memory.
 - `/memory import confirm` — replace the complete current memory snapshot with the staged backup. This is a separate explicit confirmation; it does not merge records.
 - `/memory import cancel` — discard the staged backup without changing current memory.
+- The device-memory screen also lists up to 50 exports from `Downloads/JARVIS`, showing file date, size, total record count and active record count. Each file is decoded and validated before the restore action is enabled; the selected file is checked again when opened for restore.
 - `/memory reset` — ask for confirmation.
 - `/memory reset confirm` — clear all approved memory records, including superseded correction history, while retaining the folder and an empty V2 file.
 
@@ -67,5 +68,7 @@ The old Python desktop JPVR workspace continues to be the canonical PC workspace
 ## Tests and verification
 
 app/src/test/java/org/jarvis/ans100/alpha/data/LocalWorkspaceMemoryStoreTest.kt covers reopen, approved-only merge, preservation of local records, failed storage writes, corrupt snapshot fencing, size limits, unloaded-cache state and case-sensitive imported IDs. The new exact-snapshot restore path has not yet received a dedicated test. Status: AUTHORED, NOT RUN.
+
+The backup catalog UI and MediaStore query are source-implemented but have not been verified on a physical Android device.
 
 No Gradle build, APK/AAB, Android installation, process-kill recovery, device storage test, encryption review or performance measurement has been run. Do not claim verified durability until those checks are separately authorized and executed.
