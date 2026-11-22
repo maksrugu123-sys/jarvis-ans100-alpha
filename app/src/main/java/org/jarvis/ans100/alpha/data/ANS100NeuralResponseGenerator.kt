@@ -291,7 +291,22 @@ class ANS100NeuralResponseGenerator(
                 "Хорошо, продолжаю с предложенного шага: «$acceptedStep». Я учитываю предыдущий разговор и перехожу к сути, а не начинаю обсуждение заново."
             }
         }
-        return "Я нашёл связь с предыдущей частью разговора:\n«$excerpt»\n\nПродолжу с этого места. Если я выбрал не ту тему, поправь меня."
+        val followUp = normalize(prompt).replace(Regex("[^\\p{L}\\p{N} ]"), " ").replace(Regex("\\s+"), " ").trim()
+        val previousAnswer = reference.sourceAssistantMessage.take(MAX_HISTORY_EXCERPT_CHARS)
+        return when {
+            followUp in setOf("почему", "а почему", "зачем", "а зачем", "why") ->
+                "Ты спрашиваешь, почему я дал предыдущий ответ: «$previousAnswer». Я вернусь к его причине и проверю, какие сведения действительно её подтверждают, вместо того чтобы придумывать объяснение."
+            followUp in setOf("как", "а как", "how") ->
+                "Ты хочешь понять, как работает то, о чём мы говорили: «$previousAnswer». Продолжу объяснение именно с этого места."
+            followUp in setOf("что это", "а что это", "что", "what") ->
+                "Ты уточняешь, что именно означает мой предыдущий ответ: «$previousAnswer». Разберу это понятие, не теряя исходную тему."
+            followUp.contains("подробнее") ->
+                "Конечно. Разверну предыдущую мысль: «$previousAnswer». Сохраню тему разговора и объясню её по шагам."
+            followUp.contains("дальше") || followUp == "продолжай" ->
+                "Продолжаю с того места, где мы остановились. Последняя мысль была такой: «$previousAnswer»."
+            else ->
+                "Я связал твой вопрос с предыдущим ответом: «$previousAnswer». Продолжу эту тему. Если я выбрал не тот фрагмент, поправь меня."
+        }
     }
 
     private fun isAffirmativeFollowThrough(prompt: String): Boolean {
