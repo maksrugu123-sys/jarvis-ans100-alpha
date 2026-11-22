@@ -31,6 +31,12 @@ data class LocalContextReference(
 )
 
 
+/** A bounded topic thread reconstructed from the transcript. */
+data class LocalTopicThread(
+    val userMessage: String,
+    val assistantMessage: String = "",
+)
+
 /** Bounded dialogue state derived from the transcript; never persisted separately. */
 data class LocalDialogueState(
     val activeTopic: String = "",
@@ -38,6 +44,7 @@ data class LocalDialogueState(
     val latestAssistantAnswer: String = "",
     val pendingAssistantQuestion: String = "",
     val pendingAssistantOffer: String = "",
+    val topicThreads: List<LocalTopicThread> = emptyList(),
     val schema: String = "JARVIS_DIALOGUE_STATE_V1",
 ) {
     companion object {
@@ -54,12 +61,22 @@ data class LocalDialogueState(
             val userText = bounded.getOrNull(userIndex)?.text.orEmpty().take(600)
             val assistantText = bounded.getOrNull(assistantIndex)?.text.orEmpty().take(900)
             val assistantIsCurrent = assistantIndex > userIndex
+            val topicThreads = bounded.mapIndexedNotNull { index, message ->
+                if (message.role != ConversationRole.USER || message.text.isBlank()) return@mapIndexedNotNull null
+                val answer = bounded.drop(index + 1).takeWhile { it.role != ConversationRole.USER }
+                    .lastOrNull { it.role == ConversationRole.ASSISTANT }?.text.orEmpty()
+                LocalTopicThread(
+                    userMessage = message.text.filter { it >= ' ' }.replace(Regex("\\s+"), " ").trim().take(240),
+                    assistantMessage = answer.filter { it >= ' ' }.replace(Regex("\\s+"), " ").trim().take(240),
+                )
+            }.takeLast(8)
             return LocalDialogueState(
                 activeTopic = userText,
                 latestUserRequest = userText,
                 latestAssistantAnswer = assistantText,
                 pendingAssistantQuestion = if (assistantIsCurrent && assistantText.trimEnd().endsWith("?")) assistantText else "",
                 pendingAssistantOffer = if (assistantIsCurrent && OFFER_MARKERS.any { it.containsMatchIn(assistantText) }) assistantText else "",
+                topicThreads = topicThreads,
             )
         }
     }
@@ -140,6 +157,10 @@ class LocalUnderstandingPipeline {
         val historyWindow = recentHistory.takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
         val hasRecentUserContext = historyWindow.any { it.role == ConversationRole.USER && it.text.isNotBlank() }
         val dialogueState = LocalDialogueState.fromHistory(historyWindow)
+        val explicitTopicReturn = containsAnyPhrase(tokens, TOPIC_RETURN_PHRASES)
+        val explicitTopicChange = containsAnyPhrase(tokens, TOPIC_CHANGE_PHRASES)
+        val answersPendingQuestion = dialogueState.pendingAssistantQuestion.isNotBlank() &&
+            tokens.isNotEmpty() && tokens.size <= 8 && !explicitTopicReturn && !explicitTopicChange && !('?' in text)
         val affirmativeFollowThrough = tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
             tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }
         val ellipticalFollowUp = hasRecentUserContext && isEllipticalFollowUp(tokens, text)
@@ -148,7 +169,8 @@ class LocalUnderstandingPipeline {
         val evidence = mutableListOf<String>()
         val hasQuestion = '?' in text || QUESTION_WORDS.any { it in tokens }
         val refersBack = CONTEXT_REFERENCES.any { marker -> marker in tokens || tokens.any { it.startsWith(marker) && marker.length >= 4 } } ||
-            containsAnyPhrase(tokens, CONTEXT_PHRASES) || (affirmativeFollowThrough && hasRecentUserContext) || ellipticalFollowUp
+            containsAnyPhrase(tokens, CONTEXT_PHRASES) || explicitTopicReturn ||
+            (affirmativeFollowThrough && hasRecentUserContext) || ellipticalFollowUp || answersPendingQuestion
         val negation = NEGATIONS.any { it in tokens }
         val greeting = tokens.firstOrNull()?.let { it in GREETINGS } == true
         val thanks = containsAnyPhrase(tokens, THANKS)
@@ -184,7 +206,9 @@ class LocalUnderstandingPipeline {
         val entities = ENTITY.findAll(text).map { it.value.trim() }
             .filter { it.length in 2..48 && it.lowercase(Locale.ROOT) !in COMMON_ENTITY_STOPWORDS }
             .distinctBy { it.lowercase(Locale.ROOT) }.take(MAX_ENTITIES).toList()
-        val contextReference = if (refersBack) selectContextReference(tokens, historyWindow, dialogueState) else LocalContextReference()
+        val contextReference = if (refersBack) selectContextReference(
+            tokens, historyWindow, dialogueState, explicitTopicReturn, answersPendingQuestion,
+        ) else LocalContextReference()
         val language = when {
             CYRILLIC.containsMatchIn(text) -> "ru_or_cyrillic"
             LATIN.containsMatchIn(text) -> "en_or_latin"
@@ -213,7 +237,10 @@ class LocalUnderstandingPipeline {
 
     private data class ContextCandidate(val index: Int, val userMessage: String, val assistantMessage: String)
 
-    private fun selectContextReference(tokens: List<String>, history: List<LocalConversationMessage>, dialogueState: LocalDialogueState): LocalContextReference {
+    private fun selectContextReference(
+        tokens: List<String>, history: List<LocalConversationMessage>, dialogueState: LocalDialogueState,
+        explicitTopicReturn: Boolean, answersPendingQuestion: Boolean,
+    ): LocalContextReference {
         val candidates = mutableListOf<ContextCandidate>()
         history.forEachIndexed { index, message ->
             if (message.role != ConversationRole.USER || message.text.isBlank()) return@forEachIndexed
@@ -222,19 +249,24 @@ class LocalUnderstandingPipeline {
             candidates += ContextCandidate(index, cleanExcerpt(message.text), cleanExcerpt(assistant))
         }
         if (candidates.isEmpty()) return LocalContextReference(status = "unavailable", method = "no_recent_user_turn")
-        val follow = (tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
+        val follow = !explicitTopicReturn && ((tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
             tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }) ||
-            isEllipticalFollowUp(tokens, tokens.joinToString(" "))
+            isEllipticalFollowUp(tokens, tokens.joinToString(" ")) || answersPendingQuestion)
         val latest = candidates.last()
         if (follow) return LocalContextReference(
             status = "selected",
             method = when {
+                answersPendingQuestion -> "answer_to_pending_assistant_question"
                 isEllipticalFollowUp(tokens, tokens.joinToString(" ")) -> "elliptical_follow_up"
                 dialogueState.pendingAssistantOffer.isNotBlank() -> "adjacent_assistant_offer"
                 else -> "latest_user_turn"
             },
             sourceUserMessage = latest.userMessage, sourceAssistantMessage = latest.assistantMessage,
-            confidence = if (dialogueState.pendingAssistantOffer.isNotBlank()) 0.76 else 0.62,
+            confidence = when {
+                answersPendingQuestion -> 0.78
+                dialogueState.pendingAssistantOffer.isNotBlank() -> 0.76
+                else -> 0.62
+            },
         )
         val queryTerms = tokens.filter { it.length >= MIN_TERM_LENGTH && it !in REFERENCE_STOP }.toSet()
         if (queryTerms.isEmpty()) return if (candidates.size == 1) LocalContextReference(
@@ -390,7 +422,7 @@ class LocalUnderstandingPipeline {
         private const val MAX_EVIDENCE = 5
         private const val MAX_PLAN_STEPS = 5
         private const val MAX_FOCUS_TERMS = 6
-        private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 4
+        private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 16
         private const val MAX_CONTEXT_EXCERPT_CHARS = 240
         private const val MIN_TERM_LENGTH = 3
         private val TOKEN = Regex("[\\p{L}\\p{N}]+")
@@ -415,7 +447,7 @@ class LocalUnderstandingPipeline {
         )
         private val ACTION_MARKERS = listOf("сделай", "создай", "найди", "исправь", "проверь", "напиши", "добавь", "удали", "открой", "помоги", "надо", "нужно", "хочу", "можешь", "можешь ли", "сделать", "implement", "build", "fix", "find", "create")
         private val CORRECTION_MARKERS = listOf("я имел в виду", "не так", "исправление", "точнее", "я ошибся", "i meant", "correction")
-        private val CONTEXT_REFERENCES = listOf("это", "там", "тогда", "продолжай", "дальше", "предыдущ", "it", "that", "those", "continue", "previous")
+        private val CONTEXT_REFERENCES = listOf("это", "там", "тогда", "продолжай", "дальше", "предыдущ", "вернемся", "вернёмся", "назад", "обратно", "it", "that", "those", "continue", "previous")
         private val COMMON_ENTITY_STOPWORDS = setOf(
             "привет", "здравствуй", "здравствуйте", "добрый", "спасибо", "благодарю",
             "пока", "можешь", "сделай", "создай", "найди", "исправь", "проверь",
@@ -432,6 +464,8 @@ class LocalUnderstandingPipeline {
             "the", "and", "for", "with", "that", "this",
         )
         private val CONTEXT_PHRASES = listOf("как раньше", "в прошлый раз")
+        private val TOPIC_RETURN_PHRASES = listOf("вернемся к", "вернёмся к", "назад к", "обратно к", "давай вернемся", "давай вернёмся", "return to", "back to")
+        private val TOPIC_CHANGE_PHRASES = listOf("другая тема", "сменим тему", "теперь о другом", "перейдем к другой", "перейдём к другой", "new topic", "change topic")
         private val ELLIPTICAL_FOLLOW_UP_PHRASES = setOf(
             "расскажи подробнее", "объясни подробнее", "можно подробнее", "а подробнее",
             "что дальше", "а что дальше", "и что дальше",
