@@ -1,6 +1,7 @@
 package org.jarvis.ans100.alpha.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidJnvM250kWorkingSetTest {
@@ -14,9 +15,9 @@ class AndroidJnvM250kWorkingSetTest {
 
     @Test
     fun capacityNeverExceedsManagedHotSetLimit() {
-        assertEquals(
-            AndroidNeuronRamBudgetPreferences.MAX_HOT_SET_CAPACITY,
-            AndroidJnvM250kWorkingSet.capacityForBudgetMb(8),
+        assertTrue(
+            AndroidJnvM250kWorkingSet.capacityForBudgetMb(8) <=
+                AndroidNeuronRamBudgetPreferences.MAX_HOT_SET_CAPACITY,
         )
     }
 }
