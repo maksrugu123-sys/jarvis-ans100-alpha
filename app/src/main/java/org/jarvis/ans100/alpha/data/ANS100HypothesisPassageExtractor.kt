@@ -44,13 +44,21 @@ class ANS100HypothesisPassageExtractor(
         val candidates = matching.take(maxPassages).map { (sentenceDigest, sentence) ->
             PassageCandidate(
                 hypothesisId = page.hypothesisId,
-                passageRef = "page-passage:" + sha(page.hypothesisId + "|" + digest + "|" + sentenceDigest).take(32),
+                passageRef = "page-passage:" + sha(page.hypothesisId + "|" + canonicalSourceUrl(uri) + "|" + digest + "|" + sentenceDigest).take(32),
                 searchLeadRef = page.searchLeadRef, sourceUrl = page.finalUrl, sourceHost = host,
                 pageContentSha256 = digest, fetchedAtEpochMs = page.fetchedAtEpochMs,
                 sentenceSha256 = sentenceDigest, excerpt = sentence.take(maxExcerptChars),
             )
         }
         return ExtractionReport(page.hypothesisId, digest, candidates, unique.size, matching.size > maxPassages)
+    }
+    private fun canonicalSourceUrl(uri: URI): String {
+        val normalized = uri.normalize()
+        val host = normalized.host.lowercase(Locale.ROOT).trimEnd('.')
+        val port = if (normalized.port == -1 || normalized.port == 443) "" else ":" + normalized.port
+        val path = normalized.rawPath.orEmpty().ifEmpty { "/" }
+        val query = normalized.rawQuery?.let { "?" + it }.orEmpty()
+        return "https://" + host + port + path + query
     }
     private fun split(value: String) = value.split(Regex("(?<=[.!?。！？])\\s+|\\n+")).map(String::trim).filter(String::isNotEmpty)
     private fun terms(value: String) = TOKEN.findAll(value.lowercase(Locale.ROOT)).map { it.value }
