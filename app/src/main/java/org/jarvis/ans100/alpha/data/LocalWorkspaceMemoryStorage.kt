@@ -1,6 +1,10 @@
 package org.jarvis.ans100.alpha.data
 
 import android.content.Context
+import android.content.ContentValues
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.AtomicFile
 import java.io.File
 import java.io.FileOutputStream
@@ -67,16 +71,42 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
     }
 
     @Synchronized
-    fun exportSnapshot(): File {
+    fun exportSnapshot(): String {
         val content = read() ?: LocalWorkspaceMemoryCodec.encode(emptyList())
+        val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.now())
+        val filename = "jarvis-memory-$stamp.jmem"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/JARVIS")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = appContext.contentResolver.insert(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                values,
+            ) ?: throw LocalConversationException("Не удалось создать файл экспорта в Downloads/JARVIS.")
+            try {
+                appContext.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    output.write(content.toByteArray(Charsets.UTF_8))
+                    output.flush()
+                } ?: throw LocalConversationException("Не удалось записать файл экспорта памяти.")
+                val ready = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                appContext.contentResolver.update(uri, ready, null, null)
+                return uri.toString()
+            } catch (error: Exception) {
+                appContext.contentResolver.delete(uri, null, null)
+                throw error
+            }
+        }
+
         val exports = File(directory, "exports")
         if (!exports.exists() && !exports.mkdirs()) {
             throw LocalConversationException("Не удалось создать папку экспорта памяти.")
         }
-        val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
-            .withZone(ZoneOffset.UTC)
-            .format(Instant.now())
-        val target = File(exports, "jarvis-memory-$stamp.jmem")
+        val target = File(exports, filename)
         val temporary = File(exports, target.name + ".tmp")
         try {
             FileOutputStream(temporary).use { output ->
@@ -91,7 +121,7 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
             temporary.delete()
             throw error
         }
-        return target
+        return target.absolutePath
     }
 
     fun directoryPath(): String = directory.absolutePath
