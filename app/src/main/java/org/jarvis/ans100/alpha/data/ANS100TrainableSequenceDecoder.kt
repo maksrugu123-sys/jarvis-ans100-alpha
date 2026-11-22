@@ -120,6 +120,68 @@ class ANS100TrainableSequenceDecoder(
     }
 
     /**
+     * Trains question/answer pairs. Prompt tokens are recurrent context only;
+     * loss is applied to answer tokens and EOS, matching inference-time use.
+     */
+    fun trainPairs(
+        examples: List<Pair<String, String>>,
+        epochs: Int = DEFAULT_EPOCHS,
+        learningRate: Double = DEFAULT_LEARNING_RATE,
+    ): TrainingReport {
+        require(examples.isNotEmpty() && examples.size <= MAX_TRAINING_EXAMPLES)
+        require(epochs in 1..MAX_EPOCHS)
+        require(learningRate.isFinite() && learningRate in MIN_LEARNING_RATE..MAX_LEARNING_RATE)
+        require(examples.all { (prompt, answer) ->
+            prompt.isNotBlank() && answer.isNotBlank() &&
+                prompt.length <= MAX_EXAMPLE_CHARS && answer.length <= MAX_EXAMPLE_CHARS
+        }) { "each training pair needs a non-empty prompt and answer within the size limit" }
+
+        val tokenized = examples.map { (prompt, answer) -> tokenize(prompt) to tokenize(answer) }
+        require(tokenized.all { (prompt, answer) ->
+            prompt.isNotEmpty() && answer.isNotEmpty() &&
+                prompt.size + answer.size <= MAX_TOKENS_PER_EXAMPLE &&
+                (prompt + answer).all { it.length <= MAX_TOKEN_CHARS }
+        }) { "a prompt/answer pair exceeds the token or token-length limit" }
+
+        val frequencies = tokenized.flatMap { it.first + it.second }.groupingBy { it }.eachCount()
+        val selected = frequencies.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .take(maxVocabularySize - RESERVED_TOKENS.size)
+            .map { it.key }
+        vocabulary = RESERVED_TOKENS + selected
+        tokenToId = vocabulary.withIndex().associate { it.value to it.index }
+        require(vocabulary.size >= RESERVED_TOKENS.size + 2) {
+            "training requires at least two distinct ordinary tokens"
+        }
+
+        initializeWeights()
+        val sequences = tokenized.map { (prompt, answer) ->
+            val promptIds = prompt.map { tokenToId[it] ?: UNK_ID }
+            val answerIds = answer.map { tokenToId[it] ?: UNK_ID }
+            Triple(intArrayOf(BOS_ID) + promptIds + answerIds + intArrayOf(EOS_ID), promptIds.size + 1, answerIds.size)
+        }
+        var finalLoss = 0.0
+        repeat(epochs) {
+            var epochLoss = 0.0
+            var epochTargets = 0
+            sequences.forEach { (sequence, firstTargetIndex, _) ->
+                val result = trainSequence(sequence, learningRate, firstTargetIndex)
+                epochLoss += result.first
+                epochTargets += result.second
+            }
+            finalLoss = if (epochTargets == 0) 0.0 else epochLoss / epochTargets
+        }
+        trained = true
+        return TrainingReport(
+            exampleCount = tokenized.size,
+            trainingTokenCount = tokenized.sumOf { it.second.size },
+            vocabularySize = vocabulary.size,
+            epochsCompleted = epochs,
+            finalMeanLoss = finalLoss,
+        )
+    }
+
+    /**
      * Continues a prompt through the learned recurrent state and predicts tokens
      * autoregressively. Greedy decoding is deterministic and bounded.
      */
