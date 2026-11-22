@@ -18,7 +18,7 @@ class ANS100HypothesisManualReviewCoordinator(
     fun recordAndApply(packet: ANS100HypothesisEvidenceReviewPacketBuilder.Packet,
         decision: ANS100HypothesisManualReviewDecision.Decision): Boolean {
         val evidence = decisionFactory.toRelationEvidence(packet, decision)
-        if (!decisionLedger.append(decision, evidence)) return false
+        if (!decisionLedger.append(decision, evidence, packet)) return false
         if (evidence == null) return true
         replayPending()
         return decisionLedger.isApplied(decision.decisionId)
