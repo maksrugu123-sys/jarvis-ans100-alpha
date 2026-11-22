@@ -125,3 +125,13 @@ Chat commands:
 The export contains semantic dialogue memory only; it does not include approved JPVR workspace memories, neural weights, or the full conversation archive. Reset does not delete approved JPVR workspace memories or trained ANS decoder weights. Those stores remain separate by design.
 
 Regression tests were added for durable-memory injection, export, reset, and persistence across a topic detour. They have not been run. No Gradle build, CI workflow, APK, or on-device verification was performed.
+
+## Preference corrections and contradiction handling
+
+Semantic memory now treats explicit preferences as claims with message provenance, not as immutable profile facts. When two explicit preference statements contain recognized opposing concepts (for example, short versus detailed answers, or Russian versus English), both are retained and a bounded conflict record is created. The ANS context labels this conflict as unresolved and instructs the response path not to choose one silently; a clarification is needed.
+
+When the user uses an explicit correction phrase such as "я передумал", "исправление", or "теперь предпочитаю", the matching old preference is superseded by the new statement. A correction record keeps both source message IDs and marks the prior conflict as resolved by explicit user correction. Similar-looking statements without a clear correction phrase are not silently treated as replacements.
+
+The semantic-memory JSON codec is now V2 and continues to read existing V1 files. The next successful save writes V2, including conflict and correction provenance. Bounds remain strict: at most four conflict records, with the existing item and file size caps.
+
+Regression scenarios were added for conflicting preferences, explicit correction in one history window, correction after a conflict has already been persisted, conflict merging, V1 migration, and V2 round-trip. These tests have not been run; no build, CI, APK, or device verification was performed.
