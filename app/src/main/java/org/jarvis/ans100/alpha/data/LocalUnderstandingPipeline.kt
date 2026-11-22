@@ -186,7 +186,11 @@ class LocalUnderstandingPipeline {
         val latest = candidates.last()
         if (follow) return LocalContextReference(
             status = "selected",
-            method = if (latest.assistantMessage.isNotBlank()) "adjacent_assistant_offer" else "latest_user_turn",
+            method = when {
+                isEllipticalFollowUp(tokens, tokens.joinToString(" ")) -> "elliptical_follow_up"
+                latest.assistantMessage.isNotBlank() -> "adjacent_assistant_offer"
+                else -> "latest_user_turn"
+            },
             sourceUserMessage = latest.userMessage, sourceAssistantMessage = latest.assistantMessage,
             confidence = if (latest.assistantMessage.isNotBlank()) 0.72 else 0.62,
         )
