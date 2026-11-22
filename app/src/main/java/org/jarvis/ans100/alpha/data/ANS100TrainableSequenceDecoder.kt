@@ -7,6 +7,7 @@ import java.io.DataOutputStream
 import java.util.Base64
 import java.util.Locale
 import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.tanh
 import kotlin.random.Random
 
@@ -206,29 +207,105 @@ class ANS100TrainableSequenceDecoder(
         hidden = step(BOS_ID, hidden)
         promptTokens.forEach { token -> hidden = step(tokenToId[token] ?: UNK_ID, hidden) }
 
-        val generated = ArrayList<String>(maxNewTokens)
-        var confidenceSum = 0.0
-        var ended = false
-        for (stepIndex in 0 until maxNewTokens) {
-            val probabilities = probabilities(hidden)
-            val nextId = probabilities.indices.maxByOrNull { probabilities[it] } ?: EOS_ID
-            val confidence = probabilities[nextId]
-            if (nextId == EOS_ID) {
-                ended = true
-                break
-            }
-            if (nextId == BOS_ID || nextId == UNK_ID) break
-            generated += vocabulary[nextId]
-            confidenceSum += confidence
-            hidden = step(nextId, hidden)
-        }
+        val decoded = beamDecode(hidden, maxNewTokens, DEFAULT_BEAM_WIDTH)
+        val generated = decoded.tokenIds.map { vocabulary[it] }
         return Generation(
             text = detokenize(generated),
-            tokens = generated.toList(),
-            meanTokenConfidence = if (generated.isEmpty()) 0.0 else confidenceSum / generated.size,
-            stoppedAtEndToken = ended,
+            tokens = generated,
+            meanTokenConfidence = decoded.meanConfidence,
+            stoppedAtEndToken = decoded.ended,
             unknownPromptTokenCount = unknownPromptTokenCount,
         )
+    }
+
+    private data class DecodeBeam(
+        val hidden: DoubleArray,
+        val tokenIds: List<Int>,
+        val logScore: Double,
+        val confidenceLogSum: Double,
+        val ended: Boolean,
+    )
+
+    private data class DecodedSequence(
+        val tokenIds: List<Int>,
+        val meanConfidence: Double,
+        val ended: Boolean,
+    )
+
+    /**
+     * Bounded beam search explores several next-token continuations instead of
+     * committing greedily at every step. A small repeat penalty discourages
+     * token loops; the fixed beam and length bound keep Android cost predictable.
+     */
+    private fun beamDecode(
+        initialHidden: DoubleArray,
+        maxNewTokens: Int,
+        beamWidth: Int,
+    ): DecodedSequence {
+        var beams = listOf(
+            DecodeBeam(
+                hidden = initialHidden,
+                tokenIds = emptyList(),
+                logScore = 0.0,
+                confidenceLogSum = 0.0,
+                ended = false,
+            ),
+        )
+        repeat(maxNewTokens) {
+            val candidates = ArrayList<DecodeBeam>(beamWidth * beamWidth)
+            beams.forEach { beam ->
+                if (beam.ended) {
+                    candidates += beam
+                } else {
+                    val adjustedLogits = logits(beam.hidden)
+                    beam.tokenIds.toSet().forEach { usedId ->
+                        adjustedLogits[usedId] -= REPEATED_TOKEN_LOGIT_PENALTY
+                    }
+                    if (beam.tokenIds.size >= 2) {
+                        val previousBigram = beam.tokenIds.takeLast(2)
+                        if (beam.tokenIds.windowed(2).dropLast(1).any { it == previousBigram }) {
+                            // The current suffix already repeats; discourage extending the loop.
+                            for (tokenId in RESERVED_TOKENS.size until adjustedLogits.size) {
+                                adjustedLogits[tokenId] -= REPEATED_BIGRAM_LOGIT_PENALTY
+                            }
+                        }
+                    }
+                    val probabilities = softmax(adjustedLogits)
+                    val nextIds = probabilities.indices
+                        .filter { it != BOS_ID && it != UNK_ID }
+                        .sortedByDescending { probabilities[it] }
+                        .take(beamWidth)
+                        .toMutableList()
+                    if (EOS_ID !in nextIds) nextIds.add(EOS_ID)
+                    nextIds.forEach { nextId ->
+                        val probability = probabilities[nextId].coerceAtLeast(MIN_TOKEN_PROBABILITY)
+                        val isEnd = nextId == EOS_ID
+                        candidates += DecodeBeam(
+                            hidden = if (isEnd) beam.hidden else step(nextId, beam.hidden),
+                            tokenIds = if (isEnd) beam.tokenIds else beam.tokenIds + nextId,
+                            logScore = beam.logScore + kotlin.math.ln(probability),
+                            confidenceLogSum = if (isEnd) beam.confidenceLogSum else
+                                beam.confidenceLogSum + kotlin.math.ln(probability),
+                            ended = isEnd,
+                        )
+                    }
+                }
+            }
+            beams = candidates
+                .sortedByDescending(::beamRankingScore)
+                .take(beamWidth)
+            if (beams.all { it.ended }) return@repeat
+        }
+        val best = beams.maxByOrNull(::beamRankingScore)
+            ?: DecodeBeam(initialHidden, emptyList(), 0.0, 0.0, false)
+        val meanConfidence = if (best.tokenIds.isEmpty()) 0.0 else
+            exp(best.confidenceLogSum / best.tokenIds.size).coerceIn(0.0, 1.0)
+        return DecodedSequence(best.tokenIds, meanConfidence, best.ended)
+    }
+
+    private fun beamRankingScore(beam: DecodeBeam): Double {
+        val length = beam.tokenIds.size.coerceAtLeast(1).toDouble()
+        return beam.logScore / length.pow(LENGTH_NORMALIZATION_ALPHA)
     }
 
     /**
@@ -678,6 +755,11 @@ class ANS100TrainableSequenceDecoder(
         const val DEFAULT_EPOCHS = 12
         const val DEFAULT_LEARNING_RATE = 0.04
         const val DEFAULT_MAX_NEW_TOKENS = 24
+        const val DEFAULT_BEAM_WIDTH = 3
+        private const val REPEATED_TOKEN_LOGIT_PENALTY = 0.45
+        private const val REPEATED_BIGRAM_LOGIT_PENALTY = 0.65
+        private const val MIN_TOKEN_PROBABILITY = 1e-12
+        private const val LENGTH_NORMALIZATION_ALPHA = 0.7
         const val MAX_TRAINING_EXAMPLES = 256
         const val MAX_EXAMPLE_CHARS = 8_000
         const val MAX_TOKENS_PER_EXAMPLE = 64
