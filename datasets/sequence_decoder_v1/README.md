@@ -44,3 +44,15 @@ The decoder limits each prompt/answer pair to 64 subword tokens. If importing
 the corpus reports an over-limit row, do not silently truncate it: shorten the
 example while preserving the distinguishing context, or leave it out and
 record the change.
+
+
+## In-app multi-turn corpus loading
+
+The same train and held-out text files are bundled as Android assets:
+
+- `app/src/main/assets/multiturn_train_ru_v1.txt`
+- `app/src/main/assets/multiturn_heldout_ru_v1.txt`
+
+In the app, open **ANS · нейронное обучение**. Use **Загрузить диалоги** to populate the training field, then explicitly start training. Use **Загрузить отдельные 8 проверок** only in the independent evaluation field after training. The two actions load separate files; the evaluation examples are never appended to training automatically.
+
+The decoder is still a small recurrent sequence model. The corpus tests a narrow task—topic switching and returning to an earlier subject—and does not establish general conversation competence. Evaluate it on-device and inspect every generated answer before drawing conclusions.
