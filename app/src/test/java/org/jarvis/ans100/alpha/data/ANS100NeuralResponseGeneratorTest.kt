@@ -130,6 +130,37 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun trainedAnsSequenceDecoderCanProduceChatReplyWithoutLanguageModel() {
+        val storage = object : ANS100SequenceModelStorage {
+            var value: String? = null
+            override fun readSnapshot(): String? = value
+            override fun writeSnapshot(snapshot: String): Boolean {
+                value = snapshot
+                return true
+            }
+            override fun clearSnapshot(): Boolean {
+                value = null
+                return true
+            }
+        }
+        val module = ANS100TrainableLanguageModule(storage)
+        module.train(List(12) { "кот ест рыбу." }, epochs = 80)
+        val generator = ANS100NeuralResponseGenerator(module)
+
+        val reply = generator.respond(
+            "кот",
+            emptyList(),
+            emptyList(),
+            null,
+            LocalUnderstandingPipeline().analyze("кот"),
+        )
+
+        assertTrue(reply.isNotBlank())
+        assertTrue(generator.lastTrace.strategy == "learned_sequence_generation")
+        assertTrue(generator.lastTrace.source == "trained_ans100_recurrent_decoder")
+    }
+
+    @Test
     fun coordinatorUsesAnsGeneratorAndDoesNotAdvertiseLanguageModel() {
         val storage = object : ConversationStorage {
             var value: String? = null
