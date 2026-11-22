@@ -118,6 +118,9 @@ data class LocalUnderstanding(
             .append("; активная тема: ").append(dialogueState.activeTopic.take(120))
             .append("; ожидающий вопрос: ").append(dialogueState.pendingAssistantQuestion.isNotBlank())
             .append("; ожидающее предложение: ").append(dialogueState.pendingAssistantOffer.isNotBlank()).append('\n')
+        dialogueState.topicThreads.takeLast(6).forEachIndexed { index, thread ->
+            append("Тема ").append(index + 1).append(": ").append(thread.userMessage.take(100)).append('\n')
+        }
         if (evidence.isNotEmpty()) append("Основания классификации: ").append(evidence.joinToString("; ")).append('\n')
         append("План JARVIS (").append(reasoningPlan.schema).append("; ")
             .append(reasoningPlan.scope).append("):\n")
