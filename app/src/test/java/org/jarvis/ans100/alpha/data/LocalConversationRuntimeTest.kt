@@ -103,9 +103,9 @@ class LocalConversationRuntimeTest {
     @Test
     fun fallbackStatesThatLanguageModelIsNotInstalled() {
         val engine = LocalFallbackResponseEngine()
-        assertTrue(engine.respond("/help", emptyList()).contains("не подключены"))
+        assertTrue(engine.respond("/help", emptyList()).contains("базовый локальный режим"))
         assertTrue(engine.respond("объясни квантовую физику", emptyList())
-            .contains("языковая модель ещё не подключена"))
+            .contains("Языковая модель для этого ответа не использовалась"))
     }
 
 
@@ -240,8 +240,8 @@ class LocalConversationRuntimeTest {
 
         val messages = coordinator.send("Найди ошибку в коде")
 
-        assertTrue(messages.last().text.contains("action_request"))
-        assertTrue(messages.last().text.contains("предварительный план"))
+        assertTrue(messages.last().text.contains("построил предварительный план"))
+        assertTrue(messages.last().text.contains("внешние действия не выполнялись"))
         assertTrue(!coordinator.status().languageModelConfigured)
         assertTrue(coordinator.status().understandingIntegratedIntoConversation)
         assertEquals("action_request", coordinator.status().lastUnderstandingIntent)
