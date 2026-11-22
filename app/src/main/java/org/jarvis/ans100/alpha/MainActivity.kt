@@ -500,6 +500,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onRefresh = viewModel::refreshHypothesisReview,
                             onSearch = viewModel::searchHypothesisSources,
                             onInspect = viewModel::inspectHypothesisSource,
+                            onBuildPacket = viewModel::buildCombinedHypothesisReviewPacket,
                             onSubmit = viewModel::submitManualHypothesisReviewFromUi,
                         )
                         2 -> {
@@ -1374,6 +1375,7 @@ private fun HypothesisReviewPanel(
     onRefresh: () -> Unit,
     onSearch: (String) -> Unit,
     onInspect: (String, String) -> Unit,
+    onBuildPacket: (String) -> Unit,
     onSubmit: (
         org.jarvis.ans100.alpha.data.ANS100HypothesisEvidenceReviewPacketBuilder.Packet,
         org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome,
@@ -1382,13 +1384,14 @@ private fun HypothesisReviewPanel(
     ) -> Unit,
 ) {
     val packet = state.activePacket
-    var selectedPassageRefs by rememberSaveable(packet?.pageContentSha256) {
+    val packetSelectionKey = packet?.sources?.joinToString("|") { it.pageContentSha256 + it.canonicalUrl }
+    var selectedPassageRefs by rememberSaveable(packetSelectionKey) {
         mutableStateOf(emptySet<String>())
     }
-    var selectedOutcome by rememberSaveable(packet?.pageContentSha256) {
+    var selectedOutcome by rememberSaveable(packetSelectionKey) {
         mutableStateOf("INSUFFICIENT_EVIDENCE")
     }
-    var rationale by rememberSaveable(packet?.pageContentSha256) { mutableStateOf("") }
+    var rationale by rememberSaveable(packetSelectionKey) { mutableStateOf("") }
     val outcomes = org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.values()
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1479,6 +1482,32 @@ private fun HypothesisReviewPanel(
                                         ) { Text("Открыть и проверить эту страницу") }
                                     }
                                 }
+
+                                val inspectedForRequest = state.inspectedPages.filter {
+                                    it.page.hypothesisId == request.hypothesisId
+                                }
+                                if (inspectedForRequest.isNotEmpty()) {
+                                    Text(
+                                        "Открытые страницы: ${inspectedForRequest.size}/12",
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    inspectedForRequest.forEach { inspected ->
+                                        Text(
+                                            inspected.page.pageTitle.ifBlank { inspected.page.finalUrl },
+                                            fontWeight = FontWeight.Medium,
+                                        )
+                                        Text(
+                                            "${inspected.page.finalUrl} · ${inspected.page.relevance.name} · фрагментов: ${inspected.extraction.candidates.size}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    OutlinedButton(
+                                        onClick = { onBuildPacket(request.hypothesisId) },
+                                        enabled = !state.isBusy,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) { Text("Собрать общий пакет из открытых страниц") }
+                                }
                             }
                         }
                     }
@@ -1498,8 +1527,9 @@ private fun HypothesisReviewPanel(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(packet.pageTitle.ifBlank { "Страница без заголовка" })
-                    Text(packet.pageUrl, style = MaterialTheme.typography.labelSmall)
-                    Text("Страница: ${packet.pageStatus} · SHA-256: ${packet.pageContentSha256.take(16)}…")
+                    Text("Страниц в пакете: ${packet.sources.size} · фрагментов: ${packet.passages.size}", fontWeight = FontWeight.SemiBold)
+                    Text("Основная страница: ${packet.pageUrl}", style = MaterialTheme.typography.labelSmall)
+                    Text("Основная страница: ${packet.pageStatus} · SHA-256: ${packet.pageContentSha256.take(16)}…")
                     Text(
                         "Источник не аутентифицирован. Разные домены не доказывают независимость публикаций.",
                         style = MaterialTheme.typography.bodySmall,
@@ -1520,7 +1550,7 @@ private fun HypothesisReviewPanel(
                         )
                         Text(source.canonicalUrl, style = MaterialTheme.typography.labelSmall)
                     }
-                    Text("Фрагменты страницы", fontWeight = FontWeight.SemiBold)
+                    Text("Фрагменты со всех открытых страниц", fontWeight = FontWeight.SemiBold)
                     if (packet.passages.isEmpty()) {
                         Text(
                             "Подходящих фрагментов с обоими понятиями не найдено. Нельзя подтвердить или опровергнуть гипотезу по этому пакету.",
