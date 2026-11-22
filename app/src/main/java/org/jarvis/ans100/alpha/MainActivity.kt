@@ -1765,6 +1765,36 @@ private fun HypothesisReviewPanel(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
+                                if (diff.changedSourceUrls.isNotEmpty()) {
+                                    Text(
+                                        "Обновлены источники: ${diff.changedSourceUrls.take(2).joinToString()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (diff.changedPassageRefs.isNotEmpty()) {
+                                    Text(
+                                        "Изменены фрагменты: ${diff.changedPassageRefs.take(3).joinToString()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (diff.addedSelectedPassageRefs.isNotEmpty() || diff.removedSelectedPassageRefs.isNotEmpty()) {
+                                    Text(
+                                        "В выборе добавлены: ${diff.addedSelectedPassageRefs.take(3).joinToString()} · " +
+                                            "убраны: ${diff.removedSelectedPassageRefs.take(3).joinToString()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (diff.addedWarnings.isNotEmpty() || diff.removedWarnings.isNotEmpty()) {
+                                    Text(
+                                        "Предупреждения +: ${diff.addedWarnings.joinToString()} · " +
+                                            "−: ${diff.removedWarnings.joinToString()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
