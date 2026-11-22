@@ -13,6 +13,7 @@ data class LocalSemanticTask(
     val status: String,
     val sourceMessageId: String,
     val updatedAtMillis: Long,
+    val completedByMessageId: String? = null,
     val provenance: String = "explicit_user_request",
 )
 
@@ -107,7 +108,7 @@ data class LocalSemanticDialogueMemory(
                     }
                     if (matching >= 0) {
                         val old = tasks.removeAt(matching)
-                        tasks.add(old.copy(status = "completed", sourceMessageId = message.id, updatedAtMillis = message.createdAtMillis))
+                        tasks.add(old.copy(status = "completed", updatedAtMillis = message.createdAtMillis, completedByMessageId = message.id))
                     }
                 }
 
@@ -129,7 +130,8 @@ data class LocalSemanticDialogueMemory(
 
                 val assistantAfter = messages.drop(index + 1).takeWhile { it.role != ConversationRole.USER }
                     .lastOrNull { it.role == ConversationRole.ASSISTANT }
-                if (assistantAfter != null && assistantAfter.text.trimEnd().endsWith("?")) {
+                if (index == messages.indexOfLast { it.role == ConversationRole.USER } &&
+                    assistantAfter != null && assistantAfter.text.trimEnd().endsWith("?")) {
                     questions.add(assistantAfter.text.take(MAX_ITEM_CHARS))
                 }
             }
