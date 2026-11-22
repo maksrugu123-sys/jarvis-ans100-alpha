@@ -196,6 +196,11 @@ class ANS100NeuralResponseGenerator(
                 append(memory.content.take(MAX_MEMORY_TEXT_CHARS)).append(" ")
             }
         }
+        val semanticContext = understanding.semanticMemory.toModelContext()
+        if (semanticContext.isNotBlank()) {
+            append("[semantic dialogue memory] ")
+            append(semanticContext.take(1_800)).append(" ")
+        }
         val reasoning = understanding.reasoningPlan.steps.take(MAX_PLAN_STEPS)
         if (understanding.intent != "statement_or_unknown" ||
             understanding.keyTerms.isNotEmpty() || reasoning.isNotEmpty()
