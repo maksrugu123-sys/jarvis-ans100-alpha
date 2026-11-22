@@ -6,7 +6,8 @@ import java.util.Locale
  * Deterministic, bounded pre-generation analysis owned by JARVIS Core.
  *
  * This is a transparent heuristic parser, not a trained semantic model. It produces
- * evidence and a routing hint; the language model is only the response realizer.
+ * bounded evidence and routing hints for the ANS-owned neural language generator.
+ * It does not call or depend on a separate pretrained language model.
  */
 data class LocalReasoningPlan(
     val goal: String,
