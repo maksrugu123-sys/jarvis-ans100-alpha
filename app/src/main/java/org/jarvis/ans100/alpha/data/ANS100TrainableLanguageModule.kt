@@ -41,6 +41,7 @@ class ANS100TrainableLanguageModule(
         epochs: Int = ANS100TrainableSequenceDecoder.DEFAULT_EPOCHS,
         learningRate: Double = ANS100TrainableSequenceDecoder.DEFAULT_LEARNING_RATE,
     ): ANS100TrainableSequenceDecoder.TrainingReport {
+        check(storageError == null) { "stored model is unreadable; explicit recovery is required" }
         val candidate = newDecoder()
         val report = candidate.train(examples, epochs, learningRate)
         persistCandidate(candidate)
@@ -63,6 +64,7 @@ class ANS100TrainableLanguageModule(
         if (feedback.source != ANS100SequenceFeedbackTrainer.Source.EXPLICIT_USER_CORRECTION &&
             feedback.source != ANS100SequenceFeedbackTrainer.Source.VERIFIED_EXTERNAL_OUTCOME
         ) return null
+        check(storageError == null) { "stored model is unreadable; explicit recovery is required" }
         check(decoder.isTrained) { "decoder must be trained before applying feedback" }
         val candidate = newDecoder()
         candidate.restoreSnapshot(decoder.exportSnapshot())
