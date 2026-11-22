@@ -230,6 +230,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
         if (uri != null) viewModel.importConversationModel(uri)
     }
 
+    val localMemoryImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) viewModel.previewLocalMemoryImport(uri)
+    }
+
     val sequenceExamplesLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
@@ -273,6 +279,12 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             viewModel.previewWorkspaceImport(uri, passphrase)
         } else {
             passphrase?.fill('\u0000')
+        }
+    }
+
+    LaunchedEffect(ui.localMemory.importPickerRequestId) {
+        if (ui.localMemory.importPickerRequestId > 0L) {
+            localMemoryImportLauncher.launch(arrayOf("*/*"))
         }
     }
 
