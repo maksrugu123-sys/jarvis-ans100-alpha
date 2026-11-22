@@ -1437,7 +1437,7 @@ private fun HypothesisReviewPanel(
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Text(
-                                    "${request.fromConceptId} — ${request.relationType.name} → ${request.toConceptId}",
+                                    "${state.conceptLabels[request.fromConceptId] ?: request.fromConceptId} — ${request.relationType.name} → ${state.conceptLabels[request.toConceptId] ?: request.toConceptId}",
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text("Состояние: ${request.currentStatus.name}")
@@ -1494,7 +1494,7 @@ private fun HypothesisReviewPanel(
                 ) {
                     SectionHeading("Пакет доказательств", "требуется ручная проверка")
                     Text(
-                        "${packet.fromConceptId} — ${packet.relationType.name} → ${packet.toConceptId}",
+                        "${state.conceptLabels[packet.fromConceptId] ?: packet.fromConceptId} — ${packet.relationType.name} → ${state.conceptLabels[packet.toConceptId] ?: packet.toConceptId}",
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(packet.pageTitle.ifBlank { "Страница без заголовка" })
