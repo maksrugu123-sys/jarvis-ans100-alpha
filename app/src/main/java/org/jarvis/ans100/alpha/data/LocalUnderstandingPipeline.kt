@@ -98,6 +98,7 @@ data class LocalUnderstanding(
     val reasoningPlan: LocalReasoningPlan,
     val contextReference: LocalContextReference = LocalContextReference(),
     val dialogueState: LocalDialogueState = LocalDialogueState(),
+    val semanticMemory: LocalSemanticDialogueMemory = LocalSemanticDialogueMemory(),
     val schema: String = "JARVIS_UNDERSTANDING_V1",
     val scope: String = "bounded_heuristic_pre_generation_analysis",
     val reasoningResult: LocalReasoningResult? = null,
@@ -122,6 +123,7 @@ data class LocalUnderstanding(
         dialogueState.topicThreads.takeLast(6).forEachIndexed { index, thread ->
             append("Тема ").append(index + 1).append(": ").append(thread.userMessage.take(100)).append('\n')
         }
+        append(semanticMemory.toModelContext()).append('\n')
         if (evidence.isNotEmpty()) append("Основания классификации: ").append(evidence.joinToString("; ")).append('\n')
         append("План JARVIS (").append(reasoningPlan.schema).append("; ")
             .append(reasoningPlan.scope).append("):\n")
@@ -161,6 +163,11 @@ class LocalUnderstandingPipeline {
         val historyWindow = recentHistory.takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
         val hasRecentUserContext = historyWindow.any { it.role == ConversationRole.USER && it.text.isNotBlank() }
         val dialogueState = LocalDialogueState.fromHistory(historyWindow)
+        val semanticHistory = historyWindow + LocalConversationMessage(
+            id = "current-user-turn", role = ConversationRole.USER, text = text,
+            createdAtMillis = historyWindow.lastOrNull()?.createdAtMillis?.plus(1L) ?: 0L,
+        )
+        val semanticMemory = LocalSemanticDialogueMemory.fromHistory(semanticHistory)
         val explicitTopicReturn = containsAnyPhrase(tokens, TOPIC_RETURN_PHRASES)
         val explicitTopicChange = containsAnyPhrase(tokens, TOPIC_CHANGE_PHRASES)
         val answersPendingQuestion = dialogueState.pendingAssistantQuestion.isNotBlank() &&
@@ -233,6 +240,7 @@ class LocalUnderstandingPipeline {
             reasoningPlan = buildReasoningPlan(intent, uniqueTerms, entities, refersBack, hasRecentUserContext, contextReference),
             contextReference = contextReference,
             dialogueState = dialogueState,
+            semanticMemory = semanticMemory,
         )
     }
 
