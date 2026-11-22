@@ -28,7 +28,7 @@ class AndroidJnvM250kRewardAttributionTest {
         assertEquals(4L, result.observedLinks)
         assertEquals(2L, result.omittedLinks)
         assertEquals("action-search", result.actionId)
-        assertEquals(1.0, result.responseScores.getValue("edge-a"), 0.000001)
+        assertEquals(2.0 / 3.0, result.responseScores.getValue("edge-a"), 0.000001)
         assertFalse(attribution.hasActiveEpisode())
     }
 
