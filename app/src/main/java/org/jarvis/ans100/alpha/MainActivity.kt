@@ -251,7 +251,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                 val imported = String(bytes, Charsets.UTF_8)
                 require(imported.isNotBlank()) { "Файл пуст." }
                 sequenceTrainingExamples = imported.lineSequence().map { it.trim() }
-                    .filter { it.isNotEmpty() && !it.startsWith("#") }.joinToString("\\n")
+                    .filter { it.isNotEmpty() && !it.startsWith("#") }.joinToString("\n")
                 require(sequenceTrainingExamples.isNotBlank()) { "В файле нет строк с примерами." }
             }.onFailure {
                 viewModel.refreshAnsSequenceTrainingStatus()
@@ -563,7 +563,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onCorrectionTextChange = { sequenceCorrectionText = it.take(4_000) },
                             epochsText = sequenceEpochsText,
                             onEpochsChange = { sequenceEpochsText = it.filter(Char::isDigit).take(4) },
-                            onImport = { sequenceExamplesLauncher.launch(arrayOf("text/plain", "text/*", "application/json")) },
+                            onImport = { sequenceExamplesLauncher.launch(arrayOf("text/plain", "text/*")) },
                             onTrain = {
                                 val examples = sequenceTrainingExamples.lineSequence()
                                     .map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toList()
@@ -4564,14 +4564,14 @@ private fun AnsSequenceTrainingPanel(
                     value = epochsText,
                     onValueChange = onEpochsChange,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Количество эпох (1–500)") },
+                    label = { Text("Количество эпох (1–100)") },
                     singleLine = true,
                     enabled = !state.busy,
                 )
                 Button(
                     onClick = onTrain,
                     enabled = !state.busy && trainingExamples.lineSequence().count { it.isNotBlank() && !it.trim().startsWith("#") } in 1..256 &&
-                        (epochsText.toIntOrNull() ?: 0) in 1..500,
+                        (epochsText.toIntOrNull() ?: 0) in 1..100,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Обучить / переобучить ANS") }
                 Text(
