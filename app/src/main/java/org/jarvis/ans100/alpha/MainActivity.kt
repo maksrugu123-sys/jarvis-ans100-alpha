@@ -4583,7 +4583,12 @@ private fun AnsSequenceTrainingPanel(
                 )
                 Button(
                     onClick = onTrain,
-                    enabled = !state.busy && trainingExamples.lineSequence().count { line ->\n                            val clean = line.trim()\n                            val parts = clean.split("=>", limit = 2)\n                            !clean.isEmpty() && !clean.startsWith("#") && parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()\n                        } in 1..256 &&
+                    enabled = !state.busy && trainingExamples.lineSequence().count { line ->
+                            val clean = line.trim()
+                            val parts = clean.split("=>", limit = 2)
+                            clean.isNotEmpty() && !clean.startsWith("#") &&
+                                parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()
+                        } in 1..256 &&
                         (epochsText.toIntOrNull() ?: 0) in 1..100,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Обучить ANS на парах") }
