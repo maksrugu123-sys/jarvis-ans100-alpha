@@ -81,7 +81,7 @@ class AndroidJnvM250kCounterfactualRewardGateTest {
             responseScores = mapOf("edge-incomplete" to 1.0, "edge-weak" to 0.1, "edge-missing" to 0.9),
             report = report(
                 effect("edge-incomplete", 1, 1.0, counterfactualComplete = false),
-                effect("edge-weak", 1, 0.2),
+                effect("edge-weak", 1, 0.4),
             ),
         )
         assertTrue(decision.acceptedCredits.isEmpty())
