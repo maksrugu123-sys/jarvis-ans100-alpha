@@ -67,7 +67,8 @@ class ANS100TrainableSequenceDecoderTest {
         val legacy = java.nio.ByteBuffer.allocate(current.size - Int.SIZE_BYTES)
             .put(current, 0, 4)
             .putInt(1)
-            .put(current, 8, current.size - 16)
+            .put(current, 8, 4)
+            .put(current, 16, current.size - 16)
             .array()
         val encodedLegacy = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(legacy)
 
