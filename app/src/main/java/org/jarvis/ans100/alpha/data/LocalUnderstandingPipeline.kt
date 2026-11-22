@@ -156,6 +156,7 @@ class LocalUnderstandingPipeline {
     fun analyze(
         input: String,
         recentHistory: List<LocalConversationMessage> = emptyList(),
+        persistedMemory: LocalSemanticDialogueMemory = LocalSemanticDialogueMemory(),
     ): LocalUnderstanding {
         val text = input.trim().take(MAX_INPUT_CHARS)
         val normalized = text.lowercase(Locale.ROOT)
@@ -167,7 +168,7 @@ class LocalUnderstandingPipeline {
             id = "current-user-turn", role = ConversationRole.USER, text = text,
             createdAtMillis = historyWindow.lastOrNull()?.createdAtMillis?.plus(1L) ?: 0L,
         )
-        val semanticMemory = LocalSemanticDialogueMemory.fromHistory(semanticHistory)
+        val semanticMemory = persistedMemory.mergeWith(LocalSemanticDialogueMemory.fromHistory(semanticHistory))
         val explicitTopicReturn = containsAnyPhrase(tokens, TOPIC_RETURN_PHRASES)
         val explicitTopicChange = containsAnyPhrase(tokens, TOPIC_CHANGE_PHRASES)
         val answersPendingQuestion = dialogueState.pendingAssistantQuestion.isNotBlank() &&
