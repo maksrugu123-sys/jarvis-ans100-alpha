@@ -163,7 +163,7 @@ class LocalUnderstandingPipeline {
         val historyWindow = recentHistory.takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
         val hasRecentUserContext = historyWindow.any { it.role == ConversationRole.USER && it.text.isNotBlank() }
         val dialogueState = LocalDialogueState.fromHistory(historyWindow)
-        val semanticHistory = historyWindow + LocalConversationMessage(
+        val semanticHistory = recentHistory.takeLast(MAX_SEMANTIC_HISTORY_MESSAGES) + LocalConversationMessage(
             id = "current-user-turn", role = ConversationRole.USER, text = text,
             createdAtMillis = historyWindow.lastOrNull()?.createdAtMillis?.plus(1L) ?: 0L,
         )
@@ -445,6 +445,7 @@ class LocalUnderstandingPipeline {
         private const val MAX_PLAN_STEPS = 5
         private const val MAX_FOCUS_TERMS = 6
         private const val MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING = 16
+        private const val MAX_SEMANTIC_HISTORY_MESSAGES = 32
         private const val MAX_CONTEXT_EXCERPT_CHARS = 240
         private const val MIN_TERM_LENGTH = 3
         private val TOKEN = Regex("[\\p{L}\\p{N}]+")
