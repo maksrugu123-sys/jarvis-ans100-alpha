@@ -85,3 +85,10 @@ This is a narrow dialogue-state improvement, not yet open-ended language underst
 - Automatic builds remain disabled.
 - No Gradle build, unit tests, CI, APK build, or physical-device run is implied by source changes. Record those checks only when they are actually executed.
 - The native ANS path must not silently fall back to Qwen or a remote model while being described as ANS-owned generation.
+
+
+## Confidence-based topic routing and scenario coverage
+
+Topic candidates are ranked by lexical overlap, with stronger weight for the user's original turn and an explicit margin over the runner-up. A candidate is selected only when the margin is at least two score points and heuristic confidence reaches 0.66. Otherwise, the reference remains ambiguous. When two candidates exist, the clarification prompt presents short excerpts from both rather than silently selecting one.
+
+Regression scenarios cover clear return to an older named topic, short answers to open questions, explicit topic changes, equally plausible topics, and low-margin matches. These are deterministic unit scenarios, not a measured accuracy benchmark. A broader held-out evaluation and on-device latency/RAM measurements remain pending.
