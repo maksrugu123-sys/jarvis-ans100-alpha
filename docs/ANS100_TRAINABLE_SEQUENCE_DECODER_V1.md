@@ -36,6 +36,8 @@ The following are not accepted as labels:
 
 This prevents the system from reinforcing its own unverified output as if it were ground truth.
 
+Correction learning uses the prompt as recurrent context and supervises only the corrected continuation (plus its end marker). Prompt tokens are not treated as desired output labels, while gradients can still flow through the prompt state so the network can adapt the context representation.
+
 ## Chat integration
 
 ANS100NeuralResponseGenerator can call the trainable decoder after a model has been loaded or explicitly trained. Capability, greeting, farewell and correction paths remain deterministic. Learned text is accepted only when it contains at least two generated tokens and mean token confidence is at least 0.25. The confidence is a decoder score, not a calibrated probability of factual correctness.
