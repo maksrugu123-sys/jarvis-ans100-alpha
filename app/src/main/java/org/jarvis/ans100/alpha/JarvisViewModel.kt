@@ -1653,30 +1653,40 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val before = mutableState.value.hypothesisReview
         if (before.isBusy || before.activePacket !== packet) return
-        val decision = runCatching {
-            manualHypothesisReviewDecision.record(
-                packet = packet,
-                decisionId = "manual-review-${UUID.randomUUID()}",
-                outcome = outcome,
-                selectedPassageRefs = selectedPassageRefs,
-                rationale = rationale,
-                reviewedAtEpochMs = System.currentTimeMillis(),
-            )
-        }
-        val persisted = decision.getOrNull()?.let { runCatching {
-            manualHypothesisReviewCoordinator.recordAndApply(packet, it)
-        }.getOrDefault(false) } ?: false
-        if (persisted) {
-            refreshHypothesisReview()
-            val current = mutableState.value.hypothesisReview
-            mutableState.value = mutableState.value.copy(hypothesisReview = current.copy(
-                activePacket = null, message = "Решение записано в журнал. Подтверждение пользователя не означает независимую проверку источника.",
-                error = null,
-            ))
-        } else {
-            mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
-                error = decision.exceptionOrNull()?.message ?: "Не удалось надёжно сохранить решение. Пакет оставлен открытым.",
-            ))
+        mutableState.value = mutableState.value.copy(
+            hypothesisReview = before.copy(isBusy = true, error = null, message = "Сохраняю решение и обновляю журнал…"),
+        )
+        hypothesisReviewExecutor.execute {
+            val result = runCatching {
+                val decision = manualHypothesisReviewDecision.record(
+                    packet = packet,
+                    decisionId = "manual-review-${UUID.randomUUID()}",
+                    outcome = outcome,
+                    selectedPassageRefs = selectedPassageRefs,
+                    rationale = rationale,
+                    reviewedAtEpochMs = System.currentTimeMillis(),
+                )
+                check(manualHypothesisReviewCoordinator.recordAndApply(packet, decision)) {
+                    "Решение не подтверждено журналом и оставлено для повторной проверки."
+                }
+            }
+            mainHandler.post {
+                if (result.isSuccess) {
+                    refreshHypothesisReview()
+                    val current = mutableState.value.hypothesisReview
+                    mutableState.value = mutableState.value.copy(hypothesisReview = current.copy(
+                        activePacket = null, isBusy = false,
+                        message = "Решение записано в журнал. Подтверждение пользователя не означает независимую проверку источника.",
+                        error = null,
+                    ))
+                } else {
+                    val current = mutableState.value.hypothesisReview
+                    mutableState.value = mutableState.value.copy(hypothesisReview = current.copy(
+                        isBusy = false,
+                        error = result.exceptionOrNull()?.message ?: "Не удалось надёжно сохранить решение. Пакет оставлен открытым.",
+                    ))
+                }
+            }
         }
     }
 
