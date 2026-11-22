@@ -78,6 +78,7 @@ import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutContract
 import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutDecoder
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceStore
 import java.util.UUID
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jarvis.ans100.alpha.data.AndroidWebSearchIntent
