@@ -80,3 +80,13 @@ A deliberately tiny, hand-authored Russian smoke corpus is stored under `dataset
 The held-out prompts are not copied verbatim from training. The two files nevertheless share a narrow, repetitive request/response style and much of the vocabulary. Therefore, this is only a pipeline smoke check for import, training, generation and evaluation wiring. It is not an independent measure of Russian language ability, semantic understanding, factual accuracy or generalization to ordinary conversation. A small Elman RNN may fail most or all exact matches; do not tune repeatedly against the held-out file and then report that score as an unbiased test.
 
 For a meaningful evaluation, create a larger reviewed corpus from independently authored examples, split by intent/topic before training, keep the final test set sealed, and report exact match, token-level metrics, loss, repetition and human review separately.
+
+### Evaluation diagnostics
+
+The held-out evaluator now reports three separate diagnostics:
+
+- case-insensitive exact-string match;
+- mean token-level F1, calculated from multiset token overlap (so repeated words count, but word order and meaning are not assessed);
+- repeated-token share in generated output, as a coarse repetition warning.
+
+These metrics must be read together. Token F1 is not semantic similarity, factual correctness or grammatical quality; the repetition share is not a complete language-quality metric. The held-out set remains a toy pipeline check and must not be used repeatedly for tuning and then presented as an unbiased benchmark.
