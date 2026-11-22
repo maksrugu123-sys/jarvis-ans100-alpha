@@ -2,6 +2,8 @@ package org.jarvis.ans100.alpha.data
 
 import android.content.Context
 import android.content.ContentValues
+import android.content.ContentUris
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -14,6 +16,16 @@ import java.time.format.DateTimeFormatter
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.util.Base64
+
+data class LocalMemoryBackupInfo(
+    val uri: String,
+    val displayName: String,
+    val sizeBytes: Long,
+    val modifiedAtMillis: Long,
+    val recordCount: Int?,
+    val activeRecordCount: Int?,
+    val validationError: String? = null,
+)
 
 /**
  * Stores approved JARVIS memories in the app-specific external folder:
@@ -122,6 +134,82 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
             throw error
         }
         return target.absolutePath
+    }
+
+    /**
+     * Lists only this app's own exports in Downloads/JARVIS and validates each
+     * snapshot before offering it for restore. Invalid files remain visible but
+     * carry no restoreable record count.
+     */
+    fun listExports(): List<LocalMemoryBackupInfo> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val exports = File(directory, "exports")
+            return exports.listFiles { file -> file.isFile && file.extension.equals("jmem", true) }
+                .orEmpty()
+                .sortedByDescending { it.lastModified() }
+                .map { file ->
+                    val validation = runCatching {
+                        val raw = file.readText(Charsets.UTF_8)
+                        require(raw.length <= 3 * 1024 * 1024) { "Файл превышает 3 МиБ." }
+                        LocalWorkspaceMemoryCodec.decode(raw)
+                    }
+                    val records = validation.getOrNull()
+                    LocalMemoryBackupInfo(
+                        uri = Uri.fromFile(file).toString(),
+                        displayName = file.name,
+                        sizeBytes = file.length(),
+                        modifiedAtMillis = file.lastModified(),
+                        recordCount = records?.size,
+                        activeRecordCount = records?.count { it.supersededById == null },
+                        validationError = validation.exceptionOrNull()?.message,
+                    )
+                }
+        }
+
+        val resolver = appContext.contentResolver
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+        )
+        val backups = mutableListOf<LocalMemoryBackupInfo>()
+        resolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+            arrayOf(Environment.DIRECTORY_DOWNLOADS + "/JARVIS/"),
+            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+            val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameColumn) ?: continue
+                if (!name.endsWith(".jmem", ignoreCase = true)) continue
+                val uri = ContentUris.withAppendedId(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    cursor.getLong(idColumn),
+                )
+                val validation = runCatching {
+                    val raw = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                        ?: throw LocalConversationException("Не удалось прочитать файл.")
+                    LocalWorkspaceMemoryCodec.decode(raw)
+                }
+                val records = validation.getOrNull()
+                backups += LocalMemoryBackupInfo(
+                    uri = uri.toString(),
+                    displayName = name,
+                    sizeBytes = cursor.getLong(sizeColumn).coerceAtLeast(0L),
+                    modifiedAtMillis = cursor.getLong(dateColumn).coerceAtLeast(0L) * 1_000L,
+                    recordCount = records?.size,
+                    activeRecordCount = records?.count { it.supersededById == null },
+                    validationError = validation.exceptionOrNull()?.message,
+                )
+            }
+        }
+        return backups
     }
 
     fun directoryPath(): String = directory.absolutePath
