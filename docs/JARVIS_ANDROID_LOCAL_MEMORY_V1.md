@@ -16,6 +16,14 @@ Provide useful approved-memory recall on the Android phone without requiring Ter
 - Imported shared-workspace records are merged only when user_approved=true. Existing local records are preserved when an imported batch arrives, and the panel state is refreshed after the import/restore commit.
 - Removing the optional Termux bearer token does not delete device-local notes.
 
+## Explicit correction history
+
+- A direct correction through `LocalWorkspaceMemoryCache.correct(id, correctedContent)` creates a new approved record and links the old record to it with `supersededById`; it never silently overwrites the old text.
+- The response generator excludes superseded records from recall, while the full snapshot retains them as an audit trail.
+- The storage codec writes format V2 and reads legacy V1 snapshots for one-way migration. Correction links are validated; a failed commit leaves the previous active memory unchanged.
+- Deleting a current corrected record also removes its superseded ancestors to avoid dangling lineage.
+- This is an explicit cache API foundation only: the Compose memory panel does not yet expose a correction action, and automatic natural-language conflict detection is intentionally not implemented. A correction must be explicitly confirmed by the user; timestamps alone do not decide which fact is true.
+
 ## Bounds
 
 | Field | Limit |
