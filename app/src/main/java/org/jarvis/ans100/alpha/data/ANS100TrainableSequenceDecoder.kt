@@ -49,6 +49,7 @@ class ANS100TrainableSequenceDecoder(
     private var hiddenBias = DoubleArray(hiddenSize)
     private var outputBias = DoubleArray(0)
     private var trained = false
+    private var tokenizerMode = TOKENIZER_WORD_LEVEL
 
     init {
         require(hiddenSize in MIN_HIDDEN_SIZE..MAX_HIDDEN_SIZE)
@@ -72,6 +73,7 @@ class ANS100TrainableSequenceDecoder(
         require(learningRate.isFinite() && learningRate in MIN_LEARNING_RATE..MAX_LEARNING_RATE)
         require(examples.all { it.isNotBlank() && it.length <= MAX_EXAMPLE_CHARS })
 
+        tokenizerMode = TOKENIZER_WORD_LEVEL
         val tokenized = examples.map(::tokenize).filter { it.isNotEmpty() }
         require(tokenized.isNotEmpty()) { "training examples contain no usable tokens" }
         require(tokenized.all { tokens ->
@@ -136,19 +138,25 @@ class ANS100TrainableSequenceDecoder(
                 prompt.length <= MAX_EXAMPLE_CHARS && answer.length <= MAX_EXAMPLE_CHARS
         }) { "each training pair needs a non-empty prompt and answer within the size limit" }
 
-        val tokenized = examples.map { (prompt, answer) -> tokenize(prompt) to tokenize(answer) }
+        val rawPairs = examples.map { (prompt, answer) ->
+            normalizeText(prompt) to normalizeText(answer)
+        }
+        val subwordVocabulary = buildSubwordVocabulary(rawPairs.flatMap { listOf(it.first, it.second) })
+        require(subwordVocabulary.size <= maxVocabularySize) {
+            "subword vocabulary exceeds configured model vocabulary capacity"
+        }
+        tokenizerMode = TOKENIZER_SUBWORD
+        val vocabularySet = subwordVocabulary.toHashSet()
+        val tokenized = rawPairs.map { (prompt, answer) ->
+            tokenizeSubwords(prompt, vocabularySet) to tokenizeSubwords(answer, vocabularySet)
+        }
         require(tokenized.all { (prompt, answer) ->
             prompt.isNotEmpty() && answer.isNotEmpty() &&
                 prompt.size + answer.size <= MAX_TOKENS_PER_EXAMPLE &&
                 (prompt + answer).all { it.length <= MAX_TOKEN_CHARS }
         }) { "a prompt/answer pair exceeds the token or token-length limit" }
 
-        val frequencies = tokenized.flatMap { it.first + it.second }.groupingBy { it }.eachCount()
-        val selected = frequencies.entries
-            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
-            .take(maxVocabularySize - RESERVED_TOKENS.size)
-            .map { it.key }
-        vocabulary = RESERVED_TOKENS + selected
+        vocabulary = subwordVocabulary
         tokenToId = vocabulary.withIndex().associate { it.value to it.index }
         require(vocabulary.size >= RESERVED_TOKENS.size + 2) {
             "training requires at least two distinct ordinary tokens"
@@ -231,6 +239,7 @@ class ANS100TrainableSequenceDecoder(
             output.writeInt(SNAPSHOT_MAGIC)
             output.writeInt(SNAPSHOT_VERSION)
             output.writeInt(hiddenSize)
+            output.writeInt(tokenizerMode)
             output.writeInt(vocabulary.size)
             vocabulary.forEach(output::writeUTF)
             writeMatrix(output, inputWeights)
@@ -258,8 +267,13 @@ class ANS100TrainableSequenceDecoder(
         }
         DataInputStream(ByteArrayInputStream(bytes)).use { input ->
             require(input.readInt() == SNAPSHOT_MAGIC) { "unknown model snapshot format" }
-            require(input.readInt() == SNAPSHOT_VERSION) { "unsupported model snapshot version" }
+            val snapshotVersion = input.readInt()
+            require(snapshotVersion in MIN_SNAPSHOT_VERSION..SNAPSHOT_VERSION) {
+                "unsupported model snapshot version"
+            }
             require(input.readInt() == hiddenSize) { "snapshot hidden size is incompatible" }
+            val restoredTokenizerMode = if (snapshotVersion >= 2) input.readInt() else TOKENIZER_WORD_LEVEL
+            require(restoredTokenizerMode in TOKENIZER_WORD_LEVEL..TOKENIZER_SUBWORD)
             val vocabSize = input.readInt()
             require(vocabSize in (RESERVED_TOKENS.size + 2)..maxVocabularySize)
             val restoredVocabulary = List(vocabSize) { input.readUTF() }
@@ -276,6 +290,7 @@ class ANS100TrainableSequenceDecoder(
             // Publish the fully validated state atomically after all reads succeed.
             vocabulary = restoredVocabulary
             tokenToId = vocabulary.withIndex().associate { it.value to it.index }
+            tokenizerMode = restoredTokenizerMode
             inputWeights = restoredInput
             recurrentWeights = restoredRecurrent
             outputWeights = restoredOutput
@@ -517,13 +532,31 @@ class ANS100TrainableSequenceDecoder(
         }
     }
 
-    private fun tokenize(value: String): List<String> =
-        TOKEN_PATTERN.findAll(value.lowercase(Locale.ROOT).replace('ё', 'е'))
-            .map { it.value }
-            .take(MAX_TOKENS_PER_EXAMPLE + 1)
-            .toList()
+    private fun tokenize(value: String): List<String> {
+        val normalized = normalizeText(value)
+        return if (tokenizerMode == TOKENIZER_SUBWORD) {
+            tokenizeSubwords(normalized, vocabulary.toHashSet())
+        } else {
+            TOKEN_PATTERN.findAll(normalized).map { it.value }
+                .take(MAX_TOKENS_PER_EXAMPLE + 1).toList()
+        }
+    }
 
     private fun detokenize(tokens: List<String>): String {
+        if (tokenizerMode == TOKENIZER_SUBWORD) {
+            val result = StringBuilder()
+            tokens.forEach { token ->
+                when {
+                    token.startsWith(WORD_START_MARKER) -> {
+                        if (result.isNotEmpty()) result.append(' ')
+                        result.append(token.removePrefix(WORD_START_MARKER))
+                    }
+                    token.length == 1 && token[0] in PUNCTUATION -> result.append(token)
+                    else -> result.append(token)
+                }
+            }
+            return result.toString()
+        }
         val result = StringBuilder()
         tokens.forEach { token ->
             val punctuation = token.length == 1 && token[0] in PUNCTUATION
@@ -533,10 +566,100 @@ class ANS100TrainableSequenceDecoder(
         return result.toString()
     }
 
+    private fun normalizeText(value: String): String =
+        value.lowercase(Locale.ROOT).replace('ё', 'е')
+
+    /**
+     * Builds a deterministic word-piece vocabulary. Every observed character is
+     * retained as a fallback, while frequent 2-4 character pieces are preferred.
+     * A leading marker lets decoding reconstruct word boundaries without spaces
+     * being predicted as a separate class.
+     */
+    private fun buildSubwordVocabulary(texts: List<String>): List<String> {
+        val words = texts.flatMap { text ->
+            TOKEN_PATTERN.findAll(text).map { it.value }.filter { it.isNotEmpty() }.toList()
+        }
+        val frequencies = HashMap<String, Int>()
+        val alphabet = words.filterNot { it.length == 1 && it[0] in PUNCTUATION }
+            .flatMap { it.toList() }.toSet()
+
+        words.filterNot { it.length == 1 && it[0] in PUNCTUATION }.forEach { word ->
+            for (start in word.indices) {
+                for (length in 1..MAX_SUBWORD_CHARS.coerceAtMost(word.length - start)) {
+                    val piece = word.substring(start, start + length)
+                    frequencies[piece] = (frequencies[piece] ?: 0) + 1
+                    if (start == 0) {
+                        val marked = WORD_START_MARKER + piece
+                        frequencies[marked] = (frequencies[marked] ?: 0) + 1
+                    }
+                }
+            }
+        }
+        val mandatory = buildList {
+            alphabet.forEach { character ->
+                add(character.toString())
+                add(WORD_START_MARKER + character)
+            }
+            words.filter { it.length == 1 && it[0] in PUNCTUATION }.distinct().forEach(::add)
+        }
+        require(mandatory.distinct().size + RESERVED_TOKENS.size <= maxVocabularySize) {
+            "configured vocabulary is too small for the corpus character set"
+        }
+        val remaining = frequencies.entries
+            .asSequence()
+            .filter { it.key !in mandatory && it.key !in RESERVED_TOKENS }
+            .sortedWith(
+                compareByDescending<Map.Entry<String, Int>> { it.value }
+                    .thenByDescending { it.key.length }
+                    .thenBy { it.key },
+            )
+            .map { it.key }
+            .distinct()
+            .take(maxVocabularySize - RESERVED_TOKENS.size - mandatory.distinct().size)
+            .toList()
+        return RESERVED_TOKENS + mandatory.distinct() + remaining
+    }
+
+    private fun tokenizeSubwords(value: String, allowed: Set<String>): List<String> {
+        val result = ArrayList<String>()
+        TOKEN_PATTERN.findAll(normalizeText(value)).forEach { match ->
+            val token = match.value
+            if (token.length == 1 && token[0] in PUNCTUATION) {
+                result += token
+                return@forEach
+            }
+            var offset = 0
+            var firstPiece = true
+            while (offset < token.length) {
+                val marker = if (firstPiece) WORD_START_MARKER else ""
+                val maxLength = MAX_SUBWORD_CHARS.coerceAtMost(token.length - offset)
+                val piece = (maxLength downTo 1).firstNotNullOfOrNull { length ->
+                    val candidate = marker + token.substring(offset, offset + length)
+                    candidate.takeIf { it in allowed }
+                }
+                if (piece == null) {
+                    result += UNK_TOKEN
+                    offset++
+                } else {
+                    result += piece
+                    offset += piece.length - marker.length
+                }
+                firstPiece = false
+            }
+        }
+        return result.take(MAX_TOKENS_PER_EXAMPLE + 1)
+    }
+
     private fun lnSafe(value: Double): Double = kotlin.math.ln(value.coerceAtLeast(1e-12))
 
     companion object {
-        const val SNAPSHOT_VERSION = 1
+        const val SNAPSHOT_VERSION = 2
+        private const val MIN_SNAPSHOT_VERSION = 1
+        private const val TOKENIZER_WORD_LEVEL = 0
+        private const val TOKENIZER_SUBWORD = 1
+        private const val MAX_SUBWORD_CHARS = 4
+        private const val WORD_START_MARKER = "▁"
+        private const val UNK_TOKEN = "<unk>"
         const val MAX_SNAPSHOT_CHARS = 12 * 1024 * 1024
         const val MAX_TOKEN_CHARS = 128
         const val DEFAULT_FINE_TUNE_EPOCHS = 2
