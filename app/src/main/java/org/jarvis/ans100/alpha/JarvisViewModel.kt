@@ -1411,6 +1411,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 require(examples.isNotEmpty() && examples.size <= 100) { "нужно от 1 до 100 проверочных пар" }
                 val predictions = examples.map { (prompt, expected) ->
                     require(prompt.isNotBlank() && expected.isNotBlank())
+                    require(prompt.length <= 4_096 && expected.length <= 4_096) {
+                        "вопрос и ожидаемый ответ не должны превышать 4 096 символов"
+                    }
                     val generated = requireNotNull(generateAnsSequenceContinuation(prompt)) {
                         "сначала обучи модель"
                     }.text.trim()
