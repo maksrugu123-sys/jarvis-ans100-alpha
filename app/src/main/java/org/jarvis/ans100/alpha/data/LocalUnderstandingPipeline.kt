@@ -168,7 +168,7 @@ class LocalUnderstandingPipeline {
             id = "current-user-turn", role = ConversationRole.USER, text = text,
             createdAtMillis = historyWindow.lastOrNull()?.createdAtMillis?.plus(1L) ?: 0L,
         )
-        val semanticMemory = persistedMemory.mergeWith(LocalSemanticDialogueMemory.fromHistory(semanticHistory))
+        val semanticMemory = LocalSemanticDialogueMemory.fromHistory(semanticHistory, persistedMemory)
         val explicitTopicReturn = containsAnyPhrase(tokens, TOPIC_RETURN_PHRASES)
         val explicitTopicChange = containsAnyPhrase(tokens, TOPIC_CHANGE_PHRASES)
         val answersPendingQuestion = dialogueState.pendingAssistantQuestion.isNotBlank() &&
