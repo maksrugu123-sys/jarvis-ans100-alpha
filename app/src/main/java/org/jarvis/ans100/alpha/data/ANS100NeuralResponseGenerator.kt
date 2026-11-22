@@ -126,6 +126,7 @@ class ANS100NeuralResponseGenerator(
             if (learned != null &&
                 learned.unknownPromptTokenCount == 0 &&
                 learned.tokens.size >= MIN_LEARNED_GENERATION_TOKENS &&
+                learned.stoppedAtEndToken &&
                 learned.meanTokenConfidence >= MIN_LEARNED_GENERATION_CONFIDENCE &&
                 learned.text.isNotBlank() &&
                 learned.text.length <= LocalConversationRepository.MAX_MESSAGE_CHARS
