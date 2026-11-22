@@ -223,3 +223,22 @@ generated answers manually and compare against a separately authored,
 topic-disjoint evaluation set. No model was trained from these files; no tests,
 Gradle build, APK build, CI workflow or device benchmark was run when they were
 added.
+
+
+## In-app multi-turn corpus loading
+
+The same train and held-out text files are bundled as Android assets:
+
+- `app/src/main/assets/multiturn_train_ru_v1.txt`
+- `app/src/main/assets/multiturn_heldout_ru_v1.txt`
+
+In the app, open **ANS · нейронное обучение**. Use **Загрузить диалоги** to populate the training field, then explicitly start training. Use **Загрузить отдельные 8 проверок** only in the independent evaluation field after training. The two actions load separate files; the evaluation examples are never appended to training automatically.
+
+The decoder is still a small recurrent sequence model. The corpus tests a narrow task—topic switching and returning to an earlier subject—and does not establish general conversation competence. Evaluate it on-device and inspect every generated answer before drawing conclusions.
+
+
+## Speech output
+
+Chat responses can be read aloud using Android's built-in TextToSpeech engine. Each assistant message has a **🔊 Озвучить** action, and the chat has an **Автоозвучка** switch for newly generated answers. The switch is saved in app preferences and is off by default.
+
+The speech controller requests a Russian voice, prefers an installed local Russian voice when available, and uses a slightly lower pitch and measured speaking rate for a calm assistant delivery. The exact timbre and naturalness depend on the TTS engine and Russian voice packs installed on the device; this is not a clone of a film actor or an exact reproduction of the fictional JARVIS voice. No audio model is bundled, so app size and neural-model RAM use do not increase materially.
