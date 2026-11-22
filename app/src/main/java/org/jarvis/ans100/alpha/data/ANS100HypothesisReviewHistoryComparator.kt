@@ -42,10 +42,11 @@ object ANS100HypothesisReviewHistoryComparator {
         val newSnapshot = current.snapshot
         val comparable = oldSnapshot != null && newSnapshot != null
 
-        val oldSources = oldSnapshot?.sources.orEmpty().associateBy { it.canonicalUrl }
-        val newSources = newSnapshot?.sources.orEmpty().associateBy { it.canonicalUrl }
-        val oldPassages = oldSnapshot?.passages.orEmpty().associateBy { it.passageRef }
-        val newPassages = newSnapshot?.passages.orEmpty().associateBy { it.passageRef }
+        // A missing legacy snapshot means "unknown", not an empty source set.
+        val oldSources = if (comparable) oldSnapshot!!.sources.associateBy { it.canonicalUrl } else emptyMap()
+        val newSources = if (comparable) newSnapshot!!.sources.associateBy { it.canonicalUrl } else emptyMap()
+        val oldPassages = if (comparable) oldSnapshot!!.passages.associateBy { it.passageRef } else emptyMap()
+        val newPassages = if (comparable) newSnapshot!!.passages.associateBy { it.passageRef } else emptyMap()
 
         return Comparison(
             previousDecisionId = previous.decision.decisionId,
@@ -69,8 +70,8 @@ object ANS100HypothesisReviewHistoryComparator {
                         old?.polarityReason != new?.polarityReason ||
                         old?.excerpt != new?.excerpt
                 }.sorted(),
-            addedWarnings = (newSnapshot?.warnings.orEmpty().toSet() - oldSnapshot?.warnings.orEmpty().toSet()).sorted(),
-            removedWarnings = (oldSnapshot?.warnings.orEmpty().toSet() - newSnapshot?.warnings.orEmpty().toSet()).sorted(),
+            addedWarnings = if (comparable) (newSnapshot!!.warnings.toSet() - oldSnapshot!!.warnings.toSet()).sorted() else emptyList(),
+            removedWarnings = if (comparable) (oldSnapshot!!.warnings.toSet() - newSnapshot!!.warnings.toSet()).sorted() else emptyList(),
             snapshotsComparable = comparable,
         )
     }
