@@ -368,7 +368,7 @@ data class JarvisCoreStatus(
         val language = if (languageModelConfigured) {
             "файл языковой модели установлен; успешный inference ещё не подтверждён"
         } else {
-            "языковая модель не установлена, используется базовый локальный ответчик"
+            "языковая модель не используется; ответ формирует локальный ANS-генератор"
         }
         val memory = when {
             !longTermMemoryIntegrated -> "общий JPVR workspace ещё не загружен в это приложение"
@@ -473,16 +473,15 @@ class JarvisCore(
                 lastUnderstanding = understanding
                 lastSignalContext = signalContext
                 lastDialogueNeuralAnalysis = dialogueNeuralAnalysis
-                val memories = if (languageEngine.languageModelConfigured) {
+                val memories = if (languageEngine.supportsWorkspaceMemory) {
                     retrieveMemories(clean)
                 } else {
                     emptyList()
                 }
                 lastRetrievedMemoryCount = memories.size
-                LocalDialogueFastPaths.assistantIdentityReply(clean, fullHistory)
-                    ?: languageEngine.respond(
-                        clean, context, memories, signalContext, understanding, dialogueNeuralAnalysis,
-                    )
+                languageEngine.respond(
+                    clean, context, memories, signalContext, understanding, dialogueNeuralAnalysis,
+                )
             }
         }
         if (response.isBlank() ||
@@ -575,8 +574,8 @@ class JarvisCore(
             "которая", "которые", "есть",
         )
         const val HELP_MESSAGE =
-            "Я — JARVIS. JARVIS Core управляет ходом диалога, а языковая модель формирует текст ответа. " +
-            "Подтверждённые воспоминания JPVR могут передаваться как контекст. ANS-100 выполняет только " +
+            "Я — JARVIS. Ответы формирует локальный ANS-генератор без внешней языковой модели. " +
+            "Подтверждённые воспоминания JPVR могут использоваться как контекст. ANS-100 выполняет только " +
             "10-нейронный анализ формы запроса и трёхслойную разреженную Android-сеть: 9 000 входных, 996 скрытых и 4 выходных нейрона. " +
             "Измерения большой сети могут передаваться языковой модели как ограниченные признаки; это пока не самостоятельное семантическое мышление. " +
             "Команды: /help — справка, /status — состояние компонентов."
