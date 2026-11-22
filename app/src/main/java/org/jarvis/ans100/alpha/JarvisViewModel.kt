@@ -199,6 +199,13 @@ data class ANS100BenchmarkDevelopmentExample(
     val trainingLabel: String,
 )
 
+data class HypothesisReviewUiState(
+    val requests: List<org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine.ReviewRequest> = emptyList(),
+    val recentDecisions: List<org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewLedger.Entry> = emptyList(),
+    val isLoaded: Boolean = false,
+    val error: String? = null,
+)
+
 data class JarvisUiState(
     val data: LocalDraftState = LocalDraftState(),
     val selectedSessionId: String? = null,
@@ -209,6 +216,7 @@ data class JarvisUiState(
     val localMemory: LocalMemoryUiState = LocalMemoryUiState(),
     val peerMemorySync: PeerMemorySyncUiState = PeerMemorySyncUiState(),
     val conversation: LocalConversationUiState = LocalConversationUiState(),
+    val hypothesisReview: HypothesisReviewUiState = HypothesisReviewUiState(),
 )
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
@@ -2149,6 +2157,24 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 refreshWorkspace()
             },
         )
+    }
+
+    /** Refreshes the bounded review queue and the durable human-decision journal. */
+    fun refreshHypothesisReview() {
+        val before = mutableState.value
+        val refreshed = runCatching {
+            HypothesisReviewUiState(
+                requests = structuredHypothesisRevisionEngine.reviewQueue(),
+                recentDecisions = manualHypothesisReviewLedger.loadRecent(limit = 40),
+                isLoaded = true,
+            )
+        }.getOrElse { error ->
+            before.hypothesisReview.copy(
+                isLoaded = true,
+                error = error.message ?: "Не удалось загрузить очередь проверки гипотез.",
+            )
+        }
+        mutableState.value = mutableState.value.copy(hypothesisReview = refreshed)
     }
 
     fun addLocalMemory(content: String, category: String) {

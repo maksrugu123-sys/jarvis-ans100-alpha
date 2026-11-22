@@ -263,6 +263,10 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
         }
     }
 
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 5) viewModel.refreshHypothesisReview()
+    }
+
     val selectedAccentColor = when (accentChoice) { "violet" -> Color(0xFFB18CFF); "mint" -> Color(0xFF52D6B4); else -> Color(0xFF4DA3FF) }
     val jarvisColors = darkColorScheme(
         primary = selectedAccentColor,
@@ -356,6 +360,19 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onClick = { selectedTab = 2 },
                                 icon = { Text("☷") },
                                 label = { Text("Задачи") },
+                            )
+                            NavigationBarItem(
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFF62CFFF),
+                                    selectedTextColor = Color(0xFFBDEBFF),
+                                    indicatorColor = Color(0xFF12344D),
+                                    unselectedIconColor = Color(0xFF7595AE),
+                                    unselectedTextColor = Color(0xFF7595AE),
+                                ),
+                                selected = selectedTab == 5,
+                                onClick = { selectedTab = 5 },
+                                icon = { Text("◇") },
+                                label = { Text("Гипотезы") },
                             )
                         }
                     }
@@ -478,6 +495,10 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onCancelRestore = viewModel::cancelWorkspaceRestore,
                         )
                         }
+                        5 -> HypothesisReviewPanel(
+                            state = ui.hypothesisReview,
+                            onRefresh = viewModel::refreshHypothesisReview,
+                        )
                         2 -> {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1341,6 +1362,135 @@ private fun WorkspaceMemoryPanel(
                 TextButton(onClick = { deleteTarget = null }) { Text("Отмена") }
             },
         )
+    }
+}
+
+@Composable
+private fun HypothesisReviewPanel(
+    state: HypothesisReviewUiState,
+    onRefresh: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SectionHeading("Проверка гипотез", "доказательства · ревизия · аудит")
+                Text(
+                    "Здесь отображаются структурированные гипотезы, которым требуется дополнительная проверка. " +
+                        "Очередь сама по себе не подтверждает факты и не запускает поиск в интернете.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
+                    Text("Обновить очередь")
+                }
+                if (state.error != null) {
+                    Text(state.error, color = MaterialTheme.colorScheme.error)
+                }
+                if (!state.isLoaded) {
+                    Text("Очередь ещё не загружена.")
+                } else if (state.requests.isEmpty()) {
+                    Text(
+                        "Сейчас нет гипотез, ожидающих ручной проверки. Новые элементы появятся после " +
+                            "обработки завершённых диалоговых ходов, если ANS сформирует структурированные кандидаты.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    Text(
+                        "Ожидают проверки: ${state.requests.size}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    state.requests.forEach { request ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Text(
+                                    "${request.fromConceptId} — ${request.relationType.name} → ${request.toConceptId}",
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text("Состояние: ${request.currentStatus.name}")
+                                Text("Следующий шаг: ${request.action.name}")
+                                Text("Свободных мест для доказательств: ${request.additionalEvidenceCapacity}")
+                                Text(
+                                    "Допустимые источники: " + request.permittedSources.joinToString { it.name },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    "Исключённые ссылки: " + request.excludedEvidenceRefs.size,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SectionHeading("Журнал решений", "локальная история ручной проверки")
+                if (state.recentDecisions.isEmpty()) {
+                    Text(
+                        "Сохранённых решений пока нет. Решения без достаточных доказательств также будут видны здесь, " +
+                            "но не превращаются в подтверждение и не запускают обучение.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    state.recentDecisions.forEach { entry ->
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(
+                                "${entry.decision.outcome.name} · ${entry.state.name}",
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                "${entry.decision.fromConceptId} — ${entry.decision.relationType.name} → ${entry.decision.toConceptId}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                entry.decision.rationale,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (entry != state.recentDecisions.last()) {
+                            androidx.compose.material3.HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SectionHeading("Граница текущей версии", "важно для достоверности")
+                Text(
+                    "Это первый экран очереди и журнала, а не полный просмотрщик веб-источников. " +
+                        "Подготовка пакета доказательств, явное разрешение на поиск/загрузку страниц, " +
+                        "просмотр фрагментов и отправка выбранного решения через журнал пока не подключены к экрану. " +
+                        "До этого момента этот экран ничего не подтверждает и не обучает нейроны.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
