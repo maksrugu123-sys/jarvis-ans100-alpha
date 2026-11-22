@@ -32,6 +32,22 @@ data class LocalSemanticDialogueMemory(
     val schema: String = "JARVIS_SEMANTIC_DIALOGUE_MEMORY_V1",
     val scope: String = "bounded_transcript_derived_heuristics",
 ) {
+    /** Merge fresh transcript extraction into the durable index without dropping older tasks. */
+    fun mergeWith(newer: LocalSemanticDialogueMemory): LocalSemanticDialogueMemory {
+        val tasks = LinkedHashMap<String, LocalSemanticTask>()
+        (activeTasks + completedTasks).forEach { tasks[it.sourceMessageId] = it }
+        (newer.activeTasks + newer.completedTasks).forEach { tasks[it.sourceMessageId] = it }
+        val allTasks = tasks.values.toList()
+        val preferences = LinkedHashMap<String, LocalExplicitPreference>()
+        (explicitPreferences + newer.explicitPreferences).forEach { preferences[it.sourceMessageId] = it }
+        return copy(
+            activeTasks = allTasks.filter { it.status != "completed" }.takeLast(8),
+            completedTasks = allTasks.filter { it.status == "completed" }.takeLast(8),
+            explicitPreferences = preferences.values.takeLast(8),
+            unresolvedQuestions = newer.unresolvedQuestions.takeLast(4),
+        )
+    }
+
     fun toModelContext(): String = buildString {
         append("Смысловая память диалога (").append(schema).append("): ")
         append("это извлечённые эвристикой записи, не независимые факты.\n")
