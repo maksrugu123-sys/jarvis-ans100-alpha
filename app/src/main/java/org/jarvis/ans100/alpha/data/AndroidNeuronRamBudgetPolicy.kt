@@ -25,6 +25,7 @@ object AndroidNeuronRamBudgetPolicy {
     private const val APP_HEAP_FRACTION = 0.08
     private const val AVAILABLE_RAM_FRACTION = 0.10
     private const val TOTAL_RAM_FRACTION = 0.03
+    const val MIN_FREE_RAM_RESERVE_MB = 100L
     private const val MEBIBYTE = 1024L * 1024L
 
     fun inspect(context: Context): AndroidNeuronRamProfile {
@@ -47,8 +48,11 @@ object AndroidNeuronRamBudgetPolicy {
         val totalMb = (totalRamBytes.coerceAtLeast(0L) / MEBIBYTE).coerceAtLeast(1L)
         val availableMb = (availableRamBytes.coerceAtLeast(0L) / MEBIBYTE).coerceAtLeast(1L)
         val heapMb = appMemoryClassMb.coerceAtLeast(16)
+        // Never allocate the final 100 MiB of currently available system RAM
+        // to the ANS hot set. This is a safety margin, not an Android reservation.
+        val budgetableAvailableMb = (availableMb - MIN_FREE_RAM_RESERVE_MB).coerceAtLeast(1L)
         val rawCeilingMb = min(
-            min(heapMb * APP_HEAP_FRACTION, availableMb * AVAILABLE_RAM_FRACTION),
+            min(heapMb * APP_HEAP_FRACTION, budgetableAvailableMb * AVAILABLE_RAM_FRACTION),
             totalMb * TOTAL_RAM_FRACTION,
         )
         val rounded = AndroidNeuronRamBudgetPreferences.ALLOWED_BUDGETS_MB
