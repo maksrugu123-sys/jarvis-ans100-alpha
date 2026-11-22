@@ -141,9 +141,9 @@ class LocalWorkspaceMemoryStoreTest {
         assertEquals("Тема — тёмная", restored.activeRecords().single().content)
 
         val legacy = listOf(
-            "JARVIS_ANDROID_APPROVED_MEMORY\\t1",
-            listOf("M", "bG9jYWwtbGVnYWN5", "cHJvamVjdA", "0JrQsNC6INC80L7QttC10L3QuNC1", "MjAyNi0xMS0yMg").joinToString("\\t"),
-        ).joinToString("\\n")
+            "JARVIS_ANDROID_APPROVED_MEMORY\t1",
+            listOf("M", "bG9jYWwtbGVnYWN5", "cHJvamVjdA", "0JrQsNC6INC80L7QttC10L3QuNC1", "MjAyNi0xMS0yMg").joinToString("\t"),
+        ).joinToString("\n")
         val migrated = LocalWorkspaceMemoryCodec.decode(legacy)
         assertEquals(1, migrated.size)
         assertEquals(null, migrated.single().supersededById)
