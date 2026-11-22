@@ -1430,7 +1430,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val precision = if (generatedTokens.isEmpty()) 0.0 else overlap.toDouble() / generatedTokens.size
                     val recall = if (expectedTokens.isEmpty()) 0.0 else overlap.toDouble() / expectedTokens.size
                     val f1 = if (precision + recall == 0.0) 0.0 else 2.0 * precision * recall / (precision + recall)
-                    val repetition = if (generatedTokens.isEmpty()) 0.0 else (generatedTokens.size - generatedCounts.values.sumOf { it.coerceAtMost(1) }).toDouble() / generatedTokens.size
                     val repeatedCount = generatedTokens.size - generatedCounts.values.sumOf { it.coerceAtMost(1) }
                     Triple(f1, generatedTokens.size, repeatedCount)
                 }
