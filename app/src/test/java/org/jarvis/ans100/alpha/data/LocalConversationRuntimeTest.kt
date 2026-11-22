@@ -17,6 +17,28 @@ class LocalConversationRuntimeTest {
         }
     }
 
+    private class SemanticMemoryStorage(
+        var memory: LocalSemanticDialogueMemory = LocalSemanticDialogueMemory(),
+        var exportLocation: String = "Downloads/JARVIS/test.jmem",
+    ) : LocalSemanticDialogueMemoryStorage {
+        var exportCount = 0
+        var clearCount = 0
+        override fun read(): LocalSemanticDialogueMemory = memory
+        override fun write(memory: LocalSemanticDialogueMemory): Boolean {
+            this.memory = memory
+            return true
+        }
+        override fun exportSnapshot(): String {
+            exportCount++
+            return exportLocation
+        }
+        override fun clear(): Boolean {
+            clearCount++
+            memory = LocalSemanticDialogueMemory()
+            return true
+        }
+    }
+
     private fun repository(storage: MemoryStorage): LocalConversationRepository {
         var clock = 1_700_000_000_000L
         var nextId = 0
@@ -98,6 +120,83 @@ class LocalConversationRuntimeTest {
         repo.appendExchange("question", "answer")
         repo.clear()
         assertTrue(repository(storage).load().isEmpty())
+    }
+
+
+    @Test
+    fun semanticMemorySurvivesConversationTurnsAndIsPassedIntoCoreAnalysis() {
+        val semanticStorage = SemanticMemoryStorage()
+        var seenMemory: LocalSemanticDialogueMemory? = null
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake"
+            override fun respond(prompt: String, recentHistory: List<LocalConversationMessage>): String = "legacy"
+            override fun respond(
+                prompt: String,
+                recentHistory: List<LocalConversationMessage>,
+                memoryContext: List<LocalWorkspaceMemory>,
+                signalContext: ConversationSignalContext?,
+                understandingContext: LocalUnderstanding?,
+            ): String {
+                seenMemory = understandingContext?.semanticMemory
+                return "Ответ"
+            }
+        }
+        val coordinator = LocalConversationCoordinator(
+            repository(MemoryStorage()), engine,
+            semanticMemoryStorage = semanticStorage,
+        )
+
+        coordinator.send("Нужно добавить экспорт памяти JARVIS")
+        coordinator.send("Теперь объясни, как работает CPU")
+
+        assertTrue(semanticStorage.memory.activeTasks.any { it.text.contains("экспорт памяти") })
+        assertTrue(seenMemory?.activeTasks?.any { it.text.contains("экспорт памяти") } == true)
+    }
+
+    @Test
+    fun memoryExportCommandCreatesSnapshotWithoutCallingResponseEngine() {
+        val semanticStorage = SemanticMemoryStorage()
+        var engineCalled = false
+        val engine = object : LocalResponseEngine {
+            override val backendLabel = "fake"
+            override fun respond(prompt: String, recentHistory: List<LocalConversationMessage>): String {
+                engineCalled = true
+                return "unexpected"
+            }
+        }
+        val coordinator = LocalConversationCoordinator(
+            repository(MemoryStorage()), engine,
+            semanticMemoryStorage = semanticStorage,
+        )
+
+        val result = coordinator.send("/memory export")
+
+        assertEquals(1, semanticStorage.exportCount)
+        assertTrue(result.last().text.contains("Downloads/JARVIS/test.jmem"))
+        assertTrue(!engineCalled)
+    }
+
+    @Test
+    fun memoryResetCommandClearsPersistentMemoryAndOldConversation() {
+        val semanticStorage = SemanticMemoryStorage(
+            memory = LocalSemanticDialogueMemory(
+                activeTasks = listOf(LocalSemanticTask("Задача", "open", "u1", 10L)),
+            ),
+        )
+        val repo = repository(MemoryStorage())
+        repo.appendExchange("Старый диалог", "Старый ответ")
+        val coordinator = LocalConversationCoordinator(
+            repo, LocalFallbackResponseEngine(),
+            semanticMemoryStorage = semanticStorage,
+        )
+
+        val result = coordinator.send("/memory reset")
+
+        assertEquals(1, semanticStorage.clearCount)
+        assertTrue(semanticStorage.memory.activeTasks.isEmpty())
+        assertEquals(2, result.size)
+        assertTrue(result.last().text.contains("сброшены"))
+        assertTrue(coordinator.semanticMemory().activeTasks.isEmpty())
     }
 
     @Test
