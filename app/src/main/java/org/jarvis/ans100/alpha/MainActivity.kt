@@ -250,9 +250,13 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                 } ?: error("Не удалось открыть файл.")
                 val imported = String(bytes, Charsets.UTF_8)
                 require(imported.isNotBlank()) { "Файл пуст." }
-                sequenceTrainingExamples = imported.lineSequence().map { it.trim() }
-                    .filter { it.isNotEmpty() && !it.startsWith("#") }.joinToString("\n")
-                require(sequenceTrainingExamples.isNotBlank()) { "В файле нет строк с примерами." }
+                require(imported.length <= 32_000) { "Текст файла превышает лимит 32 000 символов." }
+                val rows = imported.lineSequence().map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.startsWith("#") }.toList()
+                require(rows.isNotEmpty()) { "В файле нет строк с примерами." }
+                require(rows.size <= 256) { "В файле больше 256 примеров." }
+                require(rows.all { it.length <= 4_096 }) { "Одна из строк длиннее 4 096 символов." }
+                sequenceTrainingExamples = rows.joinToString("\n")
             }.onFailure {
                 viewModel.setAnsSequenceTrainingMessage(
                     "Импорт не выполнен: ${it.message ?: "не удалось прочитать TXT-файл."}",
