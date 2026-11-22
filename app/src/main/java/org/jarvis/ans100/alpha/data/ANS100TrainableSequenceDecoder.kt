@@ -325,6 +325,9 @@ class ANS100TrainableSequenceDecoder(
         require(promptTokens.isNotEmpty() && continuationTokens.isNotEmpty())
         require(promptTokens.size + continuationTokens.size <= MAX_TOKENS_PER_EXAMPLE)
         require((promptTokens + continuationTokens).all { it.length <= MAX_TOKEN_CHARS })
+        require((promptTokens + continuationTokens).all { it in tokenToId && it != UNK_TOKEN }) {
+            "fine-tuning text contains pieces outside the trained vocabulary"
+        }
         require(continuationTokens.any { it in tokenToId && it !in RESERVED_TOKENS }) {
             "fine-tuning continuation must contain a token from the trained vocabulary"
         }
