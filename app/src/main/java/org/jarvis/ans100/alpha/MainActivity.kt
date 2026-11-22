@@ -254,7 +254,9 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                     .filter { it.isNotEmpty() && !it.startsWith("#") }.joinToString("\n")
                 require(sequenceTrainingExamples.isNotBlank()) { "В файле нет строк с примерами." }
             }.onFailure {
-                viewModel.refreshAnsSequenceTrainingStatus()
+                viewModel.setAnsSequenceTrainingMessage(
+                    "Импорт не выполнен: ${it.message ?: "не удалось прочитать TXT-файл."}",
+                )
             }
         }
     }
