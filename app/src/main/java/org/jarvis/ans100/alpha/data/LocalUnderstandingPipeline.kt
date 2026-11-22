@@ -42,7 +42,7 @@ data class LocalDialogueState(
 ) {
     companion object {
         private val OFFER_MARKERS = listOf(
-            Regex("""(?iu)\b(?:могу|предлагаю|можем)\b.{0,180}"""),
+            Regex("""(?iu)\b(?:предлагаю|могу\s+(?:начать|помочь|сделать|продолжить|добавить|проверить)|можем\s+(?:начать|продолжить|сделать))\b.{0,180}"""),
             Regex("""(?iu)(?:следующий этап|следующий шаг|хочешь,? продолжим|если хочешь)"""),
             Regex("""(?iu)\b(?:would you like|I can|next step|shall we)\b.{0,180}"""),
         )
@@ -97,6 +97,10 @@ data class LocalUnderstanding(
         append("; ссылка на предыдущий контекст: ").append(refersToPreviousContext)
         append("; недавний контекст пользователя доступен: ").append(hasRecentUserContext).append('\n')
         append("Запрос объяснения: ").append(asksForExplanation).append('\n')
+        append("Состояние диалога: ").append(dialogueState.schema)
+            .append("; активная тема: ").append(dialogueState.activeTopic.take(120))
+            .append("; ожидающий вопрос: ").append(dialogueState.pendingAssistantQuestion.isNotBlank())
+            .append("; ожидающее предложение: ").append(dialogueState.pendingAssistantOffer.isNotBlank()).append('\n')
         if (evidence.isNotEmpty()) append("Основания классификации: ").append(evidence.joinToString("; ")).append('\n')
         append("План JARVIS (").append(reasoningPlan.schema).append("; ")
             .append(reasoningPlan.scope).append("):\n")
