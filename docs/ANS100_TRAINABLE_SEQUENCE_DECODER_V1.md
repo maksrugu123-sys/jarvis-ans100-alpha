@@ -55,3 +55,17 @@ The ViewModel exposes explicit training, correction-feedback, generation and sta
 ## Build policy
 
 The Android GitHub Actions workflow currently has only workflow_dispatch. Pushes to the working branch no longer start automatic tests or APK builds. A manual run remains available from the GitHub Actions page. The Windows package workflow is also manual-only.
+
+## Android training screen
+
+The Android app exposes a dedicated **Обучение** tab for the experimental sequence decoder:
+
+- model status shows whether weights are trained/restored, vocabulary size, hidden width, and storage errors;
+- training data can be entered manually or imported from a UTF-8 TXT file (one complete sequence per non-empty line, lines beginning with `#` ignored; import is capped at 512 KiB);
+- full training is explicit and replaces the previous model only after candidate weights are saved successfully;
+- a separate correction form uses the prompt as recurrent context and supervises only the corrected continuation;
+- an independent held-out form accepts `prompt => expected answer` lines and runs generation without applying any learning update.
+
+The held-out screen reports strict case-insensitive exact-string match only. This deliberately conservative score is not semantic accuracy, factual correctness, or a measure of general intelligence. Keep held-out examples separate from training and corrections. Training and evaluation run on a background executor rather than the Compose UI thread.
+
+The screen does not bundle a corpus or silently learn from conversation history. Until a reviewed Russian corpus is supplied and evaluated, a trained decoder remains a small experimental model and may produce poor or empty continuations.
