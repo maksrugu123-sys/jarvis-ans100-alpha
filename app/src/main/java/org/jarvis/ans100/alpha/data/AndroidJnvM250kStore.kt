@@ -863,11 +863,9 @@ class AndroidJnvM250kStore(
                 val preTrace = (row.preTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
                 val postTrace = (row.postTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
                 val eligibility = (row.eligibility * decay).coerceIn(-MAX_RSTDP_ELIGIBILITY, MAX_RSTDP_ELIGIBILITY)
-                val credit = connectionCredits[row.connectionId] ?: 1.0
-                val effectiveReward = reward * credit
-                val nextWeight = (row.weight + effectiveReward * learningRate * eligibility).coerceIn(0.0, 1.0)
-                val nextEligibility = if (effectiveReward == 0.0) eligibility else 0.0
-                if (effectiveReward != 0.0 && eligibility != 0.0) affected += 1
+                val nextWeight = (row.weight + reward * learningRate * eligibility).coerceIn(0.0, 1.0)
+                val nextEligibility = if (reward == 0.0) eligibility else 0.0
+                if (reward != 0.0 && eligibility != 0.0) affected += 1
                 if (db.update(
                         "connections",
                         ContentValues().apply { put("weight", nextWeight) },
@@ -1014,9 +1012,11 @@ class AndroidJnvM250kStore(
                 val preTrace = (row.preTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
                 val postTrace = (row.postTrace * decay).coerceIn(0.0, MAX_STDP_TRACE)
                 val eligibility = (row.eligibility * decay).coerceIn(-MAX_RSTDP_ELIGIBILITY, MAX_RSTDP_ELIGIBILITY)
-                val nextWeight = (row.weight + reward * learningRate * eligibility).coerceIn(0.0, 1.0)
-                val nextEligibility = if (reward == 0.0) eligibility else 0.0
-                if (reward != 0.0 && eligibility != 0.0) affected += 1
+                val credit = connectionCredits[row.connectionId] ?: 1.0
+                val effectiveReward = reward * credit
+                val nextWeight = (row.weight + effectiveReward * learningRate * eligibility).coerceIn(0.0, 1.0)
+                val nextEligibility = if (effectiveReward == 0.0) eligibility else 0.0
+                if (effectiveReward != 0.0 && eligibility != 0.0) affected += 1
                 if (db.update(
                         "connections",
                         ContentValues().apply { put("weight", nextWeight) },
