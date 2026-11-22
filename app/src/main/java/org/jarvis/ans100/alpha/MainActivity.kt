@@ -572,8 +572,15 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onImport = { sequenceExamplesLauncher.launch(arrayOf("text/plain", "text/*")) },
                             onTrain = {
                                 val examples = sequenceTrainingExamples.lineSequence()
-                                    .map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toList()
-                                viewModel.trainAnsSequenceModelAsync(examples, sequenceEpochsText.toIntOrNull() ?: 0)
+                                    .map { it.trim() }
+                                    .filter { it.isNotEmpty() && !it.startsWith("#") }
+                                    .mapNotNull { line ->
+                                        val split = line.split("=>", limit = 2)
+                                        if (split.size == 2 && split[0].isNotBlank() && split[1].isNotBlank()) {
+                                            split[0].trim() to split[1].trim()
+                                        } else null
+                                    }.toList()
+                                viewModel.trainAnsSequencePairsAsync(examples, sequenceEpochsText.toIntOrNull() ?: 0)
                             },
                             onCorrect = {
                                 viewModel.applyAnsSequenceCorrectionAsync(sequenceCorrectionPrompt, sequenceCorrectionText)
@@ -4547,9 +4554,9 @@ private fun AnsSequenceTrainingPanel(
         }
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                SectionHeading("1 · Обучающие примеры", "одна последовательность на строку")
+                SectionHeading("1 · Обучающие пары", "вопрос => правильный ответ")
                 Text(
-                    "Добавляй только проверенные тексты. Строки используются как последовательности для next-token обучения. Не помещай сюда тестовые ответы.",
+                    "Добавляй только проверенные тексты. Вопрос подаётся как контекст, а целевые метки обучения начинаются только с ответа. Не помещай сюда проверочные пары.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -4557,8 +4564,8 @@ private fun AnsSequenceTrainingPanel(
                     value = trainingExamples,
                     onValueChange = onTrainingExamplesChange,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                    label = { Text("Примеры обучения") },
-                    placeholder = { Text("Привет! Как дела?\nЯ могу помочь с задачей.") },
+                    label = { Text("Пары вопрос => ответ") },
+                    placeholder = { Text("Как поздороваться? => Привет!\nКак попросить пример? => Приведи пример, пожалуйста.") },
                     minLines = 4,
                     maxLines = 8,
                     enabled = !state.busy,
@@ -4576,12 +4583,12 @@ private fun AnsSequenceTrainingPanel(
                 )
                 Button(
                     onClick = onTrain,
-                    enabled = !state.busy && trainingExamples.lineSequence().count { it.isNotBlank() && !it.trim().startsWith("#") } in 1..256 &&
+                    enabled = !state.busy && trainingExamples.lineSequence().count { line ->\n                            val clean = line.trim()\n                            val parts = clean.split("=>", limit = 2)\n                            !clean.isEmpty() && !clean.startsWith("#") && parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()\n                        } in 1..256 &&
                         (epochsText.toIntOrNull() ?: 0) in 1..100,
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Обучить / переобучить ANS") }
+                ) { Text("Обучить ANS на парах") }
                 Text(
-                    "Полное обучение создаёт новую модель и заменяет предыдущие веса только после успешного сохранения. Для постепенного обучения используй исправления ниже.",
+                    "Полное обучение создаёт новую модель. Вопросы формируют состояние сети, а loss считается на ответах и EOS. Предыдущая модель заменяется только после успешного сохранения.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
