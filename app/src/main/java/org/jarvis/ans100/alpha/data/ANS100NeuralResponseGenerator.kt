@@ -5,9 +5,9 @@ import java.util.Locale
 /**
  * First ANS-owned response realizer.
  *
- * It does not load, call, or imitate a language model. It selects a bounded
- * response strategy from Core intent, optional trained neural readout hints,
- * approved memories, and recent dialogue, then composes a short Russian reply.
+ * It does not load or call an external/pretrained language model. It uses the
+ * ANS-owned recurrent decoder when its output is eligible, with Core analysis,
+ * approved memories and dialogue safeguards for the remaining response paths.
  *
  * Without a trained sequence snapshot it falls back to bounded neuro-symbolic
  * composition. When a trained ANS decoder is available, eligible prompts may
@@ -34,7 +34,7 @@ class ANS100NeuralResponseGenerator(
     )
         private set
 
-    override val backendLabel: String = "ANS-100 Neural Response v1 · без LLM"
+    override val backendLabel: String = "ANS-100 Native Neural Language v1 · локально"
     override val languageModelConfigured: Boolean = false
     override val supportsWorkspaceMemory: Boolean = true
 
@@ -256,7 +256,7 @@ class ANS100NeuralResponseGenerator(
     }
 
     private fun capabilityReply(): String =
-        "Сейчас я могу локально разбирать структуру сообщения, учитывать историю диалога и подтверждённую память, а также строить ограниченные планы. Я не использую внешнюю языковую модель для этого ответа. Свободная генерация произвольного текста нейронным декодером ещё не реализована."
+        "Сейчас я могу локально разбирать структуру сообщения, учитывать историю диалога и подтверждённую память, а также строить ограниченные планы. Я не использую внешнюю языковую модель для этого ответа. Собственная генерация текста уже работает в экспериментальном режиме, но пока ограничена небольшим словарём, коротким контекстом и качеством обучения."
 
     private fun normalize(value: String): String = value.lowercase(Locale.ROOT)
         .replace('ё', 'е')
