@@ -616,6 +616,12 @@ class LocalConversationCoordinator(
     ): ANS100TrainableSequenceDecoder.TrainingReport =
         requireNotNull(sequenceLanguageModule) { "trainable language module is not configured" }
             .train(examples, epochs)
+    fun trainSequenceLanguagePairs(
+        examples: List<Pair<String, String>>,
+        epochs: Int = ANS100TrainableSequenceDecoder.DEFAULT_EPOCHS,
+    ): ANS100TrainableSequenceDecoder.TrainingReport =
+        requireNotNull(sequenceLanguageModule) { "trainable language module is not configured" }
+            .trainPairs(examples, epochs)
     fun generateSequenceContinuation(prompt: String): ANS100TrainableSequenceDecoder.Generation? =
         sequenceLanguageModule?.generate(prompt)
     fun applySequenceFeedback(
