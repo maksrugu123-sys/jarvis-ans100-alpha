@@ -498,6 +498,9 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                         5 -> HypothesisReviewPanel(
                             state = ui.hypothesisReview,
                             onRefresh = viewModel::refreshHypothesisReview,
+                            onSearch = viewModel::searchHypothesisSources,
+                            onInspect = viewModel::inspectHypothesisSource,
+                            onSubmit = viewModel::submitManualHypothesisReviewFromUi,
                         )
                         2 -> {
                         Row(
@@ -1369,7 +1372,25 @@ private fun WorkspaceMemoryPanel(
 private fun HypothesisReviewPanel(
     state: HypothesisReviewUiState,
     onRefresh: () -> Unit,
+    onSearch: (String) -> Unit,
+    onInspect: (String, String) -> Unit,
+    onSubmit: (
+        org.jarvis.ans100.alpha.data.ANS100HypothesisEvidenceReviewPacketBuilder.Packet,
+        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome,
+        List<String>,
+        String,
+    ) -> Unit,
 ) {
+    val packet = state.activePacket
+    var selectedPassageRefs by rememberSaveable(packet?.pageContentSha256) {
+        mutableStateOf(emptySet<String>())
+    }
+    var selectedOutcome by rememberSaveable(packet?.pageContentSha256) {
+        mutableStateOf("INSUFFICIENT_EVIDENCE")
+    }
+    var rationale by rememberSaveable(packet?.pageContentSha256) { mutableStateOf("") }
+    val outcomes = org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.values()
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(
@@ -1378,17 +1399,19 @@ private fun HypothesisReviewPanel(
             ) {
                 SectionHeading("Проверка гипотез", "доказательства · ревизия · аудит")
                 Text(
-                    "Здесь отображаются структурированные гипотезы, которым требуется дополнительная проверка. " +
-                        "Очередь сама по себе не подтверждает факты и не запускает поиск в интернете.",
+                    "Поиск начинается только после нажатия кнопки. Каждая страница открывается отдельным действием. " +
+                        "Поисковые результаты и извлечённые фрагменты не считаются подтверждёнными фактами.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth(), enabled = !state.isBusy) {
                     Text("Обновить очередь")
                 }
-                if (state.error != null) {
-                    Text(state.error, color = MaterialTheme.colorScheme.error)
+                if (state.isBusy) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
+                state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (!state.isLoaded) {
                     Text("Очередь ещё не загружена.")
                 } else if (state.requests.isEmpty()) {
@@ -1411,7 +1434,7 @@ private fun HypothesisReviewPanel(
                         ) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Text(
                                     "${request.fromConceptId} — ${request.relationType.name} → ${request.toConceptId}",
@@ -1430,9 +1453,151 @@ private fun HypothesisReviewPanel(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                OutlinedButton(
+                                    onClick = { onSearch(request.hypothesisId) },
+                                    enabled = !state.isBusy && request.additionalEvidenceCapacity > 0 &&
+                                        request.action != org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine.ReviewAction.MANUAL_CONFLICT_REVIEW,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Найти источники для этой гипотезы")
+                                }
+                                state.searchCandidates.filter { it.hypothesisId == request.hypothesisId }.forEach { lead ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(lead.title, fontWeight = FontWeight.Medium)
+                                        if (lead.snippet.isNotBlank()) {
+                                            Text(lead.snippet, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        Text(
+                                            lead.url,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        OutlinedButton(
+                                            onClick = { onInspect(request.hypothesisId, lead.provenanceRef) },
+                                            enabled = !state.isBusy,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) { Text("Открыть и проверить эту страницу") }
+                                    }
+                                }
                             }
                         }
                     }
+                }
+            }
+        }
+
+        if (packet != null) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    SectionHeading("Пакет доказательств", "требуется ручная проверка")
+                    Text(
+                        "${packet.fromConceptId} — ${packet.relationType.name} → ${packet.toConceptId}",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(packet.pageTitle.ifBlank { "Страница без заголовка" })
+                    Text(packet.pageUrl, style = MaterialTheme.typography.labelSmall)
+                    Text("Страница: ${packet.pageStatus} · SHA-256: ${packet.pageContentSha256.take(16)}…")
+                    Text(
+                        "Источник не аутентифицирован. Разные домены не доказывают независимость публикаций.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    if (packet.warnings.isNotEmpty()) {
+                        Text(
+                            "Предупреждения: " + packet.warnings.joinToString { it.name },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Text("Источники и происхождение", fontWeight = FontWeight.SemiBold)
+                    packet.sources.forEach { source ->
+                        Text(
+                            "${source.host} · ${source.assessment.name} · независимость подтверждена: ${source.independenceConfirmed}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(source.canonicalUrl, style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text("Фрагменты страницы", fontWeight = FontWeight.SemiBold)
+                    if (packet.passages.isEmpty()) {
+                        Text(
+                            "Подходящих фрагментов с обоими понятиями не найдено. Нельзя подтвердить или опровергнуть гипотезу по этому пакету.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    packet.passages.forEach { passage ->
+                        Row(verticalAlignment = Alignment.Top) {
+                            Checkbox(
+                                checked = passage.passageRef in selectedPassageRefs,
+                                onCheckedChange = { checked ->
+                                    selectedPassageRefs = if (checked) {
+                                        selectedPassageRefs + passage.passageRef
+                                    } else {
+                                        selectedPassageRefs - passage.passageRef
+                                    }
+                                },
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f).padding(top = 11.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(passage.excerpt)
+                                Text(
+                                    "Кандидат: ${passage.polarity.name} · ${passage.polarityReason.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    "Источник: ${passage.sourceAssessment.name} · ссылка фрагмента: ${passage.passageRef}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    Text("Решение человека", fontWeight = FontWeight.SemiBold)
+                    outcomes.forEach { outcome ->
+                        FilterChip(
+                            selected = selectedOutcome == outcome.name,
+                            onClick = { selectedOutcome = outcome.name },
+                            label = {
+                                Text(
+                                    when (outcome) {
+                                        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_SUPPORT -> "Подтверждаю"
+                                        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_CONTRADICTION -> "Противоречие"
+                                        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.INSUFFICIENT_EVIDENCE -> "Недостаточно данных"
+                                        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.SOURCE_UNTRUSTED -> "Источник ненадёжен"
+                                        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.CONFLICT_REQUIRES_REVIEW -> "Нужен разбор конфликта"
+                                    },
+                                )
+                            },
+                        )
+                    }
+                    OutlinedTextField(
+                        value = rationale,
+                        onValueChange = { rationale = it.take(1_000) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Почему принято это решение") },
+                        minLines = 2,
+                    )
+                    val chosenOutcome = outcomes.first { it.name == selectedOutcome }
+                    val needsPassage = chosenOutcome ==
+                        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_SUPPORT ||
+                        chosenOutcome ==
+                        org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_CONTRADICTION
+                    Button(
+                        onClick = { onSubmit(packet, chosenOutcome, selectedPassageRefs.toList(), rationale) },
+                        enabled = !state.isBusy && rationale.isNotBlank() &&
+                            (!needsPassage || selectedPassageRefs.isNotEmpty()),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Сохранить решение в журнал") }
+                    Text(
+                        "Только явное подтверждение/противоречие создаёт пользовательское свидетельство. Это не доказывает объективную истинность и не запускает автоматическое обучение нейронов.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -1472,23 +1637,6 @@ private fun HypothesisReviewPanel(
                         }
                     }
                 }
-            }
-        }
-
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                SectionHeading("Граница текущей версии", "важно для достоверности")
-                Text(
-                    "Это первый экран очереди и журнала, а не полный просмотрщик веб-источников. " +
-                        "Подготовка пакета доказательств, явное разрешение на поиск/загрузку страниц, " +
-                        "просмотр фрагментов и отправка выбранного решения через журнал пока не подключены к экрану. " +
-                        "До этого момента этот экран ничего не подтверждает и не обучает нейроны.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
