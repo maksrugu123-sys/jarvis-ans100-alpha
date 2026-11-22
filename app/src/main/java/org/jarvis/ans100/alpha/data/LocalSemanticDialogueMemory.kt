@@ -113,7 +113,10 @@ data class LocalSemanticDialogueMemory(
                 val raw = clean(message.text)
                 val normalized = raw.lowercase(Locale.ROOT).replace('ё', 'е')
 
-                if (PREFERENCE_MARKERS.any { normalized.contains(it) }) {
+                if (PREFERENCE_MARKERS.any { marker ->
+                        Regex("(?iu)(?<![\\\\p{L}\\\\p{N}_])" + Regex.escape(marker) + "(?![\\\\p{L}\\\\p{N}_])")
+                            .containsMatchIn(normalized)
+                    }) {
                     val value = raw.take(MAX_ITEM_CHARS)
                     preferences.removeAll { it.sourceMessageId == message.id }
                     preferences.add(LocalExplicitPreference(value, message.id, message.createdAtMillis))
