@@ -117,7 +117,17 @@ class LocalWorkspaceMemoryCache(
     fun delete(id: String): List<LocalWorkspaceMemory> {
         requireWritable()
         if (records.none { it.id == id }) return records.toList()
-        publish(records.filterNot { it.id == id })
+        // Deleting a corrected fact also removes its superseded audit ancestors,
+        // so the persisted correction graph cannot be left with dangling links.
+        val removedIds = linkedSetOf(id)
+        var changed: Boolean
+        do {
+            changed = false
+            records.filter { it.supersededById in removedIds }.forEach {
+                if (removedIds.add(it.id)) changed = true
+            }
+        } while (changed)
+        publish(records.filterNot { it.id in removedIds })
         return records.toList()
     }
 
