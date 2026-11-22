@@ -190,6 +190,45 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun remembersSeveralTopicsAndReturnsToAnOlderTopicByItsName() {
+        val history = listOf(
+            LocalConversationMessage("u1", ConversationRole.USER, "Обсуждаем Chromium браузер", 1L),
+            LocalConversationMessage("a1", ConversationRole.ASSISTANT, "Chromium использует движок Blink.", 2L),
+            LocalConversationMessage("u2", ConversationRole.USER, "Обсуждаем память JARVIS", 3L),
+            LocalConversationMessage("a2", ConversationRole.ASSISTANT, "Память хранит локальные записи.", 4L),
+            LocalConversationMessage("u3", ConversationRole.USER, "Обсуждаем CPU", 5L),
+            LocalConversationMessage("a3", ConversationRole.ASSISTANT, "CPU выполняет инструкции.", 6L),
+        )
+        val result = pipeline.analyze("Вернёмся к Chromium", history)
+        assertTrue(result.dialogueState.topicThreads.size >= 3)
+        assertEquals("selected", result.contextReference.status)
+        assertEquals("lexical_turn_match", result.contextReference.method)
+        assertTrue(result.contextReference.sourceUserMessage.contains("Chromium"))
+    }
+
+    @Test
+    fun shortAnswerIsLinkedToThePendingAssistantQuestion() {
+        val history = listOf(
+            LocalConversationMessage("u1", ConversationRole.USER, "Настроить память JARVIS", 1L),
+            LocalConversationMessage("a1", ConversationRole.ASSISTANT, "Какой объём памяти выбрать?", 2L),
+        )
+        val result = pipeline.analyze("256 мегабайт", history)
+        assertEquals("continuation", result.intent)
+        assertEquals("answer_to_pending_assistant_question", result.contextReference.method)
+        assertTrue(result.contextReference.sourceAssistantMessage.contains("Какой объём"))
+    }
+
+    @Test
+    fun explicitTopicChangeDoesNotAnswerTheOldPendingQuestion() {
+        val history = listOf(
+            LocalConversationMessage("u1", ConversationRole.USER, "Настроить память JARVIS", 1L),
+            LocalConversationMessage("a1", ConversationRole.ASSISTANT, "Какой объём памяти выбрать?", 2L),
+        )
+        val result = pipeline.analyze("Теперь другая тема: объясни CPU", history)
+        assertFalse(result.evidence.contains("previous_context_reference"))
+    }
+
+    @Test
     fun shortWhyFollowUpResolvesToTheLatestDialogueTurn() {
         val history = listOf(
             LocalConversationMessage("user-1", ConversationRole.USER, "Как работает память JARVIS?", 1L),
