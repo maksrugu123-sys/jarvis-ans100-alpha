@@ -570,9 +570,8 @@ class JarvisCore(
         }
         val updatedHistory = repository.appendExchange(clean, response)
         if (semanticMemoryStorage != null && command != "/memory reset") {
-            val extracted = LocalSemanticDialogueMemory.fromHistory(updatedHistory)
-            val merged = persistedSemanticMemory.mergeWith(extracted)
-            if (!semanticMemoryStorage.write(merged)) {
+            val extracted = LocalSemanticDialogueMemory.fromHistory(updatedHistory, persistedSemanticMemory)
+            if (!semanticMemoryStorage.write(extracted)) {
                 throw LocalConversationException("Диалог сохранён, но смысловую память не удалось обновить.")
             }
         }
@@ -606,8 +605,8 @@ class JarvisCore(
         lastRetrievedMemoryCount = 0
         val updatedHistory = repository.appendExchange(cleanPrompt, cleanResponse)
         if (semanticMemoryStorage != null) {
-            val merged = persistedSemanticMemory.mergeWith(LocalSemanticDialogueMemory.fromHistory(updatedHistory))
-            if (!semanticMemoryStorage.write(merged)) {
+            val extracted = LocalSemanticDialogueMemory.fromHistory(updatedHistory, persistedSemanticMemory)
+            if (!semanticMemoryStorage.write(extracted)) {
                 throw LocalConversationException("Результат добавлен в историю, но смысловую память не удалось обновить.")
             }
         }
