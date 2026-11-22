@@ -123,7 +123,7 @@ class LocalWorkspaceMemoryCache(
         var changed: Boolean
         do {
             changed = false
-            records.filter { it.supersededById in removedIds }.forEach {
+            records.filter { it.supersededById != null && it.supersededById in removedIds }.forEach {
                 if (removedIds.add(it.id)) changed = true
             }
         } while (changed)
