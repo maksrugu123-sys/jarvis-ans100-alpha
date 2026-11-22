@@ -71,6 +71,24 @@ class ANS100TrainableLanguageModule(
     fun generate(prompt: String): ANS100TrainableSequenceDecoder.Generation? =
         if (decoder.isTrained) decoder.generate(prompt) else null
 
+    /**
+     * Generates from a bounded, caller-composed ANS context followed by the
+     * current user prompt. Context is ordinary model input, never trusted as
+     * executable instruction or verified fact.
+     */
+    @Synchronized
+    fun generateWithContext(
+        prompt: String,
+        context: String,
+    ): ANS100TrainableSequenceDecoder.Generation? {
+        if (!decoder.isTrained) return null
+        require(prompt.isNotBlank() && prompt.length <= LocalConversationRepository.MAX_MESSAGE_CHARS)
+        require(context.length <= MAX_CONTEXT_CHARS)
+        val combined = if (context.isBlank()) prompt else "$context\n$prompt"
+        require(combined.length <= ANS100TrainableSequenceDecoder.MAX_EXAMPLE_CHARS)
+        return decoder.generate(combined)
+    }
+
     @Synchronized
     fun applyFeedback(
         feedback: ANS100SequenceFeedbackTrainer.Feedback,
@@ -116,6 +134,7 @@ class ANS100TrainableLanguageModule(
     )
 
     private companion object {
+        const val MAX_CONTEXT_CHARS = 4_000
         const val DEFAULT_HIDDEN_SIZE = ANS100TrainableSequenceDecoder.DEFAULT_HIDDEN_SIZE
         const val DEFAULT_MAX_VOCABULARY = ANS100TrainableSequenceDecoder.DEFAULT_MAX_VOCABULARY
     }
