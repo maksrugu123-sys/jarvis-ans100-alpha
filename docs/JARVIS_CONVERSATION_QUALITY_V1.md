@@ -107,3 +107,21 @@ The memory is passed into the ANS understanding context and the recurrent decode
 Limits: at most 8 active tasks, 8 completed tasks, 8 explicit preferences, and 4 unresolved questions; the serialized memory context is capped at 1,800 characters. Every stored preference/task retains provenance. Statements without explicit preference markers are not promoted into preferences. The task lifecycle is lexical and approximate: ambiguous completion wording can be missed, and these labels are not a measured semantic accuracy score.
 
 Regression coverage was added for explicit preference provenance, retaining a task across a topic detour, explicit completion, avoiding inferred preferences, and collection bounds. These tests have been added but were not run. No build, CI, APK generation, or on-device measurement was performed.
+
+## Persistent semantic dialogue memory on Android
+
+The semantic index now has a dedicated atomic file at:
+
+`Android/data/net.shlep.browser/files/JARVIS/Memory/semantic-dialogue.jmem`
+
+If Android does not expose an external app-specific files directory, the app-private files directory is used instead. The folder and an empty versioned file are created when the conversation screen restores memory on first launch. Later launches load the file before processing the next message. The approved JPVR memory file remains separate; the semantic index does not overwrite it.
+
+The file stores bounded task records, explicit preferences, provenance message IDs, completion provenance, and the latest unresolved assistant question. Writes use Android `AtomicFile`; a failed write does not replace the last valid snapshot. Reads reject unknown versions, malformed records, and files larger than 256 KiB. Existing records are supplied to incremental extraction so a task can still be marked complete after its original transcript turn has rolled out of the recent-history window.
+
+Chat commands:
+- `/memory export` writes a timestamped `.jmem` snapshot to `Downloads/JARVIS/`.
+- `/memory reset` clears the semantic memory file and dialogue history, then leaves a fresh confirmation exchange.
+
+The export contains semantic dialogue memory only; it does not include approved JPVR workspace memories, neural weights, or the full conversation archive. Reset does not delete approved JPVR workspace memories or trained ANS decoder weights. Those stores remain separate by design.
+
+Regression tests were added for durable-memory injection, export, reset, and persistence across a topic detour. They have not been run. No Gradle build, CI workflow, APK, or on-device verification was performed.
