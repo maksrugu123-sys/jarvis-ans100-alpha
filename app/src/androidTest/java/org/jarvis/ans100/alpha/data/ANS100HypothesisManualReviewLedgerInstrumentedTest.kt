@@ -148,4 +148,31 @@ class ANS100HypothesisManualReviewLedgerInstrumentedTest {
         context.deleteDatabase(manualDb)
         context.deleteDatabase(revisionDb)
     }
+    @Test
+    fun malformedPendingRowIsRejectedWithoutBlockingOtherValidDecisions() {
+        val name = "ans100-manual-review-corrupt-${System.nanoTime()}.db"
+        context.deleteDatabase(name)
+        val reviewedPacket = packet()
+        val noEvidence = factory.record(
+            reviewedPacket, "persist-corrupt",
+            ANS100HypothesisManualReviewDecision.Outcome.INSUFFICIENT_EVIDENCE,
+            emptyList(), "Недостаточно данных.", 20_002L,
+        )
+        val validDecision = decision(reviewedPacket, "persist-valid-after-corrupt")
+        val validEvidence = factory.toRelationEvidence(reviewedPacket, validDecision)
+        val ledger = ANS100HypothesisManualReviewLedger(context, name, factory)
+        assertTrue(ledger.append(noEvidence, null))
+        assertTrue(ledger.append(validDecision, validEvidence))
+        ledger.writableDatabase.execSQL(
+            "UPDATE manual_hypothesis_review_decisions SET state=? WHERE decision_id=?",
+            arrayOf(ANS100HypothesisManualReviewLedger.State.PENDING.name, noEvidence.decisionId),
+        )
+        val batch = ledger.loadPendingBatch()
+        assertEquals(1, batch.rejectedEntries)
+        assertEquals(listOf(validDecision.decisionId), batch.entries.map { it.decision.decisionId })
+        ledger.close()
+        context.deleteDatabase(name)
+    }
+
+
 }

@@ -11,7 +11,7 @@ class ANS100HypothesisManualReviewCoordinator(
 ) {
     data class ReplayReport(
         val pendingAtStart: Int, val applied: Int, val deferredMissingHypothesis: Int,
-        val checkpointFailures: Int, val journalFailures: Int,
+        val checkpointFailures: Int, val journalFailures: Int, val rejectedJournalEntries: Int = 0,
     )
 
     @Synchronized
@@ -26,9 +26,10 @@ class ANS100HypothesisManualReviewCoordinator(
 
     @Synchronized
     fun replayPending(limit: Int = ANS100HypothesisManualReviewLedger.MAX_ENTRIES): ReplayReport {
-        val pending = runCatching { decisionLedger.loadPending(limit) }.getOrElse {
+        val batch = runCatching { decisionLedger.loadPendingBatch(limit) }.getOrElse {
             return ReplayReport(0, 0, 0, 0, 1)
         }
+        val pending = batch.entries
         var applied = 0
         var missing = 0
         var checkpointFailures = 0
@@ -48,7 +49,7 @@ class ANS100HypothesisManualReviewCoordinator(
                 applied++
             } else journalFailures++
         }
-        return ReplayReport(pending.size, applied, missing, checkpointFailures, journalFailures)
+        return ReplayReport(pending.size + batch.rejectedEntries, applied, missing, checkpointFailures, journalFailures, batch.rejectedEntries)
     }
 
     private fun reviewTurnId(decisionId: String): String {

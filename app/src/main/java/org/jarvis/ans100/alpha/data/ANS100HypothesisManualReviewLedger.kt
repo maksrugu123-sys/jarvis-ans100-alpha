@@ -16,6 +16,7 @@ class ANS100HypothesisManualReviewLedger(
 ) : SQLiteOpenHelper(context.applicationContext, databaseName, null, DATABASE_VERSION) {
     enum class State { PENDING, APPLIED, RECORDED_NO_EVIDENCE }
     data class Entry(val decision: ANS100HypothesisManualReviewDecision.Decision, val evidence: ANS100ConceptMemory.RelationEvidence?, val state: State)
+    data class PendingBatch(val entries: List<Entry>, val rejectedEntries: Int)
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE manual_hypothesis_review_decisions (
@@ -56,21 +57,32 @@ class ANS100HypothesisManualReviewLedger(
     }
 
     @Synchronized
-    fun loadPending(limit: Int = MAX_ENTRIES): List<Entry> {
+    fun loadPending(limit: Int = MAX_ENTRIES): List<Entry> =
+        loadPendingBatch(limit).entries
+
+    /**
+     * Reads valid pending records independently. A malformed row is retained for
+     * audit and counted, but cannot block later valid decisions from being replayed.
+     */
+    @Synchronized
+    fun loadPendingBatch(limit: Int = MAX_ENTRIES): PendingBatch {
         require(limit in 0..MAX_ENTRIES)
-        if (limit == 0) return emptyList()
+        if (limit == 0) return PendingBatch(emptyList(), 0)
         return readableDatabase.rawQuery(
             "SELECT payload, state FROM manual_hypothesis_review_decisions WHERE state=? ORDER BY created_at_ms, decision_id LIMIT ?",
             arrayOf(State.PENDING.name, limit.toString()),
         ).use { cursor ->
-            buildList {
-                while (cursor.moveToNext()) {
-                    val payload = cursor.getString(0)
-                    if (payload.length > MAX_ENTRY_CHARS) continue
-                    val state = State.valueOf(cursor.getString(1))
-                    add(decode(payload, state))
-                }
+            val valid = mutableListOf<Entry>()
+            var rejected = 0
+            while (cursor.moveToNext()) {
+                val payload = cursor.getString(0)
+                val state = runCatching { State.valueOf(cursor.getString(1)) }.getOrNull()
+                val entry = if (payload.length <= MAX_ENTRY_CHARS && state != null) {
+                    runCatching { decode(payload, state) }.getOrNull()
+                } else null
+                if (entry == null) rejected++ else valid += entry
             }
+            PendingBatch(valid, rejected)
         }
     }
 
@@ -169,7 +181,11 @@ class ANS100HypothesisManualReviewLedger(
             )
         }
         validate(decision, evidence)
-        require(state == if (evidence == null) State.RECORDED_NO_EVIDENCE else state)
+        if (evidence == null) {
+            require(state == State.RECORDED_NO_EVIDENCE) { "non-evidence decisions must not enter the replay queue" }
+        } else {
+            require(state == State.PENDING || state == State.APPLIED) { "evidence decisions require a replayable state" }
+        }
         return Entry(decision, evidence, state)
     }
 

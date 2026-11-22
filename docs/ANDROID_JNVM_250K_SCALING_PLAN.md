@@ -543,3 +543,8 @@ Confirmed decisions enter `PENDING`. `ANS100HypothesisManualReviewCoordinator` w
 `JarvisViewModel` restores the revision checkpoint before replaying pending manual decisions and exposes `submitManualHypothesisReview` for a future explicit review UI. No UI for packet approval is added in this change, and no search or page retrieval is automatically invoked. A manual confirmation is still a user's attestation, not objective proof, publisher authentication, or source independence.
 
 Tests are authored for exact-relation application, duplicate replay, premise-reference rejection, decision-journal persistence/reopen, conflicting decision-ID reuse, non-confirmation handling, and coordinator replay. Tests are **AUTHORED / NOT RUN**. No Gradle build, APK, CI, instrumentation or device test was run; Kotlin compilation and runtime behavior remain unverified.
+
+
+### Manual-review journal corruption isolation
+
+The pending replay reader now validates each row independently. A malformed or state-inconsistent row is retained in SQLite for audit and counted as rejected; it does not prevent later valid pending decisions from being replayed. The state invariant is strict: decisions without evidence must be `RECORDED_NO_EVIDENCE`; decisions carrying evidence must be `PENDING` or `APPLIED`. The coordinator includes rejected journal rows in its replay report. An instrumentation test corrupts one row's state and verifies that a subsequent valid decision remains readable. This test is **AUTHORED / NOT RUN**.
