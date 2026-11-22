@@ -112,7 +112,7 @@ Regression coverage was added for explicit preference provenance, retaining a ta
 
 The semantic index now has a dedicated atomic file at:
 
-`Android/data/net.shlep.browser/files/JARVIS/Memory/semantic-dialogue.jmem`
+`Android/data/org.jarvis.ans100.alpha/files/JARVIS/Memory/semantic-dialogue.jmem`
 
 If Android does not expose an external app-specific files directory, the app-private files directory is used instead. The folder and an empty versioned file are created when the conversation screen restores memory on first launch. Later launches load the file before processing the next message. The approved JPVR memory file remains separate; the semantic index does not overwrite it.
 
