@@ -67,6 +67,7 @@ import org.jarvis.ans100.alpha.data.ANS100HypothesisPageVerifier
 import org.jarvis.ans100.alpha.data.ANS100HypothesisPassageExtractor
 import org.jarvis.ans100.alpha.data.ANS100HypothesisSourceAudit
 import org.jarvis.ans100.alpha.data.ANS100HypothesisClaimPolarityAnalyzer
+import org.jarvis.ans100.alpha.data.ANS100HypothesisMultiSourceReviewPacketBuilder
 import org.jarvis.ans100.alpha.data.ANS100ConceptMemory
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceAdapter
 import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutContract
@@ -1748,7 +1749,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     refreshHypothesisReview()
                     val current = mutableState.value.hypothesisReview
                     mutableState.value = mutableState.value.copy(hypothesisReview = current.copy(
-                        activePacket = null, isBusy = false,
+                        activePacket = null, inspectedPages = emptyList(), searchCandidates = emptyList(),
+                        isBusy = false,
                         message = "Решение записано в журнал. Подтверждение пользователя не означает независимую проверку источника.",
                         error = null,
                     ))
