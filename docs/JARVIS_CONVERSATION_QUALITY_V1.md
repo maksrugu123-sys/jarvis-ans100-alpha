@@ -12,6 +12,8 @@ The current ANS response generator is still a bounded prototype: most intents us
 
 - Keep a bounded representation of the current topic, the latest user request, the latest assistant answer, and any unanswered assistant question or explicit offer.
 - Resolve short follow-ups such as `давай`, `да`, `почему?`, `а дальше?`, `что это?`, and `расскажи подробнее` against the correct preceding turn.
+- Keep a bounded index of several recent topic threads and allow explicit returns such as `вернёмся к Chromium`.
+- Link a short user reply to the assistant's still-open question when no explicit topic change is detected.
 - Distinguish acceptance of an offer from a generic request to repeat the previous answer.
 - Ask one focused clarification only when the reference is genuinely ambiguous.
 - Never treat quoted conversation text or retrieved memory as executable instructions.
