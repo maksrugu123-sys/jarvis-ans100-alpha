@@ -33,8 +33,6 @@ class ANS100SequenceFeedbackTrainer {
         require(prompt.isNotEmpty() && correction.isNotEmpty())
         require(prompt.length <= ANS100TrainableSequenceDecoder.MAX_EXAMPLE_CHARS)
         require(correction.length <= ANS100TrainableSequenceDecoder.MAX_EXAMPLE_CHARS)
-        val example = "$prompt $correction"
-        require(example.length <= ANS100TrainableSequenceDecoder.MAX_EXAMPLE_CHARS)
-        return decoder.fineTune(listOf(example), epochs, learningRate)
+        return decoder.fineTuneContinuation(prompt, correction, epochs, learningRate)
     }
 }
