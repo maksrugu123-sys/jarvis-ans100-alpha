@@ -22,7 +22,8 @@ class SharedPreferencesLocalWorkspaceMemoryStorage(context: Context) : Conversat
 }
 
 internal object LocalWorkspaceMemoryCodec {
-    private const val HEADER = "JARVIS_ANDROID_APPROVED_MEMORY\t1"
+    private const val HEADER_V1 = "JARVIS_ANDROID_APPROVED_MEMORY\t1"
+    private const val HEADER = "JARVIS_ANDROID_APPROVED_MEMORY\t2"
     private const val MAX_ENCODED_CHARS = 3 * 1024 * 1024
     private val encoder = Base64.getUrlEncoder().withoutPadding()
     private val decoder = Base64.getUrlDecoder()
@@ -43,6 +44,7 @@ internal object LocalWorkspaceMemoryCodec {
                 encodeText(record.category),
                 encodeText(record.content),
                 encodeText(record.updatedAt),
+                encodeText(record.supersededById.orEmpty()),
             ).joinToString("\t")
         }
         val result = lines.joinToString("\n")
@@ -57,7 +59,8 @@ internal object LocalWorkspaceMemoryCodec {
             throw LocalConversationException("Файл локальной памяти пуст или превышает лимит.")
         }
         val lines = raw.split('\n')
-        if (lines.firstOrNull() != HEADER ||
+        val version = lines.firstOrNull()
+        if ((version != HEADER && version != HEADER_V1) ||
             lines.size - 1 > LocalWorkspaceMemoryCache.MAX_CACHED_RECORDS
         ) {
             throw LocalConversationException("Неизвестная версия или размер локальной памяти.")
@@ -66,7 +69,8 @@ internal object LocalWorkspaceMemoryCodec {
         val result = ArrayList<LocalWorkspaceMemory>(lines.size - 1)
         for (line in lines.drop(1)) {
             val fields = line.split('\t')
-            if (fields.size != 5 || fields[0] != "M") {
+            val expectedFields = if (version == HEADER_V1) 5 else 6
+            if (fields.size != expectedFields || fields[0] != "M") {
                 throw LocalConversationException("Повреждена запись локальной памяти.")
             }
             val record = LocalWorkspaceMemory(
@@ -75,11 +79,19 @@ internal object LocalWorkspaceMemoryCodec {
                 content = decodeText(fields[3]),
                 updatedAt = decodeText(fields[4]),
                 userApproved = true,
+                supersededById = if (version == HEADER_V1) null else decodeText(fields[5]).ifEmpty { null },
             )
             validate(record, ids)
             result += record
         }
-        if (encode(result) != raw) {
+        if (result.any { record ->
+                record.supersededById != null && result.none { it.id == record.supersededById }
+            }
+        ) {
+            throw LocalConversationException("Связь исправления с исходной записью повреждена.")
+        }
+        // Version 1 is accepted for one-way migration; all subsequent writes use v2.
+        if (version == HEADER && encode(result) != raw) {
             throw LocalConversationException("Локальная память имеет неканоничный формат.")
         }
         return result
@@ -95,7 +107,9 @@ internal object LocalWorkspaceMemoryCodec {
             record.content.length > LocalWorkspaceMemoryCache.MAX_MEMORY_CHARS ||
             record.updatedAt.isBlank() || record.updatedAt != record.updatedAt.trim() ||
             record.updatedAt.length > 80 ||
-            listOf(record.id, record.category, record.content, record.updatedAt).any { '\u0000' in it }
+            (record.supersededById != null &&
+                (!idPattern.matches(record.supersededById) || record.supersededById == record.id)) ||
+            listOfNotNull(record.id, record.category, record.content, record.updatedAt, record.supersededById).any { '\u0000' in it }
         ) {
             throw LocalConversationException("Запись локальной памяти не соответствует ограничениям.")
         }
