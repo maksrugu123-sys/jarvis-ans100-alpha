@@ -301,7 +301,7 @@ class ANS100HypothesisManualReviewLedger(
         const val DEFAULT_DATABASE_NAME = "ans100_manual_hypothesis_reviews.db"
         const val MAX_ENTRIES = 512
         const val MAX_ENTRY_CHARS = 16 * 1024
-        const val MAX_SNAPSHOT_CHARS = 32 * 1024
+        const val MAX_SNAPSHOT_CHARS = 48 * 1024
         const val DEFAULT_HISTORY_LIMIT = 100
         private const val DATABASE_VERSION = 2
         private val SHA256 = Regex("[0-9a-f]{64}")
