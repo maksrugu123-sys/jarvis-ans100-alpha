@@ -251,7 +251,7 @@ class ANS100TrainableSequenceDecoder(
                 ended = false,
             ),
         )
-        repeat(maxNewTokens) {
+        for (stepIndex in 0 until maxNewTokens) {
             val candidates = ArrayList<DecodeBeam>(beamWidth * beamWidth)
             beams.forEach { beam ->
                 if (beam.ended) {
@@ -294,7 +294,7 @@ class ANS100TrainableSequenceDecoder(
             beams = candidates
                 .sortedByDescending(::beamRankingScore)
                 .take(beamWidth)
-            if (beams.all { it.ended }) return@repeat
+            if (beams.all { it.ended }) break
         }
         val best = beams.maxByOrNull(::beamRankingScore)
             ?: DecodeBeam(initialHidden, emptyList(), 0.0, 0.0, false)
