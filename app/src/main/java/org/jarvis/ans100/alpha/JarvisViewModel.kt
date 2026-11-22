@@ -62,6 +62,11 @@ import org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision
 import org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewLedger
 import org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewCoordinator
 import org.jarvis.ans100.alpha.data.ANS100HypothesisEvidenceReviewPacketBuilder
+import org.jarvis.ans100.alpha.data.ANS100HypothesisSearchEvidenceProvider
+import org.jarvis.ans100.alpha.data.ANS100HypothesisPageVerifier
+import org.jarvis.ans100.alpha.data.ANS100HypothesisPassageExtractor
+import org.jarvis.ans100.alpha.data.ANS100HypothesisSourceAudit
+import org.jarvis.ans100.alpha.data.ANS100HypothesisClaimPolarityAnalyzer
 import org.jarvis.ans100.alpha.data.ANS100ConceptMemory
 import org.jarvis.ans100.alpha.data.ANS100BenchmarkTraceAdapter
 import org.jarvis.ans100.alpha.data.ANS100CanonicalReadoutContract
@@ -202,6 +207,11 @@ data class ANS100BenchmarkDevelopmentExample(
 data class HypothesisReviewUiState(
     val requests: List<org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine.ReviewRequest> = emptyList(),
     val recentDecisions: List<org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewLedger.Entry> = emptyList(),
+    val activeRequest: org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine.ReviewRequest? = null,
+    val searchCandidates: List<ANS100HypothesisSearchEvidenceProvider.SearchCandidate> = emptyList(),
+    val activePacket: ANS100HypothesisEvidenceReviewPacketBuilder.Packet? = null,
+    val isBusy: Boolean = false,
+    val message: String? = null,
     val isLoaded: Boolean = false,
     val error: String? = null,
 )
@@ -332,6 +342,15 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     @Volatile private var pendingCanonicalReadoutFeedbackUi: CanonicalReadoutFeedbackUi? = null
     @Volatile private var conversationGeneration: Long = 0L
     private val androidWebSearch = AndroidWebSearchService()
+    private val hypothesisReviewExecutor = Executors.newSingleThreadExecutor()
+    private val hypothesisSearchProvider = ANS100HypothesisSearchEvidenceProvider { query ->
+        androidWebSearch.search(query)
+    }
+    private val hypothesisPageVerifier = ANS100HypothesisPageVerifier()
+    private val hypothesisPassageExtractor = ANS100HypothesisPassageExtractor()
+    private val hypothesisSourceAudit = ANS100HypothesisSourceAudit()
+    private val hypothesisPolarityAnalyzer = ANS100HypothesisClaimPolarityAnalyzer()
+    private val hypothesisPacketBuilder = ANS100HypothesisEvidenceReviewPacketBuilder()
     // The app-local ANS-100 pass is always available; Termux may override it when connected.
     private val localSignalRuntime = LocalConversationSignalRuntime(
         SharedPreferencesConversationSignalStorage(application.applicationContext),
@@ -1515,6 +1534,152 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         manualHypothesisReviewCoordinator.recordAndApply(packet, decision)
     }.getOrDefault(false)
 
+    /** Starts bounded web discovery only after the user taps the search action in the review screen. */
+    fun searchHypothesisSources(hypothesisId: String) {
+        val before = mutableState.value.hypothesisReview
+        if (before.isBusy) return
+        val request = structuredHypothesisRevisionEngine.reviewQueue()
+            .firstOrNull { it.hypothesisId == hypothesisId } ?: run {
+                mutableState.value = mutableState.value.copy(
+                    hypothesisReview = before.copy(error = "Гипотеза больше не находится в очереди. Обновите список."),
+                )
+                return
+            }
+        mutableState.value = mutableState.value.copy(
+            hypothesisReview = before.copy(
+                activeRequest = request, searchCandidates = emptyList(), activePacket = null,
+                isBusy = true, error = null, message = "Поиск выполняется по вашему запросу…",
+            ),
+        )
+        hypothesisReviewExecutor.execute {
+            val result = runCatching {
+                hypothesisSearchProvider.search(
+                    request = request,
+                    fromLabel = request.fromConceptId,
+                    toLabel = request.toConceptId,
+                    userApproved = true,
+                )
+            }
+            mainHandler.post {
+                val current = mutableState.value.hypothesisReview
+                mutableState.value = mutableState.value.copy(
+                    hypothesisReview = current.copy(
+                        isBusy = false,
+                        searchCandidates = result.getOrNull()?.candidates.orEmpty(),
+                        message = result.getOrNull()?.let { batch ->
+                            if (batch.candidates.isEmpty()) "Поиск не вернул подходящих HTTPS-источников." else
+                                "Найдено ссылок: ${batch.candidates.size}. Каждую страницу нужно открыть отдельно по вашему действию."
+                        },
+                        error = result.exceptionOrNull()?.message,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** Opens one selected HTTPS search result only after a separate user tap. */
+    fun inspectHypothesisSource(hypothesisId: String, provenanceRef: String) {
+        val before = mutableState.value.hypothesisReview
+        if (before.isBusy) return
+        val request = before.activeRequest?.takeIf { it.hypothesisId == hypothesisId } ?: return
+        val lead = before.searchCandidates.firstOrNull {
+            it.hypothesisId == hypothesisId && it.provenanceRef == provenanceRef
+        } ?: return
+        mutableState.value = mutableState.value.copy(
+            hypothesisReview = before.copy(
+                isBusy = true, activePacket = null, error = null,
+                message = "Открываю выбранную страницу и извлекаю ограниченные фрагменты…",
+            ),
+        )
+        hypothesisReviewExecutor.execute {
+            val result = runCatching {
+                val page = hypothesisPageVerifier.inspect(
+                    lead = lead,
+                    fromLabel = request.fromConceptId,
+                    toLabel = request.toConceptId,
+                    userApproved = true,
+                )
+                val extraction = hypothesisPassageExtractor.extract(
+                    page, request.fromConceptId, request.toConceptId,
+                )
+                val audit = if (extraction.candidates.isEmpty()) {
+                    val uri = java.net.URI(page.finalUrl)
+                    ANS100HypothesisSourceAudit.AuditReport(
+                        assessments = listOf(
+                            ANS100HypothesisSourceAudit.SourceAssessment(
+                                ANS100HypothesisSourceAudit.SourceRecord(
+                                    sourceUrl = page.finalUrl,
+                                    sourceHost = uri.host.lowercase(java.util.Locale.ROOT).trimEnd('.'),
+                                    pageContentSha256 = page.contentSha256.lowercase(java.util.Locale.ROOT),
+                                    searchLeadRef = page.searchLeadRef,
+                                    fetchedAtEpochMs = page.fetchedAtEpochMs,
+                                ),
+                                ANS100HypothesisSourceAudit.Assessment.DISTINCT_HOST_UNVERIFIED,
+                                null, null,
+                            ),
+                        ),
+                        uniquePageCount = 1, distinctHostCount = 1, truncated = false,
+                    )
+                } else hypothesisSourceAudit.audit(extraction.candidates)
+                val analyses = extraction.candidates.map { passage ->
+                    hypothesisPolarityAnalyzer.analyze(
+                        passage, request.fromConceptId, request.relationType, request.toConceptId,
+                    )
+                }
+                hypothesisPacketBuilder.build(request, page, extraction, audit, analyses)
+            }
+            mainHandler.post {
+                val current = mutableState.value.hypothesisReview
+                mutableState.value = mutableState.value.copy(
+                    hypothesisReview = current.copy(
+                        isBusy = false,
+                        activePacket = result.getOrNull(),
+                        message = result.getOrNull()?.let {
+                            "Пакет подготовлен. Все фрагменты остаются неподтверждёнными до ручного решения."
+                        },
+                        error = result.exceptionOrNull()?.message,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** Persists a decision against the exact packet currently displayed to the reviewer. */
+    fun submitManualHypothesisReviewFromUi(
+        packet: ANS100HypothesisEvidenceReviewPacketBuilder.Packet,
+        outcome: ANS100HypothesisManualReviewDecision.Outcome,
+        selectedPassageRefs: List<String>,
+        rationale: String,
+    ) {
+        val before = mutableState.value.hypothesisReview
+        if (before.isBusy || before.activePacket !== packet) return
+        val decision = runCatching {
+            manualHypothesisReviewDecision.record(
+                packet = packet,
+                decisionId = "manual-review-${UUID.randomUUID()}",
+                outcome = outcome,
+                selectedPassageRefs = selectedPassageRefs,
+                rationale = rationale,
+                reviewedAtEpochMs = System.currentTimeMillis(),
+            )
+        }
+        val persisted = decision.getOrNull()?.let { runCatching {
+            manualHypothesisReviewCoordinator.recordAndApply(packet, it)
+        }.getOrDefault(false) } ?: false
+        if (persisted) {
+            refreshHypothesisReview()
+            val current = mutableState.value.hypothesisReview
+            mutableState.value = mutableState.value.copy(hypothesisReview = current.copy(
+                activePacket = null, message = "Решение записано в журнал. Подтверждение пользователя не означает независимую проверку источника.",
+                error = null,
+            ))
+        } else {
+            mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
+                error = decision.exceptionOrNull()?.message ?: "Не удалось надёжно сохранить решение. Пакет оставлен открытым.",
+            ))
+        }
+    }
+
     /** Retries durable manual decisions that have not yet reached the revision checkpoint. */
     fun retryPendingManualHypothesisReviews(): ANS100HypothesisManualReviewCoordinator.ReplayReport =
         manualHypothesisReviewCoordinator.replayPending()
@@ -2163,10 +2328,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshHypothesisReview() {
         val before = mutableState.value
         val refreshed = runCatching {
-            HypothesisReviewUiState(
+            before.hypothesisReview.copy(
                 requests = structuredHypothesisRevisionEngine.reviewQueue(),
                 recentDecisions = manualHypothesisReviewLedger.loadRecent(limit = 40),
                 isLoaded = true,
+                error = null,
             )
         }.getOrElse { error ->
             before.hypothesisReview.copy(
