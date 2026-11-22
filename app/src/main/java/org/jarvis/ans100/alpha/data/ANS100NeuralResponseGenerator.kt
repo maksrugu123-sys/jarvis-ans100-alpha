@@ -12,7 +12,9 @@ import java.util.Locale
  * This v1 is neuro-symbolic composition, not yet learned token-by-token language
  * generation. The trace makes the evidence used for each response inspectable.
  */
-class ANS100NeuralResponseGenerator(\n    private val sequenceLanguageModule: ANS100TrainableLanguageModule? = null,\n) : LocalResponseEngine {
+class ANS100NeuralResponseGenerator(
+    private val sequenceLanguageModule: ANS100TrainableLanguageModule? = null,
+) : LocalResponseEngine {
     data class GenerationTrace(
         val strategy: String,
         val source: String,
