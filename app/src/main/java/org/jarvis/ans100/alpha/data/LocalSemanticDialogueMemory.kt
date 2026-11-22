@@ -88,7 +88,7 @@ data class LocalSemanticDialogueMemory(
         )
         private val PREFERENCE_MARKERS = listOf(
             "предпочитаю", "мне удобнее", "мне нравится", "отвечай", "пиши",
-            "не используй", "используй", "я хочу, чтобы ты", "предпочитаю, чтобы",
+            "не используй", "используй", "я хочу, чтобы ты", "я хочу чтобы ты", "предпочитаю, чтобы",
             "i prefer", "please answer", "don't use", "do not use",
         )
         private val STOP = setOf(
@@ -125,8 +125,13 @@ data class LocalSemanticDialogueMemory(
                 val completion = COMPLETION_MARKERS.any { normalized.contains(it) }
                 if (completion) {
                     val completionTerms = terms(raw)
-                    val matching = tasks.indexOfLast { task ->
-                        completionTerms.isEmpty() || completionTerms.intersect(terms(task.text)).isNotEmpty()
+                    val activeIndexes = tasks.indices.filter { tasks[it].status != "completed" }
+                    val matching = if (completionTerms.isEmpty()) {
+                        activeIndexes.singleOrNull() ?: -1
+                    } else {
+                        activeIndexes.lastOrNull { index ->
+                            completionTerms.intersect(terms(tasks[index].text)).isNotEmpty()
+                        } ?: -1
                     }
                     if (matching >= 0) {
                         val old = tasks.removeAt(matching)
