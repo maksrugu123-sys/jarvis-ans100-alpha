@@ -1550,6 +1550,33 @@ private fun HypothesisReviewPanel(
                         )
                         Text(source.canonicalUrl, style = MaterialTheme.typography.labelSmall)
                     }
+                    val possibleSupportCount = packet.passages.count {
+                        it.polarity == org.jarvis.ans100.alpha.data.ANS100HypothesisClaimPolarityAnalyzer.PolarityCandidate.POSSIBLE_SUPPORT
+                    }
+                    val possibleContradictionCount = packet.passages.count {
+                        it.polarity == org.jarvis.ans100.alpha.data.ANS100HypothesisClaimPolarityAnalyzer.PolarityCandidate.POSSIBLE_CONTRADICTION
+                    }
+                    val ambiguousCount = packet.passages.count {
+                        it.polarity == org.jarvis.ans100.alpha.data.ANS100HypothesisClaimPolarityAnalyzer.PolarityCandidate.AMBIGUOUS
+                    }
+                    val duplicateContentCount = packet.sources.count {
+                        it.assessment == org.jarvis.ans100.alpha.data.ANS100HypothesisSourceAudit.Assessment.DUPLICATE_PAGE_CONTENT
+                    }
+                    val sameHostCount = packet.sources.count {
+                        it.assessment == org.jarvis.ans100.alpha.data.ANS100HypothesisSourceAudit.Assessment.SAME_HOST_AS_EARLIER_SOURCE
+                    }
+                    Text(
+                        "Сопоставление (эвристические кандидаты, не факты): возможная поддержка — $possibleSupportCount; " +
+                            "возможное противоречие — $possibleContradictionCount; неоднозначные — $ambiguousCount.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Аудит: повтор содержимого — $duplicateContentCount; дополнительные страницы того же домена — $sameHostCount; " +
+                            "разных доменов — ${packet.sources.map { it.host }.distinct().size}. Независимость издателей не установлена.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Text("Фрагменты со всех открытых страниц", fontWeight = FontWeight.SemiBold)
                     if (packet.passages.isEmpty()) {
                         Text(
