@@ -130,6 +130,39 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun affirmativeFollowThroughAcceptsThePreviousAssistantOffer() {
+        val generator = ANS100NeuralResponseGenerator()
+        val history = listOf(
+            LocalConversationMessage(
+                id = "user-previous",
+                role = ConversationRole.USER,
+                text = "Как улучшить общение JARVIS?",
+                createdAtMillis = 1_700_000_000_000L,
+            ),
+            LocalConversationMessage(
+                id = "assistant-previous",
+                role = ConversationRole.ASSISTANT,
+                text = "Следующий этап — научить генератор учитывать контекст диалога. Хочешь, продолжим?",
+                createdAtMillis = 1_700_000_000_001L,
+            ),
+        )
+
+        val reply = generator.respond(
+            "Давай",
+            history,
+            emptyList(),
+            null,
+            LocalUnderstandingPipeline().analyze("Давай", history),
+            null,
+        )
+
+        assertTrue(reply.startsWith("Хорошо, продолжаю"))
+        assertTrue(reply.contains("Следующий этап"))
+        assertFalse(reply.contains("Какую именно тему"))
+        assertEquals("continuation", generator.lastTrace.strategy)
+    }
+
+    @Test
     fun trainedAnsSequenceDecoderCanProduceChatReplyWithoutLanguageModel() {
         val storage = object : ANS100SequenceModelStorage {
             var value: String? = null
