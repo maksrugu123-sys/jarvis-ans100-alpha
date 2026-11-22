@@ -1747,6 +1747,11 @@ private fun HypothesisReviewPanel(
                                             "• ${passage.polarity} / ${passage.polarityReason}: ${passage.excerpt}",
                                             style = MaterialTheme.typography.bodySmall,
                                         )
+                                        Text(
+                                            "Источник фрагмента: ${passage.sourceUrl} · SHA-256: ${passage.pageContentSha256.take(12)}…",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                     if (snapshot.warnings.isNotEmpty()) {
                                         Text(
