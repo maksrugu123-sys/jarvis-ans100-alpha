@@ -402,7 +402,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
         ),
-        ANS100NeuralResponseGenerator(),
+        ANS100NeuralResponseGenerator(sequenceLanguageModule),
         workspaceMemoryCache,
         sequenceLanguageModule,
     )
