@@ -62,6 +62,21 @@ class LocalWorkspaceMemoryCache(
         publish(merged.values.toList().takeLast(MAX_CACHED_RECORDS))
     }
 
+    /**
+     * Restores an already validated backup as the complete memory snapshot.
+     * Unlike replace(), this intentionally does not merge with current records.
+     */
+    @Synchronized
+    fun restore(values: List<LocalWorkspaceMemory>) {
+        requireWritable()
+        if (values.size > MAX_CACHED_RECORDS) {
+            throw LocalConversationException("Резервная копия содержит слишком много записей.")
+        }
+        // Validate the complete graph before touching persistent storage.
+        LocalWorkspaceMemoryCodec.encode(values)
+        publish(values.toList())
+    }
+
     @Synchronized
     fun add(content: String, category: String): List<LocalWorkspaceMemory> {
         requireWritable()
