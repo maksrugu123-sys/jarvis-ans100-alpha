@@ -1,0 +1,27 @@
+# Context-conditioned toy training set V1.
+# Format: complete runtime-style ANS context + current prompt => target answer.
+# Synthetic examples only; not a benchmark of language understanding.
+[approved memory] preference: мой любимый цвет синий [ans analysis] intent=question; terms=любимый цвет. Какой у меня любимый цвет? => Твой любимый цвет синий.
+[approved memory] preference: мой любимый цвет зеленый [ans analysis] intent=question; terms=любимый цвет. Какой у меня любимый цвет? => Твой любимый цвет зеленый.
+[approved memory] preference: мой любимый язык программирования Kotlin [ans analysis] intent=question; terms=любимый язык. Какой язык программирования мне нравится? => Тебе нравится Kotlin.
+[approved memory] preference: мой любимый язык программирования Python [ans analysis] intent=question; terms=любимый язык. Какой язык программирования мне нравится? => Тебе нравится Python.
+[approved memory] project: проект называется JARVIS ANS-100 [ans analysis] intent=question; terms=проект называется. Как называется мой проект? => Твой проект называется JARVIS ANS-100.
+[approved memory] project: проект называется NOVA Terminal [ans analysis] intent=question; terms=проект называется. Как называется мой проект? => Твой проект называется NOVA Terminal.
+[dialogue context] user: Я изучаю Kotlin. ans: Могу помочь с Kotlin. [ans analysis] intent=question; terms=язык. Какой язык я изучаю? => Ты изучаешь Kotlin.
+[dialogue context] user: Я изучаю Python. ans: Могу помочь с Python. [ans analysis] intent=question; terms=язык. Какой язык я изучаю? => Ты изучаешь Python.
+[dialogue context] user: Мой проект работает на Android. ans: Понял, проект для Android. [ans analysis] intent=question; terms=платформа. Для какой платформы мой проект? => Твой проект предназначен для Android.
+[dialogue context] user: Мой проект работает на Linux. ans: Понял, проект для Linux. [ans analysis] intent=question; terms=платформа. Для какой платформы мой проект? => Твой проект предназначен для Linux.
+[dialogue context] user: Я хочу короткие ответы. ans: Буду отвечать кратко. [ans analysis] intent=question; terms=предпочтение. Как мне удобнее получать ответы? => Тебе удобнее получать короткие ответы.
+[dialogue context] user: Я хочу подробные ответы. ans: Буду объяснять подробнее. [ans analysis] intent=question; terms=предпочтение. Как мне удобнее получать ответы? => Тебе удобнее получать подробные ответы.
+[approved memory] preference: пользователь предпочитает русский язык [ans analysis] intent=question; terms=язык общения. На каком языке мне отвечать? => Лучше отвечать тебе на русском языке.
+[approved memory] preference: пользователь предпочитает английский язык [ans analysis] intent=question; terms=язык общения. На каком языке мне отвечать? => Лучше отвечать тебе на английском языке.
+[dialogue context] user: Назови проект JARVIS. ans: Запомнил название JARVIS. [ans analysis] intent=continuation; terms=название проект. Как называется проект? => Проект называется JARVIS.
+[dialogue context] user: Назови проект NOVA. ans: Запомнил название NOVA. [ans analysis] intent=continuation; terms=название проект. Как называется проект? => Проект называется NOVA.
+[approved memory] preference: мой телефон использует Android 15 [ans analysis] intent=question; terms=версия Android. Какая версия Android у моего телефона? => На твоем телефоне Android 15.
+[approved memory] preference: мой телефон использует Android 14 [ans analysis] intent=question; terms=версия Android. Какая версия Android у моего телефона? => На твоем телефоне Android 14.
+[dialogue context] user: Сегодня я тестирую нейронный декодер. ans: Мы можем обсудить его работу. [ans analysis] intent=question; terms=тема. Что я сейчас тестирую? => Ты тестируешь нейронный декодер.
+[dialogue context] user: Сегодня я тестирую память ANS. ans: Мы можем обсудить ее работу. [ans analysis] intent=question; terms=тема. Что я сейчас тестирую? => Ты тестируешь память ANS.
+[approved memory] project: цель проекта — локальная работа без облака [ans analysis] intent=question; terms=цель проекта. Какова цель проекта? => Цель проекта — локальная работа без облака.
+[approved memory] project: цель проекта — экономия оперативной памяти [ans analysis] intent=question; terms=цель проекта. Какова цель проекта? => Цель проекта — экономия оперативной памяти.
+[dialogue context] user: Я выбрал компактную модель. ans: Это поможет снизить расход памяти. [ans analysis] intent=question; terms=выбор модель. Какую модель я выбрал? => Ты выбрал компактную модель.
+[dialogue context] user: Я выбрал расширенную модель. ans: Она может использовать больше ресурсов. [ans analysis] intent=question; terms=выбор модель. Какую модель я выбрал? => Ты выбрал расширенную модель.
