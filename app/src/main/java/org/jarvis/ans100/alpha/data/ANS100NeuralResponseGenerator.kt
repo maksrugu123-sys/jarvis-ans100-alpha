@@ -126,7 +126,7 @@ class ANS100NeuralResponseGenerator(
             if (learned != null &&
                 learned.unknownPromptTokenCount == 0 &&
                 learned.tokens.size >= MIN_LEARNED_GENERATION_TOKENS &&
-                learned.stoppedAtEndToken &&
+                (learned.stoppedAtEndToken || learned.text.trimEnd().lastOrNull() in COMPLETE_END_MARKERS) &&
                 learned.meanTokenConfidence >= MIN_LEARNED_GENERATION_CONFIDENCE &&
                 learned.text.isNotBlank() &&
                 learned.text.length <= LocalConversationRepository.MAX_MESSAGE_CHARS
@@ -382,6 +382,7 @@ class ANS100NeuralResponseGenerator(
         const val MIN_TRAINED_EXAMPLES = 3
         const val MIN_NEURAL_MARGIN = 0.15
         const val MIN_MEMORY_MATCH_RATIO = 0.20
+        private val COMPLETE_END_MARKERS = setOf('.', '!', '?')
         private val AFFIRMATIVE_FOLLOW_THROUGH = setOf(
             "давай", "да", "ок", "окей", "ладно", "поехали", "согласен", "yes", "yeah", "ok", "okay", "sure", "go",
         )
