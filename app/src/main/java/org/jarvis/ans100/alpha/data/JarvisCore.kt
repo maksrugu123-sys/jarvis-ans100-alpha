@@ -526,7 +526,11 @@ class JarvisCore(
         val fullHistory = repository.load()
         val context = fullHistory.takeLast(MAX_CONTEXT_MESSAGES)
         val command = clean.lowercase(Locale.ROOT)
-        val persistedSemanticMemory = semanticMemoryStorage?.read() ?: LocalSemanticDialogueMemory()
+        val persistedSemanticMemory = if (command == "/memory reset") {
+            LocalSemanticDialogueMemory()
+        } else {
+            semanticMemoryStorage?.read() ?: LocalSemanticDialogueMemory()
+        }
         val response = when (command) {
             "/status" -> status().toUserMessage()
             "/help" -> HELP_MESSAGE
