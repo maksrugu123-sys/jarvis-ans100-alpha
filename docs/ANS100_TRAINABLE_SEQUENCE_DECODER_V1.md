@@ -242,3 +242,11 @@ The decoder is still a small recurrent sequence model. The corpus tests a narrow
 Chat responses can be read aloud using Android's built-in TextToSpeech engine. Each assistant message has a **🔊 Озвучить** action, and the chat has an **Автоозвучка** switch for newly generated answers. The switch is saved in app preferences and is off by default.
 
 The speech controller requests a Russian voice, prefers an installed local Russian voice when available, and uses a slightly lower pitch and measured speaking rate for a calm assistant delivery. The exact timbre and naturalness depend on the TTS engine and Russian voice packs installed on the device; this is not a clone of a film actor or an exact reproduction of the fictional JARVIS voice. No audio model is bundled, so app size and neural-model RAM use do not increase materially.
+
+
+Implementation note for this revision: the multi-turn fixtures are bundled as
+assets and exposed through explicit load buttons; loading does not train the
+model. Training begins only after the user presses the training action. Speech
+output is also user-controlled (manual playback or the opt-in auto-read switch).
+No Gradle build, unit test, APK build, CI run, on-device TTS check or model
+training run was performed for these UI/runtime changes.
