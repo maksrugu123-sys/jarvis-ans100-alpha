@@ -468,6 +468,7 @@ class JarvisCore(
     private val repository: LocalConversationRepository,
     private val languageEngine: LocalResponseEngine,
     private val memoryCache: LocalWorkspaceMemoryCache = LocalWorkspaceMemoryCache(),
+    private val semanticMemoryStorage: LocalSemanticDialogueMemoryStorage? = null,
 ) {
     private var lastSignalContext: ConversationSignalContext? = null
     private var lastDialogueNeuralAnalysis: DialogueNeuralAnalysis? = null
@@ -521,12 +522,26 @@ class JarvisCore(
 
         val fullHistory = repository.load()
         val context = fullHistory.takeLast(MAX_CONTEXT_MESSAGES)
-        val response = when (clean.lowercase(Locale.ROOT)) {
+        val command = clean.lowercase(Locale.ROOT)
+        val persistedSemanticMemory = semanticMemoryStorage?.read() ?: LocalSemanticDialogueMemory()
+        val response = when (command) {
             "/status" -> status().toUserMessage()
             "/help" -> HELP_MESSAGE
+            "/memory export" -> {
+                val destination = semanticMemoryStorage?.exportSnapshot()
+                    ?: throw LocalConversationException("Экспорт смысловой памяти недоступен.")
+                "Экспорт смысловой памяти JARVIS создан: $destination"
+            }
+            "/memory reset" -> {
+                repository.clear()
+                if (semanticMemoryStorage != null && !semanticMemoryStorage.clear()) {
+                    throw LocalConversationException("Не удалось очистить файл смысловой памяти.")
+                }
+                "Смысловая память и история диалога сброшены. Начинаем с чистого листа."
+            }
             else -> {
                 // JARVIS Core analyses every normal message before any response engine is called.
-                val parsedUnderstanding = LocalUnderstandingPipeline().analyze(clean, context)
+                val parsedUnderstanding = LocalUnderstandingPipeline().analyze(clean, context, persistedSemanticMemory)
                 val understanding = parsedUnderstanding.copy(
                     reasoningResult = LocalReasoningEngine().planFor(parsedUnderstanding),
                 )
@@ -550,7 +565,15 @@ class JarvisCore(
         ) {
             throw LocalConversationException("Компонент ответа вернул некорректный ответ.")
         }
-        return repository.appendExchange(clean, response)
+        val updatedHistory = repository.appendExchange(clean, response)
+        if (semanticMemoryStorage != null && command != "/memory reset") {
+            val extracted = LocalSemanticDialogueMemory.fromHistory(updatedHistory)
+            val merged = persistedSemanticMemory.mergeWith(extracted)
+            if (!semanticMemoryStorage.write(merged)) {
+                throw LocalConversationException("Диалог сохранён, но смысловую память не удалось обновить.")
+            }
+        }
+        return updatedHistory
     }
 
     fun sendWithExternalResult(
@@ -570,14 +593,22 @@ class JarvisCore(
             throw LocalConversationException("Внешний результат поиска или исходный запрос имеет недопустимый размер.")
         }
         val context = repository.load().takeLast(MAX_CONTEXT_MESSAGES)
-        val parsedUnderstanding = LocalUnderstandingPipeline().analyze(cleanPrompt, context)
+        val persistedSemanticMemory = semanticMemoryStorage?.read() ?: LocalSemanticDialogueMemory()
+        val parsedUnderstanding = LocalUnderstandingPipeline().analyze(cleanPrompt, context, persistedSemanticMemory)
         lastUnderstanding = parsedUnderstanding.copy(
             reasoningResult = LocalReasoningEngine().planFor(parsedUnderstanding),
         )
         lastSignalContext = signalContext
         lastDialogueNeuralAnalysis = null
         lastRetrievedMemoryCount = 0
-        return repository.appendExchange(cleanPrompt, cleanResponse)
+        val updatedHistory = repository.appendExchange(cleanPrompt, cleanResponse)
+        if (semanticMemoryStorage != null) {
+            val merged = persistedSemanticMemory.mergeWith(LocalSemanticDialogueMemory.fromHistory(updatedHistory))
+            if (!semanticMemoryStorage.write(merged)) {
+                throw LocalConversationException("Результат добавлен в историю, но смысловую память не удалось обновить.")
+            }
+        }
+        return updatedHistory
     }
 
     fun replaceWorkspaceMemories(records: List<LocalWorkspaceMemory>) =
@@ -619,7 +650,12 @@ class JarvisCore(
             .filterNot { it in STOP_WORDS }
             .toSet()
 
-    fun clear() = repository.clear()
+    fun clear() {
+        repository.clear()
+        if (semanticMemoryStorage != null && !semanticMemoryStorage.clear()) {
+            throw LocalConversationException("Не удалось очистить постоянную смысловую память.")
+        }
+    }
 
     private companion object {
         const val MAX_CONTEXT_MESSAGES = 24
