@@ -175,4 +175,56 @@ class ANS100HypothesisManualReviewLedgerInstrumentedTest {
     }
 
 
+    @Test
+    fun startupReplayRecoversDecisionAfterJournalCommitBeforeRevisionApply() {
+        val suffix = System.nanoTime()
+        val manualDb = "ans100-manual-recovery-$suffix.db"
+        val revisionDb = "ans100-revision-recovery-$suffix.db"
+        context.deleteDatabase(manualDb)
+        context.deleteDatabase(revisionDb)
+        val reviewedPacket = packet()
+        val d = factory.record(
+            reviewedPacket, "recovery-001",
+            ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_SUPPORT,
+            listOf(reviewedPacket.passages.first().passageRef),
+            "Подтверждаю после проверки.", 40_000L,
+        )
+        val evidence = factory.toRelationEvidence(reviewedPacket, d)
+        val firstJournal = ANS100HypothesisManualReviewLedger(context, manualDb, factory)
+        assertTrue(firstJournal.append(d, evidence))
+        firstJournal.close() // Simulates process stop after write-ahead commit.
+
+        val recoveredEngine = ANS100HypothesisRevisionEngine()
+        recoveredEngine.observeTurn(
+            "recovery-seed",
+            listOf(ANS100ConceptMemory.Hypothesis(
+                "causal-chain:heat-expansion", "heat", ANS100ConceptMemory.RelationType.CAUSES,
+                "expansion", listOf("relation:heat-mid", "relation:mid-expansion"),
+                listOf("premise:heat-mid", "premise:mid-expansion"), 0.5,
+            )),
+            emptyList(), completed = true,
+        )
+        val recoveredJournal = ANS100HypothesisManualReviewLedger(context, manualDb, factory)
+        val revisionJournal = ANS100HypothesisRevisionLedger(context, revisionDb)
+        val coordinator = ANS100HypothesisManualReviewCoordinator(
+            factory, recoveredJournal, recoveredEngine, revisionJournal,
+        )
+        val report = coordinator.replayPending()
+        assertEquals(1, report.pendingAtStart)
+        assertEquals(1, report.applied)
+        assertEquals(0, report.rejectedJournalEntries)
+        assertTrue(recoveredJournal.isApplied(d.decisionId))
+        assertEquals(1, recoveredEngine.snapshot().single().directEvidenceCount)
+        assertEquals(0, coordinator.replayPending().pendingAtStart)
+        val checkpoint = ANS100HypothesisRevisionEngine().apply {
+            restoreSnapshot(checkNotNull(revisionJournal.load()))
+        }
+        assertEquals(1, checkpoint.snapshot().single().directEvidenceCount)
+        recoveredJournal.close()
+        revisionJournal.close()
+        context.deleteDatabase(manualDb)
+        context.deleteDatabase(revisionDb)
+    }
+
+
 }
