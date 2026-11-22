@@ -38,7 +38,7 @@ data class LocalSemanticDialogueMemory(
     val explicitPreferences: List<LocalExplicitPreference> = emptyList(),
     val unresolvedQuestions: List<String> = emptyList(),
     val preferenceConflicts: List<LocalPreferenceConflict> = emptyList(),
-    val schema: String = "JARVIS_SEMANTIC_DIALOGUE_MEMORY_V1",
+    val schema: String = "JARVIS_SEMANTIC_DIALOGUE_MEMORY_V2",
     val scope: String = "bounded_transcript_derived_heuristics",
 ) {
     /** Merge fresh transcript extraction into the durable index without dropping older tasks. */
