@@ -3871,7 +3871,7 @@ private fun SettingsPanel(
                         ) {
                             OutlinedTextField(
                                 value = ramBudgetInput,
-                                onValueChange = { ramBudgetInput = it.filter(Char::isDigit).take(3) },
+                                onValueChange = { ramBudgetInput = it.filter { char -> char.isDigit() }.take(4) },
                                 modifier = Modifier.weight(1f),
                                 label = { Text("Лимит RAM, МБ") },
                                 singleLine = true,
