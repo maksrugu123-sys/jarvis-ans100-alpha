@@ -156,7 +156,7 @@ class ANS100NeuralResponseGenerator(
             "explanation" -> evidenceReply(parsed, selectedMemories)
             "question" -> evidenceReply(parsed, selectedMemories)
             "action_request" -> actionReply(parsed)
-            "continuation" -> continuationReply(parsed, history)
+            "continuation" -> continuationReply(clean, parsed, history)
             else -> statementReply(clean, parsed, selectedMemories, normalized)
         }
 
@@ -270,6 +270,7 @@ class ANS100NeuralResponseGenerator(
     }
 
     private fun continuationReply(
+        prompt: String,
         understanding: LocalUnderstanding,
         history: List<LocalConversationMessage>,
     ): String {
@@ -282,7 +283,31 @@ class ANS100NeuralResponseGenerator(
         if (excerpt.isBlank() || history.isEmpty()) {
             return "Я понял, что нужно продолжить предыдущую тему, но связанный фрагмент не найден. Напомни, на чём мы остановились."
         }
-        return "Я связал сообщение с предыдущим фрагментом:\n«$excerpt»\n\nУточни, какую часть развить дальше, чтобы я не додумывал отсутствующие сведения."
+        if (reference.method == "adjacent_assistant_offer" && isAffirmativeFollowThrough(prompt)) {
+            val acceptedStep = extractAcceptedStep(reference.sourceAssistantMessage)
+            return if (acceptedStep.isBlank()) {
+                "Хорошо, продолжаю предыдущую тему. Я учту уже сказанное и не буду просить тебя повторять контекст."
+            } else {
+                "Хорошо, продолжаю с предложенного шага: «$acceptedStep». Я учитываю предыдущий разговор и перехожу к сути, а не начинаю обсуждение заново."
+            }
+        }
+        return "Я нашёл связь с предыдущей частью разговора:\n«$excerpt»\n\nПродолжу с этого места. Если я выбрал не ту тему, поправь меня."
+    }
+
+    private fun isAffirmativeFollowThrough(prompt: String): Boolean {
+        val tokens = TOKEN.findAll(normalize(prompt)).map { it.value }.toList()
+        return tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
+            tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }
+    }
+
+    private fun extractAcceptedStep(previousAssistantMessage: String): String {
+        val clean = previousAssistantMessage.replace(Regex("\\s+"), " ").trim()
+        if (clean.isBlank()) return ""
+        val offer = Regex(
+            """(?i)(?:следующий этап|следующий шаг|предлагаю|могу помочь|могу сделать|если хочешь)[^.!?]{0,260}[.!?]?""",
+        ).find(clean)?.value
+        val candidate = offer ?: clean
+        return candidate.take(MAX_HISTORY_EXCERPT_CHARS)
     }
 
     private fun statementReply(
@@ -333,6 +358,9 @@ class ANS100NeuralResponseGenerator(
         const val MIN_TRAINED_EXAMPLES = 3
         const val MIN_NEURAL_MARGIN = 0.15
         const val MIN_MEMORY_MATCH_RATIO = 0.20
+        private val AFFIRMATIVE_FOLLOW_THROUGH = setOf(
+            "давай", "да", "ок", "окей", "ладно", "поехали", "согласен", "yes", "yeah", "ok", "okay", "sure", "go",
+        )
         private val CAPABILITY_QUESTION = Regex(
             """\b(что ты умеешь|что умеешь|твои возможности|что можешь делать)\b""",
         )
