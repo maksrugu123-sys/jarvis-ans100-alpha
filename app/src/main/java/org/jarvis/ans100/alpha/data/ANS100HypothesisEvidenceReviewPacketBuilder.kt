@@ -25,6 +25,8 @@ class ANS100HypothesisEvidenceReviewPacketBuilder(
         val polarityReason: ANS100HypothesisClaimPolarityAnalyzer.Reason,
         val matchedCue: String?, val detectedNegation: String?,
         val sourceAssessment: ANS100HypothesisSourceAudit.Assessment,
+        val sourceUrl: String = "",
+        val pageContentSha256: String = "",
     )
     data class SourceReview(
         val canonicalUrl: String, val host: String, val pageContentSha256: String,
@@ -119,6 +121,7 @@ class ANS100HypothesisEvidenceReviewPacketBuilder(
             PassageReview(
                 c.passageRef, c.excerpt, c.sentenceSha256, PassageDisposition.CANDIDATE_ONLY,
                 a.polarityCandidate, a.reason, a.matchedCue, a.detectedNegation, source.assessment,
+                c.sourceUrl, c.pageContentSha256,
             )
         }
         val warnings = linkedSetOf<Warning>()
