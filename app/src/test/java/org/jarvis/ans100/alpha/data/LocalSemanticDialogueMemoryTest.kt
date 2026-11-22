@@ -102,6 +102,16 @@ class LocalSemanticDialogueMemoryTest {
         assertEquals("old-preference-turn", memory.explicitPreferences.single().sourceMessageId)
     }
 
+
+    @Test
+    fun imperativeWriteRequestIsNotMistakenForUserPreference() {
+        val memory = LocalSemanticDialogueMemory.fromHistory(
+            listOf(LocalConversationMessage("u1", ConversationRole.USER, "Напиши программу для экспорта памяти", 10L)),
+        )
+        assertTrue(memory.explicitPreferences.isEmpty())
+        assertTrue(memory.activeTasks.any { it.text.contains("Напиши программу") })
+    }
+
     @Test
     fun boundsMemoryCollectionsAndContext() {
         val history = (1..80).map { index ->
