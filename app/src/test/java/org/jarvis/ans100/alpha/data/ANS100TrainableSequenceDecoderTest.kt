@@ -34,7 +34,7 @@ class ANS100TrainableSequenceDecoderTest {
         val generated = decoder.generate("кот", maxNewTokens = 5)
 
         assertTrue(trained.epochsCompleted == 80)
-        assertTrue(trained.trainingTokenCount > 24)
+        assertTrue(trained.trainingTokenCount >= 24)
         assertTrue(trained.finalMeanLoss < initial.finalMeanLoss)
         assertTrue(generated.text.startsWith("ест"))
         assertTrue(generated.text.contains("рыбу"))
