@@ -119,7 +119,8 @@ class PhoneFolderSemanticDialogueMemoryStorage(context: Context) : LocalSemantic
 }
 
 internal object LocalSemanticDialogueMemoryCodec {
-    private const val VERSION = "JARVIS_SEMANTIC_DIALOGUE_MEMORY_JSON_V1"
+    private const val VERSION = "JARVIS_SEMANTIC_DIALOGUE_MEMORY_JSON_V2"
+    private const val LEGACY_VERSION = "JARVIS_SEMANTIC_DIALOGUE_MEMORY_JSON_V1"
     private const val MAX_BYTES = 256 * 1024
     private const val MAX_ITEMS = 8
     private const val MAX_ITEM_CHARS = 220
@@ -127,6 +128,7 @@ internal object LocalSemanticDialogueMemoryCodec {
     fun encode(memory: LocalSemanticDialogueMemory): String {
         require(memory.activeTasks.size <= MAX_ITEMS && memory.completedTasks.size <= MAX_ITEMS)
         require(memory.explicitPreferences.size <= MAX_ITEMS && memory.unresolvedQuestions.size <= 4)
+        require(memory.preferenceConflicts.size <= 4)
         val json = JSONObject().put("schema", VERSION)
         fun tasks(values: List<LocalSemanticTask>): JSONArray = JSONArray().apply {
             values.forEach { item ->
@@ -160,6 +162,21 @@ internal object LocalSemanticDialogueMemoryCodec {
                 put(it)
             }
         })
+        json.put("preference_conflicts", JSONArray().apply {
+            memory.preferenceConflicts.forEach { item ->
+                require(item.previousText.isNotBlank() && item.previousText.length <= MAX_ITEM_CHARS)
+                require(item.currentText.isNotBlank() && item.currentText.length <= MAX_ITEM_CHARS)
+                require(item.previousMessageId.isNotBlank() && item.previousMessageId.length <= 128)
+                require(item.currentMessageId.isNotBlank() && item.currentMessageId.length <= 128)
+                require(item.resolution in setOf("needs_confirmation", "resolved_by_explicit_correction"))
+                put(JSONObject()
+                    .put("previous_text", item.previousText)
+                    .put("previous_message_id", item.previousMessageId)
+                    .put("current_text", item.currentText)
+                    .put("current_message_id", item.currentMessageId)
+                    .put("resolution", item.resolution))
+            }
+        })
         val encoded = json.toString()
         require(encoded.toByteArray(Charsets.UTF_8).size <= MAX_BYTES)
         return encoded
@@ -168,7 +185,8 @@ internal object LocalSemanticDialogueMemoryCodec {
     fun decode(raw: String): LocalSemanticDialogueMemory {
         require(raw.isNotBlank() && raw.toByteArray(Charsets.UTF_8).size <= MAX_BYTES)
         val json = JSONObject(raw)
-        require(json.getString("schema") == VERSION)
+        val storedVersion = json.getString("schema")
+        require(storedVersion == VERSION || storedVersion == LEGACY_VERSION)
         fun readTasks(key: String): List<LocalSemanticTask> {
             val array = json.getJSONArray(key)
             require(array.length() <= MAX_ITEMS)
@@ -190,6 +208,8 @@ internal object LocalSemanticDialogueMemoryCodec {
         require(preferences.length() <= MAX_ITEMS)
         val questions = json.getJSONArray("unresolved_questions")
         require(questions.length() <= 4)
+        val conflicts = json.optJSONArray("preference_conflicts") ?: JSONArray()
+        require(conflicts.length() <= 4)
         return LocalSemanticDialogueMemory(
             activeTasks = readTasks("active_tasks"),
             completedTasks = readTasks("completed_tasks"),
@@ -204,6 +224,18 @@ internal object LocalSemanticDialogueMemoryCodec {
             },
             unresolvedQuestions = List(questions.length()) { index ->
                 questions.getString(index).also { require(it.isNotBlank() && it.length <= MAX_ITEM_CHARS) }
+            },
+            preferenceConflicts = List(conflicts.length()) { index ->
+                val item = conflicts.getJSONObject(index)
+                LocalPreferenceConflict(
+                    previousText = item.getString("previous_text").also { require(it.isNotBlank() && it.length <= MAX_ITEM_CHARS) },
+                    previousMessageId = item.getString("previous_message_id").also { require(it.isNotBlank() && it.length <= 128) },
+                    currentText = item.getString("current_text").also { require(it.isNotBlank() && it.length <= MAX_ITEM_CHARS) },
+                    currentMessageId = item.getString("current_message_id").also { require(it.isNotBlank() && it.length <= 128) },
+                    resolution = item.optString("resolution", "needs_confirmation").also {
+                        require(it in setOf("needs_confirmation", "resolved_by_explicit_correction"))
+                    },
+                )
             },
         )
     }
