@@ -143,6 +143,9 @@ class ANS100TrainableSequenceDecoder(
             normalizeText(prompt) to normalizeText(answer)
         }
         val subwordVocabulary = buildSubwordVocabulary(rawPairs.flatMap { listOf(it.first, it.second) })
+        require(subwordVocabulary.size >= RESERVED_TOKENS.size + 2) {
+            "training requires at least two distinct ordinary tokens"
+        }
         require(subwordVocabulary.size <= maxVocabularySize) {
             "subword vocabulary exceeds configured model vocabulary capacity"
         }
@@ -159,9 +162,6 @@ class ANS100TrainableSequenceDecoder(
         tokenizerMode = TOKENIZER_SUBWORD
         vocabulary = subwordVocabulary
         tokenToId = vocabulary.withIndex().associate { it.value to it.index }
-        require(vocabulary.size >= RESERVED_TOKENS.size + 2) {
-            "training requires at least two distinct ordinary tokens"
-        }
 
         initializeWeights()
         val sequences = tokenized.map { (prompt, answer) ->
@@ -201,7 +201,7 @@ class ANS100TrainableSequenceDecoder(
 
         val promptTokens = tokenize(prompt).takeLast(MAX_TOKENS_PER_EXAMPLE)
         require(promptTokens.isNotEmpty()) { "prompt contains no usable tokens" }
-        val unknownPromptTokenCount = promptTokens.count { it !in tokenToId }
+        val unknownPromptTokenCount = promptTokens.count { it == UNK_TOKEN || it !in tokenToId }
         var hidden = DoubleArray(hiddenSize)
         hidden = step(BOS_ID, hidden)
         promptTokens.forEach { token -> hidden = step(tokenToId[token] ?: UNK_ID, hidden) }
@@ -603,7 +603,7 @@ class ANS100TrainableSequenceDecoder(
                 add(character.toString())
                 add(WORD_START_MARKER + character)
             }
-            words.filter { it.length == 1 && it[0] in PUNCTUATION }.distinct().forEach(::add)
+            words.filter { it.length == 1 && it[0] in PUNCTUATION }.distinct().forEach { add(it) }
         }
         require(mandatory.distinct().size + RESERVED_TOKENS.size <= maxVocabularySize) {
             "configured vocabulary is too small for the corpus character set"
