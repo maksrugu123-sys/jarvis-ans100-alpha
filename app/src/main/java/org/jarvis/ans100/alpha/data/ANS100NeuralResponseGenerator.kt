@@ -9,8 +9,9 @@ import java.util.Locale
  * response strategy from Core intent, optional trained neural readout hints,
  * approved memories, and recent dialogue, then composes a short Russian reply.
  *
- * This v1 is neuro-symbolic composition, not yet learned token-by-token language
- * generation. The trace makes the evidence used for each response inspectable.
+ * Without a trained sequence snapshot it falls back to bounded neuro-symbolic
+ * composition. When a trained ANS decoder is available, eligible prompts may
+ * use its learned token-by-token output. The trace records the selected path.
  */
 class ANS100NeuralResponseGenerator(
     private val sequenceLanguageModule: ANS100TrainableLanguageModule? = null,
