@@ -8,6 +8,7 @@ import android.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileNotFoundException
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -34,15 +35,21 @@ class PhoneFolderSemanticDialogueMemoryStorage(context: Context) : LocalSemantic
     @Synchronized
     override fun read(): LocalSemanticDialogueMemory {
         ensureDirectory()
-        if (!file.baseFile.exists()) {
+        val input = try {
+            file.openRead()
+        } catch (_: FileNotFoundException) {
+            null
+        }
+        if (input == null) {
             val empty = LocalSemanticDialogueMemory()
             if (!write(empty)) throw LocalConversationException("Не удалось создать файл смысловой памяти JARVIS.")
             return empty
         }
         if (file.baseFile.length() !in 1L..MAX_FILE_BYTES) {
+            input.close()
             throw LocalConversationException("Файл смысловой памяти пуст или превышает лимит.")
         }
-        val raw = file.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
+        val raw = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
         return LocalSemanticDialogueMemoryCodec.decode(raw)
     }
 
