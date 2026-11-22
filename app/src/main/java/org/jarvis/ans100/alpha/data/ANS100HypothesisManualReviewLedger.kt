@@ -256,7 +256,7 @@ class ANS100HypothesisManualReviewLedger(
                     .put("reason", passage.polarityReason.name).put("source_assessment", passage.sourceAssessment.name))
             }
         }
-        val warnings = JSONArray().apply { packet.warnings.map { it.name }.sorted().forEach(::put) }
+        val warnings = JSONArray().apply { packet.warnings.map { it.name }.sorted().forEach { put(it) } }
         return JSONObject().put("hypothesis_id", packet.hypothesisId)
             .put("page_title", packet.pageTitle.take(180)).put("page_url", packet.pageUrl.take(2048))
             .put("page_digest", packet.pageContentSha256).put("fetched_at_ms", packet.fetchedAtEpochMs)
@@ -282,10 +282,25 @@ class ANS100HypothesisManualReviewLedger(
                 item.getString("polarity"), item.getString("reason"), item.getString("source_assessment"))
         }
         val warnings = (0 until warningArray.length()).map { warningArray.getString(it) }
-        require(sources.all { it.canonicalUrl.length <= 2048 && it.host.length <= 253 && it.pageContentSha256.matches(SHA256) })
-        require(passages.all { it.passageRef.isNotBlank() && it.excerpt.length <= ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT && it.sentenceSha256.matches(SHA256) })
+        val pageDigest = root.getString("page_digest")
+        require(pageDigest.matches(SHA256))
+        require(root.getString("page_url").startsWith("https://"))
+        require(sources.all {
+            it.canonicalUrl.startsWith("https://") && it.canonicalUrl.length <= 2048 &&
+                it.host.length <= 253 && it.pageContentSha256.matches(SHA256) &&
+                ANS100HypothesisSourceAudit.Assessment.values().any { value -> value.name == it.assessment }
+        })
+        require(passages.all {
+            it.passageRef.isNotBlank() && it.passageRef.length <= ANS100ConceptMemory.MAX_EVIDENCE_REF_CHARS &&
+                it.excerpt.length <= ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT &&
+                it.sentenceSha256.matches(SHA256) &&
+                ANS100HypothesisClaimPolarityAnalyzer.PolarityCandidate.values().any { value -> value.name == it.polarity } &&
+                ANS100HypothesisClaimPolarityAnalyzer.Reason.values().any { value -> value.name == it.polarityReason } &&
+                ANS100HypothesisSourceAudit.Assessment.values().any { value -> value.name == it.sourceAssessment }
+        })
+        require(warnings.all { value -> ANS100HypothesisEvidenceReviewPacketBuilder.Warning.values().any { it.name == value } })
         return ReviewSnapshot(root.getString("hypothesis_id"), root.getString("page_title"),
-            root.getString("page_url"), root.getString("page_digest"), root.getLong("fetched_at_ms"),
+            root.getString("page_url"), pageDigest, root.getLong("fetched_at_ms"),
             sources, passages, warnings)
     }
 
