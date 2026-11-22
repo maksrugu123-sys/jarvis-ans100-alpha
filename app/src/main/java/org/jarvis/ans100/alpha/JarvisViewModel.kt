@@ -223,7 +223,14 @@ data class HypothesisReviewUiState(
     val error: String? = null,
 )
 
+data class AnsSequenceTrainingUiState(
+    val busy: Boolean = false,
+    val status: String = "Проверка состояния нейронного декодера…",
+    val message: String? = null,
+)
+
 data class JarvisUiState(
+    val sequenceTraining: AnsSequenceTrainingUiState = AnsSequenceTrainingUiState(),
     val data: LocalDraftState = LocalDraftState(),
     val selectedSessionId: String? = null,
     val notice: String? = null,
@@ -324,6 +331,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val conversationExecutor = Executors.newSingleThreadExecutor()
     private val hybridNetworkExecutor = Executors.newSingleThreadExecutor()
     private val neuronComputeBenchmarkExecutor = Executors.newSingleThreadExecutor()
+    private val sequenceTrainingExecutor = Executors.newSingleThreadExecutor()
     private var pairedBenchmarkSequence = 0L
     private val ans100BenchmarkRuntimeDelegate = lazy {
         org.jarvis.ans100.alpha.data.ANS100StandaloneBenchmarkRuntime(appContext)
@@ -1320,6 +1328,103 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun ansSequenceModelStatus(): ANS100TrainableLanguageModule.Status =
         sequenceLanguageModule.status()
+
+    fun refreshAnsSequenceTrainingStatus() {
+        val status = sequenceLanguageModule.status()
+        val label = when {
+            status.storageError != null -> "Ошибка хранилища: ${status.storageError}"
+            status.trained -> "Обучена · словарь: ${status.vocabularySize} токенов · скрытый слой: ${status.hiddenSize} нейронов · сохранение: ${if (status.storageLoaded) "загружено" else "только текущая сессия"}"
+            else -> "Не обучена · словарь пуст · готова принять проверенные примеры"
+        }
+        mutableState.value = mutableState.value.copy(
+            sequenceTraining = mutableState.value.sequenceTraining.copy(status = label),
+        )
+    }
+
+    /** All training and held-out inference run away from the Android UI thread. */
+    fun trainAnsSequenceModelAsync(examples: List<String>, epochs: Int) {
+        val current = mutableState.value.sequenceTraining
+        if (current.busy) return
+        mutableState.value = mutableState.value.copy(sequenceTraining = current.copy(
+            busy = true, message = "Обучение выполняется локально на устройстве…",
+        ))
+        sequenceTrainingExecutor.execute {
+            val result = runCatching { trainAnsSequenceModel(examples, epochs) }
+            mainHandler.post {
+                val previous = mutableState.value.sequenceTraining
+                val status = sequenceLanguageModule.status()
+                val statusLabel = when {
+                    status.storageError != null -> "Ошибка хранилища: ${status.storageError}"
+                    status.trained -> "Обучена · словарь: ${status.vocabularySize} · скрытый слой: ${status.hiddenSize} · сохранение: ${if (status.storageLoaded) "загружено" else "активно"}"
+                    else -> "Не обучена"
+                }
+                mutableState.value = mutableState.value.copy(sequenceTraining = previous.copy(
+                    busy = false,
+                    status = statusLabel,
+                    message = result.fold(
+                        { "Готово: ${it.exampleCount} примеров, ${it.trainingTokenCount} токенов, ${it.epochsCompleted} эпох; итоговая средняя loss = ${"%.4f".format(java.util.Locale.ROOT, it.finalMeanLoss)}. Это метрика обучения, не доказательство понимания." },
+                        { "Ошибка обучения: ${it.message ?: "неизвестная ошибка"}" },
+                    ),
+                ))
+            }
+        }
+    }
+
+    fun applyAnsSequenceCorrectionAsync(prompt: String, correction: String) {
+        val current = mutableState.value.sequenceTraining
+        if (current.busy) return
+        mutableState.value = mutableState.value.copy(sequenceTraining = current.copy(
+            busy = true, message = "Проверенное исправление обрабатывается…",
+        ))
+        sequenceTrainingExecutor.execute {
+            val result = runCatching { applyAnsSequenceCorrection(prompt, correction) }
+            mainHandler.post {
+                val previous = mutableState.value.sequenceTraining
+                val status = sequenceLanguageModule.status()
+                mutableState.value = mutableState.value.copy(sequenceTraining = previous.copy(
+                    busy = false,
+                    status = if (status.trained) "Обучена · словарь: ${status.vocabularySize} · скрытый слой: ${status.hiddenSize} · сохранение: ${if (status.storageLoaded) "загружено" else "активно"}" else "Не обучена",
+                    message = result.fold(
+                        { report -> if (report == null) "Исправление не применено." else "Исправление сохранено: обучено ${report.trainingTokenCount} токенов продолжения за ${report.epochsCompleted} эпох." },
+                        { "Не удалось применить исправление: ${it.message ?: "неизвестная ошибка"}" },
+                    ),
+                ))
+            }
+        }
+    }
+
+    fun evaluateAnsSequenceModelAsync(examples: List<Pair<String, String>>) {
+        val current = mutableState.value.sequenceTraining
+        if (current.busy) return
+        mutableState.value = mutableState.value.copy(sequenceTraining = current.copy(
+            busy = true, message = "Проверка на отдельном наборе…",
+        ))
+        sequenceTrainingExecutor.execute {
+            val result = runCatching {
+                require(examples.isNotEmpty() && examples.size <= 100) { "нужно от 1 до 100 проверочных пар" }
+                val predictions = examples.map { (prompt, expected) ->
+                    require(prompt.isNotBlank() && expected.isNotBlank())
+                    val generated = requireNotNull(generateAnsSequenceContinuation(prompt)) {
+                        "сначала обучи модель"
+                    }.text.trim()
+                    Triple(expected.trim(), generated, expected.trim().equals(generated, ignoreCase = true))
+                }
+                val exact = predictions.count { it.third }
+                val details = predictions.take(8).mapIndexed { index, item ->
+                    "${index + 1}. ${if (item.third) "✓" else "✗"} Ожидалось: ${item.first.take(100)} | Получено: ${item.second.ifBlank { "∅" }.take(100)}"
+                }.joinToString("\\n")
+                "Точное совпадение: $exact/${predictions.size} (${"%.1f".format(java.util.Locale.ROOT, exact * 100.0 / predictions.size)}%).\n$details\nЭто строгая проверка совпадения строк, а не полноценная оценка смысла. Проверочные ответы не добавлялись в обучение."
+            }
+            mainHandler.post {
+                val previous = mutableState.value.sequenceTraining
+                mutableState.value = mutableState.value.copy(sequenceTraining = previous.copy(
+                    busy = false,
+                    message = result.fold({ it }, { "Ошибка проверки: ${it.message ?: "неизвестная ошибка"}" }),
+                ))
+            }
+        }
+    }
+
 
     /** Training is explicit; the app never silently treats its own output as a label. */
     fun trainAnsSequenceModel(
@@ -3579,6 +3684,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         conversationExecutor.shutdown()
         hybridNetworkExecutor.shutdown()
         neuronComputeBenchmarkExecutor.shutdownNow()
+        sequenceTrainingExecutor.shutdownNow()
         runtimeExecutor.shutdownNow()
         peerSyncExecutor.shutdownNow()
         super.onCleared()
