@@ -38,7 +38,13 @@ class ANS100HypothesisMultiSourceReviewPacketBuilder(
                 it.extraction.pageContentSha256 == it.page.contentSha256.lowercase()
         }) { "inspected pages do not belong to this hypothesis or have mismatched digests" }
 
-        val records = inspectedPages.map { item ->
+        // Multiple search results may resolve to the exact same URL and bytes.
+        // Keep one page in the packet; distinct URLs with identical bytes remain
+        // separate audit records and are flagged as duplicate content.
+        val uniquePages = inspectedPages.distinctBy { item -> pageKey(item.page) }
+        require(uniquePages.size <= maxPages) { "too many unique inspected pages" }
+
+        val records = uniquePages.map { item ->
             val uri = java.net.URI(item.page.finalUrl)
             require(uri.scheme.equals("https", true) && !uri.host.isNullOrBlank() && uri.userInfo == null)
             ANS100HypothesisSourceAudit.SourceRecord(
@@ -50,12 +56,12 @@ class ANS100HypothesisMultiSourceReviewPacketBuilder(
             )
         }
         val audit = sourceAudit.auditRecords(records)
-        require(audit.assessments.size == inspectedPages.size) {
+        require(audit.assessments.size == uniquePages.size) {
             "source audit omitted an inspected page"
         }
 
         var remainingPassages = maxPassages
-        val pagePackets = inspectedPages.map { item ->
+        val pagePackets = uniquePages.map { item ->
             val retained = item.extraction.candidates.take(remainingPassages)
             remainingPassages -= retained.size
             val extraction = item.extraction.copy(
@@ -75,7 +81,7 @@ class ANS100HypothesisMultiSourceReviewPacketBuilder(
         require(combinedPassages.size <= maxPassages)
         require(combinedPassages.map { it.passageRef }.distinct().size == combinedPassages.size)
         val combinedSources = first.sources
-        require(combinedSources.size == inspectedPages.size)
+        require(combinedSources.size == uniquePages.size)
 
         return first.copy(
             passages = combinedPassages,
@@ -90,6 +96,15 @@ class ANS100HypothesisMultiSourceReviewPacketBuilder(
         )
     }
 
+    private fun pageKey(page: ANS100HypothesisPageVerifier.PageReport): String {
+        val uri = java.net.URI(page.finalUrl).normalize()
+        val host = uri.host?.lowercase(java.util.Locale.ROOT)?.trimEnd('.')
+            ?: throw IllegalArgumentException("inspected page has no hostname")
+        val port = if (uri.port == -1 || uri.port == 443) "" else ":" + uri.port
+        val path = uri.rawPath.orEmpty().ifEmpty { "/" }
+        val query = uri.rawQuery?.let { "?" + it }.orEmpty()
+        return page.contentSha256.lowercase(java.util.Locale.ROOT) + "|https://" + host + port + path + query
+    }
     companion object {
         const val DEFAULT_MAX_PAGES = 12
         const val MAX_PAGES_HARD_LIMIT = 12
