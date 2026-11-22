@@ -31,6 +31,7 @@ import org.jarvis.ans100.alpha.data.ANS100TrainableSequenceDecoder
 import org.jarvis.ans100.alpha.data.FileANS100SequenceModelStorage
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
 import org.jarvis.ans100.alpha.data.PhoneFolderLocalWorkspaceMemoryStorage
+import org.jarvis.ans100.alpha.data.LocalWorkspaceMemoryCodec
 import org.jarvis.ans100.alpha.data.LocalDraftException
 import org.jarvis.ans100.alpha.data.LocalDraftRepository
 import org.jarvis.ans100.alpha.data.LocalDraftState
@@ -160,6 +161,7 @@ data class LocalMemoryUiState(
     val isBusy: Boolean = false,
     val error: String? = null,
     val lastAddedId: String? = null,
+    val importPickerRequestId: Long = 0L,
 )
 
 data class PeerMemorySyncUiState(
@@ -377,6 +379,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     )
     private val phoneMemoryStorage = PhoneFolderLocalWorkspaceMemoryStorage(application.applicationContext)
     private val workspaceMemoryCache = LocalWorkspaceMemoryCache(phoneMemoryStorage)
+    @Volatile private var pendingLocalMemoryImport: List<LocalWorkspaceMemory>? = null
     private val workspaceConceptInputBridge = ANS100WorkspaceConceptInputBridge()
     private val neuralHypothesisLedger = ANS100NeuralHypothesisLedger(appContext)
     private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine().apply {
@@ -1550,6 +1553,76 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewLocalMemoryImport(uri: Uri) {
+        val before = mutableState.value
+        if (before.conversation.isBusy || before.localMemory.isBusy) return
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(isBusy = true, error = null, streamingResponse = ""),
+            localMemory = before.localMemory.copy(isBusy = true, error = null),
+        )
+        conversationExecutor.execute {
+            try {
+                val raw = getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                    val output = ByteArrayOutputStream()
+                    val buffer = ByteArray(8 * 1024)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > 3 * 1024 * 1024) {
+                            throw IllegalArgumentException("Файл памяти превышает лимит 3 МиБ.")
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                    val bytes = output.toByteArray()
+                    if (bytes.any { (it.toInt() and 0xff) > 0x7f }) {
+                        throw IllegalArgumentException("Файл памяти должен быть текстовым .jmem-файлом JARVIS.")
+                    }
+                    String(bytes, Charsets.US_ASCII)
+                } ?: throw IllegalArgumentException("Не удалось открыть выбранный файл.")
+                val decoded = LocalWorkspaceMemoryCodec.decode(raw)
+                pendingLocalMemoryImport = decoded
+                val activeCount = decoded.count { it.supersededById == null }
+                val response = buildString {
+                    appendLine("Резервная копия JARVIS проверена.")
+                    appendLine("Всего записей: ${decoded.size}; активных воспоминаний: $activeCount.")
+                    appendLine("Текущая память пока не изменена.")
+                    append("Чтобы заменить её данными из этой копии, отправь: /memory import confirm. Для отмены: /memory import cancel.")
+                }
+                val messages = conversationCoordinator.sendWithExternalResult("/memory import", response)
+                val snapshot = workspaceMemoryCache.snapshot()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(messages = messages, isBusy = false, error = null),
+                        localMemory = current.localMemory.copy(
+                            records = snapshot.records,
+                            isLoaded = snapshot.loaded,
+                            isBusy = false,
+                            error = snapshot.error,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                pendingLocalMemoryImport = null
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(
+                            isBusy = false,
+                            error = error.message ?: "Не удалось проверить резервную копию памяти.",
+                        ),
+                        localMemory = current.localMemory.copy(
+                            isBusy = false,
+                            error = error.message ?: "Не удалось проверить резервную копию памяти.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     fun sendConversationMessage(value: String) {
         val clean = value.trim()
         if (clean.isEmpty()) return
@@ -1573,8 +1646,34 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         if (memoryCommand in setOf("/memory export", "/память выгрузить")) {
             runLocalMemoryCommand(clean) {
                 val file = phoneMemoryStorage.exportSnapshot()
-                "Экспорт памяти завершён. Файл: ${file.absolutePath}"
+                "Экспорт памяти завершён. Файл: $file"
             }
+            return
+        }
+        if (memoryCommand in setOf("/memory import", "/память импорт")) {
+            mutableState.value = before.copy(
+                localMemory = before.localMemory.copy(
+                    importPickerRequestId = before.localMemory.importPickerRequestId + 1L,
+                ),
+            )
+            runLocalMemoryCommand(clean) {
+                "Выбери резервную копию JARVIS с расширением .jmem. Сначала файл будет проверен; текущая память не изменится до отдельного подтверждения."
+            }
+            return
+        }
+        if (memoryCommand in setOf("/memory import confirm", "/память импорт подтвердить")) {
+            runLocalMemoryCommand(clean) {
+                val restored = pendingLocalMemoryImport
+                    ?: throw IllegalStateException("Нет проверенной резервной копии. Сначала выполни /memory import.")
+                workspaceMemoryCache.restore(restored)
+                pendingLocalMemoryImport = null
+                "Восстановление завершено. Загружено записей: ${restored.size}; активных воспоминаний: ${restored.count { it.supersededById == null }}."
+            }
+            return
+        }
+        if (memoryCommand in setOf("/memory import cancel", "/память импорт отмена")) {
+            pendingLocalMemoryImport = null
+            runLocalMemoryCommand(clean) { "Ожидающая резервная копия отменена. Текущая память не изменена." }
             return
         }
         if (memoryCommand in setOf("/memory reset", "/память сбросить")) {
