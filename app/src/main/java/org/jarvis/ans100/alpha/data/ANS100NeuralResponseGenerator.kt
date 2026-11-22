@@ -12,7 +12,7 @@ import java.util.Locale
  * This v1 is neuro-symbolic composition, not yet learned token-by-token language
  * generation. The trace makes the evidence used for each response inspectable.
  */
-class ANS100NeuralResponseGenerator : LocalResponseEngine {
+class ANS100NeuralResponseGenerator(\n    private val sequenceLanguageModule: ANS100TrainableLanguageModule? = null,\n) : LocalResponseEngine {
     data class GenerationTrace(
         val strategy: String,
         val source: String,
@@ -107,6 +107,28 @@ class ANS100NeuralResponseGenerator : LocalResponseEngine {
             ((neural?.classifierConfidenceMargin ?: 0.0) / 100.0).coerceIn(0.0, 1.0)
         } else {
             parsed.intentConfidence
+        }
+
+        // Prefer learned token-by-token generation only after the decoder has
+        // been explicitly trained and its output passes conservative bounds.
+        // Critical capability/correction paths remain deterministic and inspectable.
+        if (intent !in setOf("capability_question", "correction", "greeting", "farewell")) {
+            val learned = sequenceLanguageModule?.generate(clean)
+            if (learned != null &&
+                learned.tokens.size >= MIN_LEARNED_GENERATION_TOKENS &&
+                learned.meanTokenConfidence >= MIN_LEARNED_GENERATION_CONFIDENCE &&
+                learned.text.isNotBlank() &&
+                learned.text.length <= LocalConversationRepository.MAX_MESSAGE_CHARS
+            ) {
+                lastTrace = GenerationTrace(
+                    strategy = "learned_sequence_generation",
+                    source = "trained_ans100_recurrent_decoder",
+                    usedMemoryIds = selectedMemories.map { it.id },
+                    usedNeuralReadout = true,
+                    confidence = learned.meanTokenConfidence,
+                )
+                return learned.text.replaceFirstChar { it.uppercase(Locale.ROOT) }
+            }
         }
         val source = when {
             intent == neuralIntent -> "trained_neural_readout_plus_core"
@@ -244,6 +266,8 @@ class ANS100NeuralResponseGenerator : LocalResponseEngine {
         const val MAX_MEMORY_TEXT_CHARS = 420
         const val MAX_HISTORY_EXCERPT_CHARS = 360
         const val MAX_PLAN_STEPS = 4
+        const val MIN_LEARNED_GENERATION_TOKENS = 2
+        const val MIN_LEARNED_GENERATION_CONFIDENCE = 0.25
         const val MIN_TRAINED_EXAMPLES = 3
         const val MIN_NEURAL_MARGIN = 0.15
         const val MIN_MEMORY_MATCH_RATIO = 0.20
