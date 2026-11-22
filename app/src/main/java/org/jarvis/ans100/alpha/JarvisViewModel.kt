@@ -1564,6 +1564,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val memoryCommand = clean.lowercase(Locale.ROOT).replace(Regex("\\s+"), " ")
+        if (memoryCommand in setOf("/memory location", "/память папка")) {
+            runLocalMemoryCommand(clean) {
+                "Папка памяти JARVIS: ${phoneMemoryStorage.directoryPath()}"
+            }
+            return
+        }
         if (memoryCommand in setOf("/memory export", "/память выгрузить")) {
             runLocalMemoryCommand(clean) {
                 val file = phoneMemoryStorage.exportSnapshot()
