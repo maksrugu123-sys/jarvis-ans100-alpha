@@ -210,6 +210,7 @@ data class HypothesisReviewUiState(
     val activeRequest: org.jarvis.ans100.alpha.data.ANS100HypothesisRevisionEngine.ReviewRequest? = null,
     val searchCandidates: List<ANS100HypothesisSearchEvidenceProvider.SearchCandidate> = emptyList(),
     val activePacket: ANS100HypothesisEvidenceReviewPacketBuilder.Packet? = null,
+    val conceptLabels: Map<String, String> = emptyMap(),
     val isBusy: Boolean = false,
     val message: String? = null,
     val isLoaded: Boolean = false,
@@ -1534,6 +1535,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         manualHypothesisReviewCoordinator.recordAndApply(packet, decision)
     }.getOrDefault(false)
 
+    /** Resolves opaque workspace concept IDs to their exact approved labels; IDs are never sent as search terms. */
+    private fun approvedHypothesisConceptLabels(): Map<String, String> =
+        workspaceMemoryCache.snapshot().records.asSequence()
+            .filter { it.userApproved && it.category.trim().lowercase(java.util.Locale.ROOT) in setOf("concept", "понятие") }
+            .filter { it.content.isNotBlank() && it.content.trim().length <= org.jarvis.ans100.alpha.data.ANS100ConceptMemory.MAX_LABEL_CHARS }
+            .associate { record ->
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(record.id.toByteArray(Charsets.UTF_8)).take(16)
+                    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                "memory:$digest" to record.content.trim()
+            }
+
     /** Starts bounded web discovery only after the user taps the search action in the review screen. */
     fun searchHypothesisSources(hypothesisId: String) {
         val before = mutableState.value.hypothesisReview
@@ -1545,18 +1558,28 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 return
             }
+        val labels = approvedHypothesisConceptLabels()
+        val fromLabel = labels[request.fromConceptId]
+        val toLabel = labels[request.toConceptId]
+        if (fromLabel == null || toLabel == null) {
+            mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
+                error = "Не удалось восстановить исходные названия понятий из подтверждённой локальной памяти. Поиск не запускался.",
+            ))
+            return
+        }
         mutableState.value = mutableState.value.copy(
             hypothesisReview = before.copy(
                 activeRequest = request, searchCandidates = emptyList(), activePacket = null,
                 isBusy = true, error = null, message = "Поиск выполняется по вашему запросу…",
+                conceptLabels = labels,
             ),
         )
         hypothesisReviewExecutor.execute {
             val result = runCatching {
                 hypothesisSearchProvider.search(
                     request = request,
-                    fromLabel = request.fromConceptId,
-                    toLabel = request.toConceptId,
+                    fromLabel = fromLabel,
+                    toLabel = toLabel,
                     userApproved = true,
                 )
             }
@@ -1585,6 +1608,15 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val lead = before.searchCandidates.firstOrNull {
             it.hypothesisId == hypothesisId && it.provenanceRef == provenanceRef
         } ?: return
+        val labels = before.conceptLabels.ifEmpty { approvedHypothesisConceptLabels() }
+        val fromLabel = labels[request.fromConceptId]
+        val toLabel = labels[request.toConceptId]
+        if (fromLabel == null || toLabel == null) {
+            mutableState.value = mutableState.value.copy(hypothesisReview = before.copy(
+                error = "Исходные названия понятий больше недоступны. Страница не открывалась.",
+            ))
+            return
+        }
         mutableState.value = mutableState.value.copy(
             hypothesisReview = before.copy(
                 isBusy = true, activePacket = null, error = null,
@@ -1595,12 +1627,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val result = runCatching {
                 val page = hypothesisPageVerifier.inspect(
                     lead = lead,
-                    fromLabel = request.fromConceptId,
-                    toLabel = request.toConceptId,
+                    fromLabel = fromLabel,
+                    toLabel = toLabel,
                     userApproved = true,
                 )
                 val extraction = hypothesisPassageExtractor.extract(
-                    page, request.fromConceptId, request.toConceptId,
+                    page, fromLabel, toLabel,
                 )
                 val audit = if (extraction.candidates.isEmpty()) {
                     val uri = java.net.URI(page.finalUrl)
@@ -1623,7 +1655,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 } else hypothesisSourceAudit.audit(extraction.candidates)
                 val analyses = extraction.candidates.map { passage ->
                     hypothesisPolarityAnalyzer.analyze(
-                        passage, request.fromConceptId, request.relationType, request.toConceptId,
+                        passage, fromLabel, request.relationType, toLabel,
                     )
                 }
                 hypothesisPacketBuilder.build(request, page, extraction, audit, analyses)
@@ -2341,6 +2373,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             before.hypothesisReview.copy(
                 requests = structuredHypothesisRevisionEngine.reviewQueue(),
                 recentDecisions = manualHypothesisReviewLedger.loadRecent(limit = 40),
+                conceptLabels = approvedHypothesisConceptLabels(),
                 isLoaded = true,
                 error = null,
             )
