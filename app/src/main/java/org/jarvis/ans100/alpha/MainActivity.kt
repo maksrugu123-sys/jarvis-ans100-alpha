@@ -129,6 +129,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var taskTitle by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf("") }
     var selectedTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sequenceTrainingExamples by rememberSaveable { mutableStateOf("") }
+    var sequenceEvaluationCases by rememberSaveable { mutableStateOf("") }
+    var sequenceCorrectionPrompt by rememberSaveable { mutableStateOf("") }
+    var sequenceCorrectionText by rememberSaveable { mutableStateOf("") }
+    var sequenceEpochsText by rememberSaveable { mutableStateOf("30") }
     var transferPassphrase by remember { mutableStateOf("") }
     var pendingImportPassphrase by remember { mutableStateOf<CharArray?>(null) }
     var pendingExportBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -224,6 +229,35 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     ) { uri: Uri? ->
         if (uri != null) viewModel.importConversationModel(uri)
     }
+
+    val sequenceExamplesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8 * 1024)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= 512 * 1024) { "Файл превышает 512 КБ." }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                } ?: error("Не удалось открыть файл.")
+                val imported = String(bytes, Charsets.UTF_8)
+                require(imported.isNotBlank()) { "Файл пуст." }
+                sequenceTrainingExamples = imported.lineSequence().map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.startsWith("#") }.joinToString("\\n")
+                require(sequenceTrainingExamples.isNotBlank()) { "В файле нет строк с примерами." }
+            }.onFailure {
+                viewModel.refreshAnsSequenceTrainingStatus()
+            }
+        }
+    }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
@@ -265,6 +299,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
 
     LaunchedEffect(selectedTab) {
         if (selectedTab == 5) viewModel.refreshHypothesisReview()
+        if (selectedTab == 6) viewModel.refreshAnsSequenceTrainingStatus()
     }
 
     val selectedAccentColor = when (accentChoice) { "violet" -> Color(0xFFB18CFF); "mint" -> Color(0xFF52D6B4); else -> Color(0xFF4DA3FF) }
@@ -373,6 +408,19 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onClick = { selectedTab = 5 },
                                 icon = { Text("◇") },
                                 label = { Text("Гипотезы") },
+                            )
+                            NavigationBarItem(
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFF62CFFF),
+                                    selectedTextColor = Color(0xFFBDEBFF),
+                                    indicatorColor = Color(0xFF12344D),
+                                    unselectedIconColor = Color(0xFF7595AE),
+                                    unselectedTextColor = Color(0xFF7595AE),
+                                ),
+                                selected = selectedTab == 6,
+                                onClick = { selectedTab = 6 },
+                                icon = { Text("🧠") },
+                                label = { Text("Обучение") },
                             )
                         }
                     }
@@ -502,6 +550,37 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onInspect = viewModel::inspectHypothesisSource,
                             onBuildPacket = viewModel::buildCombinedHypothesisReviewPacket,
                             onSubmit = viewModel::submitManualHypothesisReviewFromUi,
+                        )
+                        6 -> AnsSequenceTrainingPanel(
+                            state = ui.sequenceTraining,
+                            trainingExamples = sequenceTrainingExamples,
+                            onTrainingExamplesChange = { sequenceTrainingExamples = it.take(32_000) },
+                            evaluationCases = sequenceEvaluationCases,
+                            onEvaluationCasesChange = { sequenceEvaluationCases = it.take(16_000) },
+                            correctionPrompt = sequenceCorrectionPrompt,
+                            onCorrectionPromptChange = { sequenceCorrectionPrompt = it.take(4_000) },
+                            correctionText = sequenceCorrectionText,
+                            onCorrectionTextChange = { sequenceCorrectionText = it.take(4_000) },
+                            epochsText = sequenceEpochsText,
+                            onEpochsChange = { sequenceEpochsText = it.filter(Char::isDigit).take(4) },
+                            onImport = { sequenceExamplesLauncher.launch(arrayOf("text/plain", "text/*", "application/json")) },
+                            onTrain = {
+                                val examples = sequenceTrainingExamples.lineSequence()
+                                    .map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toList()
+                                viewModel.trainAnsSequenceModelAsync(examples, sequenceEpochsText.toIntOrNull() ?: 0)
+                            },
+                            onCorrect = {
+                                viewModel.applyAnsSequenceCorrectionAsync(sequenceCorrectionPrompt, sequenceCorrectionText)
+                            },
+                            onEvaluate = {
+                                val cases = sequenceEvaluationCases.lineSequence().mapNotNull { line ->
+                                    val split = line.split("=>", limit = 2)
+                                    if (split.size == 2 && split[0].isNotBlank() && split[1].isNotBlank()) {
+                                        split[0].trim() to split[1].trim()
+                                    } else null
+                                }.toList()
+                                viewModel.evaluateAnsSequenceModelAsync(cases)
+                            },
                         )
                         2 -> {
                         Row(
@@ -4426,6 +4505,142 @@ private fun ANS100BenchmarkPanel(viewModel: JarvisViewModel, modelInstalled: Boo
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun AnsSequenceTrainingPanel(
+    state: AnsSequenceTrainingUiState,
+    trainingExamples: String,
+    onTrainingExamplesChange: (String) -> Unit,
+    evaluationCases: String,
+    onEvaluationCasesChange: (String) -> Unit,
+    correctionPrompt: String,
+    onCorrectionPromptChange: (String) -> Unit,
+    correctionText: String,
+    onCorrectionTextChange: (String) -> Unit,
+    epochsText: String,
+    onEpochsChange: (String) -> Unit,
+    onImport: () -> Unit,
+    onTrain: () -> Unit,
+    onCorrect: () -> Unit,
+    onEvaluate: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeading("ANS · нейронное обучение", "локальная экспериментальная модель")
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Состояние модели", fontWeight = FontWeight.SemiBold)
+                Text(state.status, style = MaterialTheme.typography.bodyMedium)
+                state.message?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                SectionHeading("1 · Обучающие примеры", "одна последовательность на строку")
+                Text(
+                    "Добавляй только проверенные тексты. Строки используются как последовательности для next-token обучения. Не помещай сюда тестовые ответы.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = trainingExamples,
+                    onValueChange = onTrainingExamplesChange,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    label = { Text("Примеры обучения") },
+                    placeholder = { Text("Привет! Как дела?\nЯ могу помочь с задачей.") },
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !state.busy,
+                )
+                OutlinedButton(onClick = onImport, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Импортировать TXT")
+                }
+                OutlinedTextField(
+                    value = epochsText,
+                    onValueChange = onEpochsChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Количество эпох (1–500)") },
+                    singleLine = true,
+                    enabled = !state.busy,
+                )
+                Button(
+                    onClick = onTrain,
+                    enabled = !state.busy && trainingExamples.lineSequence().count { it.isNotBlank() && !it.trim().startsWith("#") } in 1..256 &&
+                        (epochsText.toIntOrNull() ?: 0) in 1..500,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Обучить / переобучить ANS") }
+                Text(
+                    "Полное обучение создаёт новую модель и заменяет предыдущие веса только после успешного сохранения. Для постепенного обучения используй исправления ниже.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                SectionHeading("2 · Исправить ответ", "обучение только на явной коррекции")
+                OutlinedTextField(
+                    value = correctionPrompt,
+                    onValueChange = onCorrectionPromptChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Исходный вопрос / контекст") },
+                    minLines = 2,
+                    enabled = !state.busy,
+                )
+                OutlinedTextField(
+                    value = correctionText,
+                    onValueChange = onCorrectionTextChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Правильное продолжение") },
+                    minLines = 2,
+                    enabled = !state.busy,
+                )
+                Button(
+                    onClick = onCorrect,
+                    enabled = !state.busy && correctionPrompt.isNotBlank() && correctionText.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Подтвердить исправление и обучить") }
+                Text(
+                    "Вопрос используется как контекст, но не считается целевым ответом. Непроверенные ответы самой модели не обучают её.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                SectionHeading("3 · Независимая проверка", "отдельный набор, не попадает в обучение")
+                Text(
+                    "Одна строка: вопрос => ожидаемый ответ. Вводи только примеры, которые не использовались при обучении.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = evaluationCases,
+                    onValueChange = onEvaluationCasesChange,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 110.dp),
+                    label = { Text("Проверочные пары") },
+                    placeholder = { Text("Сколько будет 2+2? => 4") },
+                    minLines = 3,
+                    maxLines = 7,
+                    enabled = !state.busy,
+                )
+                Button(
+                    onClick = onEvaluate,
+                    enabled = !state.busy && evaluationCases.lineSequence().any { it.contains("=>") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Проверить без дообучения") }
+                Text(
+                    "Отчёт показывает точное совпадение строк. Это строгая, ограниченная метрика: она не измеряет смысл, фактическую точность или общее понимание.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
