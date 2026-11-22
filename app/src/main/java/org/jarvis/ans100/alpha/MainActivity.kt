@@ -87,7 +87,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jarvis.ans100.alpha.data.ConversationRole
-import org.jarvis.ans100.alpha.data.LocalMemoryBackupInfo
 import org.jarvis.ans100.alpha.data.LocalSession
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.LocalTaskDraft
