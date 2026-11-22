@@ -112,4 +112,58 @@ class LocalWorkspaceMemoryStoreTest {
         }
         assertTrue(rejected)
     }
+
+    @Test
+    fun explicitCorrectionKeepsAuditHistoryButOnlyNewFactIsActive() {
+        val storage = MemoryStorage()
+        val cache = LocalWorkspaceMemoryCache(storage)
+        val old = cache.add("Любимый цвет — синий", "preference").single()
+
+        val history = cache.correct(old.id, "Любимый цвет — зелёный")
+        val archived = history.first { it.id == old.id }
+        val current = history.single { it.supersededById == null }
+
+        assertEquals(current.id, archived.supersededById)
+        assertEquals("Любимый цвет — синий", archived.content)
+        assertEquals("Любимый цвет — зелёный", current.content)
+        assertEquals(listOf(current), cache.activeRecords())
+    }
+
+    @Test
+    fun correctionLineageSurvivesStorageRecreationAndV1SnapshotsRemainReadable() {
+        val storage = MemoryStorage()
+        val cache = LocalWorkspaceMemoryCache(storage)
+        val old = cache.add("Тема — светлая", "preference").single()
+        cache.correct(old.id, "Тема — тёмная")
+
+        val restored = LocalWorkspaceMemoryCache(storage)
+        assertEquals(2, restored.snapshot().records.size)
+        assertEquals("Тема — тёмная", restored.activeRecords().single().content)
+
+        val legacy = listOf(
+            "JARVIS_ANDROID_APPROVED_MEMORY\\t1",
+            listOf("M", "bG9jYWwtbGVnYWN5", "cHJvamVjdA", "0JrQsNC6INC80L7QttC10L3QuNC1", "MjAyNi0xMS0yMg").joinToString("\\t"),
+        ).joinToString("\\n")
+        val migrated = LocalWorkspaceMemoryCodec.decode(legacy)
+        assertEquals(1, migrated.size)
+        assertEquals(null, migrated.single().supersededById)
+    }
+
+    @Test
+    fun failedCorrectionCommitLeavesOldMemoryActive() {
+        val storage = MemoryStorage()
+        val cache = LocalWorkspaceMemoryCache(storage)
+        val old = cache.add("Любимый цвет — синий", "preference").single()
+        storage.allowWrite = false
+
+        var rejected = false
+        try {
+            cache.correct(old.id, "Любимый цвет — зелёный")
+        } catch (_: LocalConversationException) {
+            rejected = true
+        }
+
+        assertTrue(rejected)
+        assertEquals(listOf(old), cache.activeRecords())
+    }
 }
