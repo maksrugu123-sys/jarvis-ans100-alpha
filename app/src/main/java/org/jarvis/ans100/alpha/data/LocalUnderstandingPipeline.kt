@@ -28,6 +28,7 @@ data class LocalContextReference(
     val sourceAssistantMessage: String = "",
     val matchedTerms: List<String> = emptyList(),
     val confidence: Double = 0.0,
+    val alternativeUserMessage: String = "",
 )
 
 
@@ -287,21 +288,25 @@ class LocalUnderstandingPipeline {
         val score = ranked.first().first
         val best = ranked.first().second
         val matches = ranked.first().third
-        val tied = ranked.size > 1 && ranked[1].first == score
-        if (score > 0 && !tied) {
-            val userCount = queryTerms.intersect(contextTerms(best.userMessage)).size
-            val assistantCount = queryTerms.intersect(contextTerms(best.assistantMessage)).size
+        val runnerUpScore = ranked.getOrNull(1)?.first ?: 0
+        val margin = score - runnerUpScore
+        val tied = ranked.size > 1 && margin == 0
+        val userCount = queryTerms.intersect(contextTerms(best.userMessage)).size
+        val assistantCount = queryTerms.intersect(contextTerms(best.assistantMessage)).size
+        val confidence = (0.48 + 0.13 * userCount + 0.05 * assistantCount + 0.06 * margin).coerceAtMost(0.94)
+        val sufficientlyDistinct = score > 0 && !tied && margin >= 2 && confidence >= MIN_CONTEXT_REFERENCE_CONFIDENCE
+        if (sufficientlyDistinct) {
             return LocalContextReference(
                 status = "selected", method = "lexical_turn_match",
                 sourceUserMessage = best.userMessage, sourceAssistantMessage = best.assistantMessage,
-                matchedTerms = matches.take(6),
-                confidence = (0.56 + 0.12 * userCount + 0.05 * assistantCount).coerceAtMost(0.92),
+                matchedTerms = matches.take(6), confidence = confidence,
             )
         }
         return LocalContextReference(
             status = "ambiguous", method = if (score == 0) "no_distinctive_turn_match" else "tied_turn_matches",
             sourceUserMessage = best.userMessage, sourceAssistantMessage = best.assistantMessage,
-            matchedTerms = matches.take(6), confidence = 0.42,
+            matchedTerms = matches.take(6), confidence = confidence.coerceAtMost(0.55),
+            alternativeUserMessage = ranked.getOrNull(1)?.second?.userMessage.orEmpty(),
         )
     }
 
@@ -340,7 +345,12 @@ class LocalUnderstandingPipeline {
             else -> false
         }
         val clarificationQuestion = if (unresolvedContext) {
-            if (contextReference.status == "ambiguous") "В истории есть несколько возможных тем. Уточните, к какой именно вернуться."
+            if (contextReference.status == "ambiguous") {
+                val first = contextReference.sourceUserMessage.take(100)
+                val second = contextReference.alternativeUserMessage.take(100)
+                if (first.isNotBlank() && second.isNotBlank()) "Вы имеете в виду «$first» или «$second»? Уточните, пожалуйста."
+                else "В истории есть несколько возможных тем. Уточните, к какой именно вернуться."
+            }
             else "К какому предыдущему сообщению относится ссылка? Напомните контекст."
         } else when (intent) {
             "question" -> "Какой именно объект или ситуацию вы имеете в виду?"
@@ -418,6 +428,7 @@ class LocalUnderstandingPipeline {
         }
 
     companion object {
+        private const val MIN_CONTEXT_REFERENCE_CONFIDENCE = 0.66
         private const val MAX_INPUT_CHARS = 750
         private const val MAX_TOKENS = 128
         private const val MAX_KEY_TERMS = 10
