@@ -114,7 +114,7 @@ data class LocalSemanticDialogueMemory(
                 val normalized = raw.lowercase(Locale.ROOT).replace('ё', 'е')
 
                 if (PREFERENCE_MARKERS.any { marker ->
-                        Regex("(?iu)(?<![\\\\p{L}\\\\p{N}_])" + Regex.escape(marker) + "(?![\\\\p{L}\\\\p{N}_])")
+                        Regex("(?iu)(?<![\\p{L}\\p{N}_])" + Regex.escape(marker) + "(?![\\p{L}\\p{N}_])")
                             .containsMatchIn(normalized)
                     }) {
                     val value = raw.take(MAX_ITEM_CHARS)
