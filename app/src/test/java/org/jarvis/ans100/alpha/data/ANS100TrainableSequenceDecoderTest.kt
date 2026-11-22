@@ -24,6 +24,22 @@ class ANS100TrainableSequenceDecoderTest {
     }
 
     @Test
+    fun promptAnswerTrainingSupervisesOnlyTheAnswerContinuation() {
+        val pairs = List(8) { "кот" to "ест рыбу." }
+        val decoder = ANS100TrainableSequenceDecoder(hiddenSize = 16, seed = 7)
+
+        val initial = decoder.trainPairs(pairs, epochs = 1, learningRate = 0.05)
+        val trained = decoder.trainPairs(pairs, epochs = 80, learningRate = 0.05)
+        val generated = decoder.generate("кот", maxNewTokens = 5)
+
+        assertTrue(trained.epochsCompleted == 80)
+        assertTrue(trained.trainingTokenCount == 24)
+        assertTrue(trained.finalMeanLoss < initial.finalMeanLoss)
+        assertTrue(generated.text.startsWith("ест"))
+        assertTrue(generated.text.contains("рыбу"))
+    }
+
+    @Test
     fun decoderCannotGenerateBeforeTraining() {
         val decoder = ANS100TrainableSequenceDecoder()
         assertFalse(decoder.isTrained)
