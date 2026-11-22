@@ -105,6 +105,36 @@ class ANS100HypothesisMultiSourceReviewPacketBuilderTest {
     }
 
     @Test
+    fun manualDecisionCanCitePassageFromSecondInspectedPage() {
+        val pages = listOf(
+            inspected(
+                "https://one.example/a", "one.example", "search-lead:a", "a".repeat(64),
+                "Heat causes expansion.",
+            ),
+            inspected(
+                "https://two.example/b", "two.example", "search-lead:b", "b".repeat(64),
+                "Heat does not cause expansion.",
+            ),
+        )
+        val packet = builder.build(request(), pages)
+        val secondPagePassage = pages[1].extraction.candidates.single().passageRef
+        val factory = ANS100HypothesisManualReviewDecision()
+        val decision = factory.record(
+            packet = packet,
+            decisionId = "multi-source-decision-1",
+            outcome = ANS100HypothesisManualReviewDecision.Outcome.CONFIRM_CONTRADICTION,
+            selectedPassageRefs = listOf(secondPagePassage),
+            rationale = "The selected passage is from the separately inspected second page.",
+            reviewedAtEpochMs = 2_000L,
+        )
+        val evidence = factory.toRelationEvidence(packet, decision)
+
+        assertEquals(secondPagePassage, decision.selectedPassageRefs.single())
+        assertEquals(false, evidence?.supports)
+        assertEquals(ANS100ConceptMemory.LearningSource.EXPLICIT_USER, evidence?.source)
+    }
+
+    @Test
     fun rejectsRepeatedSearchLeadAsMultipleSources() {
         val page = inspected(
             "https://one.example/a", "one.example", "search-lead:a", "a".repeat(64),
