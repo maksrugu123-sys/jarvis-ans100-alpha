@@ -1393,6 +1393,7 @@ private fun HypothesisReviewPanel(
     }
     var rationale by rememberSaveable(packetSelectionKey) { mutableStateOf("") }
     val outcomes = org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewDecision.Outcome.values()
+    var expandedReviewId by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
@@ -1696,6 +1697,71 @@ private fun HypothesisReviewPanel(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        expandedReviewId = if (expandedReviewId == entry.decision.decisionId) null
+                                        else entry.decision.decisionId
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(if (expandedReviewId == entry.decision.decisionId) "Скрыть материалы" else "Материалы проверки")
+                                }
+                                if (state.requests.any { it.hypothesisId == entry.decision.hypothesisId }) {
+                                    Button(
+                                        onClick = { onSearch(entry.decision.hypothesisId) },
+                                        enabled = !state.isBusy,
+                                        modifier = Modifier.weight(1f),
+                                    ) { Text("Проверить снова") }
+                                }
+                            }
+                            if (expandedReviewId == entry.decision.decisionId) {
+                                val snapshot = entry.snapshot
+                                if (snapshot == null) {
+                                    Text(
+                                        "Для этой старой записи подробный снимок источников не сохранялся.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    Text(
+                                        "Снимок на момент решения: ${snapshot.pageTitle.ifBlank { snapshot.pageUrl }}",
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        "URL: ${snapshot.pageUrl} · SHA-256: ${snapshot.pageContentSha256.take(16)}…",
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                    Text(
+                                        "Источников: ${snapshot.sources.size} · фрагментов: ${snapshot.passages.size} · время: ${snapshot.fetchedAtEpochMs}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                    snapshot.sources.forEach { source ->
+                                        Text(
+                                            "Источник: ${source.host} · ${source.assessment} · ${source.canonicalUrl}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    snapshot.passages.forEach { passage ->
+                                        Text(
+                                            "• ${passage.polarity} / ${passage.polarityReason}: ${passage.excerpt}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    if (snapshot.warnings.isNotEmpty()) {
+                                        Text(
+                                            "Предупреждения: ${snapshot.warnings.joinToString()}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Text(
+                                        "Это сохранённый снимок прежней проверки, а не повторная загрузка страницы и не подтверждение достоверности источников.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                         if (entry != state.recentDecisions.last()) {
                             androidx.compose.material3.HorizontalDivider()
