@@ -16,6 +16,24 @@ Provide useful approved-memory recall on the Android phone without requiring Ter
 - Imported shared-workspace records are merged only when user_approved=true. Existing local records are preserved when an imported batch arrives, and the panel state is refreshed after the import/restore commit.
 - Removing the optional Termux bearer token does not delete device-local notes.
 
+## Phone folder storage and chat commands
+
+The Android app stores approved local memories in the app-specific external folder:
+
+`Android/data/<applicationId>/files/JARVIS/Memory/approved-memory.jmem`
+
+The folder and initial V2 memory file are created automatically when the memory cache is first initialized (including the first app launch that constructs the ViewModel). On later launches the storage adapter reads the existing file before the memory cache is exposed to the conversation generator. If the app-specific external directory is unavailable, Android's internal app files directory is used as a fallback.
+
+The first read migrates the previous `SharedPreferences` snapshot into the new file if no file exists yet. Writes use Android `AtomicFile`, so an interrupted write should not replace the last valid snapshot.
+
+Chat commands:
+- `/memory location` — show the actual storage directory.
+- `/memory export` — write a timestamped `.jmem` export to the public `Downloads/JARVIS` folder on Android 10+, without requesting broad storage permission. Older Android versions use the app-specific `JARVIS/Memory/exports` folder.
+- `/memory reset` — ask for confirmation.
+- `/memory reset confirm` — clear all approved memory records, including superseded correction history, while retaining the folder and an empty V2 file.
+
+Russian aliases are also accepted: `/память папка`, `/память выгрузить`, `/память сбросить`, and `/память сбросить подтверждаю`. Export includes the approved-memory snapshot only; it does not include chats, model weights, access tokens, or other app data.
+
 ## Explicit correction history
 
 - A direct correction through `LocalWorkspaceMemoryCache.correct(id, correctedContent)` creates a new approved record and links the old record to it with `supersededById`; it never silently overwrites the old text.
