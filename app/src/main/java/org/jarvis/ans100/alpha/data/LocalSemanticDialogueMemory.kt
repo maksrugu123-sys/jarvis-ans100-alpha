@@ -99,10 +99,13 @@ data class LocalSemanticDialogueMemory(
             "the", "please", "prefer", "answer", "use", "don't", "not",
         )
 
-        fun fromHistory(history: List<LocalConversationMessage>): LocalSemanticDialogueMemory {
+        fun fromHistory(
+            history: List<LocalConversationMessage>,
+            baseMemory: LocalSemanticDialogueMemory = LocalSemanticDialogueMemory(),
+        ): LocalSemanticDialogueMemory {
             val messages = history.takeLast(MAX_HISTORY_MESSAGES)
-            val tasks = mutableListOf<LocalSemanticTask>()
-            val preferences = mutableListOf<LocalExplicitPreference>()
+            val tasks = (baseMemory.activeTasks + baseMemory.completedTasks).toMutableList()
+            val preferences = baseMemory.explicitPreferences.toMutableList()
             val questions = mutableListOf<String>()
 
             messages.forEachIndexed { index, message ->
