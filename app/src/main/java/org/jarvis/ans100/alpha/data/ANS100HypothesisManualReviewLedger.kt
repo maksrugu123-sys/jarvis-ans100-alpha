@@ -22,6 +22,7 @@ class ANS100HypothesisManualReviewLedger(
     data class PassageSnapshot(
         val passageRef: String, val excerpt: String, val sentenceSha256: String,
         val polarity: String, val polarityReason: String, val sourceAssessment: String,
+        val sourceUrl: String, val pageContentSha256: String,
     )
     data class ReviewSnapshot(
         val hypothesisId: String, val pageTitle: String, val pageUrl: String,
@@ -253,7 +254,8 @@ class ANS100HypothesisManualReviewLedger(
                 put(JSONObject().put("ref", passage.passageRef)
                     .put("excerpt", passage.excerpt.take(ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT))
                     .put("digest", passage.sentenceSha256).put("polarity", passage.polarity.name)
-                    .put("reason", passage.polarityReason.name).put("source_assessment", passage.sourceAssessment.name))
+                    .put("reason", passage.polarityReason.name).put("source_assessment", passage.sourceAssessment.name)
+                    .put("source_url", passage.sourceUrl).put("page_digest", passage.pageContentSha256))
             }
         }
         val warnings = JSONArray().apply { packet.warnings.map { it.name }.sorted().forEach { put(it) } }
@@ -279,7 +281,8 @@ class ANS100HypothesisManualReviewLedger(
         val passages = (0 until passageArray.length()).map { i ->
             val item = passageArray.getJSONObject(i)
             PassageSnapshot(item.getString("ref"), item.getString("excerpt"), item.getString("digest"),
-                item.getString("polarity"), item.getString("reason"), item.getString("source_assessment"))
+                item.getString("polarity"), item.getString("reason"), item.getString("source_assessment"),
+                item.getString("source_url"), item.getString("page_digest"))
         }
         val warnings = (0 until warningArray.length()).map { warningArray.getString(it) }
         val pageDigest = root.getString("page_digest")
@@ -293,7 +296,8 @@ class ANS100HypothesisManualReviewLedger(
         require(passages.all {
             it.passageRef.isNotBlank() && it.passageRef.length <= ANS100ConceptMemory.MAX_EVIDENCE_REF_CHARS &&
                 it.excerpt.length <= ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT &&
-                it.sentenceSha256.matches(SHA256) &&
+                it.sentenceSha256.matches(SHA256) && it.sourceUrl.startsWith("https://") &&
+                it.sourceUrl.length <= 2048 && it.pageContentSha256.matches(SHA256) &&
                 ANS100HypothesisClaimPolarityAnalyzer.PolarityCandidate.values().any { value -> value.name == it.polarity } &&
                 ANS100HypothesisClaimPolarityAnalyzer.Reason.values().any { value -> value.name == it.polarityReason } &&
                 ANS100HypothesisSourceAudit.Assessment.values().any { value -> value.name == it.sourceAssessment }
