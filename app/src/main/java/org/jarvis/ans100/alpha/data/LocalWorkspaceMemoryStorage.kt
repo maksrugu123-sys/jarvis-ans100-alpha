@@ -149,9 +149,8 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
                 .sortedByDescending { it.lastModified() }
                 .map { file ->
                     val validation = runCatching {
-                        val raw = file.readText(Charsets.UTF_8)
-                        require(raw.length <= 3 * 1024 * 1024) { "Файл превышает 3 МиБ." }
-                        LocalWorkspaceMemoryCodec.decode(raw)
+                        require(file.length() <= 3L * 1024 * 1024) { "Файл превышает 3 МиБ." }
+                        LocalWorkspaceMemoryCodec.decode(file.readText(Charsets.UTF_8))
                     }
                     val records = validation.getOrNull()
                     LocalMemoryBackupInfo(
@@ -193,8 +192,22 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
                     cursor.getLong(idColumn),
                 )
                 val validation = runCatching {
-                    val raw = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                        ?: throw LocalConversationException("Не удалось прочитать файл.")
+                    require(cursor.getLong(sizeColumn) in 1L..(3L * 1024 * 1024)) {
+                        "Файл пуст или превышает 3 МиБ."
+                    }
+                    val raw = resolver.openInputStream(uri)?.use { input ->
+                        val output = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(8 * 1024)
+                        var total = 0
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            require(total <= 3 * 1024 * 1024) { "Файл превышает 3 МиБ." }
+                            output.write(buffer, 0, count)
+                        }
+                        String(output.toByteArray(), Charsets.UTF_8)
+                    } ?: throw LocalConversationException("Не удалось прочитать файл.")
                     LocalWorkspaceMemoryCodec.decode(raw)
                 }
                 val records = validation.getOrNull()
