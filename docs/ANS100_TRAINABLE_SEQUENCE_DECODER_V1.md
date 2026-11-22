@@ -143,3 +143,36 @@ reliably.
 
 No external or pretrained language model is called by this path. No tests,
 Gradle builds, APK builds or CI workflows were run for this change.
+
+## Context-conditioned training corpus V1
+
+Two additional UTF-8 toy files exercise the exact context markers emitted by
+`ANS100NeuralResponseGenerator`:
+
+- `datasets/sequence_decoder_v1/context_train_ru_toy.txt`: 24 synthetic
+  prompt/answer rows covering approved memory and recent dialogue. Several
+  questions are deliberately repeated with different facts or preferences so
+  the target answer must change with context.
+- `datasets/sequence_decoder_v1/context_heldout_ru_toy.txt`: 8 separate
+  context/question rows for a first held-out smoke evaluation. They use
+  different facts and question formulations; keep them out of training and
+  correction feedback.
+
+Each left-hand side contains the context prefix followed by the current
+question, matching the runtime's order: dialogue context, approved memory,
+ANS analysis, then the current user prompt. Import the training file in the
+**Обучение** tab as ordinary `prompt => answer` pairs. After training, paste
+the held-out file only into the held-out evaluation field. Training replaces
+the active candidate model after its snapshot is saved, so export/back up any
+model snapshot that must be retained before experimenting.
+
+The rows are intentionally short to fit the decoder's 64-subword-token
+per-pair bound. They are synthetic and repetitive, and their expected answers
+are simple recall statements. They test whether the pipeline can condition on
+small context differences; they do not demonstrate robust long-context
+reasoning, reliable memory retrieval, conflict resolution, general Russian
+conversation or factual understanding. The held-out set is only eight examples
+and must not be used for repeated tuning followed by a benchmark claim.
+
+No model was trained from these files in the repository, and no test, Gradle
+build, APK build or CI workflow was run while adding them.
