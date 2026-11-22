@@ -12,7 +12,7 @@ The decoder is wired into the Android conversation response generator, but it on
 - Vocabulary: reserved BOS, EOS and UNK tokens plus a frequency-ranked training vocabulary.
 - Network: one recurrent hidden layer with tanh activation.
 - Objective: next-token categorical cross-entropy.
-- Training: sequence back-propagation through time with clipped gradients.
+- Training: prompt-conditioned sequence back-propagation through time with clipped gradients; in question/answer mode, the prompt is context and only the answer plus EOS is supervised.
 - Decoding: bounded greedy autoregressive generation.
 - Limits: at most 256 training examples, 64 tokens per example, 512 vocabulary entries, 64 hidden units and 48 generated tokens.
 
@@ -61,7 +61,7 @@ The Android GitHub Actions workflow currently has only workflow_dispatch. Pushes
 The Android app exposes a dedicated **Обучение** tab for the experimental sequence decoder:
 
 - model status shows whether weights are trained/restored, vocabulary size, hidden width, and storage errors;
-- training data can be entered manually or imported from a UTF-8 TXT file (one complete sequence per non-empty line, lines beginning with `#` ignored; import is capped at 512 KiB);
+- training data can be entered manually or imported from a UTF-8 TXT file (`prompt => answer` per non-empty line, lines beginning with `#` ignored; import is capped at 512 KiB);
 - full training is explicit and replaces the previous model only after candidate weights are saved successfully;
 - a separate correction form uses the prompt as recurrent context and supervises only the corrected continuation;
 - an independent held-out form accepts `prompt => expected answer` lines and runs generation without applying any learning update.
@@ -74,7 +74,7 @@ The screen does not bundle a corpus or silently learn from conversation history.
 
 A deliberately tiny, hand-authored Russian smoke corpus is stored under `datasets/sequence_decoder_v1/`:
 
-- `train_ru_toy.txt`: 81 short synthetic prompt/response sequences. Import this file in the **Обучение** tab as training data.
+- `train_ru_toy.txt`: 81 short synthetic `prompt => answer` pairs. Import this file in the **Обучение** tab as training data.
 - `heldout_ru_toy.txt`: 8 distinct prompts in the app's `prompt => expected answer` format. Load these only in the held-out evaluation field; do not train or fine-tune on them.
 
 The held-out prompts are not copied verbatim from training. The two files nevertheless share a narrow, repetitive request/response style and much of the vocabulary. Therefore, this is only a pipeline smoke check for import, training, generation and evaluation wiring. It is not an independent measure of Russian language ability, semantic understanding, factual accuracy or generalization to ordinary conversation. A small Elman RNN may fail most or all exact matches; do not tune repeatedly against the held-out file and then report that score as an unbiased test.
@@ -98,3 +98,11 @@ The held-out evaluator also reports:
 - **Repetition rate**: fraction of generated tokens beyond the first occurrence of each distinct token within that answer. This is a coarse repetition diagnostic, not a fluency score.
 
 These metrics complement exact match but do not replace human review. An answer can have a high token overlap while being grammatically wrong, misleading, or semantically reversed.
+
+## Prompt-conditioned training update
+
+The decoder now exposes `trainPairs` and the Android training tab uses this path. Each row must be `prompt => answer`. The vocabulary is built from both sides, the recurrent state is advanced through BOS and the prompt, and the loss is applied only to answer tokens and EOS. Prompt tokens are therefore context rather than labels that the model is asked to reproduce. The same raw prompt can be passed to generation, avoiding the earlier mismatch between training on tagged full lines and inference on a user's untagged question.
+
+The legacy full-sequence `train` method remains for next-token sequence experiments and compatibility, but the Android question-answer training screen no longer uses it. The correction-learning path continues to supervise only the corrected continuation.
+
+Unit tests were added for answer-only target counting, loss reduction on a tiny repeated pair set, generation from the same prompt, and persistence/restoration of pair-trained weights. These tests have been authored but have **not** been run; no Android build or CI was started.
