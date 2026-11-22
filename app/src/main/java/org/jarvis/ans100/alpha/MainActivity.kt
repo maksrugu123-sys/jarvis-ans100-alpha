@@ -135,6 +135,16 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var sequenceCorrectionPrompt by rememberSaveable { mutableStateOf("") }
     var sequenceCorrectionText by rememberSaveable { mutableStateOf("") }
     var sequenceEpochsText by rememberSaveable { mutableStateOf("30") }
+    var transferPassphrase by remember { mutableStateOf("") }
+    var pendingImportPassphrase by remember { mutableStateOf<CharArray?>(null) }
+    var pendingExportBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingBackupExportBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingBackupExportRevision by remember { mutableStateOf<Long?>(null) }
+    var pendingRestorePassphrase by remember { mutableStateOf<CharArray?>(null) }
+    var selectedTab by rememberSaveable { mutableStateOf(4) }
+    var settingsCategory by rememberSaveable { mutableStateOf("appearance") }
+    val context = LocalContext.current
+    val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
     var autoSpeakEnabled by rememberSaveable {
         mutableStateOf(uiPreferences.getBoolean("auto_speak", false))
     }
@@ -154,16 +164,6 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
             }
         }
     }
-    var transferPassphrase by remember { mutableStateOf("") }
-    var pendingImportPassphrase by remember { mutableStateOf<CharArray?>(null) }
-    var pendingExportBytes by remember { mutableStateOf<ByteArray?>(null) }
-    var pendingBackupExportBytes by remember { mutableStateOf<ByteArray?>(null) }
-    var pendingBackupExportRevision by remember { mutableStateOf<Long?>(null) }
-    var pendingRestorePassphrase by remember { mutableStateOf<CharArray?>(null) }
-    var selectedTab by rememberSaveable { mutableStateOf(4) }
-    var settingsCategory by rememberSaveable { mutableStateOf("appearance") }
-    val context = LocalContext.current
-    val uiPreferences = remember(context) { context.getSharedPreferences("jarvis_ui_preferences_v1", android.content.Context.MODE_PRIVATE) }
     val neuronComputePreferences = remember(context) {
         org.jarvis.ans100.alpha.data.AndroidNeuronComputeModePreferences(context)
     }
