@@ -353,7 +353,7 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
         private const val THRESHOLD_GUARD = 0.0002
         private const val STATE_TOLERANCE = 0.00005
 
-        private const val COMPUTE_SHADER = """
+        private val COMPUTE_SHADER = """
             #version 310 es
             layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
             layout(std430, binding = 0) readonly buffer InputBuffer { vec4 inputData[]; };
@@ -379,6 +379,6 @@ class Gles31AndroidNeuronComputeBackend(context: Context) :
                     outputData[i] = vec4(nextP, clamp(decayedA, 0.0, 1.0), 0.0, nextP - threshold);
                 }
             }
-        """
+        """.trimIndent()
     }
 }
