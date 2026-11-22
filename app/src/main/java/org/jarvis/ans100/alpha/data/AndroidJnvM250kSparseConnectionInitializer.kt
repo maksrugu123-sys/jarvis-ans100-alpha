@@ -125,12 +125,18 @@ object AndroidJnvM250kSparseConnectionInitializer {
         fanoutPerRoute: Int = DEFAULT_FANOUT_PER_ROUTE,
         delayNs: Long = DEFAULT_DELAY_NS,
         weight: Double = DEFAULT_WEIGHT,
-    ): Sequence<List<AndroidNeuronConnection>> = sequence {
-        var checkpoint = initialCheckpoint(seed, fanoutPerRoute, delayNs, weight)
-        while (!checkpoint.completed) {
-            val batch = nextBatch(checkpoint, batchSize)
-            if (batch.connections.isNotEmpty()) yield(batch.connections)
-            checkpoint = batch.checkpoint
+    ): Sequence<List<AndroidNeuronConnection>> {
+        // Validate eagerly: Sequence builders defer their body until iteration,
+        // but invalid topology configurations must fail at API invocation.
+        require(batchSize in 1..AndroidJnvM250kProfile.MAX_PAGE_SIZE)
+        validateConfiguration(fanoutPerRoute, delayNs, weight)
+        return sequence {
+            var checkpoint = initialCheckpoint(seed, fanoutPerRoute, delayNs, weight)
+            while (!checkpoint.completed) {
+                val batch = nextBatch(checkpoint, batchSize)
+                if (batch.connections.isNotEmpty()) yield(batch.connections)
+                checkpoint = batch.checkpoint
+            }
         }
     }
 
