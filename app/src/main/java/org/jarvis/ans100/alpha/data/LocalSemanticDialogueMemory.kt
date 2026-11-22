@@ -122,6 +122,8 @@ data class LocalSemanticDialogueMemory(
             "коротк" to "подроб", "кратк" to "подроб", "коротк" to "длинн",
             "русск" to "английск", "формальн" to "неформальн",
             "без эмодзи" to "с эмодзи", "без смайлик" to "с эмодзи",
+            "short" to "detailed", "brief" to "detailed", "short" to "long",
+            "russian" to "english", "formal" to "casual",
         )
         private val STOP = setOf(
             "сделай", "создай", "добавь", "исправь", "проверь", "найди", "реализуй",
@@ -158,6 +160,16 @@ data class LocalSemanticDialogueMemory(
                     if (explicitCorrection && conflicting.isNotEmpty()) {
                         conflicting.forEach { old ->
                             preferences.removeAll { it.sourceMessageId == old.sourceMessageId }
+                            for (conflictIndex in conflicts.indices) {
+                                val prior = conflicts[conflictIndex]
+                                if (prior.previousMessageId == old.sourceMessageId ||
+                                    prior.currentMessageId == old.sourceMessageId
+                                ) {
+                                    conflicts[conflictIndex] = prior.copy(
+                                        resolution = "resolved_by_explicit_correction",
+                                    )
+                                }
+                            }
                             conflicts.add(LocalPreferenceConflict(
                                 old.text, old.sourceMessageId, value, message.id, "resolved_by_explicit_correction",
                             ))
