@@ -506,6 +506,9 @@ class JarvisCore(
         )
     }
 
+    fun semanticMemory(): LocalSemanticDialogueMemory =
+        semanticMemoryStorage?.read() ?: LocalSemanticDialogueMemory()
+
     fun history(): List<LocalConversationMessage> = repository.load()
 
     fun send(
@@ -684,12 +687,14 @@ class LocalConversationCoordinator(
     responseEngine: LocalResponseEngine,
     private val memoryCache: LocalWorkspaceMemoryCache = LocalWorkspaceMemoryCache(),
     private val sequenceLanguageModule: ANS100TrainableLanguageModule? = null,
+    semanticMemoryStorage: LocalSemanticDialogueMemoryStorage? = null,
 ) {
-    private val core = JarvisCore(repository, responseEngine, memoryCache)
+    private val core = JarvisCore(repository, responseEngine, memoryCache, semanticMemoryStorage)
 
     val backendLabel: String get() = core.backendLabel
     fun status(): JarvisCoreStatus = core.status()
     fun history(): List<LocalConversationMessage> = core.history()
+    fun semanticMemory(): LocalSemanticDialogueMemory = core.semanticMemory()
     fun send(
         prompt: String,
         signalContext: ConversationSignalContext? = null,
