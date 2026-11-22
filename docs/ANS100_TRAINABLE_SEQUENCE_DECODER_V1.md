@@ -8,8 +8,8 @@ The decoder is wired into the Android conversation response generator, but it on
 
 ## Model
 
-- Tokenizer: bounded Unicode word and punctuation tokenizer.
-- Vocabulary: reserved BOS, EOS and UNK tokens plus a frequency-ranked training vocabulary.
+- Tokenizer: deterministic Unicode subword tokenizer for question/answer training, with a character fallback and explicit word-start markers. The legacy full-sequence training path remains word-level.
+- Vocabulary: reserved BOS, EOS and UNK tokens, mandatory character pieces, and frequency-ranked 2–4 character word pieces, bounded by the configured vocabulary size.
 - Network: one recurrent hidden layer with tanh activation.
 - Objective: next-token categorical cross-entropy.
 - Training: prompt-conditioned sequence back-propagation through time with clipped gradients; in question/answer mode, the prompt is context and only the answer plus EOS is supervised.
@@ -20,7 +20,7 @@ There are no pretrained weights, cloud calls, Qwen calls, prompt templates or hi
 
 ## Persistence
 
-The model snapshot stores its format version, architecture size, vocabulary, input/recurrent/output matrices and biases. The snapshot is validated completely before it replaces the active model.
+The model snapshot stores its format version, architecture size, tokenizer mode, vocabulary, input/recurrent/output matrices and biases. Version-1 word-level snapshots remain readable; new snapshots use version 2. The snapshot is validated completely before it replaces the active model.
 
 Android stores snapshots in an app-private file through AtomicFile; it does not place large neural matrices in SharedPreferences. The language module trains a candidate model and publishes it as active only after the durable snapshot write succeeds. A malformed or unreadable snapshot is not silently overwritten.
 
@@ -40,7 +40,7 @@ Correction learning uses the prompt as recurrent context and supervises only the
 
 ## Chat integration
 
-ANS100NeuralResponseGenerator can call the trainable decoder after a model has been loaded or explicitly trained. Capability, greeting, farewell and correction paths remain deterministic. Learned text is accepted only when it contains at least two generated tokens and mean token confidence is at least 0.25. The confidence is a decoder score, not a calibrated probability of factual correctness.
+ANS100NeuralResponseGenerator can call the trainable decoder after a model has been loaded or explicitly trained. Capability, greeting, farewell and correction paths remain deterministic. Learned text is accepted only when the prompt is fully represented by known model pieces, it contains at least two generated tokens, and mean token confidence is at least 0.25. Subword composition reduces whole-word UNK failures but does not guarantee linguistic quality. The confidence is a decoder score, not a calibrated probability of factual correctness.
 
 The ViewModel exposes explicit training, correction-feedback, generation and status methods. No automatic training corpus is bundled: training examples must be supplied deliberately. Until a sufficiently broad and independently reviewed Russian corpus is available, output quality and generalization are not established.
 
@@ -106,3 +106,10 @@ The decoder now exposes `trainPairs` and the Android training tab uses this path
 The legacy full-sequence `train` method remains for next-token sequence experiments and compatibility, but the Android question-answer training screen no longer uses it. The correction-learning path continues to supervise only the corrected continuation.
 
 Unit tests were added for answer-only target counting, loss reduction on a tiny repeated pair set, generation from the same prompt, and persistence/restoration of pair-trained weights. These tests have been authored but have **not** been run; no Android build or CI was started.
+
+
+## Subword generation update
+
+Question/answer training now builds a deterministic word-piece vocabulary from the supplied corpus. Frequent pieces of up to four characters are available, and every observed character is retained as a fallback (with separate word-start pieces). This allows the decoder to compose a word it has not seen as a complete token when its characters were represented in training. It does not provide open-vocabulary understanding: unseen characters can still map to UNK, and the small recurrent network may still generate malformed text.
+
+The model snapshot format is now version 2 and records the tokenizer mode. The reader remains backward-compatible with version-1 word-level snapshots. The ANS response generator rejects learned continuations when any prompt piece is unknown, then falls back to the conservative Core response path. The model remains a small experimental Elman RNN, not a production-scale language model.
