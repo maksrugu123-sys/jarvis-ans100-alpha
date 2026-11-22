@@ -1651,6 +1651,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         if (memoryCommand in setOf("/memory import", "/память импорт")) {
+            pendingLocalMemoryImport = null
             mutableState.value = before.copy(
                 localMemory = before.localMemory.copy(
                     importPickerRequestId = before.localMemory.importPickerRequestId + 1L,
@@ -1683,6 +1684,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         if (memoryCommand in setOf("/memory reset confirm", "/память сбросить подтверждаю")) {
+            pendingLocalMemoryImport = null
             runLocalMemoryCommand(clean) {
                 workspaceMemoryCache.clear()
                 "Локальная память JARVIS сброшена. Папка и пустой файл памяти сохранены."
