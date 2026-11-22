@@ -116,7 +116,13 @@ class ANS100NeuralResponseGenerator(
         // been explicitly trained and its output passes conservative bounds.
         // Critical capability/correction paths remain deterministic and inspectable.
         if (intent !in setOf("capability_question", "correction", "greeting", "farewell")) {
-            val learned = sequenceLanguageModule?.generate(clean)
+            val modelContext = buildGenerationContext(
+                history = history,
+                memories = selectedMemories,
+                understanding = parsed,
+                neural = neural,
+            )
+            val learned = sequenceLanguageModule?.generateWithContext(clean, modelContext)
             if (learned != null &&
                 learned.unknownPromptTokenCount == 0 &&
                 learned.tokens.size >= MIN_LEARNED_GENERATION_TOKENS &&
@@ -163,6 +169,54 @@ class ANS100NeuralResponseGenerator(
         )
         return answer.take(LocalConversationRepository.MAX_MESSAGE_CHARS)
     }
+
+    /**
+     * Packs only bounded, already-available ANS evidence into the learned
+     * decoder's recurrent prompt. Current user text remains the final segment.
+     */
+    private fun buildGenerationContext(
+        history: List<LocalConversationMessage>,
+        memories: List<LocalWorkspaceMemory>,
+        understanding: LocalUnderstanding,
+        neural: DialogueNeuralAnalysis?,
+    ): String = buildString {
+        val recent = history.takeLast(MAX_CONTEXT_HISTORY_MESSAGES)
+        if (recent.isNotEmpty()) {
+            append("[dialogue context] ")
+            recent.forEach { message ->
+                append(if (message.role == ConversationRole.USER) "user: " else "ans: ")
+                append(message.text.take(MAX_CONTEXT_MESSAGE_CHARS))
+                append(" ")
+            }
+        }
+        if (memories.isNotEmpty()) {
+            append("[approved memory] ")
+            memories.take(MAX_MEMORIES_PER_REPLY).forEach { memory ->
+                append(memory.category.take(48)).append(": ")
+                append(memory.content.take(MAX_MEMORY_TEXT_CHARS)).append(" ")
+            }
+        }
+        val reasoning = understanding.reasoningPlan.steps.take(MAX_PLAN_STEPS)
+        if (understanding.intent != "statement_or_unknown" ||
+            understanding.keyTerms.isNotEmpty() || reasoning.isNotEmpty()
+        ) {
+            append("[ans analysis] intent=").append(understanding.intent)
+            if (understanding.keyTerms.isNotEmpty()) {
+                append("; terms=").append(understanding.keyTerms.take(5).joinToString(", "))
+            }
+            if (understanding.entities.isNotEmpty()) {
+                append("; entities=").append(understanding.entities.take(4).joinToString(", "))
+            }
+            if (reasoning.isNotEmpty()) {
+                append("; plan=").append(reasoning.joinToString(" -> "))
+            }
+            append(". ")
+        }
+        val neuralSummary = neural?.toModelContext()?.take(MAX_NEURAL_CONTEXT_CHARS)
+        if (!neuralSummary.isNullOrBlank()) {
+            append("[neural telemetry] ").append(neuralSummary).append(" ")
+        }
+    }.take(MAX_GENERATION_CONTEXT_CHARS)
 
     private fun evidenceReply(
         understanding: LocalUnderstanding,
@@ -266,6 +320,10 @@ class ANS100NeuralResponseGenerator(
         TOKEN.findAll(normalize(value)).map { it.value }.filterNot { it in STOP_WORDS }.toSet()
 
     companion object {
+        const val MAX_CONTEXT_HISTORY_MESSAGES = 4
+        const val MAX_CONTEXT_MESSAGE_CHARS = 280
+        const val MAX_NEURAL_CONTEXT_CHARS = 500
+        const val MAX_GENERATION_CONTEXT_CHARS = 3_500
         const val MAX_MEMORIES_PER_REPLY = 3
         const val MAX_MEMORY_TEXT_CHARS = 420
         const val MAX_HISTORY_EXCERPT_CHARS = 360
