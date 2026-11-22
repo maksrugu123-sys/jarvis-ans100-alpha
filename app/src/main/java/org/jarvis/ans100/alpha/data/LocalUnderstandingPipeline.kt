@@ -101,12 +101,13 @@ class LocalUnderstandingPipeline {
         val hasRecentUserContext = historyWindow.any { it.role == ConversationRole.USER && it.text.isNotBlank() }
         val affirmativeFollowThrough = tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
             tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }
+        val ellipticalFollowUp = hasRecentUserContext && isEllipticalFollowUp(tokens, text)
         val uniqueTerms = tokens.filter { it.length >= MIN_TERM_LENGTH && it !in STOP_WORDS }
             .distinct().take(MAX_KEY_TERMS)
         val evidence = mutableListOf<String>()
         val hasQuestion = '?' in text || QUESTION_WORDS.any { it in tokens }
         val refersBack = CONTEXT_REFERENCES.any { marker -> marker in tokens || tokens.any { it.startsWith(marker) && marker.length >= 4 } } ||
-            containsAnyPhrase(tokens, CONTEXT_PHRASES) || (affirmativeFollowThrough && hasRecentUserContext)
+            containsAnyPhrase(tokens, CONTEXT_PHRASES) || (affirmativeFollowThrough && hasRecentUserContext) || ellipticalFollowUp
         val negation = NEGATIONS.any { it in tokens }
         val greeting = tokens.firstOrNull()?.let { it in GREETINGS } == true
         val thanks = containsAnyPhrase(tokens, THANKS)
@@ -130,6 +131,7 @@ class LocalUnderstandingPipeline {
             comparison -> { intent = "comparison"; confidence = 0.76; taskKind = "compare_options"; evidence += "comparison_marker" }
             explanation -> { intent = "explanation"; confidence = 0.72; taskKind = "explain_concept"; evidence += "explanation_marker" }
             actionRequest -> { intent = "action_request"; confidence = 0.68; taskKind = "plan_or_explain_requested_action"; evidence += "action_marker" }
+            ellipticalFollowUp -> { intent = "continuation"; confidence = 0.72; taskKind = "continue_context"; evidence += "elliptical_follow_up" }
             hasQuestion -> { intent = "question"; confidence = 0.70; taskKind = "answer_question"; evidence += "question_marker" }
             refersBack -> { intent = "continuation"; confidence = 0.64; taskKind = "continue_context"; evidence += "context_reference" }
             else -> { intent = "statement_or_unknown"; confidence = 0.30; taskKind = "interpret_and_respond"; evidence += "unknown_intent_marker" }
@@ -178,8 +180,9 @@ class LocalUnderstandingPipeline {
             candidates += ContextCandidate(index, cleanExcerpt(message.text), cleanExcerpt(assistant))
         }
         if (candidates.isEmpty()) return LocalContextReference(status = "unavailable", method = "no_recent_user_turn")
-        val follow = tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
-            tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }
+        val follow = (tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
+            tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }) ||
+            isEllipticalFollowUp(tokens, "")
         val latest = candidates.last()
         if (follow) return LocalContextReference(
             status = "selected",
@@ -219,6 +222,14 @@ class LocalUnderstandingPipeline {
             sourceUserMessage = best.userMessage, sourceAssistantMessage = best.assistantMessage,
             matchedTerms = matches.take(6), confidence = 0.42,
         )
+    }
+
+    private fun isEllipticalFollowUp(tokens: List<String>, originalText: String): Boolean {
+        if (tokens.isEmpty() || tokens.size > 3) return false
+        val normalized = originalText.lowercase(Locale.ROOT).replace('ё', 'е').trim()
+        if (normalized in ELLIPTICAL_FOLLOW_UP_PHRASES) return true
+        return tokens.any { it in ELLIPTICAL_FOLLOW_UP_WORDS } &&
+            tokens.all { it in ELLIPTICAL_FOLLOW_UP_WORDS || it in setOf("а", "это", "же", "ли", "то") }
     }
 
     private fun contextTerms(value: String): Set<String> =
@@ -375,6 +386,14 @@ class LocalUnderstandingPipeline {
             "the", "and", "for", "with", "that", "this",
         )
         private val CONTEXT_PHRASES = listOf("как раньше", "в прошлый раз")
+        private val ELLIPTICAL_FOLLOW_UP_PHRASES = setOf(
+            "расскажи подробнее", "объясни подробнее", "можно подробнее", "а подробнее",
+            "что дальше", "а что дальше", "и что дальше",
+        )
+        private val ELLIPTICAL_FOLLOW_UP_WORDS = setOf(
+            "почему", "зачем", "как", "что", "кто", "где", "когда", "сколько",
+            "дальше", "подробнее", "why", "how", "what", "who", "where", "when",
+        )
         private val AFFIRMATIVE_FOLLOW_THROUGH = setOf("давай", "да", "ок", "окей", "ладно", "поехали", "согласен", "yes", "yeah", "ok", "okay", "sure", "go")
         private val REFERENCE_STOP = STOP_WORDS + ACTION_TERMS + CONTEXT_REFERENCES.toSet() + setOf(
             "этим", "этого", "этой", "этому", "предыдущий", "предыдущая", "предыдущую",
