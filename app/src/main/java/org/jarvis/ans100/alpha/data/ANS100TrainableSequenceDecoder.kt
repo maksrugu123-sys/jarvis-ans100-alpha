@@ -238,6 +238,9 @@ class ANS100TrainableSequenceDecoder(
         require(tokenized.isNotEmpty() && tokenized.all { tokens ->
             tokens.size <= MAX_TOKENS_PER_EXAMPLE && tokens.all { it.length <= MAX_TOKEN_CHARS }
         })
+        require(tokenized.flatten().any { it in tokenToId && it !in RESERVED_TOKENS }) {
+            "fine-tuning examples must contain at least one token from the trained vocabulary"
+        }
         val sequences = tokenized.map { tokens ->
             intArrayOf(BOS_ID) + tokens.map { tokenToId[it] ?: UNK_ID }.toIntArray() + intArrayOf(EOS_ID)
         }
