@@ -14,7 +14,7 @@ The decoder is wired into the Android conversation response generator, but it on
 - Objective: next-token categorical cross-entropy.
 - Training: prompt-conditioned sequence back-propagation through time with clipped gradients; in question/answer mode, the prompt is context and only the answer plus EOS is supervised.
 - Decoding: bounded greedy autoregressive generation.
-- Limits: at most 256 training examples, 64 tokens per example, 512 vocabulary entries, 64 hidden units and 48 generated tokens.
+- Limits: at most 256 training examples, 64 subword tokens per prompt/answer pair, 512 vocabulary entries, 64 hidden units and 48 generated tokens.
 
 There are no pretrained weights, cloud calls, Qwen calls, prompt templates or hidden language-model dependencies in this decoder.
 
