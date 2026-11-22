@@ -52,10 +52,10 @@ class ANS100TrainableSequenceDecoderTest {
             epochs = 40,
         )
 
-        val knownPieces = decoder.generate("котёнок", maxNewTokens = 4)
+        val knownPieces = decoder.generate("котом", maxNewTokens = 4)
         val familiar = decoder.generate("котик", maxNewTokens = 4)
 
-        assertTrue(knownPieces.unknownPromptTokenCount >= 0)
+        assertEquals(0, knownPieces.unknownPromptTokenCount)
         assertEquals(0, familiar.unknownPromptTokenCount)
     }
 
@@ -65,9 +65,9 @@ class ANS100TrainableSequenceDecoderTest {
         original.train(List(8) { "кот ест рыбу." }, epochs = 5)
         val current = java.util.Base64.getUrlDecoder().decode(original.exportSnapshot())
         val legacy = java.nio.ByteBuffer.allocate(current.size - Int.SIZE_BYTES)
-            .put(current, 0, 4 + Int.SIZE_BYTES)
+            .put(current, 0, 4)
             .putInt(1)
-            .put(current, 4 + Int.SIZE_BYTES + Int.SIZE_BYTES, current.size - (4 + Int.SIZE_BYTES + Int.SIZE_BYTES))
+            .put(current, 8, current.size - 16)
             .array()
         val encodedLegacy = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(legacy)
 
