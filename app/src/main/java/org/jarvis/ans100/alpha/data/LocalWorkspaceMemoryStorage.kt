@@ -1,24 +1,100 @@
 package org.jarvis.ans100.alpha.data
 
 import android.content.Context
+import android.util.AtomicFile
+import java.io.File
+import java.io.FileOutputStream
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.util.Base64
 
 /**
- * Versioned app-private storage for explicitly approved memories.
- * This stores user notes only; it is not a JPVR file or a cross-device sync mechanism.
+ * Stores approved JARVIS memories in the app-specific external folder:
+ * Android/data/<applicationId>/files/JARVIS/Memory/.
+ *
+ * The directory is created on first access. AtomicFile prevents a partial write
+ * from replacing the last valid memory snapshot. Legacy SharedPreferences are
+ * migrated once when the new file does not exist.
  */
-class SharedPreferencesLocalWorkspaceMemoryStorage(context: Context) : ConversationStorage {
-    private val preferences = context.applicationContext.getSharedPreferences(
+class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationStorage {
+    private val appContext = context.applicationContext
+    private val directory: File = File(
+        appContext.getExternalFilesDir(null) ?: appContext.filesDir,
+        "JARVIS/Memory",
+    )
+    private val memoryFile = AtomicFile(File(directory, "approved-memory.jmem"))
+    private val legacyPreferences = appContext.getSharedPreferences(
         "jarvis_android_approved_memories_v1",
         Context.MODE_PRIVATE,
     )
 
-    override fun read(): String? = preferences.getString("records", null)
+    @Synchronized
+    override fun read(): String? {
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw LocalConversationException("Не удалось создать папку памяти JARVIS.")
+        }
+        if (memoryFile.baseFile.exists()) {
+            return memoryFile.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
+        }
+        val legacy = legacyPreferences.getString("records", null)
+        val initial = legacy ?: LocalWorkspaceMemoryCodec.encode(emptyList())
+        if (!write(initial)) {
+            throw LocalConversationException("Не удалось создать файл памяти JARVIS.")
+        }
+        return initial
+    }
 
-    override fun write(value: String): Boolean =
-        preferences.edit().putString("records", value).commit()
+    @Synchronized
+    override fun write(value: String): Boolean {
+        return try {
+            if (!directory.exists() && !directory.mkdirs()) return false
+            val stream = memoryFile.startWrite()
+            try {
+                stream.write(value.toByteArray(Charsets.UTF_8))
+                stream.fd.sync()
+                memoryFile.finishWrite(stream)
+            } catch (error: Exception) {
+                memoryFile.failWrite(stream)
+                throw error
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @Synchronized
+    fun exportSnapshot(): File {
+        val content = read() ?: LocalWorkspaceMemoryCodec.encode(emptyList())
+        val exports = File(directory, "exports")
+        if (!exports.exists() && !exports.mkdirs()) {
+            throw LocalConversationException("Не удалось создать папку экспорта памяти.")
+        }
+        val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.now())
+        val target = File(exports, "jarvis-memory-$stamp.jmem")
+        val temporary = File(exports, target.name + ".tmp")
+        try {
+            FileOutputStream(temporary).use { output ->
+                output.write(content.toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+            if (!temporary.renameTo(target)) {
+                temporary.delete()
+                throw LocalConversationException("Не удалось завершить экспорт памяти.")
+            }
+        } catch (error: Exception) {
+            temporary.delete()
+            throw error
+        }
+        return target
+    }
+
+    fun directoryPath(): String = directory.absolutePath
 }
 
 internal object LocalWorkspaceMemoryCodec {
