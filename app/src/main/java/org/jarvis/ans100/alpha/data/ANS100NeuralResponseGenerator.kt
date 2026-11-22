@@ -98,10 +98,10 @@ class ANS100NeuralResponseGenerator : LocalResponseEngine {
                 !it.classifierLabel.isNullOrBlank() &&
                 (it.classifierConfidenceMargin ?: 0.0) >= MIN_NEURAL_MARGIN
         }?.classifierLabel
-        val intent = if (parsed.intent == "statement_or_unknown" && neuralIntent != null) {
-            neuralIntent
-        } else {
-            parsed.intent
+        val intent = when {
+            CAPABILITY_QUESTION.containsMatchIn(normalized) -> "capability_question"
+            parsed.intent == "statement_or_unknown" && neuralIntent != null -> neuralIntent
+            else -> parsed.intent
         }
         val confidence = if (intent == neuralIntent) {
             ((neural?.classifierConfidenceMargin ?: 0.0) / 100.0).coerceIn(0.0, 1.0)
@@ -247,6 +247,9 @@ class ANS100NeuralResponseGenerator : LocalResponseEngine {
         const val MIN_TRAINED_EXAMPLES = 3
         const val MIN_NEURAL_MARGIN = 0.15
         const val MIN_MEMORY_MATCH_RATIO = 0.20
+        private val CAPABILITY_QUESTION = Regex(
+            """\\b(что ты умеешь|что умеешь|твои возможности|что можешь делать)\\b""",
+        )
         private val TOKEN = Regex("[a-zа-яё0-9]{3,}")
         private val STOP_WORDS = setOf(
             "это", "как", "что", "для", "или", "мне", "можно", "когда", "где",
