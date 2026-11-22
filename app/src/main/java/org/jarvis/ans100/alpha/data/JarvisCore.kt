@@ -10,6 +10,8 @@ data class LocalWorkspaceMemory(
     val category: String,
     val updatedAt: String,
     val userApproved: Boolean,
+    /** ID of the newer explicitly confirmed memory that supersedes this record. */
+    val supersededById: String? = null,
 )
 
 data class LocalWorkspaceMemorySnapshot(
@@ -83,6 +85,34 @@ class LocalWorkspaceMemoryCache(
         return records.toList()
     }
 
+    /**
+     * Applies an explicit user correction without erasing the previous record.
+     * The old record remains in the audit history and is excluded from recall.
+     */
+    @Synchronized
+    fun correct(id: String, correctedContent: String): List<LocalWorkspaceMemory> {
+        requireWritable()
+        val old = records.firstOrNull { it.id == id && it.userApproved && it.supersededById == null }
+            ?: throw LocalConversationException("Не найдена активная подтверждённая запись для исправления.")
+        val clean = correctedContent.trim()
+        if (clean.isEmpty() || clean.length > MAX_MEMORY_CHARS || clean.any { it == '\u0000' }) {
+            throw LocalConversationException("Исправление должно содержать текст до $MAX_MEMORY_CHARS символов.")
+        }
+        if (clean == old.content) return records.toList()
+        val replacement = LocalWorkspaceMemory(
+            id = "local-" + UUID.randomUUID().toString(),
+            content = clean,
+            category = old.category,
+            updatedAt = Instant.now().toString(),
+            userApproved = true,
+        )
+        val candidate = records.map { record ->
+            if (record.id == old.id) record.copy(supersededById = replacement.id) else record
+        } + replacement
+        publish(candidate.takeLast(MAX_CACHED_RECORDS))
+        return records.toList()
+    }
+
     @Synchronized
     fun delete(id: String): List<LocalWorkspaceMemory> {
         requireWritable()
@@ -116,6 +146,11 @@ class LocalWorkspaceMemoryCache(
 
     fun snapshot(): LocalWorkspaceMemorySnapshot =
         LocalWorkspaceMemorySnapshot(loaded, records.toList(), storageError)
+
+    /** Active approved memories only; superseded records remain in snapshot history. */
+    @Synchronized
+    fun activeRecords(): List<LocalWorkspaceMemory> =
+        records.filter { it.userApproved && it.supersededById == null }.toList()
 
     companion object {
         const val MAX_CACHED_RECORDS = 2_000
