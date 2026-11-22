@@ -25,6 +25,10 @@ import org.jarvis.ans100.alpha.data.LiteRtLmModelStore
 import org.jarvis.ans100.alpha.data.LiteRtLmDownloadCancelledException
 import org.jarvis.ans100.alpha.data.LiteRtLmResponseEngine
 import org.jarvis.ans100.alpha.data.ANS100NeuralResponseGenerator
+import org.jarvis.ans100.alpha.data.ANS100TrainableLanguageModule
+import org.jarvis.ans100.alpha.data.ANS100SequenceFeedbackTrainer
+import org.jarvis.ans100.alpha.data.ANS100TrainableSequenceDecoder
+import org.jarvis.ans100.alpha.data.FileANS100SequenceModelStorage
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
 import org.jarvis.ans100.alpha.data.SharedPreferencesLocalWorkspaceMemoryStorage
 import org.jarvis.ans100.alpha.data.LocalDraftException
@@ -390,12 +394,17 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         manualHypothesisReviewCoordinator.replayPending()
     }.getOrNull()
     private val benchmarkTraceStore = ANS100BenchmarkTraceStore(appContext.filesDir)
+    // Restores the trainable ANS decoder from an atomic app-private snapshot.
+    private val sequenceLanguageModule = ANS100TrainableLanguageModule(
+        FileANS100SequenceModelStorage(application.applicationContext),
+    )
     private val conversationCoordinator = LocalConversationCoordinator(
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
         ),
         ANS100NeuralResponseGenerator(),
         workspaceMemoryCache,
+        sequenceLanguageModule,
     )
     private val runtimeClient = LocalRuntimeBridgeClient()
     private val runtimeTokenStore = RuntimeAccessTokenStore(application.applicationContext)
@@ -1308,6 +1317,33 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    fun ansSequenceModelStatus(): ANS100TrainableLanguageModule.Status =
+        sequenceLanguageModule.status()
+
+    /** Training is explicit; the app never silently treats its own output as a label. */
+    fun trainAnsSequenceModel(
+        examples: List<String>,
+        epochs: Int = ANS100TrainableSequenceDecoder.DEFAULT_EPOCHS,
+    ): ANS100TrainableSequenceDecoder.TrainingReport =
+        conversationCoordinator.trainSequenceLanguage(examples, epochs)
+
+    fun applyAnsSequenceCorrection(
+        prompt: String,
+        correctedContinuation: String,
+    ): ANS100TrainableSequenceDecoder.TrainingReport? =
+        conversationCoordinator.applySequenceFeedback(
+            ANS100SequenceFeedbackTrainer.Feedback(
+                prompt = prompt,
+                correctedContinuation = correctedContinuation,
+                source = ANS100SequenceFeedbackTrainer.Source.EXPLICIT_USER_CORRECTION,
+            ),
+        )
+
+    fun generateAnsSequenceContinuation(
+        prompt: String,
+    ): ANS100TrainableSequenceDecoder.Generation? =
+        conversationCoordinator.generateSequenceContinuation(prompt)
 
     fun sendConversationMessage(value: String) {
         val clean = value.trim()
