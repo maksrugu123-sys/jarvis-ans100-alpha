@@ -78,8 +78,8 @@ data class LocalSemanticDialogueMemory(
         private const val MAX_CONTEXT_CHARS = 1_800
 
         private val TASK_MARKERS = listOf(
-            "сделай", "создай", "добавь", "исправь", "проверь", "найди", "реализуй",
-            "продолжай", "надо", "нужно", "хочу", "сделать", "добавить", "исправить",
+            "сделай", "создай", "добавь", "исправь", "проверь", "найди", "реализуй", "напиши",
+            "продолжай", "надо", "нужно", "хочу", "сделать", "добавить", "исправить", "write",
             "implement", "build", "fix", "create", "continue",
         )
         private val COMPLETION_MARKERS = listOf(
