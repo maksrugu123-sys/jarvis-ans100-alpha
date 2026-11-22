@@ -33,8 +33,8 @@ class AndroidNeuronRamBudgetPreferences(context: Context) {
     companion object {
         const val DEFAULT_BUDGET_MB = 4
         const val ESTIMATED_BYTES_PER_RESIDENT_NEURON = 2_048
-        const val MAX_HOT_SET_CAPACITY = 4_096
-        val ALLOWED_BUDGETS_MB = (1..8).toList()
+        const val MAX_HOT_SET_CAPACITY = 250_000
+        val ALLOWED_BUDGETS_MB = (1..1_024).toList()
         private const val PREFERENCES_NAME = "ans_neuron_ram_budget_v1"
         private const val KEY_BUDGET_MB = "managed_hot_set_budget_mb"
 
