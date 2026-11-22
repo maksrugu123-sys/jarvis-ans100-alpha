@@ -1431,11 +1431,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     val recall = if (expectedTokens.isEmpty()) 0.0 else overlap.toDouble() / expectedTokens.size
                     val f1 = if (precision + recall == 0.0) 0.0 else 2.0 * precision * recall / (precision + recall)
                     val repetition = if (generatedTokens.isEmpty()) 0.0 else (generatedTokens.size - generatedCounts.values.sumOf { it.coerceAtMost(1) }).toDouble() / generatedTokens.size
-                    Triple(f1, repetition, generatedTokens.size)
+                    val repeatedCount = generatedTokens.size - generatedCounts.values.sumOf { it.coerceAtMost(1) }\n                    Triple(f1, repetition, generatedTokens.size, repeatedCount)
                 }
                 val meanTokenF1 = tokenized.map { it.first }.average()
                 val totalGeneratedTokens = tokenized.sumOf { it.third }
-                val repeatedTokens = tokenized.sumOf { (it.second * it.third).toInt() }
+                val repeatedTokens = tokenized.sumOf { it.fourth }
                 val repetitionRate = if (totalGeneratedTokens == 0) 0.0 else repeatedTokens.toDouble() / totalGeneratedTokens
                 val details = predictions.take(8).mapIndexed { index, item ->
                     "${index + 1}. ${if (item.third) "✓" else "✗"} Ожидалось: ${item.first.take(100)} | Получено: ${item.second.ifBlank { "∅" }.take(100)}"
