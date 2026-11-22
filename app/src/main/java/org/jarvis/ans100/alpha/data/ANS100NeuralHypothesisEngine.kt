@@ -395,7 +395,7 @@ class ANS100NeuralHypothesisEngine(
                 if (candidate in members) continue
                 if (members.all { eligible(it, candidate) != null }) members += candidate
             }
-            if (members.size < 2) return@forEach
+            if (members.size < 3) return@forEach
 
             val orderedMembers = members.sorted()
             val pairStates = ArrayList<State>()
@@ -530,7 +530,7 @@ class ANS100NeuralHypothesisEngine(
 
     private fun snapshot(state: State): Hypothesis {
         val status = when {
-            state.supportingTurns.size >= 2 && state.nonReproducingTurns.isNotEmpty() ->
+            state.supportingTurns.isNotEmpty() && state.nonReproducingTurns.isNotEmpty() ->
                 Status.MIXED_REPRODUCTION_SIGNAL
             state.supportingTurns.size >= 2 -> Status.REPRODUCED_ON_INDEPENDENT_TURN
             state.nonReproducingTurns.isNotEmpty() -> Status.NOT_REPRODUCED_ON_INDEPENDENT_TURN
