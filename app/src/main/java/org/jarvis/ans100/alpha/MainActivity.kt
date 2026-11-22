@@ -1697,6 +1697,26 @@ private fun HypothesisReviewPanel(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Text(
+                                "Время: ${entry.decision.reviewedAtEpochMs} · ID: ${entry.decision.decisionId}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                "Отпечаток пакета: ${entry.decision.packetFingerprint.take(16)}… · " +
+                                    "выбрано фрагментов: ${entry.decision.selectedPassageRefs.size}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            entry.evidence?.let { evidence ->
+                                Text(
+                                    "Свидетельство: ${evidence.source.name} · " +
+                                        "${if (evidence.supports) "поддержка" else "противоречие"} · " +
+                                        evidence.evidenceRef,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
