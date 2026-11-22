@@ -7,7 +7,6 @@ import java.io.DataOutputStream
 import java.util.Base64
 import java.util.Locale
 import kotlin.math.exp
-import kotlin.math.max
 import kotlin.math.tanh
 import kotlin.random.Random
 
@@ -75,8 +74,10 @@ class ANS100TrainableSequenceDecoder(
 
         val tokenized = examples.map(::tokenize).filter { it.isNotEmpty() }
         require(tokenized.isNotEmpty()) { "training examples contain no usable tokens" }
-        require(tokenized.all { it.size <= MAX_TOKENS_PER_EXAMPLE }) {
-            "a training example exceeds the token limit"
+        require(tokenized.all { tokens ->
+            tokens.size <= MAX_TOKENS_PER_EXAMPLE && tokens.all { it.length <= MAX_TOKEN_CHARS }
+        }) {
+            "a training example exceeds the token or token-length limit"
         }
 
         val frequencies = tokenized.flatten().groupingBy { it }.eachCount()
@@ -234,7 +235,9 @@ class ANS100TrainableSequenceDecoder(
         require(learningRate.isFinite() && learningRate in MIN_LEARNING_RATE..MAX_LEARNING_RATE)
         require(examples.all { it.isNotBlank() && it.length <= MAX_EXAMPLE_CHARS })
         val tokenized = examples.map(::tokenize).filter { it.isNotEmpty() }
-        require(tokenized.isNotEmpty() && tokenized.all { it.size <= MAX_TOKENS_PER_EXAMPLE })
+        require(tokenized.isNotEmpty() && tokenized.all { tokens ->
+            tokens.size <= MAX_TOKENS_PER_EXAMPLE && tokens.all { it.length <= MAX_TOKEN_CHARS }
+        })
         val sequences = tokenized.map { tokens ->
             intArrayOf(BOS_ID) + tokens.map { tokenToId[it] ?: UNK_ID }.toIntArray() + intArrayOf(EOS_ID)
         }
