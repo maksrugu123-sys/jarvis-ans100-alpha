@@ -660,7 +660,7 @@ class AndroidJnvM250kRewardAttribution(
         return Candidate(
             connectionId = link.connectionId,
             targetNeuronId = link.targetNeuronId,
-            estimatedTransmissions = saturatedAdd(least.estimatedTransmissions, 1L),
+            estimatedTransmissions = 1L,
             responseCount = 0L,
             responseCredit = 0.0,
             firstSeenOrder = episode.nextOrder++,
