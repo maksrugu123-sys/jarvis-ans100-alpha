@@ -150,6 +150,45 @@ class LocalUnderstandingPipelineTest {
         assertTrue(result.contextReference.sourceAssistantMessage.contains("Могу начать"))
     }
 
+
+    @Test
+    fun affirmativeDoesNotAcceptAnAssistantMessageThatWasNotAnOffer() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Проверить описание проблемы", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Я нашёл описание проблемы.", 2L),
+        )
+        val result = pipeline.analyze("Давай", history)
+        assertEquals("continuation", result.intent)
+        assertEquals("latest_user_turn", result.contextReference.method)
+        assertTrue(result.dialogueState.pendingAssistantOffer.isBlank())
+    }
+
+    @Test
+    fun dialogueStateTracksAnOpenQuestionAndExpiresItAfterUserReply() {
+        val waiting = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Настроить память", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Какой объём памяти выбрать?", 2L),
+        )
+        val state = LocalDialogueState.fromHistory(waiting)
+        assertEquals("Настроить память", state.activeTopic)
+        assertTrue(state.pendingAssistantQuestion.contains("Какой объём"))
+        val replied = waiting + LocalConversationMessage("user-2", ConversationRole.USER, "Выбери автоматически", 3L)
+        assertTrue(LocalDialogueState.fromHistory(replied).pendingAssistantQuestion.isBlank())
+    }
+
+    @Test
+    fun topicChangeExpiresThePreviousAssistantOffer() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Добавить поиск", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Могу начать реализацию поиска.", 2L),
+            LocalConversationMessage("user-2", ConversationRole.USER, "Теперь объясни CPU", 3L),
+        )
+        val result = pipeline.analyze("Давай", history)
+        assertTrue(result.dialogueState.pendingAssistantOffer.isBlank())
+        assertEquals("latest_user_turn", result.contextReference.method)
+        assertEquals("Теперь объясни CPU", result.dialogueState.activeTopic)
+    }
+
     @Test
     fun shortWhyFollowUpResolvesToTheLatestDialogueTurn() {
         val history = listOf(
