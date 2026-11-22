@@ -124,9 +124,9 @@ class ANS100TrainableSequenceDecoder(
 
         val promptTokens = tokenize(prompt).takeLast(MAX_TOKENS_PER_EXAMPLE)
         require(promptTokens.isNotEmpty()) { "prompt contains no usable tokens" }
-        val hidden = DoubleArray(hiddenSize)
-        step(BOS_ID, hidden)
-        promptTokens.forEach { token -> step(tokenToId[token] ?: UNK_ID, hidden) }
+        var hidden = DoubleArray(hiddenSize)
+        hidden = step(BOS_ID, hidden)
+        promptTokens.forEach { token -> hidden = step(tokenToId[token] ?: UNK_ID, hidden) }
 
         val generated = ArrayList<String>(maxNewTokens)
         var confidenceSum = 0.0
@@ -142,8 +142,7 @@ class ANS100TrainableSequenceDecoder(
             if (nextId == BOS_ID || nextId == UNK_ID) break
             generated += vocabulary[nextId]
             confidenceSum += confidence
-            val nextHidden = step(nextId, hidden)
-            nextHidden.copyInto(hidden)
+            hidden = step(nextId, hidden)
         }
         return Generation(
             text = detokenize(generated),
