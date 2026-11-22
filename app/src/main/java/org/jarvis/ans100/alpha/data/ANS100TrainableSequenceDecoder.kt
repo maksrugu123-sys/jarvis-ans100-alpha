@@ -603,7 +603,7 @@ class ANS100TrainableSequenceDecoder(
                 add(character.toString())
                 add(WORD_START_MARKER + character)
             }
-            words.filter { it.length == 1 && it[0] in PUNCTUATION }.distinct().forEach { add(it) }
+            PUNCTUATION.forEach { add(it.toString()) }
         }
         require(mandatory.distinct().size + RESERVED_TOKENS.size <= maxVocabularySize) {
             "configured vocabulary is too small for the corpus character set"
