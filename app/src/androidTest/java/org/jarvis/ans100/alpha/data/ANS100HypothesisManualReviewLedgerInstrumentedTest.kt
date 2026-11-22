@@ -246,6 +246,8 @@ class ANS100HypothesisManualReviewLedgerInstrumentedTest {
         assertEquals(reviewedPacket.pageContentSha256, snapshot.pageContentSha256)
         assertEquals(reviewedPacket.passages.map { it.passageRef }, snapshot.passages.map { it.passageRef })
         assertEquals(reviewedPacket.sources.map { it.canonicalUrl }, snapshot.sources.map { it.canonicalUrl })
+        assertEquals(reviewedPacket.passages.map { it.sourceUrl }, snapshot.passages.map { it.sourceUrl })
+        assertEquals(reviewedPacket.passages.map { it.pageContentSha256 }, snapshot.passages.map { it.pageContentSha256 })
         assertTrue(snapshot.passages.all { it.excerpt.isNotBlank() })
         assertTrue(snapshot.passages.all { it.excerpt.length <= ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT })
         assertTrue(reopened.isApplied(d.decisionId).not())
