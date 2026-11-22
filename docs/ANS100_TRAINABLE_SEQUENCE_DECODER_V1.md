@@ -176,3 +176,13 @@ and must not be used for repeated tuning followed by a benchmark claim.
 
 No model was trained from these files in the repository, and no test, Gradle
 build, APK build or CI workflow was run while adding them.
+
+## Bounded beam decoding and prompt-priority context
+
+The decoder's inference path now uses a fixed-width beam search (width 3) instead of committing to a single greedy next token at every step. Candidate sequences are ranked with a length-normalized log score. A small token-repeat penalty and an additional repeated-bigram penalty discourage simple loops. EOS remains an explicit candidate, and decoding stops when all retained candidates have ended or the configured token budget is reached.
+
+The search is deliberately small and deterministic: it does not sample randomly, does not increase model parameters, and has a predictable upper bound suitable for a phone. Beam search explores alternatives under the learned model; it cannot make weak training data or an undertrained network produce reliable language by itself. The reported mean token confidence is the geometric mean of selected token scores and is still not calibrated factual confidence.
+
+Context packing was also corrected. The decoder now tokenizes the current user prompt separately and reserves its token capacity first. Only the remaining portion of the 64-token input window is filled with the most recent context pieces. A long history/memory prefix can therefore no longer evict the beginning of a current prompt that fits the model's input window. If the current prompt itself exceeds 64 tokens, its earliest tokens are still truncated to preserve the latest part; this remains a known limit.
+
+Regression tests were added for deterministic generation, output bounds, reserved-token filtering, and preserving a full 64-token current prompt when older context is present. These tests have not been run. No Gradle build, Android test task, APK, CI workflow, or device benchmark was run for this change.
