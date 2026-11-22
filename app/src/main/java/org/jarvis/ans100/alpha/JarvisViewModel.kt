@@ -1420,10 +1420,30 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     Triple(expected.trim(), generated, expected.trim().equals(generated, ignoreCase = true))
                 }
                 val exact = predictions.count { it.third }
+                val tokenPattern = Regex("[\\p{L}\\p{N}]+|[.,!?;:]")
+                val tokenized = predictions.map { item ->
+                    val expectedTokens = tokenPattern.findAll(item.first.lowercase(java.util.Locale.ROOT).replace('ё', 'е')).map { it.value }.toList()
+                    val generatedTokens = tokenPattern.findAll(item.second.lowercase(java.util.Locale.ROOT).replace('ё', 'е')).map { it.value }.toList()
+                    val expectedCounts = expectedTokens.groupingBy { it }.eachCount()
+                    val generatedCounts = generatedTokens.groupingBy { it }.eachCount()
+                    val overlap = expectedCounts.entries.sumOf { (token, count) -> minOf(count, generatedCounts[token] ?: 0) }
+                    val precision = if (generatedTokens.isEmpty()) 0.0 else overlap.toDouble() / generatedTokens.size
+                    val recall = if (expectedTokens.isEmpty()) 0.0 else overlap.toDouble() / expectedTokens.size
+                    val f1 = if (precision + recall == 0.0) 0.0 else 2.0 * precision * recall / (precision + recall)
+                    val repetition = if (generatedTokens.isEmpty()) 0.0 else (generatedTokens.size - generatedCounts.values.sumOf { it.coerceAtMost(1) }).toDouble() / generatedTokens.size
+                    Triple(f1, repetition, generatedTokens.size)
+                }
+                val meanTokenF1 = tokenized.map { it.first }.average()
+                val totalGeneratedTokens = tokenized.sumOf { it.third }
+                val repeatedTokens = tokenized.sumOf { (it.second * it.third).toInt() }
+                val repetitionRate = if (totalGeneratedTokens == 0) 0.0 else repeatedTokens.toDouble() / totalGeneratedTokens
                 val details = predictions.take(8).mapIndexed { index, item ->
                     "${index + 1}. ${if (item.third) "✓" else "✗"} Ожидалось: ${item.first.take(100)} | Получено: ${item.second.ifBlank { "∅" }.take(100)}"
                 }.joinToString("\n")
-                "Точное совпадение: $exact/${predictions.size} (${"%.1f".format(java.util.Locale.ROOT, exact * 100.0 / predictions.size)}%).\n$details\nЭто строгая проверка совпадения строк, а не полноценная оценка смысла. Проверочные ответы не добавлялись в обучение."
+                "Точное совпадение: $exact/${predictions.size} (${"%.1f".format(java.util.Locale.ROOT, exact * 100.0 / predictions.size)}%).\n" +
+                    "Средний token-F1 (пересечение слов с учётом повторов): ${"%.3f".format(java.util.Locale.ROOT, meanTokenF1)}. " +
+                    "Повторы в генерации: ${"%.1f".format(java.util.Locale.ROOT, repetitionRate * 100.0)}%.\n$details\n" +
+                    "Token-F1 не оценивает смысл и порядок слов; повторяемость — грубый сигнал. Это диагностические метрики, не доказательство понимания. Проверочные ответы не добавлялись в обучение."
             }
             mainHandler.post {
                 val previous = mutableState.value.sequenceTraining
