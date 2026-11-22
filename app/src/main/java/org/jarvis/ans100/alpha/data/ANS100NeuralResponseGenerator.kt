@@ -34,7 +34,7 @@ class ANS100NeuralResponseGenerator(
     )
         private set
 
-    override val backendLabel: String = "ANS-100 Native Neural Language v1 · локально"
+    override val backendLabel: String = "ANS-100 Neural Response v1 · локально"
     override val languageModelConfigured: Boolean = false
     override val supportsWorkspaceMemory: Boolean = true
 
@@ -103,6 +103,8 @@ class ANS100NeuralResponseGenerator(
         }?.classifierLabel
         val intent = when {
             CAPABILITY_QUESTION.containsMatchIn(normalized) -> "capability_question"
+            parsed.dialogueState.pendingAssistantOffer.isNotBlank() &&
+                parsed.contextReference.status == "selected" && isAffirmativeFollowThrough(clean) -> "continuation"
             parsed.intent == "statement_or_unknown" && neuralIntent != null -> neuralIntent
             else -> parsed.intent
         }
@@ -122,7 +124,12 @@ class ANS100NeuralResponseGenerator(
                 understanding = parsed,
                 neural = neural,
             )
-            val learned = sequenceLanguageModule?.generateWithContext(clean, modelContext)
+            // With no dialogue or approved memories, feed the exact prompt alone.
+            // Heuristic analysis text is not training data and can corrupt a short learned prefix.
+            val learned = sequenceLanguageModule?.let { module ->
+                if (history.isEmpty() && selectedMemories.isEmpty()) module.generate(clean)
+                else module.generateWithContext(clean, modelContext)
+            }
             if (learned != null &&
                 learned.unknownPromptTokenCount == 0 &&
                 learned.tokens.size >= MIN_LEARNED_GENERATION_TOKENS &&
@@ -291,8 +298,11 @@ class ANS100NeuralResponseGenerator(
         if (excerpt.isBlank() || history.isEmpty()) {
             return "Я понял, что нужно продолжить предыдущую тему, но связанный фрагмент не найден. Напомни, на чём мы остановились."
         }
-        if (reference.method == "adjacent_assistant_offer" && isAffirmativeFollowThrough(prompt)) {
-            val acceptedStep = extractAcceptedStep(reference.sourceAssistantMessage)
+        val acceptedOffer = understanding.dialogueState.pendingAssistantOffer.takeIf {
+            it.isNotBlank() && isAffirmativeFollowThrough(prompt)
+        }
+        if ((reference.method == "adjacent_assistant_offer" || acceptedOffer != null) && isAffirmativeFollowThrough(prompt)) {
+            val acceptedStep = extractAcceptedStep(acceptedOffer ?: reference.sourceAssistantMessage)
             return if (acceptedStep.isBlank()) {
                 "Хорошо, продолжаю предыдущую тему. Я учту уже сказанное и не буду просить тебя повторять контекст."
             } else {
