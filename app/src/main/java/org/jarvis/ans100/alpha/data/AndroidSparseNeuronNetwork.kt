@@ -955,7 +955,7 @@ class AndroidSparseNeuronNetwork(
         refreshRamBudgetInternal()
         if (!cognitiveFeaturesEnabled) return null
         hotFeatures[neuronId]?.let { return it }
-        return store.loadFeatureState(neuronId)?.also(::publishFeature)
+        return store.loadFeatureState(neuronId)?.also { publishFeature(neuronId, it) }
     }
 
     private fun featureStateFor(neuronId: Int): ANS100NeuronFeatureState =
