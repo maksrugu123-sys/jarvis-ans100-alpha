@@ -61,6 +61,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -134,6 +135,25 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     var sequenceCorrectionPrompt by rememberSaveable { mutableStateOf("") }
     var sequenceCorrectionText by rememberSaveable { mutableStateOf("") }
     var sequenceEpochsText by rememberSaveable { mutableStateOf("30") }
+    var autoSpeakEnabled by rememberSaveable {
+        mutableStateOf(uiPreferences.getBoolean("auto_speak", false))
+    }
+    val speechController = remember(context) { JarvisSpeechController(context.applicationContext) }
+    var conversationWasBusy by remember { mutableStateOf(false) }
+    DisposableEffect(speechController) {
+        onDispose { speechController.shutdown() }
+    }
+    LaunchedEffect(ui.conversation.isBusy, ui.conversation.messages.lastOrNull()?.id) {
+        if (ui.conversation.isBusy) {
+            conversationWasBusy = true
+        } else if (conversationWasBusy) {
+            conversationWasBusy = false
+            val latest = ui.conversation.messages.lastOrNull()
+            if (latest?.role == ConversationRole.ASSISTANT && autoSpeakEnabled) {
+                speechController.speak(latest.text)
+            }
+        }
+    }
     var transferPassphrase by remember { mutableStateOf("") }
     var pendingImportPassphrase by remember { mutableStateOf<CharArray?>(null) }
     var pendingExportBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -485,6 +505,13 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             ConversationPanel(
                                 state = ui.conversation,
                                 onClear = viewModel::clearConversation,
+                                onSpeak = { speechController.speak(it) },
+                                autoSpeak = autoSpeakEnabled,
+                                onAutoSpeakChange = {
+                                    autoSpeakEnabled = it
+                                    uiPreferences.edit().putBoolean("auto_speak", it).apply()
+                                    if (!it) speechController.stop()
+                                },
                                 onRateLatestAnswer = viewModel::rateLatestHybridAnswer,
                                 onRateNeuralAssociation = viewModel::rateNeuralAssociationCandidate,
                                 onRateCanonicalReadout = viewModel::rateCanonicalReadout,
@@ -588,6 +615,32 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             epochsText = sequenceEpochsText,
                             onEpochsChange = { sequenceEpochsText = it.filter(Char::isDigit).take(4) },
                             onImport = { sequenceExamplesLauncher.launch(arrayOf("text/plain", "text/*")) },
+                            onLoadTraining = {
+                                runCatching {
+                                    context.assets.open("multiturn_train_ru_v1.txt")
+                                        .bufferedReader(Charsets.UTF_8).use { it.readText() }
+                                }.onSuccess {
+                                    sequenceTrainingExamples = it
+                                    viewModel.setAnsSequenceTrainingMessage(
+                                        "Загружен встроенный набор: 32 обучающих диалога. Проверочные примеры сюда не включены.",
+                                    )
+                                }.onFailure {
+                                    viewModel.setAnsSequenceTrainingMessage("Не удалось загрузить учебный набор: ${it.message}")
+                                }
+                            },
+                            onLoadEvaluation = {
+                                runCatching {
+                                    context.assets.open("multiturn_heldout_ru_v1.txt")
+                                        .bufferedReader(Charsets.UTF_8).use { it.readText() }
+                                }.onSuccess {
+                                    sequenceEvaluationCases = it
+                                    viewModel.setAnsSequenceTrainingMessage(
+                                        "Загружен отдельный набор из 8 проверочных диалогов. Не обучай модель на этих ответах.",
+                                    )
+                                }.onFailure {
+                                    viewModel.setAnsSequenceTrainingMessage("Не удалось загрузить проверочный набор: ${it.message}")
+                                }
+                            },
                             onTrain = {
                                 val examples = sequenceTrainingExamples.lineSequence()
                                     .map { it.trim() }
@@ -3592,6 +3645,9 @@ private fun ChatTitleBar(
 private fun ConversationPanel(
     state: LocalConversationUiState,
     onClear: () -> Unit,
+    onSpeak: (String) -> Unit,
+    autoSpeak: Boolean,
+    onAutoSpeakChange: (Boolean) -> Unit,
     onRateLatestAnswer: (Boolean) -> Unit,
     onRateNeuralAssociation: (String, Boolean) -> Unit,
     onRateCanonicalReadout: (String) -> Unit,
@@ -3607,7 +3663,16 @@ private fun ConversationPanel(
         if (target >= 0) messageListState.animateScrollToItem(target)
     }
     Column(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Автоозвучка", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Switch(checked = autoSpeak, onCheckedChange = onAutoSpeakChange)
+            }
             if (state.messages.isNotEmpty()) {
                 TextButton(onClick = { showClearConfirmation = true }, enabled = !state.isBusy) {
                     Text("Очистить диалог")
@@ -3686,6 +3751,12 @@ private fun ConversationPanel(
                                     color = if (userMessage) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.primary)
                                 MessageBodyText(message.text)
+                                if (!userMessage) {
+                                    TextButton(
+                                        onClick = { onSpeak(message.text) },
+                                        modifier = Modifier.align(Alignment.Start),
+                                    ) { Text("🔊 Озвучить") }
+                                }
                                 if (!userMessage && message.id == latestAssistantId &&
                                     state.neuralAssociationFeedback != null
                                 ) {
@@ -4647,6 +4718,8 @@ private fun AnsSequenceTrainingPanel(
     epochsText: String,
     onEpochsChange: (String) -> Unit,
     onImport: () -> Unit,
+    onLoadTraining: () -> Unit,
+    onLoadEvaluation: () -> Unit,
     onTrain: () -> Unit,
     onCorrect: () -> Unit,
     onEvaluate: () -> Unit,
@@ -4681,8 +4754,17 @@ private fun AnsSequenceTrainingPanel(
                     maxLines = 8,
                     enabled = !state.busy,
                 )
-                OutlinedButton(onClick = onImport, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Импортировать TXT")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onLoadTraining,
+                        enabled = !state.busy,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Загрузить диалоги") }
+                    OutlinedButton(
+                        onClick = onImport,
+                        enabled = !state.busy,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Импорт TXT") }
                 }
                 OutlinedTextField(
                     value = epochsText,
@@ -4749,6 +4831,11 @@ private fun AnsSequenceTrainingPanel(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                OutlinedButton(
+                    onClick = onLoadEvaluation,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Загрузить отдельные 8 проверок") }
                 OutlinedTextField(
                     value = evaluationCases,
                     onValueChange = onEvaluationCasesChange,
