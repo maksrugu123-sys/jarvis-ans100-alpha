@@ -587,6 +587,7 @@ class LocalConversationCoordinator(
     repository: LocalConversationRepository,
     responseEngine: LocalResponseEngine,
     private val memoryCache: LocalWorkspaceMemoryCache = LocalWorkspaceMemoryCache(),
+    private val sequenceLanguageModule: ANS100TrainableLanguageModule? = null,
 ) {
     private val core = JarvisCore(repository, responseEngine, memoryCache)
 
@@ -607,5 +608,19 @@ class LocalConversationCoordinator(
     fun replaceWorkspaceMemories(records: List<LocalWorkspaceMemory>) =
         core.replaceWorkspaceMemories(records)
     fun clearWorkspaceMemories() = core.clearWorkspaceMemories()
+    fun sequenceLanguageStatus(): ANS100TrainableLanguageModule.Status? =
+        sequenceLanguageModule?.status()
+    fun trainSequenceLanguage(
+        examples: List<String>,
+        epochs: Int = ANS100TrainableSequenceDecoder.DEFAULT_EPOCHS,
+    ): ANS100TrainableSequenceDecoder.TrainingReport =
+        requireNotNull(sequenceLanguageModule) { "trainable language module is not configured" }
+            .train(examples, epochs)
+    fun generateSequenceContinuation(prompt: String): ANS100TrainableSequenceDecoder.Generation? =
+        sequenceLanguageModule?.generate(prompt)
+    fun applySequenceFeedback(
+        feedback: ANS100SequenceFeedbackTrainer.Feedback,
+    ): ANS100TrainableSequenceDecoder.TrainingReport? =
+        sequenceLanguageModule?.applyFeedback(feedback)
     fun clear() = core.clear()
 }
