@@ -84,9 +84,11 @@ class ANS100TrainableLanguageModule(
         if (!decoder.isTrained) return null
         require(prompt.isNotBlank() && prompt.length <= LocalConversationRepository.MAX_MESSAGE_CHARS)
         require(context.length <= MAX_CONTEXT_CHARS)
-        val combined = if (context.isBlank()) prompt else "$context\n$prompt"
-        require(combined.length <= ANS100TrainableSequenceDecoder.MAX_EXAMPLE_CHARS)
-        return decoder.generate(combined)
+        return if (context.isBlank()) {
+            decoder.generate(prompt)
+        } else {
+            decoder.generateWithContext(prompt, context)
+        }
     }
 
     @Synchronized
