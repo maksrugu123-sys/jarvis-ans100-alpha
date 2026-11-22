@@ -141,6 +141,28 @@ class LocalSemanticDialogueMemoryTest {
         assertTrue(memory.toModelContext().contains("обновил предпочтение"))
     }
 
+
+    @Test
+    fun laterExplicitCorrectionResolvesPreviouslyPersistedConflict() {
+        val conflicted = LocalSemanticDialogueMemory.fromHistory(
+            listOf(
+                LocalConversationMessage("u1", ConversationRole.USER, "Предпочитаю короткие ответы", 10L),
+                LocalConversationMessage("u2", ConversationRole.USER, "Предпочитаю подробные ответы", 20L),
+            ),
+        )
+        val corrected = LocalSemanticDialogueMemory.fromHistory(
+            listOf(
+                LocalConversationMessage("u3", ConversationRole.USER, "Я передумал, теперь предпочитаю короткие ответы", 30L),
+            ),
+            conflicted,
+        )
+
+        assertEquals("u3", corrected.explicitPreferences.last().sourceMessageId)
+        assertTrue(corrected.preferenceConflicts.all {
+            it.resolution == "resolved_by_explicit_correction"
+        })
+    }
+
     @Test
     fun preferenceConflictSurvivesMemoryMerge() {
         val first = LocalSemanticDialogueMemory.fromHistory(
