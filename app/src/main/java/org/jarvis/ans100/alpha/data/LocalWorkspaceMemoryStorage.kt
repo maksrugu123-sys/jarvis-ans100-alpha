@@ -47,6 +47,9 @@ internal object LocalWorkspaceMemoryCodec {
                 encodeText(record.supersededById.orEmpty()),
             ).joinToString("\t")
         }
+        if (records.any { it.supersededById != null && it.supersededById !in ids }) {
+            throw LocalConversationException("Связь исправления с исходной записью не найдена.")
+        }
         val result = lines.joinToString("\n")
         if (result.length > MAX_ENCODED_CHARS) {
             throw LocalConversationException("Локальная память превышает лимит хранения.")
