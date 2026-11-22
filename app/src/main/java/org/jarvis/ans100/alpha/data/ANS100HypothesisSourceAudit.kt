@@ -44,31 +44,38 @@ class ANS100HypothesisSourceAudit(
 
     fun audit(passages: List<ANS100HypothesisPassageExtractor.PassageCandidate>): AuditReport {
         require(passages.size <= MAX_INPUT_PASSAGES) { "source audit input exceeds its bounded capacity" }
+        return auditRecords(passages.map { passage ->
+            SourceRecord(
+                sourceUrl = passage.sourceUrl,
+                sourceHost = passage.sourceHost,
+                pageContentSha256 = passage.pageContentSha256,
+                searchLeadRef = passage.searchLeadRef,
+                fetchedAtEpochMs = passage.fetchedAtEpochMs,
+            )
+        })
+    }
+
+    /** Audits every explicitly inspected page, including pages with no matching passages. */
+    fun auditRecords(records: List<SourceRecord>): AuditReport {
+        require(records.size <= MAX_INPUT_PAGES) { "source audit page input exceeds its bounded capacity" }
         val pages = LinkedHashMap<String, SourceRecord>()
-        passages.forEach { passage ->
-            require(passage.pageContentSha256.matches(Regex("[0-9a-f]{64}"))) {
+        records.forEach { record ->
+            require(record.pageContentSha256.matches(Regex("[0-9a-f]{64}"))) {
                 "invalid page content digest"
             }
-            val uri = runCatching { URI(passage.sourceUrl) }.getOrNull()
+            val uri = runCatching { URI(record.sourceUrl) }.getOrNull()
                 ?: throw IllegalArgumentException("source URL is invalid")
             val host = uri.host?.lowercase(Locale.ROOT)?.trimEnd('.')
             require(uri.scheme.equals("https", true) && !host.isNullOrBlank() && uri.userInfo == null) {
                 "source URL must be HTTPS and include a hostname"
             }
-            require(host == passage.sourceHost.lowercase(Locale.ROOT).trimEnd('.')) {
+            require(host == record.sourceHost.lowercase(Locale.ROOT).trimEnd('.')) {
                 "source host does not match the source URL"
             }
-            val key = passage.pageContentSha256 + "|" + canonicalUrl(uri)
-            pages.putIfAbsent(
-                key,
-                SourceRecord(
-                    sourceUrl = canonicalUrl(uri),
-                    sourceHost = host,
-                    pageContentSha256 = passage.pageContentSha256,
-                    searchLeadRef = passage.searchLeadRef,
-                    fetchedAtEpochMs = passage.fetchedAtEpochMs,
-                ),
-            )
+            require(record.searchLeadRef.isNotBlank() && record.fetchedAtEpochMs > 0L)
+            val canonical = canonicalUrl(uri)
+            val key = record.pageContentSha256 + "|" + canonical
+            pages.putIfAbsent(key, record.copy(sourceUrl = canonical, sourceHost = host))
         }
 
         val retained = pages.values.take(maxPages)
@@ -116,5 +123,6 @@ class ANS100HypothesisSourceAudit(
         const val DEFAULT_MAX_PAGES = 24
         const val MAX_PAGES_HARD_LIMIT = 48
         const val MAX_INPUT_PASSAGES = 288
+        const val MAX_INPUT_PAGES = 48
     }
 }
