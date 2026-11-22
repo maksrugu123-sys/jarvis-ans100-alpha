@@ -247,7 +247,7 @@ class ANS100HypothesisManualReviewLedgerInstrumentedTest {
         assertEquals(reviewedPacket.passages.map { it.passageRef }, snapshot.passages.map { it.passageRef })
         assertEquals(reviewedPacket.sources.map { it.canonicalUrl }, snapshot.sources.map { it.canonicalUrl })
         assertTrue(snapshot.passages.all { it.excerpt.isNotBlank() })
-        assertFalse(snapshot.passages.any { it.excerpt.contains("Heat and expansion are discussed.") && it.excerpt.length > 1_000 })
+        assertTrue(snapshot.passages.all { it.excerpt.length <= ANS100HypothesisPassageExtractor.MAX_EXCERPT_CHARS_HARD_LIMIT })
         assertTrue(reopened.isApplied(d.decisionId).not())
         reopened.close()
         context.deleteDatabase(name)
