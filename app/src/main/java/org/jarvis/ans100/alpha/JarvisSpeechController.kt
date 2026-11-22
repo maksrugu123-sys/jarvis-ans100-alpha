@@ -61,7 +61,7 @@ class JarvisSpeechController(context: Context) : TextToSpeech.OnInitListener {
         val tts = engine ?: return false
         if (!ready || !languageAvailable) return false
         tts.stop()
-        return tts.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "jarvis-\${System.nanoTime()}") ==
+        return tts.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "jarvis-${System.nanoTime()}") ==
             TextToSpeech.SUCCESS
     }
 
