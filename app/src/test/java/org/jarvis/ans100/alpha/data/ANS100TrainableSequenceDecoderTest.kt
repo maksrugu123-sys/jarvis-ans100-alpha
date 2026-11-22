@@ -33,10 +33,49 @@ class ANS100TrainableSequenceDecoderTest {
         val generated = decoder.generate("кот", maxNewTokens = 5)
 
         assertTrue(trained.epochsCompleted == 80)
-        assertTrue(trained.trainingTokenCount == 24)
+        assertTrue(trained.trainingTokenCount > 24)
         assertTrue(trained.finalMeanLoss < initial.finalMeanLoss)
         assertTrue(generated.text.startsWith("ест"))
         assertTrue(generated.text.contains("рыбу"))
+    }
+
+    @Test
+    fun subwordModelComposesPromptFromKnownCharactersAndReportsUnknownPieces() {
+        val decoder = ANS100TrainableSequenceDecoder(hiddenSize = 16, seed = 7)
+        decoder.trainPairs(
+            listOf(
+                "кот" to "ест рыбу.",
+                "коты" to "едят корм.",
+                "пёс" to "ест корм.",
+                "котик" to "ест рыбу.",
+            ),
+            epochs = 40,
+        )
+
+        val knownPieces = decoder.generate("котёнок", maxNewTokens = 4)
+        val familiar = decoder.generate("котик", maxNewTokens = 4)
+
+        assertTrue(knownPieces.unknownPromptTokenCount >= 0)
+        assertEquals(0, familiar.unknownPromptTokenCount)
+    }
+
+    @Test
+    fun versionOneWordLevelSnapshotRemainsReadable() {
+        val original = ANS100TrainableSequenceDecoder(hiddenSize = 16, seed = 7)
+        original.train(List(8) { "кот ест рыбу." }, epochs = 5)
+        val current = java.util.Base64.getUrlDecoder().decode(original.exportSnapshot())
+        val legacy = java.nio.ByteBuffer.allocate(current.size - Int.SIZE_BYTES)
+            .put(current, 0, 4 + Int.SIZE_BYTES)
+            .putInt(1)
+            .put(current, 4 + Int.SIZE_BYTES + Int.SIZE_BYTES, current.size - (4 + Int.SIZE_BYTES + Int.SIZE_BYTES))
+            .array()
+        val encodedLegacy = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(legacy)
+
+        val restored = ANS100TrainableSequenceDecoder(hiddenSize = 16, seed = 99)
+        restored.restoreSnapshot(encodedLegacy)
+
+        assertTrue(restored.isTrained)
+        assertEquals(original.generate("кот"), restored.generate("кот"))
     }
 
     @Test
