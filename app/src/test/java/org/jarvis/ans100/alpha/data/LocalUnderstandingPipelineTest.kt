@@ -151,6 +151,44 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun shortWhyFollowUpResolvesToTheLatestDialogueTurn() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Как работает память JARVIS?", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Память сохраняет подтверждённые записи.", 2L),
+        )
+        val result = pipeline.analyze("Почему?", history)
+        assertEquals("continuation", result.intent)
+        assertEquals("selected", result.contextReference.status)
+        assertEquals("elliptical_follow_up", result.contextReference.method)
+        assertTrue(result.refersToPreviousContext)
+        assertTrue(result.contextReference.sourceAssistantMessage.contains("подтверждённые записи"))
+    }
+
+    @Test
+    fun shortHowAndMoreDetailFollowUpsResolveToPreviousTurn() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Расскажи про нейронный декодер", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Декодер строит последовательность токенов.", 2L),
+        )
+        val how = pipeline.analyze("А как?", history)
+        val more = pipeline.analyze("Расскажи подробнее", history)
+        assertEquals("continuation", how.intent)
+        assertEquals("elliptical_follow_up", how.contextReference.method)
+        assertEquals("continuation", more.intent)
+        assertEquals("elliptical_follow_up", more.contextReference.method)
+    }
+
+    @Test
+    fun completeStandaloneQuestionIsNotMisclassifiedAsEllipticalFollowUp() {
+        val result = pipeline.analyze("Почему небо голубое?", listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Привет", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Привет!", 2L),
+        ))
+        assertEquals("question", result.intent)
+        assertFalse(result.evidence.contains("elliptical_follow_up"))
+    }
+
+    @Test
     fun matchesTheSharedDesktopAndAndroidUnderstandingFixtures() {
         val stream = javaClass.getResourceAsStream("/understanding/understanding-v1.tsv")
             ?: error("Shared JARVIS understanding fixture is missing")
