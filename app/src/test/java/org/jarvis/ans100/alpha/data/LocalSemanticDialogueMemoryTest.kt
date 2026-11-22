@@ -41,7 +41,8 @@ class LocalSemanticDialogueMemoryTest {
         val memory = LocalSemanticDialogueMemory.fromHistory(history)
         assertFalse(memory.activeTasks.any { it.text.contains("экспорт памяти") })
         assertTrue(memory.completedTasks.any { it.text.contains("экспорт памяти") })
-        assertEquals("u2", memory.completedTasks.last().sourceMessageId)
+        assertEquals("u1", memory.completedTasks.last().sourceMessageId)
+        assertEquals("u2", memory.completedTasks.last().completedByMessageId)
     }
 
     @Test
@@ -52,6 +53,19 @@ class LocalSemanticDialogueMemoryTest {
         val memory = LocalSemanticDialogueMemory.fromHistory(history)
         assertTrue(memory.explicitPreferences.isEmpty())
         assertTrue(memory.activeTasks.isEmpty())
+    }
+
+
+    @Test
+    fun keepsOnlyTheLatestAssistantQuestionAsUnresolved() {
+        val history = listOf(
+            LocalConversationMessage("u1", ConversationRole.USER, "Настроить память", 10L),
+            LocalConversationMessage("a1", ConversationRole.ASSISTANT, "Какой формат выбрать?", 11L),
+            LocalConversationMessage("u2", ConversationRole.USER, "JSON", 12L),
+            LocalConversationMessage("a2", ConversationRole.ASSISTANT, "Какой размер лимита?", 13L),
+        )
+        val memory = LocalSemanticDialogueMemory.fromHistory(history)
+        assertEquals(listOf("Какой размер лимита?"), memory.unresolvedQuestions)
     }
 
     @Test
