@@ -30,6 +30,41 @@ data class LocalContextReference(
     val confidence: Double = 0.0,
 )
 
+
+/** Bounded dialogue state derived from the transcript; never persisted separately. */
+data class LocalDialogueState(
+    val activeTopic: String = "",
+    val latestUserRequest: String = "",
+    val latestAssistantAnswer: String = "",
+    val pendingAssistantQuestion: String = "",
+    val pendingAssistantOffer: String = "",
+    val schema: String = "JARVIS_DIALOGUE_STATE_V1",
+) {
+    companion object {
+        private val OFFER_MARKERS = listOf(
+            Regex("""(?iu)\b(?:могу|предлагаю|можем)\b.{0,180}"""),
+            Regex("""(?iu)(?:следующий этап|следующий шаг|хочешь,? продолжим|если хочешь)"""),
+            Regex("""(?iu)\b(?:would you like|I can|next step|shall we)\b.{0,180}"""),
+        )
+
+        fun fromHistory(history: List<LocalConversationMessage>): LocalDialogueState {
+            val bounded = history.takeLast(16)
+            val userIndex = bounded.indexOfLast { it.role == ConversationRole.USER && it.text.isNotBlank() }
+            val assistantIndex = bounded.indexOfLast { it.role == ConversationRole.ASSISTANT && it.text.isNotBlank() }
+            val userText = bounded.getOrNull(userIndex)?.text.orEmpty().take(600)
+            val assistantText = bounded.getOrNull(assistantIndex)?.text.orEmpty().take(900)
+            val assistantIsCurrent = assistantIndex > userIndex
+            return LocalDialogueState(
+                activeTopic = userText,
+                latestUserRequest = userText,
+                latestAssistantAnswer = assistantText,
+                pendingAssistantQuestion = if (assistantIsCurrent && assistantText.trimEnd().endsWith("?")) assistantText else "",
+                pendingAssistantOffer = if (assistantIsCurrent && OFFER_MARKERS.any { it.containsMatchIn(assistantText) }) assistantText else "",
+            )
+        }
+    }
+}
+
 data class LocalUnderstanding(
     val language: String,
     val intent: String,
@@ -44,6 +79,7 @@ data class LocalUnderstanding(
     val hasRecentUserContext: Boolean,
     val reasoningPlan: LocalReasoningPlan,
     val contextReference: LocalContextReference = LocalContextReference(),
+    val dialogueState: LocalDialogueState = LocalDialogueState(),
     val schema: String = "JARVIS_UNDERSTANDING_V1",
     val scope: String = "bounded_heuristic_pre_generation_analysis",
     val reasoningResult: LocalReasoningResult? = null,
@@ -99,6 +135,7 @@ class LocalUnderstandingPipeline {
         val tokens = TOKEN.findAll(normalized).map { it.value }.take(MAX_TOKENS).toList()
         val historyWindow = recentHistory.takeLast(MAX_CONTEXT_MESSAGES_FOR_UNDERSTANDING)
         val hasRecentUserContext = historyWindow.any { it.role == ConversationRole.USER && it.text.isNotBlank() }
+        val dialogueState = LocalDialogueState.fromHistory(historyWindow)
         val affirmativeFollowThrough = tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
             tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }
         val ellipticalFollowUp = hasRecentUserContext && isEllipticalFollowUp(tokens, text)
@@ -143,7 +180,7 @@ class LocalUnderstandingPipeline {
         val entities = ENTITY.findAll(text).map { it.value.trim() }
             .filter { it.length in 2..48 && it.lowercase(Locale.ROOT) !in COMMON_ENTITY_STOPWORDS }
             .distinctBy { it.lowercase(Locale.ROOT) }.take(MAX_ENTITIES).toList()
-        val contextReference = if (refersBack) selectContextReference(tokens, historyWindow) else LocalContextReference()
+        val contextReference = if (refersBack) selectContextReference(tokens, historyWindow, dialogueState) else LocalContextReference()
         val language = when {
             CYRILLIC.containsMatchIn(text) -> "ru_or_cyrillic"
             LATIN.containsMatchIn(text) -> "en_or_latin"
@@ -163,6 +200,7 @@ class LocalUnderstandingPipeline {
             hasRecentUserContext = hasRecentUserContext,
             reasoningPlan = buildReasoningPlan(intent, uniqueTerms, entities, refersBack, hasRecentUserContext, contextReference),
             contextReference = contextReference,
+            dialogueState = dialogueState,
         )
     }
 
@@ -171,7 +209,7 @@ class LocalUnderstandingPipeline {
 
     private data class ContextCandidate(val index: Int, val userMessage: String, val assistantMessage: String)
 
-    private fun selectContextReference(tokens: List<String>, history: List<LocalConversationMessage>): LocalContextReference {
+    private fun selectContextReference(tokens: List<String>, history: List<LocalConversationMessage>, dialogueState: LocalDialogueState): LocalContextReference {
         val candidates = mutableListOf<ContextCandidate>()
         history.forEachIndexed { index, message ->
             if (message.role != ConversationRole.USER || message.text.isBlank()) return@forEachIndexed
@@ -188,11 +226,11 @@ class LocalUnderstandingPipeline {
             status = "selected",
             method = when {
                 isEllipticalFollowUp(tokens, tokens.joinToString(" ")) -> "elliptical_follow_up"
-                latest.assistantMessage.isNotBlank() -> "adjacent_assistant_offer"
+                dialogueState.pendingAssistantOffer.isNotBlank() -> "adjacent_assistant_offer"
                 else -> "latest_user_turn"
             },
             sourceUserMessage = latest.userMessage, sourceAssistantMessage = latest.assistantMessage,
-            confidence = if (latest.assistantMessage.isNotBlank()) 0.72 else 0.62,
+            confidence = if (dialogueState.pendingAssistantOffer.isNotBlank()) 0.76 else 0.62,
         )
         val queryTerms = tokens.filter { it.length >= MIN_TERM_LENGTH && it !in REFERENCE_STOP }.toSet()
         if (queryTerms.isEmpty()) return if (candidates.size == 1) LocalContextReference(
