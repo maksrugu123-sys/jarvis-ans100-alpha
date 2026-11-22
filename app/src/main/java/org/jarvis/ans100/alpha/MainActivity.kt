@@ -1583,7 +1583,7 @@ private fun HypothesisReviewPanel(
                                     inspected.extraction.candidates.any { it.passageRef == passage.passageRef }
                                 }?.page
                                 Text(
-                                    "Страница: ${passageSource?.pageTitle?.ifBlank { passageSource.finalUrl } ?: "источник не сопоставлен"}",
+                                    "Страница: ${passageSource?.let { it.pageTitle.ifBlank { it.finalUrl } } ?: "источник не сопоставлен"}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
