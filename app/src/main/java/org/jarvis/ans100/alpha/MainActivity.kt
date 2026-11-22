@@ -421,6 +421,8 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                                 onRateLatestAnswer = viewModel::rateLatestHybridAnswer,
                                 onRateNeuralAssociation = viewModel::rateNeuralAssociationCandidate,
                                 onRateCanonicalReadout = viewModel::rateCanonicalReadout,
+                                modelInstalled = ui.conversation.modelInstalled,
+                                onOpenModelSettings = { selectedTab = 3; settingsCategory = "model" },
                                 feedbackAvailable = ui.conversation.hybridFeedbackAvailable,
                                 feedbackMessage = ui.conversation.hybridFeedbackMessage,
                                 glowEnabled = glowEnabled,
@@ -3392,6 +3394,8 @@ private fun ConversationPanel(
     onRateLatestAnswer: (Boolean) -> Unit,
     onRateNeuralAssociation: (String, Boolean) -> Unit,
     onRateCanonicalReadout: (String) -> Unit,
+    modelInstalled: Boolean,
+    onOpenModelSettings: () -> Unit,
     feedbackAvailable: Boolean,
     feedbackMessage: String?,
     glowEnabled: Boolean,
@@ -3408,6 +3412,26 @@ private fun ConversationPanel(
             if (state.messages.isNotEmpty()) {
                 TextButton(onClick = { showClearConfirmation = true }, enabled = !state.isBusy) {
                     Text("Очистить диалог")
+                }
+            }
+        }
+        if (!modelInstalled) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF302719)),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Полноценные ответы JARVIS ещё не включены", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Сейчас работает только базовый режим. Установи Qwen3-0.6B INT4, чтобы JARVIS генерировал свободные ответы локально на телефоне.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedButton(onClick = onOpenModelSettings) {
+                        Text("Установить языковую модель")
+                    }
                 }
             }
         }
@@ -3823,7 +3847,7 @@ private fun SettingsPanel(
                         SectionHeading("Вычислитель нейронов ANS-100", "CPU · GPU · совместная работа")
                         Text("Память рабочего набора нейронов", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Максимум рассчитывается по физической RAM, доступной памяти и классу памяти Android-приложения. Используется консервативный лимит; это не резервирование RAM.",
+                            "Лимит задаётся вручную в мегабайтах, но не выше безопасного максимума устройства. Последние 100 МБ доступной системной RAM остаются неприкосновенным запасом; это не жёсткий лимит всей памяти процесса.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -3836,6 +3860,33 @@ private fun SettingsPanel(
                             "Автоматический максимум устройства: ${ansNeuronRamBudgetMaxMb} МБ",
                             fontWeight = FontWeight.Medium,
                         )
+                        var ramBudgetInput by rememberSaveable(ansNeuronRamBudgetMb, ansNeuronRamBudgetMaxMb) {
+                            mutableStateOf(ansNeuronRamBudgetMb.toString())
+                        }
+                        val parsedRamBudget = ramBudgetInput.toIntOrNull()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = ramBudgetInput,
+                                onValueChange = { ramBudgetInput = it.filter(Char::isDigit).take(3) },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Лимит RAM, МБ") },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                                ),
+                                supportingText = { Text("От 1 до ${ansNeuronRamBudgetMaxMb} МБ") },
+                            )
+                            Button(
+                                onClick = { parsedRamBudget?.let(onAnsNeuronRamBudgetChange) },
+                                enabled = parsedRamBudget != null &&
+                                    parsedRamBudget in 1..ansNeuronRamBudgetMaxMb &&
+                                    parsedRamBudget != ansNeuronRamBudgetMb,
+                            ) { Text("Применить") }
+                        }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             org.jarvis.ans100.alpha.data.AndroidNeuronRamBudgetPreferences.ALLOWED_BUDGETS_MB
                                 .filter { it <= ansNeuronRamBudgetMaxMb }
