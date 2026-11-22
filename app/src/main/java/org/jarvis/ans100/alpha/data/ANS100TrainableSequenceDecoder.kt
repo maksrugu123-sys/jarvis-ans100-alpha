@@ -1,5 +1,10 @@
 package org.jarvis.ans100.alpha.data
 
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.util.Base64
 import java.util.Locale
 import kotlin.math.exp
 import kotlin.math.max
@@ -152,6 +157,129 @@ class ANS100TrainableSequenceDecoder(
         )
     }
 
+    /**
+     * Exports the learned vocabulary and every trainable parameter in a bounded,
+     * versioned binary snapshot encoded as URL-safe Base64.
+     */
+    fun exportSnapshot(): String {
+        check(trained) { "decoder must be trained before exporting a snapshot" }
+        val bytes = ByteArrayOutputStream()
+        DataOutputStream(bytes).use { output ->
+            output.writeInt(SNAPSHOT_MAGIC)
+            output.writeInt(SNAPSHOT_VERSION)
+            output.writeInt(hiddenSize)
+            output.writeInt(vocabulary.size)
+            vocabulary.forEach(output::writeUTF)
+            writeMatrix(output, inputWeights)
+            writeMatrix(output, recurrentWeights)
+            writeMatrix(output, outputWeights)
+            writeVector(output, hiddenBias)
+            writeVector(output, outputBias)
+        }
+        val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes.toByteArray())
+        require(encoded.length <= MAX_SNAPSHOT_CHARS) { "trained model snapshot exceeds storage limit" }
+        return encoded
+    }
+
+    /**
+     * Restores only a complete, compatible, finite snapshot. Parsing is done
+     * into temporary arrays first, so a rejected snapshot never partially
+     * mutates the active decoder.
+     */
+    fun restoreSnapshot(encoded: String) {
+        require(encoded.isNotBlank() && encoded.length <= MAX_SNAPSHOT_CHARS)
+        val bytes = try {
+            Base64.getUrlDecoder().decode(encoded)
+        } catch (error: IllegalArgumentException) {
+            throw IllegalArgumentException("model snapshot is not valid Base64", error)
+        }
+        DataInputStream(ByteArrayInputStream(bytes)).use { input ->
+            require(input.readInt() == SNAPSHOT_MAGIC) { "unknown model snapshot format" }
+            require(input.readInt() == SNAPSHOT_VERSION) { "unsupported model snapshot version" }
+            require(input.readInt() == hiddenSize) { "snapshot hidden size is incompatible" }
+            val vocabSize = input.readInt()
+            require(vocabSize in (RESERVED_TOKENS.size + 2)..maxVocabularySize)
+            val restoredVocabulary = List(vocabSize) { input.readUTF() }
+            require(restoredVocabulary.take(RESERVED_TOKENS.size) == RESERVED_TOKENS)
+            require(restoredVocabulary.distinct().size == restoredVocabulary.size)
+            require(restoredVocabulary.all { it.isNotBlank() && it.length <= MAX_TOKEN_CHARS })
+            val restoredInput = readMatrix(input, vocabSize, hiddenSize)
+            val restoredRecurrent = readMatrix(input, hiddenSize, hiddenSize)
+            val restoredOutput = readMatrix(input, hiddenSize, vocabSize)
+            val restoredHiddenBias = readVector(input, hiddenSize)
+            val restoredOutputBias = readVector(input, vocabSize)
+            require(input.available() == 0) { "model snapshot contains trailing data" }
+
+            // Publish the fully validated state atomically after all reads succeed.
+            vocabulary = restoredVocabulary
+            tokenToId = vocabulary.withIndex().associate { it.value to it.index }
+            inputWeights = restoredInput
+            recurrentWeights = restoredRecurrent
+            outputWeights = restoredOutput
+            hiddenBias = restoredHiddenBias
+            outputBias = restoredOutputBias
+            trained = true
+        }
+    }
+
+    /** Continues training from current weights; unlike train(), it never resets them. */
+    fun fineTune(
+        examples: List<String>,
+        epochs: Int = DEFAULT_FINE_TUNE_EPOCHS,
+        learningRate: Double = DEFAULT_FINE_TUNE_LEARNING_RATE,
+    ): TrainingReport {
+        check(trained) { "decoder must be trained before fine-tuning" }
+        require(examples.isNotEmpty() && examples.size <= MAX_TRAINING_EXAMPLES)
+        require(epochs in 1..MAX_EPOCHS)
+        require(learningRate.isFinite() && learningRate in MIN_LEARNING_RATE..MAX_LEARNING_RATE)
+        require(examples.all { it.isNotBlank() && it.length <= MAX_EXAMPLE_CHARS })
+        val tokenized = examples.map(::tokenize).filter { it.isNotEmpty() }
+        require(tokenized.isNotEmpty() && tokenized.all { it.size <= MAX_TOKENS_PER_EXAMPLE })
+        val sequences = tokenized.map { tokens ->
+            intArrayOf(BOS_ID) + tokens.map { tokenToId[it] ?: UNK_ID }.toIntArray() + intArrayOf(EOS_ID)
+        }
+        var finalLoss = 0.0
+        repeat(epochs) {
+            var epochLoss = 0.0
+            var targetCount = 0
+            sequences.forEach { sequence ->
+                val result = trainSequence(sequence, learningRate)
+                epochLoss += result.first
+                targetCount += result.second
+            }
+            finalLoss = if (targetCount == 0) 0.0 else epochLoss / targetCount
+        }
+        return TrainingReport(
+            exampleCount = tokenized.size,
+            trainingTokenCount = tokenized.sumOf { it.size },
+            vocabularySize = vocabulary.size,
+            epochsCompleted = epochs,
+            finalMeanLoss = finalLoss,
+        )
+    }
+
+    private fun writeMatrix(output: DataOutputStream, matrix: Array<DoubleArray>) {
+        matrix.forEach { row -> row.forEach(output::writeDouble) }
+    }
+
+    private fun writeVector(output: DataOutputStream, vector: DoubleArray) {
+        vector.forEach(output::writeDouble)
+    }
+
+    private fun readMatrix(input: DataInputStream, rows: Int, columns: Int): Array<DoubleArray> =
+        Array(rows) { DoubleArray(columns) { readFiniteWeight(input) } }
+
+    private fun readVector(input: DataInputStream, size: Int): DoubleArray =
+        DoubleArray(size) { readFiniteWeight(input) }
+
+    private fun readFiniteWeight(input: DataInputStream): Double {
+        val value = input.readDouble()
+        require(value.isFinite() && value in -MAX_ABSOLUTE_WEIGHT..MAX_ABSOLUTE_WEIGHT) {
+            "snapshot contains an invalid model weight"
+        }
+        return value
+    }
+
     private fun trainSequence(sequence: IntArray, learningRate: Double): Pair<Double, Int> {
         val states = Array(sequence.size) { DoubleArray(hiddenSize) }
         val logits = Array(sequence.size - 1) { DoubleArray(vocabulary.size) }
@@ -283,6 +411,13 @@ class ANS100TrainableSequenceDecoder(
     private fun lnSafe(value: Double): Double = kotlin.math.ln(value.coerceAtLeast(1e-12))
 
     companion object {
+        const val SNAPSHOT_VERSION = 1
+        const val MAX_SNAPSHOT_CHARS = 12 * 1024 * 1024
+        const val MAX_TOKEN_CHARS = 128
+        const val DEFAULT_FINE_TUNE_EPOCHS = 2
+        const val DEFAULT_FINE_TUNE_LEARNING_RATE = 0.005
+        private const val SNAPSHOT_MAGIC = 0x414E5331
+        private const val MAX_ABSOLUTE_WEIGHT = 1_000_000.0
         const val DEFAULT_HIDDEN_SIZE = 24
         const val DEFAULT_MAX_VOCABULARY = 256
         const val DEFAULT_SEED = 100
