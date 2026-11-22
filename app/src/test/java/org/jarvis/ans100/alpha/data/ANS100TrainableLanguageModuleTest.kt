@@ -38,6 +38,18 @@ class ANS100TrainableLanguageModuleTest {
     }
 
     @Test
+    fun promptAnswerTrainingPersistsAndRestoresGeneration() {
+        val storage = MemoryStorage()
+        val module = ANS100TrainableLanguageModule(storage)
+        module.trainPairs(List(8) { "кот" to "ест рыбу." }, epochs = 60)
+        val before = module.generate("кот")
+        assertNotNull(before)
+
+        val restored = ANS100TrainableLanguageModule(storage)
+        assertEquals(before, restored.generate("кот"))
+    }
+
+    @Test
     fun failedPersistenceDoesNotReplaceActiveModel() {
         val storage = MemoryStorage()
         val module = ANS100TrainableLanguageModule(storage)
