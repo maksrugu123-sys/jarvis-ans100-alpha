@@ -24,7 +24,7 @@ import org.jarvis.ans100.alpha.data.LocalWorkspaceMemoryCache
 import org.jarvis.ans100.alpha.data.LiteRtLmModelStore
 import org.jarvis.ans100.alpha.data.LiteRtLmDownloadCancelledException
 import org.jarvis.ans100.alpha.data.LiteRtLmResponseEngine
-import org.jarvis.ans100.alpha.data.LocalFallbackResponseEngine
+import org.jarvis.ans100.alpha.data.ANS100NeuralResponseGenerator
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
 import org.jarvis.ans100.alpha.data.SharedPreferencesLocalWorkspaceMemoryStorage
 import org.jarvis.ans100.alpha.data.LocalDraftException
@@ -394,7 +394,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         LocalConversationRepository(
             SharedPreferencesConversationStorage(application.applicationContext),
         ),
-        conversationResponseEngine,
+        ANS100NeuralResponseGenerator(),
         workspaceMemoryCache,
     )
     private val runtimeClient = LocalRuntimeBridgeClient()
@@ -434,7 +434,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                         val current = mutableState.value
                         mutableState.value = current.copy(
                             conversation = current.conversation.copy(
-                                backendLabel = conversationResponseEngine.backendLabel,
+                                backendLabel = conversationCoordinator.backendLabel,
                             ),
                         )
                     }
