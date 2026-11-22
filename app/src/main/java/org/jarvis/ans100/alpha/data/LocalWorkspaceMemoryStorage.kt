@@ -137,9 +137,8 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
     }
 
     /**
-     * Lists only this app's own exports in Downloads/JARVIS and validates each
-     * snapshot before offering it for restore. Invalid files remain visible but
-     * carry no restoreable record count.
+     * Lists .jmem snapshots in Downloads/JARVIS and validates each before
+     * offering it for restore. Invalid files remain visible but have no record count.
      */
     fun listExports(): List<LocalMemoryBackupInfo> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
