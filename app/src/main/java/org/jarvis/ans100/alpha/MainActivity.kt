@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jarvis.ans100.alpha.data.ConversationRole
+import org.jarvis.ans100.alpha.data.LocalMemoryBackupInfo
 import org.jarvis.ans100.alpha.data.LocalSession
 import org.jarvis.ans100.alpha.data.LocalSessionStatus
 import org.jarvis.ans100.alpha.data.LocalTaskDraft
@@ -316,6 +317,7 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     }
 
     LaunchedEffect(selectedTab) {
+        if (selectedTab == 1) viewModel.refreshLocalMemoryBackups()
         if (selectedTab == 5) viewModel.refreshHypothesisReview()
         if (selectedTab == 6) viewModel.refreshAnsSequenceTrainingStatus()
     }
@@ -500,6 +502,11 @@ private fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                             onAdd = viewModel::addLocalMemory,
                             onDelete = viewModel::deleteLocalMemory,
                             onPeerSync = viewModel::syncApprovedMemories,
+                        )
+                        LocalMemoryBackupsPanel(
+                            state = ui.localMemory,
+                            onRefresh = viewModel::refreshLocalMemoryBackups,
+                            onRestore = viewModel::previewLocalMemoryBackup,
                         )
                         WorkspaceMemoryPanel(
                             state = ui.workspace,
@@ -1072,6 +1079,99 @@ private fun LocalMemoryPanel(
     }
 }
 
+@Composable
+private fun LocalMemoryBackupsPanel(
+    state: LocalMemoryUiState,
+    onRefresh: () -> Unit,
+    onRestore: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, Color(0x443D789F)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1C2B)),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                SectionHeading("Резервные копии", "Downloads/JARVIS · .jmem")
+                TextButton(onClick = onRefresh, enabled = !state.isLoadingBackups) {
+                    Text(if (state.isLoadingBackups) "Обновляем…" else "Обновить")
+                }
+            }
+            Text(
+                "Здесь показаны дата, размер и количество записей. Перед заменой памяти каждый файл проверяется повторно.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.isLoadingBackups) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            state.backupListError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (!state.isLoadingBackups && state.backups.isEmpty()) {
+                Text(
+                    "Резервных копий пока нет. Создай её командой /memory export.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            state.backups.forEach { backup ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Text(backup.displayName, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                        Text("Дата: ${formatMemoryBackupDate(backup.modifiedAtMillis)}", style = MaterialTheme.typography.bodySmall)
+                        Text("Размер: ${formatMemoryBackupSize(backup.sizeBytes)}", style = MaterialTheme.typography.bodySmall)
+                        if (backup.recordCount != null) {
+                            Text(
+                                "Записей: ${backup.recordCount} · активных: ${backup.activeRecordCount ?: 0}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            OutlinedButton(
+                                onClick = { onRestore(backup.uri) },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !state.isBusy && !state.isLoadingBackups,
+                            ) { Text("Проверить и восстановить") }
+                        } else {
+                            Text(
+                                "Нельзя восстановить: ${backup.validationError ?: "неизвестная ошибка формата"}",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatMemoryBackupDate(timestampMillis: Long): String {
+    if (timestampMillis <= 0L) return "дата неизвестна"
+    return runCatching {
+        java.time.Instant.ofEpochMilli(timestampMillis)
+            .atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+    }.getOrDefault("дата неизвестна")
+}
+
+private fun formatMemoryBackupSize(sizeBytes: Long): String = when {
+    sizeBytes < 1024L -> "$sizeBytes Б"
+    sizeBytes < 1024L * 1024L -> String.format(java.util.Locale.ROOT, "%.1f КиБ", sizeBytes / 1024.0)
+    else -> String.format(java.util.Locale.ROOT, "%.2f МиБ", sizeBytes / (1024.0 * 1024.0))
+}
 @Composable
 private fun WorkspaceMemoryPanel(
     state: RuntimeWorkspaceUiState,
