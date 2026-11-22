@@ -33,6 +33,7 @@ class ANS100SequenceFeedbackTrainerTest {
             ),
         )
         assertNotNull(corrected)
+        assertTrue(corrected!!.trainingTokenCount == 2)
         assertTrue(decoder.exportSnapshot() != before)
     }
 
