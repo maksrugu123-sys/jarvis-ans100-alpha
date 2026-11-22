@@ -30,7 +30,7 @@ import org.jarvis.ans100.alpha.data.ANS100SequenceFeedbackTrainer
 import org.jarvis.ans100.alpha.data.ANS100TrainableSequenceDecoder
 import org.jarvis.ans100.alpha.data.FileANS100SequenceModelStorage
 import org.jarvis.ans100.alpha.data.SharedPreferencesConversationStorage
-import org.jarvis.ans100.alpha.data.SharedPreferencesLocalWorkspaceMemoryStorage
+import org.jarvis.ans100.alpha.data.PhoneFolderLocalWorkspaceMemoryStorage
 import org.jarvis.ans100.alpha.data.LocalDraftException
 import org.jarvis.ans100.alpha.data.LocalDraftRepository
 import org.jarvis.ans100.alpha.data.LocalDraftState
@@ -374,9 +374,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val localSignalRuntime = LocalConversationSignalRuntime(
         SharedPreferencesConversationSignalStorage(application.applicationContext),
     )
-    private val workspaceMemoryCache = LocalWorkspaceMemoryCache(
-        SharedPreferencesLocalWorkspaceMemoryStorage(application.applicationContext),
-    )
+    private val phoneMemoryStorage = PhoneFolderLocalWorkspaceMemoryStorage(application.applicationContext)
+    private val workspaceMemoryCache = LocalWorkspaceMemoryCache(phoneMemoryStorage)
     private val workspaceConceptInputBridge = ANS100WorkspaceConceptInputBridge()
     private val neuralHypothesisLedger = ANS100NeuralHypothesisLedger(appContext)
     private val neuralHypothesisEngine = ANS100NeuralHypothesisEngine().apply {
@@ -1514,6 +1513,42 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     ): ANS100TrainableSequenceDecoder.Generation? =
         conversationCoordinator.generateSequenceContinuation(prompt)
 
+    private fun runLocalMemoryCommand(command: String, action: () -> String) {
+        val before = mutableState.value
+        if (before.conversation.isBusy || before.localMemory.isBusy) return
+        mutableState.value = before.copy(
+            conversation = before.conversation.copy(isBusy = true, error = null, streamingResponse = ""),
+            localMemory = before.localMemory.copy(isBusy = true, error = null),
+        )
+        conversationExecutor.execute {
+            try {
+                val response = action()
+                val messages = conversationCoordinator.sendWithExternalResult(command, response)
+                val snapshot = workspaceMemoryCache.snapshot()
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(messages = messages, isBusy = false, error = null),
+                        localMemory = current.localMemory.copy(
+                            records = snapshot.records,
+                            isLoaded = snapshot.loaded,
+                            isBusy = false,
+                            error = snapshot.error,
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    val current = mutableState.value
+                    mutableState.value = current.copy(
+                        conversation = current.conversation.copy(isBusy = false, error = error.message ?: "Команда памяти не выполнена."),
+                        localMemory = current.localMemory.copy(isBusy = false, error = error.message),
+                    )
+                }
+            }
+        }
+    }
+
     fun sendConversationMessage(value: String) {
         val clean = value.trim()
         if (clean.isEmpty()) return
@@ -1525,6 +1560,27 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     error = "Сообщение не должно превышать 4 000 символов.",
                 ),
             )
+            return
+        }
+        val memoryCommand = clean.lowercase(Locale.ROOT).replace(Regex("\\s+"), " ")
+        if (memoryCommand in setOf("/memory export", "/память выгрузить")) {
+            runLocalMemoryCommand(clean) {
+                val file = phoneMemoryStorage.exportSnapshot()
+                "Экспорт памяти завершён. Файл: ${file.absolutePath}"
+            }
+            return
+        }
+        if (memoryCommand in setOf("/memory reset", "/память сбросить")) {
+            runLocalMemoryCommand(clean) {
+                "Для защиты от случайной потери данных подтверди сброс командой: /memory reset confirm"
+            }
+            return
+        }
+        if (memoryCommand in setOf("/memory reset confirm", "/память сбросить подтверждаю")) {
+            runLocalMemoryCommand(clean) {
+                workspaceMemoryCache.clear()
+                "Локальная память JARVIS сброшена. Папка и пустой файл памяти сохранены."
+            }
             return
         }
         val searchIntent = AndroidWebSearchIntent.extract(clean)
