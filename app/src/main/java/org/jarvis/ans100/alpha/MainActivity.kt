@@ -4142,7 +4142,7 @@ private fun SettingsPanel(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "Qwen отвечает за естественную формулировку и не может отменять отказ или уточнение ANS-100.",
+                            "Основной чат использует ANS-100 Neural Response и не вызывает Qwen. Экспериментальная модель остаётся отдельным инструментом сравнения, а не генератором ответов JARVIS.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
