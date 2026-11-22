@@ -1377,6 +1377,34 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun trainAnsSequencePairsAsync(examples: List<Pair<String, String>>, epochs: Int) {
+        val current = mutableState.value.sequenceTraining
+        if (current.busy) return
+        mutableState.value = mutableState.value.copy(sequenceTraining = current.copy(
+            busy = true, message = "Обучение ответов на вопросы выполняется локально…",
+        ))
+        sequenceTrainingExecutor.execute {
+            val result = runCatching { trainAnsSequencePairs(examples, epochs) }
+            mainHandler.post {
+                val previous = mutableState.value.sequenceTraining
+                val status = sequenceLanguageModule.status()
+                val statusLabel = when {
+                    status.storageError != null -> "Ошибка хранилища: ${status.storageError}"
+                    status.trained -> "Обучена · словарь: ${status.vocabularySize} · скрытый слой: ${status.hiddenSize} · сохранение: ${if (status.storageLoaded) "загружено" else "активно"}"
+                    else -> "Не обучена"
+                }
+                mutableState.value = mutableState.value.copy(sequenceTraining = previous.copy(
+                    busy = false,
+                    status = statusLabel,
+                    message = result.fold(
+                        { "Готово: ${it.exampleCount} пар вопрос-ответ, ${it.trainingTokenCount} целевых токенов ответа, ${it.epochsCompleted} эпох; средняя loss = ${"%.4f".format(java.util.Locale.ROOT, it.finalMeanLoss)}. Вопросы использовались как контекст, обучение ошибки считалось только на ответах." },
+                        { "Ошибка обучения: ${it.message ?: "неизвестная ошибка"}" },
+                    ),
+                ))
+            }
+        }
+    }
+
     fun applyAnsSequenceCorrectionAsync(prompt: String, correction: String) {
         val current = mutableState.value.sequenceTraining
         if (current.busy) return
@@ -1462,6 +1490,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         epochs: Int = ANS100TrainableSequenceDecoder.DEFAULT_EPOCHS,
     ): ANS100TrainableSequenceDecoder.TrainingReport =
         conversationCoordinator.trainSequenceLanguage(examples, epochs)
+
+    fun trainAnsSequencePairs(
+        examples: List<Pair<String, String>>,
+        epochs: Int = ANS100TrainableSequenceDecoder.DEFAULT_EPOCHS,
+    ): ANS100TrainableSequenceDecoder.TrainingReport =
+        conversationCoordinator.trainSequenceLanguagePairs(examples, epochs)
 
     fun applyAnsSequenceCorrection(
         prompt: String,
