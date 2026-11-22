@@ -182,7 +182,7 @@ class LocalUnderstandingPipeline {
         if (candidates.isEmpty()) return LocalContextReference(status = "unavailable", method = "no_recent_user_turn")
         val follow = (tokens.isNotEmpty() && tokens.first() in AFFIRMATIVE_FOLLOW_THROUGH &&
             tokens.all { it in AFFIRMATIVE_FOLLOW_THROUGH || it in setOf("же", "это", "вот", "пожалуйста") }) ||
-            isEllipticalFollowUp(tokens, "")
+            isEllipticalFollowUp(tokens, tokens.joinToString(" "))
         val latest = candidates.last()
         if (follow) return LocalContextReference(
             status = "selected",
