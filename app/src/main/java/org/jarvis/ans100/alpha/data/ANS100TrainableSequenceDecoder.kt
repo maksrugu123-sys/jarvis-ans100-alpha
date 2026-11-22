@@ -202,11 +202,42 @@ class ANS100TrainableSequenceDecoder(
 
         val promptTokens = tokenize(prompt).takeLast(MAX_TOKENS_PER_EXAMPLE)
         require(promptTokens.isNotEmpty()) { "prompt contains no usable tokens" }
-        val unknownPromptTokenCount = promptTokens.count { it == UNK_TOKEN || it !in tokenToId }
+        return generateFromTokens(promptTokens, maxNewTokens)
+    }
+
+    /**
+     * Reserves token capacity for the current user prompt before adding older
+     * context. Long context is trimmed first, never allowed to evict the
+     * beginning of a prompt that fits within the model's bounded input window.
+     */
+    fun generateWithContext(
+        prompt: String,
+        context: String,
+        maxNewTokens: Int = DEFAULT_MAX_NEW_TOKENS,
+    ): Generation {
+        check(trained) { "decoder must be trained before generation" }
+        require(prompt.isNotBlank() && prompt.length <= MAX_EXAMPLE_CHARS)
+        require(context.length <= MAX_EXAMPLE_CHARS)
+        require(maxNewTokens in 1..MAX_GENERATION_TOKENS)
+        val promptTokens = tokenize(prompt).takeLast(MAX_TOKENS_PER_EXAMPLE)
+        require(promptTokens.isNotEmpty()) { "prompt contains no usable tokens" }
+        val remainingContextTokens = (MAX_TOKENS_PER_EXAMPLE - promptTokens.size).coerceAtLeast(0)
+        val contextTokens = if (remainingContextTokens == 0 || context.isBlank()) {
+            emptyList()
+        } else {
+            tokenize(context).takeLast(remainingContextTokens)
+        }
+        return generateFromTokens(contextTokens + promptTokens, maxNewTokens)
+    }
+
+    private fun generateFromTokens(
+        promptTokens: List<String>,
+        maxNewTokens: Int,
+    ): Generation {
         var hidden = DoubleArray(hiddenSize)
         hidden = step(BOS_ID, hidden)
         promptTokens.forEach { token -> hidden = step(tokenToId[token] ?: UNK_ID, hidden) }
-
+        val unknownPromptTokenCount = promptTokens.count { it == UNK_TOKEN || it !in tokenToId }
         val decoded = beamDecode(hidden, maxNewTokens, DEFAULT_BEAM_WIDTH)
         val generated = decoded.tokenIds.map { vocabulary[it] }
         return Generation(
