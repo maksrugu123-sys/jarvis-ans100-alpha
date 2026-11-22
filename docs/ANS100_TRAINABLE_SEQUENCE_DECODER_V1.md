@@ -13,7 +13,7 @@ The decoder is wired into the Android conversation response generator, but it on
 - Network: one recurrent hidden layer with tanh activation.
 - Objective: next-token categorical cross-entropy.
 - Training: prompt-conditioned sequence back-propagation through time with clipped gradients; in question/answer mode, the prompt is context and only the answer plus EOS is supervised.
-- Decoding: bounded greedy autoregressive generation.
+- Decoding: bounded deterministic beam search with repetition penalties and explicit EOS handling.
 - Limits: at most 256 training examples, 64 subword tokens per prompt/answer pair, 512 vocabulary entries, 64 hidden units and 48 generated tokens.
 
 There are no pretrained weights, cloud calls, Qwen calls, prompt templates or hidden language-model dependencies in this decoder.
@@ -179,7 +179,7 @@ build, APK build or CI workflow was run while adding them.
 
 ## Bounded beam decoding and prompt-priority context
 
-The decoder's inference path now uses a fixed-width beam search (width 3) instead of committing to a single greedy next token at every step. Candidate sequences are ranked with a length-normalized log score. A small token-repeat penalty and an additional repeated-bigram penalty discourage simple loops. EOS remains an explicit candidate, and decoding stops when all retained candidates have ended or the configured token budget is reached.
+The decoder's inference path now uses a fixed-width beam search (width 3) instead of committing to a single beam-search next token at every step. Candidate sequences are ranked with a length-normalized log score. A small token-repeat penalty and an additional repeated-bigram penalty discourage simple loops. EOS remains an explicit candidate, and decoding stops when all retained candidates have ended or the configured token budget is reached.
 
 The search is deliberately small and deterministic: it does not sample randomly, does not increase model parameters, and has a predictable upper bound suitable for a phone. Beam search explores alternatives under the learned model; it cannot make weak training data or an undertrained network produce reliable language by itself. The reported mean token confidence is the geometric mean of selected token scores and is still not calibrated factual confidence.
 
