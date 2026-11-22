@@ -52,7 +52,7 @@ data class LocalSemanticDialogueMemory(
         return copy(
             activeTasks = allTasks.filter { it.status != "completed" }.takeLast(8),
             completedTasks = allTasks.filter { it.status == "completed" }.takeLast(8),
-            explicitPreferences = preferences.values.takeLast(8),
+            explicitPreferences = preferences.values.toList().takeLast(8),
             unresolvedQuestions = newer.unresolvedQuestions.takeLast(4),
             preferenceConflicts = (preferenceConflicts + newer.preferenceConflicts)
                 .distinctBy { "${it.previousMessageId}:${it.currentMessageId}" }.takeLast(4),
