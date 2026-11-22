@@ -83,7 +83,7 @@ class ANS100NeuralResponseGenerator(
         val parsed = understanding ?: LocalUnderstandingPipeline().analyze(clean, history)
         val queryTerms = terms(clean)
         val rankedMemories = memories.asSequence()
-            .filter { it.userApproved && it.content.isNotBlank() }
+            .filter { it.userApproved && it.supersededById == null && it.content.isNotBlank() }
             .map { memory ->
                 val overlap = queryTerms.intersect(terms(memory.content + " " + memory.category)).size
                 Triple(overlap, memory, queryTerms.isNotEmpty() && overlap.toDouble() / queryTerms.size >= MIN_MEMORY_MATCH_RATIO)
