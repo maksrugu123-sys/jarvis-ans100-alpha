@@ -1694,7 +1694,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun retryPendingManualHypothesisReviews(): ANS100HypothesisManualReviewCoordinator.ReplayReport =
         manualHypothesisReviewCoordinator.replayPending()
 
-    /** Bounded audit history for a future manual-review screen. */
+    /** Returns bounded audit history for the manual-review screen. */
     fun loadManualHypothesisReviewHistory(
         limit: Int = ANS100HypothesisManualReviewLedger.DEFAULT_HISTORY_LIMIT,
     ): List<ANS100HypothesisManualReviewLedger.Entry> = runCatching {
