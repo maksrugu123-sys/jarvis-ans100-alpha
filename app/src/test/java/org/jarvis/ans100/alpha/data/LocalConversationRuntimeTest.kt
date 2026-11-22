@@ -105,7 +105,7 @@ class LocalConversationRuntimeTest {
         val engine = LocalFallbackResponseEngine()
         assertTrue(engine.respond("/help", emptyList()).contains("базовый локальный режим"))
         assertTrue(engine.respond("объясни квантовую физику", emptyList())
-            .contains("Языковая модель для этого ответа не использовалась"))
+            .contains("ответ без догадок"))
     }
 
 
@@ -240,8 +240,8 @@ class LocalConversationRuntimeTest {
 
         val messages = coordinator.send("Найди ошибку в коде")
 
-        assertTrue(messages.last().text.contains("построил предварительный план"))
-        assertTrue(messages.last().text.contains("внешние действия не выполнялись"))
+        assertTrue(messages.last().text.contains("не располагаю достаточными сведениями"))
+        assertTrue(messages.last().text.contains("Языковая модель для этого ответа не использовалась"))
         assertTrue(!coordinator.status().languageModelConfigured)
         assertTrue(coordinator.status().understandingIntegratedIntoConversation)
         assertEquals("action_request", coordinator.status().lastUnderstandingIntent)
