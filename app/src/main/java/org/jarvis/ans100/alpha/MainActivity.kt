@@ -1579,8 +1579,16 @@ private fun HypothesisReviewPanel(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                val passageSource = state.inspectedPages.firstOrNull { inspected ->
+                                    inspected.extraction.candidates.any { it.passageRef == passage.passageRef }
+                                }?.page
                                 Text(
-                                    "Источник: ${passage.sourceAssessment.name} · ссылка фрагмента: ${passage.passageRef}",
+                                    "Страница: ${passageSource?.pageTitle?.ifBlank { passageSource.finalUrl } ?: "источник не сопоставлен"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    "Аудит: ${passage.sourceAssessment.name} · ссылка фрагмента: ${passage.passageRef}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
