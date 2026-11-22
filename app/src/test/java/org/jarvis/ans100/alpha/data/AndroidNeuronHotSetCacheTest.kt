@@ -33,6 +33,6 @@ class AndroidNeuronHotSetCacheTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun zeroCapacityIsRejected() {
-        AndroidNeuronHotSetCache.trimToCapacity(LinkedHashMap(), 0)
+        AndroidNeuronHotSetCache.trimToCapacity(LinkedHashMap<Int, String>(), 0)
     }
 }
