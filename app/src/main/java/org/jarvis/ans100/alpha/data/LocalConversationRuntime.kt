@@ -394,23 +394,9 @@ class LocalFallbackResponseEngine : LocalResponseEngine {
                 "До связи. История диалога сохранена локально."
             }
             understandingContext != null -> {
-                val plan = understandingContext.reasoningPlan
-                buildString {
-                    append("Ядро JARVIS выполнило предварительный разбор: ")
-                    append(understandingContext.intent)
-                    append(" (уверенность эвристики ")
-                    append(String.format(Locale.ROOT, "%.2f", understandingContext.intentConfidence))
-                    append("). ")
-                    if (plan.requiresClarification && plan.clarificationQuestion.isNotBlank()) {
-                        append(plan.clarificationQuestion)
-                    } else {
-                        append("Сформирован предварительный план из ")
-                        append(plan.steps.size)
-                        append(" шагов. ")
-                    }
-                    append("Это ограниченный анализ и шаблонный план, не глубокое понимание. ")
-                    append("Для свободного содержательного ответа установи языковую модель.")
-                }
+                "Я получил сообщение, но полноценная генерация ответа пока не включена. " +
+                    "Установи локальную языковую модель Qwen3-0.6B INT4 в Настройки → Языковая модель. " +
+                    "После установки JARVIS сможет формировать свободные ответы на устройстве."
             }
             else -> {
                 "Я получил и сохранил сообщение локально, но пока не могу дать содержательный " +
