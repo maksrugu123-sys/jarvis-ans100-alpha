@@ -132,6 +132,43 @@ class ANS100TrainableSequenceDecoderTest {
         assertTrue(decoder.exportSnapshot() != before)
     }
 
+
+    @Test
+    fun beamGenerationIsDeterministicAndRespectsTokenLimit() {
+        val decoder = ANS100TrainableSequenceDecoder(hiddenSize = 16, seed = 19)
+        decoder.trainPairs(
+            listOf(
+                "кот" to "ест рыбу.",
+                "пёс" to "ест корм.",
+                "птица" to "ест зерно.",
+                "рыба" to "плывёт в воде.",
+            ),
+            epochs = 40,
+        )
+
+        val first = decoder.generate("кот", maxNewTokens = 4)
+        val second = decoder.generate("кот", maxNewTokens = 4)
+
+        assertEquals(first, second)
+        assertTrue(first.tokens.size <= 4)
+        assertTrue(first.meanTokenConfidence in 0.0..1.0)
+        assertFalse(first.tokens.any { it in setOf("<bos>", "<eos>", "<unk>") })
+    }
+
+    @Test
+    fun beamGenerationHandlesMaximumBoundWithoutUnboundedOutput() {
+        val decoder = ANS100TrainableSequenceDecoder(hiddenSize = 16, seed = 23)
+        decoder.trainPairs(
+            listOf("кот" to "ест рыбу.", "пёс" to "ест корм."),
+            epochs = 30,
+        )
+
+        val generated = decoder.generate("кот", maxNewTokens = ANS100TrainableSequenceDecoder.MAX_GENERATION_TOKENS)
+
+        assertTrue(generated.tokens.size <= ANS100TrainableSequenceDecoder.MAX_GENERATION_TOKENS)
+        assertTrue(generated.text.length <= ANS100TrainableSequenceDecoder.MAX_GENERATION_TOKENS * ANS100TrainableSequenceDecoder.MAX_TOKEN_CHARS)
+    }
+
     @Test
     fun trainingRejectsUnboundedOrEmptyExamples() {
         val decoder = ANS100TrainableSequenceDecoder()
