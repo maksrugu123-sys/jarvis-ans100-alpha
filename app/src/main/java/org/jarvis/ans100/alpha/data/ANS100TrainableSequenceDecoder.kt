@@ -146,7 +146,6 @@ class ANS100TrainableSequenceDecoder(
         require(subwordVocabulary.size <= maxVocabularySize) {
             "subword vocabulary exceeds configured model vocabulary capacity"
         }
-        tokenizerMode = TOKENIZER_SUBWORD
         val vocabularySet = subwordVocabulary.toHashSet()
         val tokenized = rawPairs.map { (prompt, answer) ->
             tokenizeSubwords(prompt, vocabularySet) to tokenizeSubwords(answer, vocabularySet)
@@ -157,6 +156,7 @@ class ANS100TrainableSequenceDecoder(
                 (prompt + answer).all { it.length <= MAX_TOKEN_CHARS }
         }) { "a prompt/answer pair exceeds the token or token-length limit" }
 
+        tokenizerMode = TOKENIZER_SUBWORD
         vocabulary = subwordVocabulary
         tokenToId = vocabulary.withIndex().associate { it.value to it.index }
         require(vocabulary.size >= RESERVED_TOKENS.size + 2) {
