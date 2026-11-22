@@ -147,6 +147,7 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
             return exports.listFiles { file -> file.isFile && file.extension.equals("jmem", true) }
                 .orEmpty()
                 .sortedByDescending { it.lastModified() }
+                .take(50)
                 .map { file ->
                     val validation = runCatching {
                         require(file.length() <= 3L * 1024 * 1024) { "Файл превышает 3 МиБ." }
@@ -176,7 +177,7 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
         resolver.query(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
             projection,
-            "${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+            "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.IS_PENDING} = 0",
             arrayOf(Environment.DIRECTORY_DOWNLOADS + "/JARVIS/"),
             "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
         )?.use { cursor ->
@@ -222,7 +223,7 @@ class PhoneFolderLocalWorkspaceMemoryStorage(context: Context) : ConversationSto
                 )
             }
         }
-        return backups
+        return backups.take(50)
     }
 
     fun directoryPath(): String = directory.absolutePath
