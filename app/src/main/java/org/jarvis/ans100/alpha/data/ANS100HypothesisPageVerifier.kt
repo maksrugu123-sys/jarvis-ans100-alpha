@@ -105,7 +105,7 @@ class ANS100HypothesisPageVerifier(
                 }
                 output.toByteArray()
             }
-            val html = bytes.toString(Charsets.UTF_8.name())
+            val html = String(bytes, Charsets.UTF_8)
             val pageTitle = extractTitle(html)
             val description = extractDescription(html)
             val text = extractText(html)
