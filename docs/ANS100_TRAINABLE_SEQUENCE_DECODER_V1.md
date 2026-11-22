@@ -113,3 +113,33 @@ Unit tests were added for answer-only target counting, loss reduction on a tiny 
 Question/answer training now builds a deterministic word-piece vocabulary from the supplied corpus. Frequent pieces of up to four characters are available, and every observed character is retained as a fallback (with separate word-start pieces). This allows the decoder to compose a word it has not seen as a complete token when its characters were represented in training. It does not provide open-vocabulary understanding: unseen characters can still map to UNK, and the small recurrent network may still generate malformed text.
 
 The model snapshot format is now version 2 and records the tokenizer mode. The reader remains backward-compatible with version-1 word-level snapshots. The ANS response generator rejects learned continuations when any prompt piece is unknown, then falls back to the conservative Core response path. The model remains a small experimental Elman RNN, not a production-scale language model.
+
+## Context-conditioned ANS generation
+
+The response generator now assembles a bounded context package from the current
+conversation before invoking the ANS-owned decoder:
+
+- up to four recent dialogue messages, with explicit user/ANS role markers;
+- only user-approved memories already selected by the Core memory matcher;
+- the current Core understanding: intent, key terms, entities and a bounded
+  reasoning-plan excerpt;
+- optional sparse-neuron telemetry, explicitly labelled as telemetry rather
+  than semantic proof.
+
+The current user prompt is appended after this context and remains the final
+input segment. The context package is capped at 3,500 characters; individual
+history excerpts and neural telemetry are separately bounded. The module also
+rejects oversized combined input before inference.
+
+This is context routing into the recurrent state, not proof that the decoder
+understands or correctly follows every context item. The decoder's existing
+unknown-token gate remains active: if any context or prompt piece is outside
+the trained vocabulary, the learned generation candidate is rejected by the
+response generator and the conservative Core response path is used instead.
+Consequently, toy prompt/answer training data will not automatically teach
+dialogue-memory reasoning. Contextual training examples and held-out evaluation
+are still required before claiming that learned generation uses these sources
+reliably.
+
+No external or pretrained language model is called by this path. No tests,
+Gradle builds, APK builds or CI workflows were run for this change.
