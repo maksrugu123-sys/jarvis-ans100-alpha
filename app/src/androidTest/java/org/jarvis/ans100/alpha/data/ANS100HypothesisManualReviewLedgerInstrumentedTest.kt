@@ -227,4 +227,31 @@ class ANS100HypothesisManualReviewLedgerInstrumentedTest {
     }
 
 
+    @Test
+    fun immutableReviewSnapshotSurvivesReopenWithoutStoringFullPageBody() {
+        val name = "ans100-manual-review-snapshot-${System.nanoTime()}.db"
+        context.deleteDatabase(name)
+        val reviewedPacket = packet()
+        val d = decision(reviewedPacket, "snapshot-persist-001")
+        val evidence = factory.toRelationEvidence(reviewedPacket, d)
+        val first = ANS100HypothesisManualReviewLedger(context, name, factory)
+        assertTrue(first.append(d, evidence, reviewedPacket))
+        first.close()
+
+        val reopened = ANS100HypothesisManualReviewLedger(context, name, factory)
+        val saved = reopened.loadRecent().single()
+        val snapshot = checkNotNull(saved.snapshot)
+        assertEquals(d.hypothesisId, snapshot.hypothesisId)
+        assertEquals(reviewedPacket.pageUrl, snapshot.pageUrl)
+        assertEquals(reviewedPacket.pageContentSha256, snapshot.pageContentSha256)
+        assertEquals(reviewedPacket.passages.map { it.passageRef }, snapshot.passages.map { it.passageRef })
+        assertEquals(reviewedPacket.sources.map { it.canonicalUrl }, snapshot.sources.map { it.canonicalUrl })
+        assertTrue(snapshot.passages.all { it.excerpt.isNotBlank() })
+        assertFalse(snapshot.passages.any { it.excerpt.contains("Heat and expansion are discussed.") && it.excerpt.length > 1_000 })
+        assertTrue(reopened.isApplied(d.decisionId).not())
+        reopened.close()
+        context.deleteDatabase(name)
+    }
+
+
 }
