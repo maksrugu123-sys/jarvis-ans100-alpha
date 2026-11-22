@@ -131,18 +131,19 @@ class ANS100TrainableSequenceDecoder(
         val generated = ArrayList<String>(maxNewTokens)
         var confidenceSum = 0.0
         var ended = false
-        repeat(maxNewTokens) {
+        for (stepIndex in 0 until maxNewTokens) {
             val probabilities = probabilities(hidden)
             val nextId = probabilities.indices.maxByOrNull { probabilities[it] } ?: EOS_ID
             val confidence = probabilities[nextId]
             if (nextId == EOS_ID) {
                 ended = true
-                return@repeat
+                break
             }
-            if (nextId == BOS_ID || nextId == UNK_ID) return@repeat
+            if (nextId == BOS_ID || nextId == UNK_ID) break
             generated += vocabulary[nextId]
             confidenceSum += confidence
-            step(nextId, hidden)
+            val nextHidden = step(nextId, hidden)
+            nextHidden.copyInto(hidden)
         }
         return Generation(
             text = detokenize(generated),
