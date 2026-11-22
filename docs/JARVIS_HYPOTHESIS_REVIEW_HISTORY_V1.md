@@ -10,7 +10,7 @@ Preserve a bounded, immutable audit snapshot for each explicit manual hypothesis
 - Schema version 2 adds `manual_hypothesis_review_snapshots`, keyed by the same decision ID.
 - The decision row and snapshot row are written in one SQLite transaction.
 - Existing version-1 databases are upgraded by creating the snapshot table. Older decisions remain valid and appear without a snapshot.
-- Snapshots are bounded to 48 KiB per decision. They retain the hypothesis ID, primary page title/URL/content digest/fetch timestamp, source URLs/hosts/digests/audit classifications, extracted excerpts and their digests/polarity candidates, and packet warnings.
+- Snapshots are bounded to 48 KiB per decision. They retain the hypothesis ID, primary page title/URL/content digest/fetch timestamp, source URLs/hosts/digests/audit classifications, extracted excerpts with their exact source URL and page digest, sentence digests/polarity candidates, and packet warnings.
 - Full fetched page bodies are not stored. Excerpts are capped at the passage extractor's hard limit; source and passage counts are bounded by the packet contracts.
 - Reusing a decision ID with a different decision payload or a different snapshot is rejected.
 
