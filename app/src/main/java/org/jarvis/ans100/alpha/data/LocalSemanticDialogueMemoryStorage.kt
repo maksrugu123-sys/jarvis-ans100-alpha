@@ -39,6 +39,9 @@ class PhoneFolderSemanticDialogueMemoryStorage(context: Context) : LocalSemantic
             if (!write(empty)) throw LocalConversationException("Не удалось создать файл смысловой памяти JARVIS.")
             return empty
         }
+        if (file.baseFile.length() !in 1L..MAX_FILE_BYTES) {
+            throw LocalConversationException("Файл смысловой памяти пуст или превышает лимит.")
+        }
         val raw = file.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
         return LocalSemanticDialogueMemoryCodec.decode(raw)
     }
@@ -96,6 +99,10 @@ class PhoneFolderSemanticDialogueMemoryStorage(context: Context) : LocalSemantic
     override fun clear(): Boolean = write(LocalSemanticDialogueMemory())
 
     fun directoryPath(): String = directory.absolutePath
+
+    private companion object {
+        const val MAX_FILE_BYTES = 256 * 1024L
+    }
 
     private fun ensureDirectory() {
         if (!directory.exists() && !directory.mkdirs()) {
