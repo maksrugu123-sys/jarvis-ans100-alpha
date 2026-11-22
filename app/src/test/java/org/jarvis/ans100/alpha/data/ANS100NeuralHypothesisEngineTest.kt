@@ -40,7 +40,7 @@ class ANS100NeuralHypothesisEngineTest {
         val engine = ANS100NeuralHypothesisEngine()
         engine.observeTurn("turn-1", setOf("concept.alpha", "concept.beta"), listOf(candidate()), true)
         val row = engine.observeTurn("turn-2", setOf("concept.alpha", "concept.beta"), emptyList(), true).single()
-        assertEquals(ANS100NeuralHypothesisEngine.Status.NOT_REPRODUCED_ON_INDEPENDENT_TURN, row.status)
+        assertEquals(ANS100NeuralHypothesisEngine.Status.MIXED_REPRODUCTION_SIGNAL, row.status)
         assertTrue(row.nonReproducingTurnIds.contains("turn-2"))
     }
 
