@@ -1717,6 +1717,55 @@ private fun HypothesisReviewPanel(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            val previousReview = state.recentDecisions
+                                .asSequence()
+                                .filter { previous ->
+                                    previous.decision.hypothesisId == entry.decision.hypothesisId &&
+                                        (previous.decision.reviewedAtEpochMs < entry.decision.reviewedAtEpochMs ||
+                                            (previous.decision.reviewedAtEpochMs == entry.decision.reviewedAtEpochMs &&
+                                                previous.decision.decisionId < entry.decision.decisionId))
+                                }
+                                .maxWithOrNull(compareBy<org.jarvis.ans100.alpha.data.ANS100HypothesisManualReviewLedger.Entry> {
+                                    it.decision.reviewedAtEpochMs
+                                }.thenBy { it.decision.decisionId })
+                            val historyDiff = previousReview?.let { previous ->
+                                org.jarvis.ans100.alpha.data.ANS100HypothesisReviewHistoryComparator.compare(previous, entry)
+                            }
+                            historyDiff?.let { diff ->
+                                Text(
+                                    "Сравнение с ${diff.previousDecisionId}: " +
+                                        "${if (diff.outcomeChanged) "вывод изменился" else "вывод прежний"} · " +
+                                        "${if (diff.packetChanged) "состав проверки изменился" else "отпечаток проверки прежний"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    "Источники: +${diff.addedSourceUrls.size} / −${diff.removedSourceUrls.size} / " +
+                                        "изменено ${diff.changedSourceUrls.size}; фрагменты: " +
+                                        "+${diff.addedPassageRefs.size} / −${diff.removedPassageRefs.size} / " +
+                                        "изменено ${diff.changedPassageRefs.size}; выбранные: " +
+                                        "+${diff.addedSelectedPassageRefs.size} / −${diff.removedSelectedPassageRefs.size}" +
+                                        if (diff.snapshotsComparable) "" else " · снимки не сопоставимы",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (diff.addedSourceUrls.isNotEmpty() || diff.removedSourceUrls.isNotEmpty()) {
+                                    Text(
+                                        "Новые источники: ${diff.addedSourceUrls.take(2).joinToString()} · " +
+                                            "убраны: ${diff.removedSourceUrls.take(2).joinToString()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (diff.addedPassageRefs.isNotEmpty() || diff.removedPassageRefs.isNotEmpty()) {
+                                    Text(
+                                        "Новые фрагменты: ${diff.addedPassageRefs.take(3).joinToString()} · " +
+                                            "убраны: ${diff.removedPassageRefs.take(3).joinToString()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
