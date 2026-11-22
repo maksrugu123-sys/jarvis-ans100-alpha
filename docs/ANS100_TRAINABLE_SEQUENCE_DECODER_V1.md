@@ -69,3 +69,14 @@ The Android app exposes a dedicated **Обучение** tab for the experimenta
 The held-out screen reports strict case-insensitive exact-string match only. This deliberately conservative score is not semantic accuracy, factual correctness, or a measure of general intelligence. Keep held-out examples separate from training and corrections. Training and evaluation run on a background executor rather than the Compose UI thread.
 
 The screen does not bundle a corpus or silently learn from conversation history. Until a reviewed Russian corpus is supplied and evaluated, a trained decoder remains a small experimental model and may produce poor or empty continuations.
+
+## Reproducible toy corpus (not a quality benchmark)
+
+A deliberately tiny, hand-authored Russian smoke corpus is stored under `datasets/sequence_decoder_v1/`:
+
+- `train_ru_toy.txt`: 30 short prompt/response sequences. Import this file in the **Обучение** tab as training data.
+- `heldout_ru_toy.txt`: 8 distinct prompts in the app's `prompt => expected answer` format. Load these only in the held-out evaluation field; do not train or fine-tune on them.
+
+The held-out prompts are not copied verbatim from training. The two files nevertheless share a narrow, repetitive request/response style and much of the vocabulary. Therefore, this is only a pipeline smoke check for import, training, generation and evaluation wiring. It is not an independent measure of Russian language ability, semantic understanding, factual accuracy or generalization to ordinary conversation. A small Elman RNN may fail most or all exact matches; do not tune repeatedly against the held-out file and then report that score as an unbiased test.
+
+For a meaningful evaluation, create a larger reviewed corpus from independently authored examples, split by intent/topic before training, keep the final test set sealed, and report exact match, token-level metrics, loss, repetition and human review separately.
