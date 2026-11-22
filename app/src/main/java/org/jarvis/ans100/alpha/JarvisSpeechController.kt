@@ -45,7 +45,7 @@ class JarvisSpeechController(context: Context) : TextToSpeech.OnInitListener {
                 ?.filterNot { it.isNetworkConnectionRequired }
                 ?.maxWithOrNull(
                     compareBy<Voice> { it.quality }
-                        .thenByDescending { -it.latency },
+                        .thenBy { -it.latency },
                 )
         }.getOrNull()
         if (localRussianVoice != null) {
