@@ -112,6 +112,49 @@ class LocalSemanticDialogueMemoryTest {
         assertTrue(memory.activeTasks.any { it.text.contains("Напиши программу") })
     }
 
+
+    @Test
+    fun conflictingExplicitPreferencesAreKeptAndMarkedForConfirmation() {
+        val memory = LocalSemanticDialogueMemory.fromHistory(
+            listOf(
+                LocalConversationMessage("u1", ConversationRole.USER, "Предпочитаю короткие ответы", 10L),
+                LocalConversationMessage("u2", ConversationRole.USER, "Предпочитаю подробные ответы", 20L),
+            ),
+        )
+        assertEquals(2, memory.explicitPreferences.size)
+        assertEquals(1, memory.preferenceConflicts.size)
+        assertEquals("needs_confirmation", memory.preferenceConflicts.single().resolution)
+        assertTrue(memory.toModelContext().contains("не выбирать автоматически"))
+    }
+
+    @Test
+    fun explicitCorrectionReplacesOldPreferenceAndKeepsCorrectionProvenance() {
+        val memory = LocalSemanticDialogueMemory.fromHistory(
+            listOf(
+                LocalConversationMessage("u1", ConversationRole.USER, "Предпочитаю короткие ответы", 10L),
+                LocalConversationMessage("u2", ConversationRole.USER, "Я передумал, теперь предпочитаю подробные ответы", 20L),
+            ),
+        )
+        assertEquals(1, memory.explicitPreferences.size)
+        assertEquals("u2", memory.explicitPreferences.single().sourceMessageId)
+        assertEquals("resolved_by_explicit_correction", memory.preferenceConflicts.single().resolution)
+        assertTrue(memory.toModelContext().contains("обновил предпочтение"))
+    }
+
+    @Test
+    fun preferenceConflictSurvivesMemoryMerge() {
+        val first = LocalSemanticDialogueMemory.fromHistory(
+            listOf(LocalConversationMessage("u1", ConversationRole.USER, "Предпочитаю короткие ответы", 10L)),
+        )
+        val second = LocalSemanticDialogueMemory.fromHistory(
+            listOf(LocalConversationMessage("u2", ConversationRole.USER, "Предпочитаю подробные ответы", 20L)),
+            first,
+        )
+        val merged = LocalSemanticDialogueMemory().mergeWith(second)
+        assertEquals(1, merged.preferenceConflicts.size)
+        assertEquals("needs_confirmation", merged.preferenceConflicts.single().resolution)
+    }
+
     @Test
     fun boundsMemoryCollectionsAndContext() {
         val history = (1..80).map { index ->
