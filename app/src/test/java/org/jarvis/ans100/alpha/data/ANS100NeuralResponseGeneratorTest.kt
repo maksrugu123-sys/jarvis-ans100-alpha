@@ -163,6 +163,33 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun ellipticalWhyFollowUpKeepsThePreviousAssistantAnswerInContext() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Как работает память JARVIS?", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Память сохраняет подтверждённые записи.", 2L),
+        )
+        val understanding = LocalUnderstandingPipeline().analyze("Почему?", history)
+        val generator = ANS100NeuralResponseGenerator()
+        val reply = generator.respond("Почему?", history, emptyList(), null, understanding, null)
+        assertTrue(reply.startsWith("Ты спрашиваешь, почему"))
+        assertTrue(reply.contains("Память сохраняет подтверждённые записи"))
+        assertEquals("continuation", generator.lastTrace.strategy)
+    }
+
+    @Test
+    fun detailFollowUpContinuesTheSameTopicInsteadOfRequestingItAgain() {
+        val history = listOf(
+            LocalConversationMessage("user-1", ConversationRole.USER, "Расскажи про нейронный декодер", 1L),
+            LocalConversationMessage("assistant-1", ConversationRole.ASSISTANT, "Декодер строит последовательность токенов.", 2L),
+        )
+        val understanding = LocalUnderstandingPipeline().analyze("Расскажи подробнее", history)
+        val generator = ANS100NeuralResponseGenerator()
+        val reply = generator.respond("Расскажи подробнее", history, emptyList(), null, understanding, null)
+        assertTrue(reply.startsWith("Конечно. Разверну предыдущую мысль"))
+        assertTrue(reply.contains("Декодер строит последовательность токенов"))
+    }
+
+    @Test
     fun trainedAnsSequenceDecoderCanProduceChatReplyWithoutLanguageModel() {
         val storage = object : ANS100SequenceModelStorage {
             var value: String? = null
