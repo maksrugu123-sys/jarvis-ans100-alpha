@@ -309,6 +309,8 @@ interface LocalResponseEngine {
     val backendLabel: String
     /** True only when a local model artifact is installed; inference is not implied. */
     val languageModelConfigured: Boolean get() = false
+    /** True when the engine can use approved workspace memories without an LLM. */
+    val supportsWorkspaceMemory: Boolean get() = languageModelConfigured
     fun respond(
         prompt: String,
         recentHistory: List<LocalConversationMessage>,
