@@ -223,6 +223,51 @@ class ANS100TrainableSequenceDecoder(
         }
     }
 
+    /**
+     * Fine-tunes continuation targets conditioned on a prompt. Prompt tokens
+     * provide recurrent context but are not treated as desired output labels.
+     */
+    fun fineTuneContinuation(
+        prompt: String,
+        continuation: String,
+        epochs: Int = DEFAULT_FINE_TUNE_EPOCHS,
+        learningRate: Double = DEFAULT_FINE_TUNE_LEARNING_RATE,
+    ): TrainingReport {
+        check(trained) { "decoder must be trained before fine-tuning" }
+        require(prompt.isNotBlank() && continuation.isNotBlank())
+        require(prompt.length <= MAX_EXAMPLE_CHARS && continuation.length <= MAX_EXAMPLE_CHARS)
+        require(epochs in 1..MAX_EPOCHS)
+        require(learningRate.isFinite() && learningRate in MIN_LEARNING_RATE..MAX_LEARNING_RATE)
+        require(prompt.length + continuation.length + 1 <= MAX_EXAMPLE_CHARS)
+
+        val promptTokens = tokenize(prompt)
+        val continuationTokens = tokenize(continuation)
+        require(promptTokens.isNotEmpty() && continuationTokens.isNotEmpty())
+        require(promptTokens.size + continuationTokens.size <= MAX_TOKENS_PER_EXAMPLE)
+        require((promptTokens + continuationTokens).all { it.length <= MAX_TOKEN_CHARS })
+        require(continuationTokens.any { it in tokenToId && it !in RESERVED_TOKENS }) {
+            "fine-tuning continuation must contain a token from the trained vocabulary"
+        }
+
+        val sequence = intArrayOf(BOS_ID) +
+            promptTokens.map { tokenToId[it] ?: UNK_ID }.toIntArray() +
+            continuationTokens.map { tokenToId[it] ?: UNK_ID }.toIntArray() +
+            intArrayOf(EOS_ID)
+        val firstTargetIndex = promptTokens.size + 1
+        var finalLoss = 0.0
+        repeat(epochs) {
+            val result = trainSequence(sequence, learningRate, firstTargetIndex)
+            finalLoss = if (result.second == 0) 0.0 else result.first / result.second
+        }
+        return TrainingReport(
+            exampleCount = 1,
+            trainingTokenCount = continuationTokens.size,
+            vocabularySize = vocabulary.size,
+            epochsCompleted = epochs,
+            finalMeanLoss = finalLoss,
+        )
+    }
+
     /** Continues training from current weights; unlike train(), it never resets them. */
     fun fineTune(
         examples: List<String>,
@@ -286,7 +331,12 @@ class ANS100TrainableSequenceDecoder(
         return value
     }
 
-    private fun trainSequence(sequence: IntArray, learningRate: Double): Pair<Double, Int> {
+    private fun trainSequence(
+        sequence: IntArray,
+        learningRate: Double,
+        firstTargetIndex: Int = 1,
+    ): Pair<Double, Int> {
+        require(firstTargetIndex in 1 until sequence.size)
         val states = Array(sequence.size) { DoubleArray(hiddenSize) }
         val logits = Array(sequence.size - 1) { DoubleArray(vocabulary.size) }
         var loss = 0.0
@@ -296,7 +346,7 @@ class ANS100TrainableSequenceDecoder(
             logits[time] = logits(states[time + 1])
             val probs = softmax(logits[time])
             val target = sequence[time + 1]
-            loss -= lnSafe(probs[target])
+            if (time + 1 >= firstTargetIndex) loss -= lnSafe(probs[target])
         }
 
         val gradInput = Array(inputWeights.size) { DoubleArray(hiddenSize) }
@@ -306,19 +356,26 @@ class ANS100TrainableSequenceDecoder(
         val gradOutputBias = DoubleArray(vocabulary.size)
         var nextHiddenGradient = DoubleArray(hiddenSize)
 
+        var supervisedTargets = 0
         for (time in sequence.size - 2 downTo 0) {
-            val probs = softmax(logits[time])
-            probs[sequence[time + 1]] -= 1.0
-            for (h in 0 until hiddenSize) {
-                for (v in vocabulary.indices) {
-                    gradOutput[h][v] += states[time + 1][h] * probs[v]
+            val supervised = time + 1 >= firstTargetIndex
+            val probs = if (supervised) softmax(logits[time]) else null
+            if (probs != null) {
+                probs[sequence[time + 1]] -= 1.0
+                for (h in 0 until hiddenSize) {
+                    for (v in vocabulary.indices) {
+                        gradOutput[h][v] += states[time + 1][h] * probs[v]
+                    }
                 }
+                for (v in vocabulary.indices) gradOutputBias[v] += probs[v]
+                supervisedTargets++
             }
-            for (v in vocabulary.indices) gradOutputBias[v] += probs[v]
 
             val hiddenGradient = nextHiddenGradient.copyOf()
-            for (h in 0 until hiddenSize) {
-                for (v in vocabulary.indices) hiddenGradient[h] += outputWeights[h][v] * probs[v]
+            if (probs != null) {
+                for (h in 0 until hiddenSize) {
+                    for (v in vocabulary.indices) hiddenGradient[h] += outputWeights[h][v] * probs[v]
+                }
             }
             val rawGradient = DoubleArray(hiddenSize) { h ->
                 hiddenGradient[h] * (1.0 - states[time + 1][h] * states[time + 1][h])
@@ -343,7 +400,7 @@ class ANS100TrainableSequenceDecoder(
         applyGradient(outputWeights, gradOutput, learningRate)
         applyGradient(hiddenBias, gradHiddenBias, learningRate)
         applyGradient(outputBias, gradOutputBias, learningRate)
-        return loss to (sequence.size - 1)
+        return loss to supervisedTargets
     }
 
     private fun step(tokenId: Int, previous: DoubleArray): DoubleArray {
