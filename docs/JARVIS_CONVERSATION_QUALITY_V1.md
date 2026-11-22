@@ -54,7 +54,7 @@ Measure context-reference accuracy, response relevance, directness, unsupported-
 
 ## Implemented first slice
 
-The native ANS response generator now treats a short affirmative follow-up as acceptance when the context resolver selected the immediately preceding assistant offer. It extracts the proposed next step and acknowledges continuation without asking the user to restate the topic.
+The native ANS response generator now treats a short affirmative follow-up as acceptance only when the immediately preceding assistant message contains an explicit offer marker. A bounded `LocalDialogueState` is derived from the latest 16 history messages and tracks the active topic, latest user request, latest assistant answer, pending assistant question, and pending assistant offer. A new user turn expires a previous unanswered question or offer automatically. Plain assistant statements are no longer mistaken for offers.
 
 A focused regression test was added for the sequence:
 1. The assistant offers a concrete next step.
@@ -65,11 +65,16 @@ This is a narrow dialogue-state improvement, not yet open-ended language underst
 
 ## Next implementation batches
 
-1. Resolve elliptical follow-up questions against the active dialogue topic.
-2. Add explicit pending-question / pending-offer state and expiry rules.
-3. Expand the held-out multi-turn evaluation set before changing the decoder.
+1. Expand the held-out multi-turn evaluation set before changing the decoder.
 4. Improve ANS decoder training and decoding only against those evaluation cases.
 5. Measure CPU time and memory on Android before increasing model size.
+
+## Latest implementation details
+
+- `LocalDialogueState` is a bounded, deterministic view over conversation history; it is not a separate persistent database.
+- Pending offers use conservative phrase markers and are valid only while the offer is the latest assistant turn after the latest user turn.
+- Pending assistant questions are tracked when the latest assistant turn ends with a question mark; the next user message clears that pending state.
+- This is heuristic dialogue bookkeeping, not a trained semantic state tracker.
 
 ## Verification and constraints
 
