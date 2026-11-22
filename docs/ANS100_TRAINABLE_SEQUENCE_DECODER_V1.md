@@ -90,3 +90,11 @@ The held-out evaluator now reports three separate diagnostics:
 - repeated-token share in generated output, as a coarse repetition warning.
 
 These metrics must be read together. Token F1 is not semantic similarity, factual correctness or grammatical quality; the repetition share is not a complete language-quality metric. The held-out set remains a toy pipeline check and must not be used repeatedly for tuning and then presented as an unbiased benchmark.
+
+### Evaluation metrics
+
+The held-out evaluator also reports:
+- **Token-F1**: overlap of normalized generated and expected tokens, treating tokens as a multiset. It ignores token order and therefore must not be interpreted as semantic similarity.
+- **Repetition rate**: fraction of generated tokens beyond the first occurrence of each distinct token within that answer. This is a coarse repetition diagnostic, not a fluency score.
+
+These metrics complement exact match but do not replace human review. An answer can have a high token overlap while being grammatically wrong, misleading, or semantically reversed.
