@@ -144,6 +144,23 @@ class ANS100HypothesisMultiSourceReviewPacketBuilderTest {
     }
 
     @Test
+    fun collapsesSameUrlAndSameContentReturnedByDifferentSearchLeads() {
+        val first = inspected(
+            "https://one.example/a#first", "one.example", "search-lead:a", "a".repeat(64),
+            "Heat causes expansion.",
+        )
+        val repeated = inspected(
+            "https://one.example/a#second", "one.example", "search-lead:b", "a".repeat(64),
+            "Heat causes expansion.",
+        )
+
+        val packet = builder.build(request(), listOf(first, repeated))
+
+        assertEquals(1, packet.sources.size)
+        assertEquals(1, packet.passages.size)
+    }
+
+    @Test
     fun enforcesPageAndPassageBounds() {
         val page = inspected(
             "https://one.example/a", "one.example", "search-lead:a", "a".repeat(64),
