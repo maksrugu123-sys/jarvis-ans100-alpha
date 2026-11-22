@@ -1,14 +1,7 @@
 name: Android first prototype
 
+# Automatic builds are temporarily paused. Run this workflow manually when needed.
 on:
-  push:
-    branches:
-      - experiment/jarvis-integrated-prototype-v1
-    paths:
-      - "app/**"
-      - "build.gradle.kts"
-      - "settings.gradle.kts"
-      - "gradle.properties"
   workflow_dispatch:
 
 permissions:
