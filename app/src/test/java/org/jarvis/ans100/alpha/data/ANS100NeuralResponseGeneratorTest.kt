@@ -111,8 +111,8 @@ class ANS100NeuralResponseGeneratorTest {
             processedNeuronBatches = 4,
             outputSpikeCount = 1,
             pendingEvents = 0,
-            classifierLabel = "greeting",
-            classifierConfidenceMargin = 0.9,
+            classifierLabel = null,
+            classifierConfidenceMargin = null,
             classifierTrainedExamples = 0,
             statePersisted = true,
         )
@@ -149,7 +149,7 @@ class ANS100NeuralResponseGeneratorTest {
 
         val messages = core.send("Что ты умеешь?")
 
-        assertTrue(messages.last().text.contains("локально"))
+        assertTrue(messages.last().text.contains("внешнюю языковую модель"))
         assertFalse(core.status().languageModelConfigured)
         assertTrue(core.backendLabel.contains("ANS-100 Neural Response"))
     }
