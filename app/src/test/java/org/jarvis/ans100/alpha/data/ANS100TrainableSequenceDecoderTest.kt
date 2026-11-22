@@ -169,6 +169,23 @@ class ANS100TrainableSequenceDecoderTest {
         assertTrue(generated.text.length <= ANS100TrainableSequenceDecoder.MAX_GENERATION_TOKENS * ANS100TrainableSequenceDecoder.MAX_TOKEN_CHARS)
     }
 
+
+    @Test
+    fun longCurrentPromptIsNotEvictedByOlderContext() {
+        val longPrompt = List(32) { "кот ест" }.joinToString(" ")
+        val decoder = ANS100TrainableSequenceDecoder(hiddenSize = 16, seed = 31)
+        decoder.train(List(8) { longPrompt }, epochs = 20)
+
+        val withoutContext = decoder.generate(longPrompt, maxNewTokens = 4)
+        val withOversizedContext = decoder.generateWithContext(
+            prompt = longPrompt,
+            context = List(40) { "старый контекст" }.joinToString(" "),
+            maxNewTokens = 4,
+        )
+
+        assertEquals(withoutContext, withOversizedContext)
+    }
+
     @Test
     fun trainingRejectsUnboundedOrEmptyExamples() {
         val decoder = ANS100TrainableSequenceDecoder()
