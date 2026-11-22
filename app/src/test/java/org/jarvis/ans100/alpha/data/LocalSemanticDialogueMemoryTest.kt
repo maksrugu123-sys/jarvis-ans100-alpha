@@ -68,6 +68,40 @@ class LocalSemanticDialogueMemoryTest {
         assertEquals(listOf("Какой размер лимита?"), memory.unresolvedQuestions)
     }
 
+
+    @Test
+    fun persistedTaskCanBeCompletedAfterItsOriginalTurnLeavesRecentHistory() {
+        val persisted = LocalSemanticDialogueMemory(
+            activeTasks = listOf(
+                LocalSemanticTask("Нужно реализовать экспорт памяти", "in_progress", "old-user-turn", 10L),
+            ),
+        )
+        val memory = LocalSemanticDialogueMemory.fromHistory(
+            listOf(
+                LocalConversationMessage("new-user-turn", ConversationRole.USER, "Готово, экспорт памяти работает", 20L),
+            ),
+            persisted,
+        )
+        assertTrue(memory.activeTasks.none { it.sourceMessageId == "old-user-turn" })
+        assertTrue(memory.completedTasks.any {
+            it.sourceMessageId == "old-user-turn" && it.completedByMessageId == "new-user-turn"
+        })
+    }
+
+    @Test
+    fun persistedExplicitPreferencesSurviveAHistoryWindowWithoutPreferenceMarkers() {
+        val persisted = LocalSemanticDialogueMemory(
+            explicitPreferences = listOf(
+                LocalExplicitPreference("Отвечай коротко", "old-preference-turn", 10L),
+            ),
+        )
+        val memory = LocalSemanticDialogueMemory.fromHistory(
+            listOf(LocalConversationMessage("new-turn", ConversationRole.USER, "Объясни CPU", 20L)),
+            persisted,
+        )
+        assertEquals("old-preference-turn", memory.explicitPreferences.single().sourceMessageId)
+    }
+
     @Test
     fun boundsMemoryCollectionsAndContext() {
         val history = (1..80).map { index ->
