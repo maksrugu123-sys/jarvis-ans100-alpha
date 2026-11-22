@@ -118,6 +118,7 @@ class ANS100NeuralResponseGenerator(
         if (intent !in setOf("capability_question", "correction", "greeting", "farewell")) {
             val learned = sequenceLanguageModule?.generate(clean)
             if (learned != null &&
+                learned.unknownPromptTokenCount == 0 &&
                 learned.tokens.size >= MIN_LEARNED_GENERATION_TOKENS &&
                 learned.meanTokenConfidence >= MIN_LEARNED_GENERATION_CONFIDENCE &&
                 learned.text.isNotBlank() &&
