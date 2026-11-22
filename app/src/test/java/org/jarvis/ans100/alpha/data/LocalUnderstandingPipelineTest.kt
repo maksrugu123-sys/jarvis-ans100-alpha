@@ -229,6 +229,37 @@ class LocalUnderstandingPipelineTest {
     }
 
     @Test
+    fun lowMarginTopicMatchRequestsClarificationInsteadOfGuessing() {
+        val history = listOf(
+            LocalConversationMessage("u1", ConversationRole.USER, "Обсуждаем JARVIS память и хранилище", 1L),
+            LocalConversationMessage("a1", ConversationRole.ASSISTANT, "Память хранит данные.", 2L),
+            LocalConversationMessage("u2", ConversationRole.USER, "Обсуждаем память JARVIS и нейроны", 3L),
+            LocalConversationMessage("a2", ConversationRole.ASSISTANT, "Нейроны используют память.", 4L),
+        )
+        val result = pipeline.analyze("Вернёмся к памяти JARVIS", history)
+        assertEquals("ambiguous", result.contextReference.status)
+        assertTrue(result.reasoningPlan.requiresClarification)
+        assertTrue(result.reasoningPlan.clarificationQuestion.contains("или"))
+        assertTrue(result.contextReference.confidence < 0.66)
+    }
+
+    @Test
+    fun clearTopicAnchorWinsWithAHighConfidenceMargin() {
+        val history = listOf(
+            LocalConversationMessage("u1", ConversationRole.USER, "Обсуждаем Chromium браузер", 1L),
+            LocalConversationMessage("a1", ConversationRole.ASSISTANT, "Chromium использует движок Blink.", 2L),
+            LocalConversationMessage("u2", ConversationRole.USER, "Обсуждаем память JARVIS", 3L),
+            LocalConversationMessage("a2", ConversationRole.ASSISTANT, "Память хранит локальные записи.", 4L),
+            LocalConversationMessage("u3", ConversationRole.USER, "Обсуждаем CPU", 5L),
+            LocalConversationMessage("a3", ConversationRole.ASSISTANT, "CPU выполняет инструкции.", 6L),
+        )
+        val result = pipeline.analyze("Вернёмся к Chromium", history)
+        assertEquals("selected", result.contextReference.status)
+        assertTrue(result.contextReference.confidence >= 0.66)
+        assertTrue(result.contextReference.sourceUserMessage.contains("Chromium"))
+    }
+
+    @Test
     fun shortWhyFollowUpResolvesToTheLatestDialogueTurn() {
         val history = listOf(
             LocalConversationMessage("user-1", ConversationRole.USER, "Как работает память JARVIS?", 1L),
