@@ -188,3 +188,38 @@ Context packing was also corrected. The decoder now tokenizes the current user p
 Regression tests were added for deterministic generation, output bounds, reserved-token filtering, and preserving a full 64-token current prompt when older context is present. These tests have not been run. No Gradle build, Android test task, APK, CI workflow, or device benchmark was run for this change.
 
 The response generator now also rejects a learned candidate that simply runs out of its token budget mid-answer. It accepts a continuation only when the decoder emitted EOS or the rendered text ends with a sentence boundary (`.`, `!`, or `?`); otherwise the conservative ANS/Core path is used. This avoids presenting an obviously truncated fragment as a completed answer, at the cost of falling back more often until the model learns reliable stopping behavior.
+
+
+## Multi-turn dialogue corpus V1
+
+Two additional UTF-8 files exercise reference resolution across several recent
+messages and deliberate topic switching:
+
+- `datasets/sequence_decoder_v1/multiturn_train_ru_v1.txt`: 32 synthetic
+  context-to-answer rows. The examples cover switching between two topics,
+  returning to a deferred topic, distinguishing which project or requirement a
+  follow-up refers to, and recovering the first/second item in a short plan.
+- `datasets/sequence_decoder_v1/multiturn_heldout_ru_v1.txt`: 8 different
+  context-to-answer rows reserved for a first diagnostic evaluation. Their
+  scenarios and key nouns are not copied from the training rows.
+
+Import only the training file in **Обучение** as `prompt => answer` pairs.
+Use the held-out file only in the independent evaluation field. Do not train
+on held-out answers or feed them back as corrections. Keep the earlier toy
+corpora separate when comparing results so the source of each training run is
+known.
+
+The examples intentionally use the runtime's `[dialogue context]`, `user:`
+and `ans:` markers. They are short because the decoder has a bounded
+64-subword-token input/target limit. This corpus is still synthetic, small and
+highly structured. It does not prove that the model can robustly track arbitrary
+topics, resolve ambiguous pronouns, remember long conversations, or converse
+naturally. A model can also memorize these patterns without learning a general
+dialogue policy.
+
+The training file is suitable for a controlled pipeline experiment, not as a
+claim of language-model readiness. Before using results as evidence, review
+generated answers manually and compare against a separately authored,
+topic-disjoint evaluation set. No model was trained from these files; no tests,
+Gradle build, APK build, CI workflow or device benchmark was run when they were
+added.
