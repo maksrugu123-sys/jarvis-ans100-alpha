@@ -3446,3 +3446,16 @@ Added `selectedDecisionSnapshotCaptureReadsCompleteBoundedReachableGraph` to `ap
 **Interpretation:** this connects the bounded symbolic planner's actual result to response composition. It is not a learned neural reasoning breakthrough, does not prove extracted facts, does not authorize tools, and does not execute actions. The 10k sparse dialogue network and 250k JNVM runtime remain separate from this symbolic planner.
 
 **Next step:** continue integrating a single bounded turn-evidence object across Core analysis, response selection and feedback capture, while preserving provenance and preventing telemetry from being treated as factual confidence.
+
+
+## 2026-11-24 — Bind explicit decoder feedback to the latest conversation turn
+
+**Changed:**
+- `LocalConversationCoordinator.correctLatestAnswer(correctedAnswer)` now accepts only corrected answer text and resolves the matching prompt from the exact latest persisted user/assistant exchange. It refuses incomplete/missing exchanges and submits the correction through the existing `EXPLICIT_USER_CORRECTION` feedback gate.
+- `JarvisViewModel.correctLatestAnsAnswerAsync` exposes this as an asynchronous operation and reports whether a durable decoder update was applied.
+- Added regression tests for latest-turn prompt binding, persisted decoder snapshot update, and the missing-exchange fail-closed case.
+- Updated the completion audit with the feedback integration boundary.
+
+**Safety/learning boundary:** this remains explicit supervised correction, not automatic self-training. Model-generated answers, passive behavior and implicit engagement are not training labels. The decoder must already be trained; model snapshot recovery must be healthy; and candidate weights are committed only after durable snapshot write succeeds.
+
+**Verification:** changes and tests are **AUTHORED / NOT RUN**. No Gradle tests/build, APK, CI, benchmark or device validation was started. Automatic Android workflow triggers remain manual-only.
