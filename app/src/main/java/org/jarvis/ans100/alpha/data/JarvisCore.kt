@@ -732,5 +732,34 @@ class LocalConversationCoordinator(
         feedback: ANS100SequenceFeedbackTrainer.Feedback,
     ): ANS100TrainableSequenceDecoder.TrainingReport? =
         sequenceLanguageModule?.applyFeedback(feedback)
+
+    /**
+     * Applies an explicit correction to the latest complete user/assistant exchange.
+     * The prompt is taken from persisted conversation history, never supplied by a
+     * caller, so feedback cannot accidentally be attached to a different turn.
+     */
+    @Synchronized
+    fun correctLatestAnswer(
+        correctedAnswer: String,
+    ): ANS100TrainableSequenceDecoder.TrainingReport? {
+        val corrected = correctedAnswer.trim()
+        require(corrected.isNotEmpty() &&
+            corrected.length <= ANS100TrainableSequenceDecoder.MAX_EXAMPLE_CHARS &&
+            corrected.none { it == '\\u0000' }
+        ) { "corrected answer is empty or exceeds the feedback limit" }
+        val exchange = core.history().takeLast(2)
+        if (exchange.size != 2 ||
+            exchange[0].role != ConversationRole.USER ||
+            exchange[1].role != ConversationRole.ASSISTANT
+        ) return null
+        return applySequenceFeedback(
+            ANS100SequenceFeedbackTrainer.Feedback(
+                prompt = exchange[0].text,
+                correctedContinuation = corrected,
+                source = ANS100SequenceFeedbackTrainer.Source.EXPLICIT_USER_CORRECTION,
+            ),
+        )
+    }
+
     fun clear() = core.clear()
 }
