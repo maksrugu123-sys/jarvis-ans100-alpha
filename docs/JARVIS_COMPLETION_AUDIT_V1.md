@@ -125,4 +125,12 @@ The ordinary Android Core path already attaches a `LocalReasoningResult` to each
 
 Regression tests were authored for both the solved and unsolved action-plan paths. They are **AUTHORED / NOT RUN**. This change does not connect the 10k or 250k neural network to symbolic planning, does not add tool authorization, and does not establish general reasoning capability.
 
+## 9. Explicit correction feedback is now bound to the latest chat turn
+
+The ViewModel now exposes an asynchronous correction path that accepts only the corrected answer text. The coordinator resolves the prompt from the exact latest persisted user/assistant exchange and submits it to the existing sequence-feedback gate with source `EXPLICIT_USER_CORRECTION`. The decoder still commits only after the candidate snapshot is durably saved.
+
+The path fails closed when there is no complete latest exchange, and the module still refuses to update an untrained decoder or unreadable model snapshot. Existing explicit prompt-plus-correction APIs remain available for controlled training workflows.
+
+Regression tests were authored for successful latest-turn binding and for the missing-exchange case. They are **AUTHORED / NOT RUN**. This does not mean ordinary chat automatically trains itself: a user-facing caller must explicitly invoke the correction action. Passive behavior and model-generated output remain ineligible as labels.
+
 **Conclusion:** the next milestone is an integrated, stable, honest first serious test build—not a claim of perfection. The current branch has useful foundations, but the largest gains will come from integration, measured behavior and removing misleading parallel paths rather than adding more named mechanisms.
