@@ -103,7 +103,7 @@ class ANS100NeuralResponseGenerator(
         }?.classifierLabel
         val intent = when {
             SELF_DESCRIPTION_QUESTION.containsMatchIn(normalized) -> "self_description"
-            META_GUESSING_QUESTION.containsMatchIn(normalized) -> "meta_reasoning_question"
+            isMetaGuessingQuestion(normalized) -> "meta_reasoning_question"
             CAPABILITY_QUESTION.containsMatchIn(normalized) -> "capability_question"
             parsed.dialogueState.pendingAssistantOffer.isNotBlank() &&
                 parsed.contextReference.status == "selected" && isAffirmativeFollowThrough(clean) -> "continuation"
@@ -403,6 +403,15 @@ class ANS100NeuralResponseGenerator(
                 "Мой предварительный разбор такой: сначала нужно определить основные свойства темы, затем понять, какие факторы на неё влияют, и проверить, какое объяснение лучше всего связывает их между собой. Я могу развить эту гипотезу дальше, не выдавая её за установленный факт."
         }
         return "Попробую ответить по существу. Тема: «$subject». $reasoning"
+    }
+
+    private fun isMetaGuessingQuestion(normalized: String): Boolean {
+        val asksAboutAbility = normalized.contains("можешь") ||
+            normalized.contains("умеешь") || normalized.contains("будешь")
+        val mentionsGuessing = normalized.contains("догады") ||
+            normalized.contains("угадыва") || normalized.contains("гадать") ||
+            normalized.contains("предполаг")
+        return asksAboutAbility && mentionsGuessing
     }
 
     private fun normalize(value: String): String = value.lowercase(Locale.ROOT)
