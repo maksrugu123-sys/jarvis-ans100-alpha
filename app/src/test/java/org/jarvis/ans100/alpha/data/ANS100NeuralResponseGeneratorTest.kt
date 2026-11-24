@@ -41,6 +41,22 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun capabilityQuestionIsAnsweredDirectlyAcrossNaturalPhrasings() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompts = listOf(
+            "Что ты умеешь?",
+            "Я задаю тебе вопрос: что ты умеешь? И ты называешь свои функции",
+            "Назови свои функции и возможности"
+        )
+        prompts.forEach { prompt ->
+            val reply = generator.respond(prompt, emptyList(), emptyList(), null,
+                LocalUnderstandingPipeline().analyze(prompt), null)
+            assertTrue("Capability prompt was not answered directly: $prompt; reply: $reply",
+                reply.startsWith("Я могу вести диалог"))
+        }
+    }
+
+    @Test
     fun selfDescriptionPromptGetsACompleteIntroduction() {
         val generator = ANS100NeuralResponseGenerator()
         val prompt = "Ты можешь рассказать о себе?"
