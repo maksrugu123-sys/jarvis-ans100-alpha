@@ -445,9 +445,6 @@ class ANS100NeuralResponseGenerator(
         private val SELF_DESCRIPTION_QUESTION = Regex(
             """\b(расскажи о себе|рассказать о себе|кто ты|что ты за ассистент|представься)\b""",
         )
-        private val META_GUESSING_QUESTION = Regex(
-            """\b(можешь|умеешь|будешь)\b.{0,80}\b(дога\w*|угадывать|гадать|предполагать)\b|\b(дога\w*|угадывать|гадать|предполагать)\b.{0,80}\b(можешь|умеешь|будешь)\b""",
-        )
         private val TOKEN = Regex("[a-zа-яё0-9]{3,}")
         private val STOP_WORDS = setOf(
             "это", "как", "что", "для", "или", "мне", "можно", "когда", "где",
