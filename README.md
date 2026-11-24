@@ -1,10 +1,10 @@
 # JARVIS ANS-100 Alpha
 
-> **Integrated experimental prototype:** see [JARVIS Experimental Integrated Prototype V1](docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md). This branch combines the Android client and PC local console, a no-model desktop fallback, optional LiteRT-LM inference, separate Android/Python dialogue classifiers, and an Android SQLite-backed sparse LIF-DT side channel. It remains experimental and source-level; a successful APK build, device runtime and test pass are not yet verified.
+> **Integrated experimental prototype:** see [JARVIS Experimental Integrated Prototype V1](docs/JARVIS_EXPERIMENTAL_PROTOTYPE_V1.md) and the [JARVIS Completion Audit V1](docs/JARVIS_COMPLETION_AUDIT_V1.md). This branch contains the Android client, local ANS conversation route, optional LiteRT-LM adapter, memory and training flows, and multiple separately scoped neural-runtime experiments. It remains experimental; source presence is not proof of runtime integration or quality.
 
-> **Latest Android build status (14 November 2026):** Actions run [#5](https://github.com/maksrugu123-sys/jarvis-ans100-alpha/actions/runs/43616668545) passed JDK/Gradle/SDK setup but failed at `:app:compileDebugKotlin`; no APK artifact was produced. The compile errors are being corrected on this experiment branch; the next push-triggered run must verify the fixes.
+> **Latest Android verification (24 November 2026):** the most recent recorded CI run completed 552 unit tests with 2 failures in `ANS100NeuralResponseGeneratorTest`; subsequent source/test corrections are committed but NOT rerun. The APK step was skipped. Automatic push/PR builds are paused; the Android workflow is manual-only. No current APK or physical-device verification is claimed.
 
-> **First APK path:** [build and install the first Android prototype](docs/FIRST_ANDROID_PROTOTYPE.md). The `Android first prototype` workflow assembles a debug APK on GitHub Actions; it does not require a local Gradle Wrapper.
+> **First APK path:** [build and install the first Android prototype](docs/FIRST_ANDROID_PROTOTYPE.md). Run the workflow manually only after the current source stabilization pass is ready.
 
 **JARVIS ANS-100 Alpha** is a research project for a compact adaptive neural system. Development is staged: begin with one artificial neuron and a small number of synapses, validate behavior and resource cost, and scale only when each previous step is supported by evidence.
 
