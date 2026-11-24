@@ -22,6 +22,26 @@ This is the append-only record of meaningful implementation, test, experiment, a
 
 **Mandatory for all contributors and agents:** follow `AGENTS.md` and `docs/TESTING_POLICY.md`. Chat history and commit messages are not substitutes for this log.
 
+## 2026-11-24 — Exclude superseded memories from live Core retrieval
+
+**Objective:** ensure that an explicitly corrected workspace fact remains in the audit history but cannot be selected as current context for a later conversation turn.
+
+**Changed:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/JarvisCore.kt` — live retrieval now uses `LocalWorkspaceMemoryCache.activeRecords()`, which returns only user-approved records with no `supersededById`. Superseded records remain stored for correction/audit history but are not passed to response engines as current memories.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/LocalConversationRuntimeTest.kt` — expanded `coreUsesOnlyApprovedWorkspaceMemoriesAndPassesNeuralSignalToLanguageEngine` with a superseded record whose terms deliberately match the query; the expected live context contains only the active approved record.
+
+**Architectural decision:** correction history and retrieval context are separate views. A superseded record is retained as provenance, not treated as an active fact. The cache's existing `activeRecords()` contract is reused instead of adding another memory filter or subsystem.
+
+**Tests:** regression assertion AUTHORED. **NOT RUN** — Gradle/JVM execution was not requested; no build was run.
+
+**Builds / CI / APK / device:** NOT RUN. Automatic Android workflow remains manual-only.
+
+**Limitations:** this change filters Core's live workspace-memory retrieval. It does not validate the truth of approved memory content or change heuristic ranking among active records.
+
+**Next step:** add explicit correction/retrieval lifecycle coverage across import, persistence/reopen and backup/restore paths before treating the memory lifecycle as fully verified.
+
+---
+
 ## Entry format
 
 Each entry should include:
