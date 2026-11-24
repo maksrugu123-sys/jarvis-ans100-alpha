@@ -19,10 +19,48 @@ class ANS100NeuralResponseGeneratorTest {
         )
 
         assertFalse(generator.languageModelConfigured)
-        assertTrue(reply.contains("Я выделил тему"))
-        assertTrue(reply.contains("нет достаточных сведений"))
+        assertTrue(reply.startsWith("Попробую ответить по существу"))
+        assertTrue(reply.contains("предварительный разбор"))
+        assertFalse(reply.contains("нет достаточных сведений"))
         assertEquals("explanation", generator.lastTrace.strategy)
         assertEquals("core_analysis_and_dialogue", generator.lastTrace.source)
+    }
+
+    @Test
+    fun unknownQuestionStillReceivesAReasonedPreliminaryAnswer() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompt = "Почему квантовая физика важна?"
+        val reply = generator.respond(
+            prompt, emptyList(), emptyList(), null,
+            LocalUnderstandingPipeline().analyze(prompt), null,
+        )
+
+        assertTrue(reply.startsWith("Попробую ответить по существу"))
+        assertTrue(reply.contains("Вероятнее всего"))
+        assertFalse(reply.contains("нет достаточных сведений"))
+    }
+
+    @Test
+    fun selfDescriptionPromptGetsACompleteIntroduction() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompt = "Ты можешь рассказать о себе?"
+        val reply = generator.respond(prompt, emptyList(), emptyList(), null,
+            LocalUnderstandingPipeline().analyze(prompt), null)
+
+        assertTrue(reply.startsWith("Я JARVIS"))
+        assertTrue(reply.contains("ANS-100"))
+        assertTrue(reply.contains("локальный"))
+    }
+
+    @Test
+    fun questionAboutGuessingGetsADirectMetaAnswer() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompt = "Можешь всегда только догадываться?"
+        val reply = generator.respond(prompt, emptyList(), emptyList(), null,
+            LocalUnderstandingPipeline().analyze(prompt), null)
+
+        assertTrue(reply.startsWith("Нет. Я не должен только догадываться"))
+        assertTrue(reply.contains("предварительный ответ"))
     }
 
     @Test
@@ -125,7 +163,7 @@ class ANS100NeuralResponseGeneratorTest {
             neural,
         )
 
-        assertTrue(reply.contains("Я выделил тему"))
+        assertTrue(reply.startsWith("Попробую ответить по существу"))
         assertFalse(generator.lastTrace.usedNeuralReadout)
     }
 
