@@ -1,13 +1,7 @@
 name: Android first prototype
 
-# Build automatically on updates to the active development branch and on PRs targeting main.
+# Automatic builds are temporarily paused. Manual workflow_dispatch remains available.
 on:
-  push:
-    branches:
-      - experiment/jarvis-integrated-prototype-v1
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
