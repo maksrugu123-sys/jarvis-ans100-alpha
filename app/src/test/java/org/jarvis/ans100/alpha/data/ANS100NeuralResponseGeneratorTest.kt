@@ -96,6 +96,57 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun actionReplyRequiresACompletedSymbolicDependencyPlan() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompt = "Сделай резервную копию проекта"
+        val parsed = LocalUnderstandingPipeline().analyze(prompt)
+        val incomplete = parsed.copy(
+            reasoningResult = LocalReasoningResult(
+                status = LocalReasoningStatus.NO_PLAN,
+                actionIds = emptyList(),
+                steps = emptyList(),
+                exploredStates = 3,
+                finalFacts = setOf("message_received", "intent_recognized"),
+                missingGoalFacts = setOf("response_context_ready"),
+            ),
+        )
+
+        val reply = generator.respond(
+            prompt, emptyList(), emptyList(), null, incomplete, null,
+        )
+
+        assertTrue(reply.contains("проверка зависимостей не нашла полного плана"))
+        assertFalse(reply.contains("построил предварительный план"))
+        assertFalse(reply.contains("внешние действия выполнялись"))
+    }
+
+    @Test
+    fun actionReplyUsesOnlyStepsFromSolvedSymbolicPlan() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompt = "Сделай резервную копию проекта"
+        val parsed = LocalUnderstandingPipeline().analyze(prompt)
+        val solved = parsed.copy(
+            reasoningResult = LocalReasoningResult(
+                status = LocalReasoningStatus.SOLVED,
+                actionIds = listOf("review_scope", "prepare_response"),
+                steps = listOf("Проверить исходные данные", "Подготовить последовательность резервного копирования"),
+                exploredStates = 4,
+                finalFacts = setOf("response_context_ready"),
+                missingGoalFacts = emptySet(),
+            ),
+        )
+
+        val reply = generator.respond(
+            prompt, emptyList(), emptyList(), null, solved, null,
+        )
+
+        assertTrue(reply.contains("Проверить исходные данные"))
+        assertTrue(reply.contains("Подготовить последовательность резервного копирования"))
+        assertFalse(reply.contains("выполнены"))
+        assertTrue(reply.contains("факты не подтверждены"))
+    }
+
+    @Test
     fun comparisonWithoutStoredFactsStillProvidesAUsefulFramework() {
         val generator = ANS100NeuralResponseGenerator()
         val prompt = "Сравни трансформер и импульсные нейроны"
