@@ -102,9 +102,9 @@ class ANS100NeuralResponseGenerator(
                 (it.classifierConfidenceMargin ?: 0.0) >= MIN_NEURAL_MARGIN
         }?.classifierLabel
         val intent = when {
-            SELF_DESCRIPTION_QUESTION.containsMatchIn(normalized) -> "self_description"
+            isSelfDescriptionQuestion(normalized) -> "self_description"
             isMetaGuessingQuestion(normalized) -> "meta_reasoning_question"
-            CAPABILITY_QUESTION.containsMatchIn(normalized) -> "capability_question"
+            isCapabilityQuestion(normalized) -> "capability_question"
             parsed.dialogueState.pendingAssistantOffer.isNotBlank() &&
                 parsed.contextReference.status == "selected" && isAffirmativeFollowThrough(clean) -> "continuation"
             parsed.intent == "statement_or_unknown" && neuralIntent != null -> neuralIntent
@@ -405,6 +405,17 @@ class ANS100NeuralResponseGenerator(
         return "Попробую ответить по существу. Тема: «$subject». $reasoning"
     }
 
+    private fun isCapabilityQuestion(normalized: String): Boolean = listOf(
+        "что ты умеешь", "что умеешь", "твои возможности", "что можешь делать",
+        "что ты можешь", "какие у тебя функции", "назови свои функции",
+        "расскажи о своих возможностях",
+    ).any(normalized::contains)
+
+    private fun isSelfDescriptionQuestion(normalized: String): Boolean = listOf(
+        "расскажи о себе", "рассказать о себе", "кто ты",
+        "что ты за ассистент", "представься",
+    ).any(normalized::contains)
+
     private fun isMetaGuessingQuestion(normalized: String): Boolean {
         val asksAboutAbility = normalized.contains("можешь") ||
             normalized.contains("умеешь") || normalized.contains("будешь")
@@ -438,12 +449,6 @@ class ANS100NeuralResponseGenerator(
         private val COMPLETE_END_MARKERS = setOf('.', '!', '?')
         private val AFFIRMATIVE_FOLLOW_THROUGH = setOf(
             "давай", "да", "ок", "окей", "ладно", "поехали", "согласен", "yes", "yeah", "ok", "okay", "sure", "go",
-        )
-        private val CAPABILITY_QUESTION = Regex(
-            """\b(что ты умеешь|что умеешь|твои возможности|что можешь делать)\b""",
-        )
-        private val SELF_DESCRIPTION_QUESTION = Regex(
-            """\b(расскажи о себе|рассказать о себе|кто ты|что ты за ассистент|представься)\b""",
         )
         private val TOKEN = Regex("[a-zа-яё0-9]{3,}")
         private val STOP_WORDS = setOf(
