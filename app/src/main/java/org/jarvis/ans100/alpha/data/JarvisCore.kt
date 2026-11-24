@@ -627,7 +627,9 @@ class JarvisCore(
         if (!snapshot.loaded) return emptyList()
         val queryTokens = tokens(prompt)
         if (queryTokens.isEmpty()) return emptyList()
-        val ranked = snapshot.records.mapIndexedNotNull { index, memory ->
+        // Superseded records remain in the cache for correction/audit history,
+        // but must never re-enter live retrieval as if they were current facts.
+        val ranked = memoryCache.activeRecords().mapIndexedNotNull { index, memory ->
             val textTokens = tokens(memory.content + " " + memory.category)
             val score = queryTokens.intersect(textTokens).size
             if (score == 0) null else Triple(score, index, memory)
