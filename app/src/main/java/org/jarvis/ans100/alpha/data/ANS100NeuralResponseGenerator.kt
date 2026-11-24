@@ -225,9 +225,14 @@ class ANS100NeuralResponseGenerator(
                 append("; entities=").append(understanding.entities.take(4).joinToString(", "))
             }
             if (reasoning.isNotEmpty()) {
-                append("; plan=").append(reasoning.joinToString(" -> "))
+                append("; heuristic plan=").append(reasoning.joinToString(" -> "))
             }
             append(". ")
+        }
+        understanding.reasoningResult?.let { result ->
+            append("[bounded symbolic dependency check] ")
+            append(result.toModelContext().take(MAX_SYMBOLIC_REASONING_CONTEXT_CHARS))
+            append(" ")
         }
         val neuralSummary = neural?.toModelContext()?.take(MAX_NEURAL_CONTEXT_CHARS)
         if (!neuralSummary.isNullOrBlank()) {
@@ -254,18 +259,28 @@ class ANS100NeuralResponseGenerator(
     }
 
     private fun actionReply(understanding: LocalUnderstanding): String {
-        val steps = understanding.reasoningPlan.steps.take(MAX_PLAN_STEPS)
         if (understanding.reasoningPlan.requiresClarification) {
             return understanding.reasoningPlan.clarificationQuestion.ifBlank {
                 "Чтобы продолжить, мне нужно одно уточнение: какой результат ты ожидаешь?"
             }
         }
-        if (steps.isEmpty()) {
-            return "Я распознал просьбу о действии, но пока не построил надёжный план. Уточни желаемый результат."
+        val symbolic = understanding.reasoningResult
+        if (symbolic == null || symbolic.status != LocalReasoningStatus.SOLVED) {
+            val status = symbolic?.status?.name?.lowercase(Locale.ROOT)
+            return when (status) {
+                "search_limit", "depth_limit" ->
+                    "Я начал проверку зависимостей, но достиг ограничения поиска и не буду выдавать неполный маршрут за готовый план. Уточни желаемый результат или раздели задачу на более короткие этапы."
+                else ->
+                    "Я распознал просьбу о действии, но проверка зависимостей не нашла полного плана. Уточни желаемый результат или необходимые исходные условия."
+            }
         }
-        return "Я разобрал запрос и построил предварительный план:\n" +
+        val steps = symbolic.steps.take(MAX_PLAN_STEPS)
+        if (steps.isEmpty()) {
+            return "Проверка структуры завершилась без конкретных шагов. Внешние действия не выполнялись."
+        }
+        return "Я проверил ограниченную последовательность зависимостей и построил предварительный план:\n" +
             steps.mapIndexed { index, step -> "${index + 1}. $step" }.joinToString("\n") +
-            "\n\nЭто план рассуждения: внешние действия не выполнялись."
+            "\n\nЭто только структурная проверка плана: факты не подтверждены, внешние действия не выполнялись."
     }
 
     private fun comparisonReply(
@@ -438,6 +453,7 @@ class ANS100NeuralResponseGenerator(
     companion object {
         const val MAX_CONTEXT_HISTORY_MESSAGES = 4
         const val MAX_CONTEXT_MESSAGE_CHARS = 280
+        const val MAX_SYMBOLIC_REASONING_CONTEXT_CHARS = 1_200
         const val MAX_NEURAL_CONTEXT_CHARS = 500
         const val MAX_GENERATION_CONTEXT_CHARS = 3_500
         const val MAX_MEMORIES_PER_REPLY = 3
