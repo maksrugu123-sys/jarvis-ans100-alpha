@@ -3459,3 +3459,19 @@ Added `selectedDecisionSnapshotCaptureReadsCompleteBoundedReachableGraph` to `ap
 **Safety/learning boundary:** this remains explicit supervised correction, not automatic self-training. Model-generated answers, passive behavior and implicit engagement are not training labels. The decoder must already be trained; model snapshot recovery must be healthy; and candidate weights are committed only after durable snapshot write succeeds.
 
 **Verification:** changes and tests are **AUTHORED / NOT RUN**. No Gradle tests/build, APK, CI, benchmark or device validation was started. Automatic Android workflow triggers remain manual-only.
+
+## 2026-11-24 — Reject unchanged dialogue answers as correction feedback
+
+**Objective:** prevent an accidental repeat of the current assistant answer from being accepted as a supervised correction and reinforcing the same continuation.
+
+**Changed:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/JarvisCore.kt` — `LocalConversationCoordinator.correctLatestAnswer` now returns without applying feedback when the normalized caller input (trimmed) exactly matches the latest persisted assistant answer (trimmed). The existing latest complete USER/ASSISTANT exchange binding remains authoritative.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/ANS100NeuralResponseGeneratorTest.kt` — added a regression test proving unchanged latest-answer feedback returns no training report and leaves the durable decoder snapshot byte-for-byte unchanged.
+
+**Safety rationale:** explicit user correction remains an eligible label, but an unchanged answer is not a correction event. This guard does not determine whether a different correction is factually true; provenance remains `EXPLICIT_USER_CORRECTION`, and no passive or model-generated labels are admitted.
+
+**Tests:** regression test **AUTHORED / NOT RUN**. No Gradle test, build, APK, CI, or device run was performed, as requested.
+
+**Build / workflow:** automatic Android workflow remains manual-only; no workflow was triggered.
+
+**Limitations / next step:** feedback is still applied directly to the trainable decoder and is not yet stored as a separately reviewable, bounded correction-evidence journal. A future integration should add provenance, duplicate detection across restarts, explicit user review/retraction, and held-out regression evaluation before using correction history to influence answer selection.
