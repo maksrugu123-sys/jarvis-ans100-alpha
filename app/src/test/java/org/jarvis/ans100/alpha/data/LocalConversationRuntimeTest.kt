@@ -351,10 +351,18 @@ class LocalConversationRuntimeTest {
         val cache = LocalWorkspaceMemoryCache()
         cache.replace(listOf(
             LocalWorkspaceMemory(
-                id = "approved-android",
-                content = "Android local offline browser memory",
+                id = "superseded-android",
+                content = "Android local offline browser memory deprecated",
                 category = "device",
                 updatedAt = "2026-11-14T00:00:00Z",
+                userApproved = true,
+                supersededById = "approved-android",
+            ),
+            LocalWorkspaceMemory(
+                id = "approved-android",
+                content = "Android local offline browser memory current",
+                category = "device",
+                updatedAt = "2026-11-15T00:00:00Z",
                 userApproved = true,
             ),
             LocalWorkspaceMemory(
