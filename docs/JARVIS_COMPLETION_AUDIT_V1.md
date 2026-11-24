@@ -22,7 +22,7 @@ The immediate user-facing priority is coherent Russian conversation and useful a
 | ANS response path | Connected | Uses deterministic response planning plus the optional trained sequence decoder; this is not yet a capable general language model. |
 | Conversation history | Connected | Local SharedPreferences transcript with bounded context supplied to the Core. |
 | Semantic dialogue memory | Connected | Separate atomic versioned file; extraction is heuristic and bounded. |
-| Approved workspace memories | Connected | Only selected approved records are passed to the response generator. |
+| Approved workspace memories | Connected | Core retrieval now uses active approved records only; superseded correction history remains stored but is excluded from live context. Truth of approved content is not independently verified. |
 | Short follow-up routing | Partially connected | Dialogue state and lexical reference resolution exist; ambiguous and longer references still need evaluation. |
 | Russian TTS | Connected in source | Uses Android TextToSpeech and installed voice packs; actual device voice quality is unverified. |
 | Web search | Connected in source | Link-first search path; network behavior and parser quality need live-device checks. |
