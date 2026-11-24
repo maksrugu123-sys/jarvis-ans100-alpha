@@ -223,7 +223,7 @@ class ANS100NeuralResponseGeneratorTest {
             sequenceLanguageModule = module,
         )
 
-        assertEquals(null, coordinator.correctLatestAnswer("Исправленный ответ"))
+        assertTrue(coordinator.correctLatestAnswer("Исправленный ответ") == null)
     }
 
     @Test
