@@ -208,6 +208,53 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun unchangedLatestAnswerIsNotAcceptedAsCorrectionFeedback() {
+        val modelStorage = object : ANS100SequenceModelStorage {
+            var snapshot: String? = null
+            override fun readSnapshot(): String? = snapshot
+            override fun writeSnapshot(snapshot: String): Boolean {
+                this.snapshot = snapshot
+                return true
+            }
+            override fun clearSnapshot(): Boolean {
+                snapshot = null
+                return true
+            }
+        }
+        val module = ANS100TrainableLanguageModule(modelStorage)
+        module.trainPairs(
+            listOf(
+                "вопрос о погоде" to "сегодня ясно.",
+                "вопрос о памяти" to "память хранит контекст.",
+                "вопрос о нейронах" to "нейроны обрабатывают сигналы.",
+                "вопрос о проекте" to "проект развивается.",
+            ),
+            epochs = 20,
+        )
+        val conversationStorage = object : ConversationStorage {
+            var value: String? = null
+            override fun read(): String? = value
+            override fun write(value: String): Boolean {
+                this.value = value
+                return true
+            }
+        }
+        val coordinator = LocalConversationCoordinator(
+            LocalConversationRepository(conversationStorage),
+            ANS100NeuralResponseGenerator(module),
+            sequenceLanguageModule = module,
+        )
+        coordinator.send("Объясни, что такое погода")
+        val originalAnswer = coordinator.history().last().text
+        val before = modelStorage.snapshot
+
+        val report = coordinator.correctLatestAnswer(originalAnswer)
+
+        assertTrue(report == null)
+        assertEquals(before, modelStorage.snapshot)
+    }
+
+    @Test
     fun latestAnswerCorrectionDoesNotTrainWithoutACompleteExchange() {
         val module = ANS100TrainableLanguageModule(object : ANS100SequenceModelStorage {
             override fun readSnapshot(): String? = null
