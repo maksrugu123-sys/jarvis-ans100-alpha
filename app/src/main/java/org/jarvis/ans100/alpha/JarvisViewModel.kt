@@ -1521,6 +1521,33 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             ),
         )
 
+    /**
+     * Learns from a correction attached to the latest persisted chat exchange.
+     * The caller supplies only the corrected answer; Core resolves the exact prompt.
+     */
+    fun correctLatestAnsAnswerAsync(correctedAnswer: String) {
+        val current = mutableState.value.sequenceTraining
+        if (current.busy) return
+        mutableState.value = mutableState.value.copy(sequenceTraining = current.copy(
+            busy = true, message = "Исправление последнего ответа обрабатывается…",
+        ))
+        sequenceTrainingExecutor.execute {
+            val result = runCatching { conversationCoordinator.correctLatestAnswer(correctedAnswer) }
+            mainHandler.post {
+                val previous = mutableState.value.sequenceTraining
+                val status = sequenceLanguageModule.status()
+                mutableState.value = mutableState.value.copy(sequenceTraining = previous.copy(
+                    busy = false,
+                    status = if (status.trained) "Обучена · словарь: ${status.vocabularySize} · скрытый слой: ${status.hiddenSize} · сохранение: ${if (status.storageLoaded) "загружено" else "активно"}" else "Не обучена",
+                    message = result.fold(
+                        { report -> if (report == null) "Нет подходящего последнего обмена или декодер ещё не обучен." else "Исправление последнего ответа сохранено: обучено ${report.trainingTokenCount} токенов продолжения." },
+                        { error -> "Исправление не применено: ${error.message ?: "неизвестная ошибка"}" },
+                    ),
+                ))
+            }
+        }
+    }
+
     fun generateAnsSequenceContinuation(
         prompt: String,
     ): ANS100TrainableSequenceDecoder.Generation? =
