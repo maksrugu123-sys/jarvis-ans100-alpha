@@ -102,8 +102,9 @@ class ANS100NeuralResponseGenerator(
                 (it.classifierConfidenceMargin ?: 0.0) >= MIN_NEURAL_MARGIN
         }?.classifierLabel
         val intent = when {
-            CAPABILITY_QUESTION.containsMatchIn(normalized) || SELF_DESCRIPTION_QUESTION.containsMatchIn(normalized) -> "capability_question"
+            SELF_DESCRIPTION_QUESTION.containsMatchIn(normalized) -> "self_description"
             META_GUESSING_QUESTION.containsMatchIn(normalized) -> "meta_reasoning_question"
+            CAPABILITY_QUESTION.containsMatchIn(normalized) -> "capability_question"
             parsed.dialogueState.pendingAssistantOffer.isNotBlank() &&
                 parsed.contextReference.status == "selected" && isAffirmativeFollowThrough(clean) -> "continuation"
             parsed.intent == "statement_or_unknown" && neuralIntent != null -> neuralIntent
