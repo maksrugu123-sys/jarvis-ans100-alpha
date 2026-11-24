@@ -115,4 +115,14 @@ The first likely consolidation candidates are parallel dialogue classifiers/read
 - Neural mechanisms shown in UI are genuinely connected to the execution path or explicitly marked experimental.
 - No claim of 250k live neurons, general intelligence, calibrated confidence or autonomous learning is made without direct measurements.
 
+## 8. Incremental integration — bounded symbolic reasoning in ordinary responses
+
+The ordinary Android Core path already attaches a `LocalReasoningResult` to each normal-turn `LocalUnderstanding`. The ANS response generator now consumes that result in two places:
+
+- The optional recurrent decoder context receives a capped (1,200-character) symbolic dependency-check summary, clearly separated from the heuristic text plan and neural telemetry.
+- Action-request replies require `LocalReasoningStatus.SOLVED` before presenting symbolic steps as a completed structural plan. `NO_PLAN`, `DEPTH_LIMIT`, `SEARCH_LIMIT`, or a missing result no longer fall back to presenting the heuristic template steps as if the symbolic planner had solved the request.
+- Even a solved result is described only as a structural dependency plan. It does not prove world facts and does not execute external actions.
+
+Regression tests were authored for both the solved and unsolved action-plan paths. They are **AUTHORED / NOT RUN**. This change does not connect the 10k or 250k neural network to symbolic planning, does not add tool authorization, and does not establish general reasoning capability.
+
 **Conclusion:** the next milestone is an integrated, stable, honest first serious test build—not a claim of perfection. The current branch has useful foundations, but the largest gains will come from integration, measured behavior and removing misleading parallel paths rather than adding more named mechanisms.
