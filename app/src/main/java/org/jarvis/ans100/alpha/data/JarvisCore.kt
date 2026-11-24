@@ -754,6 +754,10 @@ class LocalConversationCoordinator(
             exchange[0].role != ConversationRole.USER ||
             exchange[1].role != ConversationRole.ASSISTANT
         ) return null
+        // Re-submitting the answer unchanged is not a correction label. Treat it
+        // as a no-op so accidental duplicate feedback cannot reinforce the same
+        // continuation or create a misleading training event.
+        if (corrected == exchange[1].text.trim()) return null
         return applySequenceFeedback(
             ANS100SequenceFeedbackTrainer.Feedback(
                 prompt = exchange[0].text,
