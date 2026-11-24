@@ -747,7 +747,7 @@ class LocalConversationCoordinator(
         val corrected = correctedAnswer.trim()
         require(corrected.isNotEmpty() &&
             corrected.length <= ANS100TrainableSequenceDecoder.MAX_EXAMPLE_CHARS &&
-            corrected.none { it == '\\u0000' }
+            corrected.none { it == '\u0000' }
         ) { "corrected answer is empty or exceeds the feedback limit" }
         val exchange = core.history().takeLast(2)
         if (exchange.size != 2 ||
