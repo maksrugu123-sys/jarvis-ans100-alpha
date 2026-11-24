@@ -3383,3 +3383,22 @@ Aligned the public `LEARNING_RATE` constant with the actual SQLite update step (
 ### 2026-11-20 follow-up — Verify the bounded SQLite snapshot reader
 
 Added `selectedDecisionSnapshotCaptureReadsCompleteBoundedReachableGraph` to `app/src/androidTest/java/org/jarvis/ans100/alpha/data/AndroidJnvM250kStoreInstrumentedTest.kt`. It initializes the isolated 250k store, persists a two-edge reachable path, verifies the runtime captures the exact three pre-action neuron states/edges/input/outcome set, and verifies a too-shallow graph bound fails closed. The test is **AUTHORED, NOT RUN**; full 250k initialization, Gradle, APK, CI and device execution remain unperformed. Documentation was synchronized in `ANDROID_JNVM_250K_SCALING_PLAN.md` and `JARVIS_ARCHITECTURE.md` §3.55.
+
+
+## 2026-11-24 — Conversation routing repair and completion audit
+
+**Objective:** address the observed Android chat failures and establish an honest whole-project completion boundary before adding more neural mechanisms.
+
+**Changed:**
+- Replaced fragile Russian capability/self-description/meta-guessing regex routing with normalized substring-based phrase/stem checks. This directly targets observed failures such as `что ты умеешь?` falling through to the generic topic response.
+- Added regression cases for natural capability-question wording and several forms of questions about guessing.
+- Corrected the coordinator test's expected Russian grammatical form for the phrase about an external language model.
+- Updated the conversation-quality policy: unknown questions should receive a bounded preliminary answer with uncertainty marked; exact verifiable facts must not be fabricated.
+- Added [JARVIS Completion Audit V1](JARVIS_COMPLETION_AUDIT_V1.md), documenting which components are connected to ordinary chat, which remain separate prototypes, current verification status, consolidation rules and completion gates.
+- Refreshed README build/test status.
+
+**Verification evidence:** the latest recorded CI run completed 552 unit tests with two failures: `questionAboutGuessingGetsADirectMetaAnswer` and `coordinatorUsesAnsGeneratorAndDoesNotAdvertiseLanguageModel`. Source/test corrections were committed after that run. They are **NOT RERUN**. No Gradle build, unit-test command, APK, instrumentation, benchmark or physical-device run was started during this work.
+
+**Build policy:** `.github/workflows/android-prototype.yml` remains manual-only (`workflow_dispatch`). Automatic push and pull-request triggers remain disabled.
+
+**Important limitations:** the small Elman decoder remains a trained experimental text component, not a modern general language model. The Android 10k sparse network is a side channel and does not itself generate natural-language answers. The separate 250k JNVM decision-learning bridge is not wired into MainActivity/ordinary chat. These boundaries must remain visible until integration and device measurements prove otherwise.
