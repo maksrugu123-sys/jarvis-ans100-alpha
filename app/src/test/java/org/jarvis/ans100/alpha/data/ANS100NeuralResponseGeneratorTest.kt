@@ -96,6 +96,20 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun comparisonWithoutStoredFactsStillProvidesAUsefulFramework() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompt = "Сравни трансформер и импульсные нейроны"
+        val reply = generator.respond(
+            prompt, emptyList(), emptyList(), null,
+            LocalUnderstandingPipeline().analyze(prompt), null,
+        )
+
+        assertTrue(reply.contains("сравнение"))
+        assertTrue(reply.contains("назначение и принцип работы"))
+        assertTrue(reply.contains("не буду выдумывать победителя"))
+    }
+
+    @Test
     fun approvedMemoryCanGroundAReplyWithoutLanguageModel() {
         val generator = ANS100NeuralResponseGenerator()
         val memory = LocalWorkspaceMemory(
