@@ -3402,3 +3402,10 @@ Added `selectedDecisionSnapshotCaptureReadsCompleteBoundedReachableGraph` to `ap
 **Build policy:** `.github/workflows/android-prototype.yml` remains manual-only (`workflow_dispatch`). Automatic push and pull-request triggers remain disabled.
 
 **Important limitations:** the small Elman decoder remains a trained experimental text component, not a modern general language model. The Android 10k sparse network is a side channel and does not itself generate natural-language answers. The separate 250k JNVM decision-learning bridge is not wired into MainActivity/ordinary chat. These boundaries must remain visible until integration and device measurements prove otherwise.
+
+
+## 2026-11-24 — Unknown-comparison response pass
+
+**Changed:** the comparison fallback no longer stops at "I don't have confirmed characteristics" or immediately asks the user to choose criteria. When it identifies at least two candidate options, it proposes a common comparison framework (purpose/principle, strengths, limitations, resource requirements and use cases) while explicitly refusing to invent a winner. Added a regression test for a Transformer-versus-spiking-neuron prompt.
+
+**Verification:** source and test changes committed; tests were not run. Automatic builds remain disabled. This is a response-quality improvement, not evidence of learned open-domain reasoning.
