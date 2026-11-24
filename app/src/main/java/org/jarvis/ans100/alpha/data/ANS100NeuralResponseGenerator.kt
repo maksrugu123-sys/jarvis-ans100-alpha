@@ -102,7 +102,8 @@ class ANS100NeuralResponseGenerator(
                 (it.classifierConfidenceMargin ?: 0.0) >= MIN_NEURAL_MARGIN
         }?.classifierLabel
         val intent = when {
-            CAPABILITY_QUESTION.containsMatchIn(normalized) -> "capability_question"
+            CAPABILITY_QUESTION.containsMatchIn(normalized) || SELF_DESCRIPTION_QUESTION.containsMatchIn(normalized) -> "capability_question"
+            META_GUESSING_QUESTION.containsMatchIn(normalized) -> "meta_reasoning_question"
             parsed.dialogueState.pendingAssistantOffer.isNotBlank() &&
                 parsed.contextReference.status == "selected" && isAffirmativeFollowThrough(clean) -> "continuation"
             parsed.intent == "statement_or_unknown" && neuralIntent != null -> neuralIntent
@@ -159,10 +160,12 @@ class ANS100NeuralResponseGenerator(
             "thanks" -> "Пожалуйста! Я сохранил ход диалога и готов продолжить."
             "farewell" -> "До связи! История нашей беседы остаётся на устройстве."
             "capability_question" -> capabilityReply()
+            "meta_reasoning_question" -> metaReasoningReply()
+            "self_description" -> selfDescriptionReply()
             "correction" -> "Понял, ты указываешь на ошибку в предыдущем ответе. Какая именно часть неверна? Я сопоставлю её с исходным сообщением и сохранёнными сведениями."
             "comparison" -> comparisonReply(parsed, selectedMemories)
-            "explanation" -> evidenceReply(parsed, selectedMemories)
-            "question" -> evidenceReply(parsed, selectedMemories)
+            "explanation" -> generativeKnowledgeReply(clean, parsed, selectedMemories)
+            "question" -> generativeKnowledgeReply(clean, parsed, selectedMemories)
             "action_request" -> actionReply(parsed)
             "continuation" -> continuationReply(clean, parsed, history)
             else -> statementReply(clean, parsed, selectedMemories, normalized)
@@ -243,9 +246,9 @@ class ANS100NeuralResponseGenerator(
         }
         val focus = (understanding.keyTerms + understanding.entities).distinct().take(4)
         return if (focus.isEmpty()) {
-            "Я пока не могу надёжно определить предмет вопроса. Уточни, пожалуйста, о чём именно ты спрашиваешь?"
+            "Я попробую ответить самостоятельно: сначала разберу смысл вопроса, затем предложу наиболее вероятное объяснение. Если данных окажется мало, обозначу предположения отдельно от фактов."
         } else {
-            "Я выделил тему: ${focus.joinToString(", ")}. В доступной подтверждённой памяти пока нет достаточных сведений, чтобы дать проверенный ответ. Уточни, какой именно аспект нужно разобрать?"
+            "Предварительный ответ по теме «${focus.joinToString(", ")}»: я могу построить рабочее объяснение из смысла вопроса и общих связей, даже если в моей памяти нет готового ответа. Сначала рассмотрю возможные причины и варианты, затем отмечу, что требует проверки. Это будет обоснованная гипотеза, а не подтверждённый факт."
         }
     }
 
@@ -369,7 +372,37 @@ class ANS100NeuralResponseGenerator(
     }
 
     private fun capabilityReply(): String =
-        "Сейчас я могу локально разбирать структуру сообщения, учитывать историю диалога и подтверждённую память, а также строить ограниченные планы. Я не использую внешнюю языковую модель для этого ответа. Собственная генерация текста уже работает в экспериментальном режиме, но пока ограничена небольшим словарём, коротким контекстом и качеством обучения."
+        "Я могу вести диалог, разбирать смысл сообщений, удерживать несколько тем и возвращаться к ним, учитывать историю и подтверждённую память, формировать планы, помогать с кодом и проектами, а при подключённых инструментах — выполнять поиск и другие разрешённые действия. Я работаю локальным ANS-механизмом без внешней языковой модели. Моя свободная генерация пока развивается, поэтому сложные ответы могут быть неточными, но я должен пытаться ответить, а не останавливаться на фразе «я не знаю»."
+
+    private fun selfDescriptionReply(): String =
+        "Я JARVIS — локальный экспериментальный ассистент на базе ANS-100. Моя задача — понимать сообщения, поддерживать связный диалог, помнить важные темы и помогать решать задачи. Я анализирую контекст, строю ответ собственным механизмом и постепенно развиваю обучаемую генерацию. Я не являюсь человеком и не подключаю скрытую облачную языковую модель."
+
+    private fun metaReasoningReply(): String =
+        "Нет. Я не должен только догадываться. Если у меня есть надёжные сведения, я отвечаю по ним. Если знаний недостаточно, я всё равно формирую наиболее разумный предварительный ответ, объясняю ход рассуждения и отдельно помечаю предположения. Точную проверку фактов нельзя заменять догадкой, но нехватка памяти не должна заставлять меня прекращать разговор."
+
+    private fun generativeKnowledgeReply(
+        prompt: String,
+        understanding: LocalUnderstanding,
+        memories: List<LocalWorkspaceMemory>,
+    ): String {
+        if (memories.isNotEmpty()) return evidenceReply(understanding, memories)
+        val normalized = normalize(prompt)
+        val focus = (understanding.entities + understanding.keyTerms).distinct().take(4)
+        val subject = focus.joinToString(", ").ifBlank { "этот вопрос" }
+        val reasoning = when {
+            normalized.contains("почему") || normalized.contains("зачем") ->
+                "Вероятнее всего, ответ связан не с одной причиной, а с сочетанием условий. Я бы проверил исходные условия, сам механизм и то, что изменилось перед появлением результата. Затем можно исключить версии, которые не объясняют все наблюдения."
+            normalized.contains("как") ->
+                "Я разложу это на последовательность: что поступает на вход, какие действия или процессы происходят внутри, что влияет на результат и как его можно проверить. Такой разбор помогает получить рабочую модель даже без готовой записи в памяти."
+            normalized.contains("кто") ->
+                "Чтобы ответить, нужно установить, о ком или о чём идёт речь, отделить подтверждённые сведения от похожих имён и затем собрать краткое описание. Я не стану придумывать биографические детали, которых не могу обосновать."
+            normalized.contains("где") || normalized.contains("когда") || normalized.contains("сколько") ->
+                "Это вопрос с конкретным проверяемым ответом. Я могу сформировать предварительную оценку, но точное место, дату или число нельзя надёжно вывести только из формулировки — для этого нужен источник или дополнительные исходные данные."
+            else ->
+                "Мой предварительный разбор такой: сначала нужно определить основные свойства темы, затем понять, какие факторы на неё влияют, и проверить, какое объяснение лучше всего связывает их между собой. Я могу развить эту гипотезу дальше, не выдавая её за установленный факт."
+        }
+        return "Попробую ответить по существу. Тема: «$subject». $reasoning"
+    }
 
     private fun normalize(value: String): String = value.lowercase(Locale.ROOT)
         .replace('ё', 'е')
@@ -398,6 +431,12 @@ class ANS100NeuralResponseGenerator(
         )
         private val CAPABILITY_QUESTION = Regex(
             """\b(что ты умеешь|что умеешь|твои возможности|что можешь делать)\b""",
+        )
+        private val SELF_DESCRIPTION_QUESTION = Regex(
+            """\b(расскажи о себе|кто ты|что ты за ассистент|представься)\b""",
+        )
+        private val META_GUESSING_QUESTION = Regex(
+            """\b(можешь|умеешь|будешь).{0,35}(только|всегда).{0,20}(догадываться|гадать|предполагать)\b""",
         )
         private val TOKEN = Regex("[a-zа-яё0-9]{3,}")
         private val STOP_WORDS = setOf(
