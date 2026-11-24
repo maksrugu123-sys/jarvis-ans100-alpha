@@ -3409,3 +3409,20 @@ Added `selectedDecisionSnapshotCaptureReadsCompleteBoundedReachableGraph` to `ap
 **Changed:** the comparison fallback no longer stops at "I don't have confirmed characteristics" or immediately asks the user to choose criteria. When it identifies at least two candidate options, it proposes a common comparison framework (purpose/principle, strengths, limitations, resource requirements and use cases) while explicitly refusing to invent a winner. Added a regression test for a Transformer-versus-spiking-neuron prompt.
 
 **Verification:** source and test changes committed; tests were not run. Automatic builds remain disabled. This is a response-quality improvement, not evidence of learned open-domain reasoning.
+
+
+## 2026-11-24 — Connect bounded symbolic reasoning to ordinary ANS responses
+
+**Objective:** make the already Core-produced symbolic dependency result influence the ordinary response path, rather than leaving it as status/diagnostic metadata.
+
+**Changed:**
+- `app/src/main/java/org/jarvis/ans100/alpha/data/ANS100NeuralResponseGenerator.kt` — the optional recurrent decoder context now receives a separately labelled symbolic dependency-check summary, capped at 1,200 characters. The existing heuristic plan remains explicitly labelled as heuristic.
+- Action-request replies now use symbolic steps only when `LocalReasoningStatus.SOLVED`. Missing, `NO_PLAN`, `DEPTH_LIMIT`, and `SEARCH_LIMIT` results fail closed and do not present heuristic template steps as a completed symbolic plan. Even a solved plan is described as a structural dependency check, not verified facts or executed actions.
+- `app/src/test/java/org/jarvis/ans100/alpha/data/ANS100NeuralResponseGeneratorTest.kt` — added regression cases for solved and unsolved symbolic action plans.
+- `docs/JARVIS_COMPLETION_AUDIT_V1.md` — recorded the integration boundary and limitations.
+
+**Verification:** source changes and regression tests are **AUTHORED / NOT RUN**. No Gradle unit tests, lint, instrumentation tests, APK/AAB build, CI run, benchmark or physical-device check was started. Automatic Android workflow triggers remain manual-only.
+
+**Interpretation:** this connects the bounded symbolic planner's actual result to response composition. It is not a learned neural reasoning breakthrough, does not prove extracted facts, does not authorize tools, and does not execute actions. The 10k sparse dialogue network and 250k JNVM runtime remain separate from this symbolic planner.
+
+**Next step:** continue integrating a single bounded turn-evidence object across Core analysis, response selection and feedback capture, while preserving provenance and preventing telemetry from being treated as factual confidence.
