@@ -37,7 +37,7 @@ The current ANS response generator is still a bounded prototype: most intents us
 
 - Separate information recalled from approved memory, information derived from the current conversation, and general knowledge.
 - Do not claim a fact was verified if no source or verification step was available.
-- When the local system does not know an answer, say so plainly and ask a useful follow-up rather than inventing an answer.
+- When the local system does not know an answer, still produce the most useful bounded preliminary response it can justify. Clearly separate recalled facts, current-context facts, general reasoning and hypotheses; state what cannot be verified. Ask a follow-up only when the missing detail blocks a useful answer or the reference is genuinely ambiguous. Never present a guess as a verified fact.
 - Keep the user's original request visible to the response generator; analysis summaries must not replace it.
 
 ### 5. Evaluation
@@ -135,3 +135,10 @@ When the user uses an explicit correction phrase such as "я передумал"
 The semantic-memory JSON codec is now V2 and continues to read existing V1 files. The next successful save writes V2, including conflict and correction provenance. Bounds remain strict: at most four conflict records, with the existing item and file size caps.
 
 Regression scenarios were added for conflicting preferences, explicit correction in one history window, correction after a conflict has already been persisted, conflict merging, V1 migration, and V2 round-trip. These tests have not been run; no build, CI, APK, or device verification was performed.
+
+
+## Unknown-question response policy update — 24 November 2026
+
+The native ANS response path now has a deliberate no-knowledge response policy: absence of an approved memory entry must not cause a generic refusal. For an unfamiliar topic, the response generator attempts a bounded preliminary explanation, mechanism analysis or verification plan and labels uncertainty. Concrete dates, identities, quantities and other externally verifiable facts must not be fabricated. Self-description, capability and meta-questions about guessing have dedicated direct-response routes. Russian meta-question routing uses normalized substring stems rather than a word-boundary regex so inflected forms and natural word order are handled more reliably.
+
+Regression coverage was expanded for several Russian phrasings. The last recorded CI run completed 552 unit tests with two failures in this response-generator test class; source and assertion corrections have since been committed, but they have NOT been rerun. Automatic builds remain paused and no APK/device verification is implied.
