@@ -64,6 +64,22 @@ class ANS100NeuralResponseGeneratorTest {
     }
 
     @Test
+    fun guessingQuestionIsRecognizedWithNaturalRussianWordOrder() {
+        val generator = ANS100NeuralResponseGenerator()
+        val prompts = listOf(
+            "Можешь всегда только догадываться?",
+            "Ты можешь ответить, а не просто догадываться?",
+            "Ты умеешь не только предполагать, но и объяснять?"
+        )
+        prompts.forEach { prompt ->
+            val reply = generator.respond(prompt, emptyList(), emptyList(), null,
+                LocalUnderstandingPipeline().analyze(prompt), null)
+            assertTrue("Prompt was not routed: $prompt; reply: $reply",
+                reply.startsWith("Нет. Я не должен только догадываться"))
+        }
+    }
+
+    @Test
     fun approvedMemoryCanGroundAReplyWithoutLanguageModel() {
         val generator = ANS100NeuralResponseGenerator()
         val memory = LocalWorkspaceMemory(
@@ -278,7 +294,7 @@ class ANS100NeuralResponseGeneratorTest {
 
         val messages = core.send("Что ты умеешь?")
 
-        assertTrue(messages.last().text.contains("внешнюю языковую модель"))
+        assertTrue(messages.last().text.contains("внешней языковой модели"))
         assertFalse(core.status().languageModelConfigured)
         assertTrue(core.backendLabel.contains("ANS-100 Neural Response"))
     }
